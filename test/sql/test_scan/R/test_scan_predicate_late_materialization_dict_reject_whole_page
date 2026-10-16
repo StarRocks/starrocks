@@ -1,0 +1,61 @@
+-- name: test_predicate_late_materialization_dict_reject_whole_page
+-- The first predicate column is pushed down to the page level. When a dict-encoded page's whole dictionary is rejected
+-- by the predicate, BinaryDictPageDecoder::next_batch_with_filter returned without advancing the data page decoder, so
+-- the next chunk of the same page tripped DCHECK_EQ(_offset_in_page, _data_decoder->current_index()) in
+-- ParsedPageV2::read_with_filter and aborted ASan/Debug backends. Release results were correct; this guards both.
+drop table if exists dict_reject_whole_page;
+-- result:
+-- !result
+
+-- v: a low-cardinality numeric prefix (500 distinct "5000".."5499", dictionary encoded, thousands of rows per page)
+-- followed by a unique suffix that overflows the dictionary to plain encoding, so all_dict_encoded() is false and the
+-- page-level predicate pushdown stays enabled for the dict pages.
+create table dict_reject_whole_page (id int, v varchar(32))
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+
+insert into dict_reject_whole_page
+select g,
+       case when g <= 100000 then cast(5000 + (g % 500) as varchar)
+            else concat("u", g) end
+from table(generate_series(1, 200000)) t(g);
+-- result:
+-- !result
+
+select count(*), count(distinct v) from dict_reject_whole_page;
+-- result:
+200000	100500
+-- !result
+
+-- id is referenced so the scan keeps a non-predicate output column and the predicate-column late-materialization path
+-- (rowid column + page-level pushdown of the first predicate column) is taken. "52509" sorts inside the dict pages'
+-- zone map ["5000", "5499"] but is absent from their dictionary, so every dict page rejects its whole dictionary and
+-- the read crosses a chunk boundary within the page -- the exact shape the fuzzer aborted on.
+set enable_predicate_col_late_materialize = true;
+-- result:
+-- !result
+select count(*), ifnull(sum(id), 0) from dict_reject_whole_page where v = "52509";
+-- result:
+0	0
+-- !result
+select count(*), ifnull(sum(id), 0), min(id), max(id) from dict_reject_whole_page where v = "5250";
+-- result:
+200	10000000	250	99750
+-- !result
+
+set enable_predicate_col_late_materialize = false;
+-- result:
+-- !result
+select count(*), ifnull(sum(id), 0) from dict_reject_whole_page where v = "52509";
+-- result:
+0	0
+-- !result
+select count(*), ifnull(sum(id), 0), min(id), max(id) from dict_reject_whole_page where v = "5250";
+-- result:
+200	10000000	250	99750
+-- !result
+
+drop table if exists dict_reject_whole_page;
+-- result:
+-- !result

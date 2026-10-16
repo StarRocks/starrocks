@@ -40,7 +40,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -130,7 +130,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     // and each chunk is queried against the index in parallel via thread pool.
     std::vector<std::vector<uint64_t>> rss_rowids_per_segment;
     std::vector<Filter> owned_per_segment;
-    RETURN_IF_ERROR(params.tablet->update_mgr()->batch_get_rss_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->batch_get_rss_rowids_from_pkindex(
             params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/,
             &owned_per_segment));
 
@@ -324,7 +324,7 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // strictly greater than the new one are dropped before applying the update, so the
 // corresponding source rows keep their previous values. Equal values let the new row
 // win, matching the existing upsert/row-mode condition-update semantics (see
-// UpdateManager::_process_single_chunk_update_with_condition).
+// PrimaryKeyManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                                    const Schema& partial_schema,
                                                                    StreamChunkContainer container,
@@ -558,11 +558,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         }
 
         // Create thread pool token for segment-level parallelism
-        std::unique_ptr<ThreadPoolToken> token;
-        if (config::enable_pk_index_parallel_execution) {
-            token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
-                    ThreadPool::ExecutionMode::CONCURRENT);
-        }
+        auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
 
         // Declared before the runner so it outlives the join in ~ParallelTaskRunner: the tasks lock
         // it, and reverse declaration order would otherwise destroy it first.

@@ -47,6 +47,15 @@ public:
     Status write_ordinal_index() override;
     Status write_zone_map() override;
     Status write_bitmap_index() override;
+    // Same order as write_ordinal_index(): the flat children first, then the root JSON writer.
+    // Omitting the root leaves its ColumnMetaPB without an ordinal index, which ColumnReader::_init()
+    // rejects as a corrupt segment.
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        for (auto& w : _flat_writers) {
+            w->take_ordinal_index_builders(out);
+        }
+        _json_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override;
 
@@ -89,5 +98,16 @@ protected:
 
     // Track global dict validity for each sub-column
     std::map<std::string, bool> _subcolumn_dict_valid;
+
+    // captured from the parent ColumnWriterOptions so it can be propagated to
+    // the flat string/JSON sub-columns (the `remain` blob is the primary target).
+    // The fallback plain _json_writer already carries this flag via its own opts.
+    bool _use_zstd_compression = false;
+    // The parent column's data page size. The flattened sub-columns are what
+    // actually holds the data, so a per-column page size that stopped at the
+    // parent would have no effect on a JSON column at all.
+    uint32_t _data_page_size = 0;
+    uint32_t _zstd_compression_dict_sample_bytes = 0;
+    double _zstd_compression_dict_min_gain = 0;
 };
 } // namespace starrocks

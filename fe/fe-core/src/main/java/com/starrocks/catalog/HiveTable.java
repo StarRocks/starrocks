@@ -244,14 +244,16 @@ public class HiveTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
-        // The user may alter the resource properties
-        // So we do this to get the fresh properties
+        // The user may alter the resource properties, so the metastore URIs are read fresh from the resource.
+        // They are merged into a copy rather than into hiveProperties: a resource-mapping table is planned
+        // without the meta lock (see isMetaLockTarget), so this getter must not write to the shared object.
+        Map<String, String> properties = hiveProperties == null ? new HashMap<>() : new HashMap<>(hiveProperties);
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource != null) {
             HiveResource hiveResource = (HiveResource) resource;
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+            properties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
         }
-        return hiveProperties == null ? new HashMap<>() : hiveProperties;
+        return properties;
     }
 
     public Map<String, String> getSerdeProperties() {
@@ -307,15 +309,28 @@ public class HiveTable extends Table {
         }
     }
 
+    /**
+     * Replays {@link #modifyTableSchema}. The edit log only carries the new full schema, so the data columns are
+     * derived from it the way the leader got them: every column that is not a partition column, in order.
+     */
+    public void replayModifyTableSchema(List<Column> newFullSchema) {
+        Set<String> partitionColumnNames = Sets.newHashSet(partColumnNames);
+        modifyTableSchemaInternal(ImmutableList.copyOf(newFullSchema), newFullSchema.stream()
+                .map(Column::getName)
+                .filter(name -> !partitionColumnNames.contains(name))
+                .collect(ImmutableList.toImmutableList()));
+    }
+
+    /**
+     * Swaps in new collections instead of refilling the current ones. A resource-mapping table is planned
+     * without the meta lock (see {@link #isMetaLockTarget}), so a query may still be iterating the old schema;
+     * it keeps seeing that one whole, where clearing it in place would show it an empty or half-filled list.
+     */
     protected void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
                                            ImmutableList<String> newDataColumnNames) {
-        this.fullSchema.clear();
-        this.nameToColumn.clear();
-        this.dataColumnNames.clear();
-
-        this.fullSchema.addAll(newFullSchema);
+        this.fullSchema = new ArrayList<>(newFullSchema);
         updateSchemaIndex();
-        this.dataColumnNames.addAll(newDataColumnNames);
+        this.dataColumnNames = new ArrayList<>(newDataColumnNames);
     }
 
     @Override
@@ -428,6 +443,18 @@ public class HiveTable extends Table {
         if (isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
+    }
+
+    /**
+     * Not a lock target, even when it lives in an internal database (ENGINE=HIVE from a resource). The data is
+     * in the metastore, and the definition held here is never written in place once published: ALTER TABLE
+     * rejects the table, and a schema refresh swaps in new collections ({@link #modifyTableSchemaInternal}).
+     * So the reference a query resolves is already a consistent snapshot, and planning -- which reaches the
+     * metastore for statistics and partitions -- runs without the lock, as it does for a catalog table.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override

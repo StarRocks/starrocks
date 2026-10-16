@@ -419,21 +419,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
-        boolean expiredByHistorySchema = true;
-        if (historySchema != null && !historySchema.isExpired()) {
-            try {
-                expiredByHistorySchema = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId, Lists.newArrayList(tableId));
-            } catch (Exception e) {
-                // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
-                // so could clean the history schema safely
-            }
-            if (expiredByHistorySchema) {
-                historySchema.setExpire();
-                LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
-                        jobId, tableName, historySchema.getHistoryTxnIdThreshold());
-            }
-        }
+        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
         return expiredByTime && expiredByHistorySchema;
     }
 
@@ -441,6 +427,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return schemaInfos.stream().map(IndexSchemaInfo::getSchemaInfo).collect(Collectors.toList());
     }
 
+    @Override
     public Optional<OlapTableHistorySchema> getHistorySchema() {
         return Optional.ofNullable(historySchema);
     }
@@ -456,6 +443,18 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     public AlterJobV2 copyForPersist() {
         return new LakeTableAsyncFastSchemaChangeJob(this, true);
+    }
+
+    /**
+     * Also drops the target range of every tablet and the set of partitions with a schema file, which only the
+     * running job and replay read: every reader checks the target ranges for null, as on a job that flips no
+     * ranges. A replay installs the entry's targets again.
+     */
+    @Override
+    public void pruneMeta() {
+        super.pruneMeta();
+        targetRanges = null;
+        partitionsWithSchemaFile = new HashSet<>();
     }
 
     @SuppressWarnings("rawtypes")

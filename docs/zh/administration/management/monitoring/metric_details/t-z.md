@@ -86,6 +86,24 @@ description: "Alphabetical t - z"
 - 单位: 字节
 - 描述: tablet元数据使用的内存。
 
+## `tablet_pre_split_data_tier_file_selection`
+
+- 单位: 计数
+- 类型: 累计
+- 标签: `mode` — `subset`（只扫描了部分文件，扫描量由 `tablet_pre_split_data_tier_scan_byte_limit` 控制）、`under_limit`（输入未超过上限，扫描了全部文件）、`disabled`（上限为 `0`，扫描了全部文件）、`all_selected`（输入超过上限，但以整个文件为单位选取、每个分区至少一个文件并满足最少文件数后，仍选中了全部文件）、`partition_from_file_data`（输入超过上限，但分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列，取子集可能漏掉整个分区，因此扫描了全部文件）、`path_not_expressible`（仅 `INSERT INTO ... SELECT FROM FILES()`：选中文件的路径含有 FILES 无法作为精确路径处理的字符，即 `,`、`*`、`?`、`[`、`{`、`\`、主机名之后路径中的 `:` 或首尾空白，因此改用语句自身的 `path` 扫描全部文件）。
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入在 data tier 的采样总次数，按扫描文件的选取方式细分。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 单位: -
+- 类型: 直方图
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入每次在 data tier 采样时扫描的字节数占输入总字节数的百分比，向下取整，因此 `100` 表示扫描了全部文件。
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- 单位: 计数
+- 描述: 该指标统计的是合并规划过程中 Tablet 被排除事件的累计次数，而不是当前仍被阻塞的 Tablet 数量：只要某次规划把一个原本符合条件的 Tablet 判定为排除，计数就会加一，且不会随后回退，只有 FE 重启才会清零。因此应关注该值的增长速率，而非其绝对大小。一个 Tablet 被排除，原因要么是它仍持有 Tablet 分裂遗留下来、会阻塞合并的共享数据文件，要么是尚未被证实不含这类文件——后一种情况通常意味着 compaction 还没追上，但也可能是该 Tablet 所在 BE 版本过旧、不支持这项检查，或者该 Tablet 还未被观测到。清掉分裂遗留的共享文件需要一次重写它们的 compaction：非主键表可以用 `ALTER TABLE ... COMPACT` 按需触发；主键表执行同样的语句时，只有当该 Tablet 存在未清理的删除时才会触发 base compaction，而刚分裂出来的 Tablet 通常没有删除，因此对它无效，只能等常规 compaction 自行重写到那些 rowset。仅 Leader FE 会递增该计数器。
+
 ## `tablet_schema_mem_bytes`
 
 - 单位: 字节
@@ -101,6 +119,12 @@ description: "Alphabetical t - z"
 - 单位: 计数
 - 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
 
+## `thrift_client_retries_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE 发起的 Thrift RPC 因连接断开而重试的累计次数。每次重试前，FE 会先随机等待一段时间（指数退避：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止），再重新建立连接并重发请求。调用超时不会重试，也不计入该指标。单次调用的重试次数受 `thrift_rpc_retry_times` 限制。该值持续上升说明 FE 与其他节点之间的 Thrift 连接频繁断开，常见原因是对端（例如 Leader FE）的 Thrift 工作线程池已饱和，正在直接关闭新连接，可结合对端的 `thrift_server_rejected_connections_total` 一起判断。
+
 ## `thrift_connections_total`
 
 - 单位: 计数
@@ -112,6 +136,30 @@ description: "Alphabetical t - z"
 
 - 单位: 计数
 - 描述: 当前打开的thrift客户端数量。
+
+## `thrift_server_acceptor_stall_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 描述: FE Thrift 接收循环（accept loop）上次返回连接至今的时长（毫秒）。接收循环卡住会使该值上升，但没有 Thrift 流量的 FE 同样会上升，因此应结合连接到达速率一起判断，不要仅凭该指标告警。此外，当接收循环根本没有运行时（Thrift 服务器启动之前、停止之后）该值同样为 `0`，因此基于阈值的告警无法区分 Thrift 服务已停止与服务健康这两种情况。
+
+## `thrift_server_expired_connections_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：因在等待队列中的滞留时间超过 `thrift_server_queue_timeout_ms` 而被 FE Thrift 服务器直接关闭、未予处理的连接总数。该检查默认关闭，因此在运维人员启用该超时之前，本指标恒为 0。该值上升表示 FE 当时正在处理一批调用方几乎肯定已经放弃的积压连接；可结合 `thrift_server_queue_wait_ms` 判断队列落后的程度。
+
+## `thrift_server_queue_wait_ms`
+
+- 单位：毫秒
+- 类型：瞬时
+- 描述：连接在被工作线程取走之前，在 FE Thrift 服务器等待队列中滞留时长的分位数。每个出队连接都会采样，包括随后因超时而被丢弃的连接，因此该分布不会被 `thrift_server_queue_timeout_ms` 截断。这是 Thrift 饱和的先行指标：在工作线程池尚能跟上时它就会上升，远早于 `thrift_server_rejected_connections_total` 开始变化。
+
+## `thrift_server_rejected_connections_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE Thrift 服务器因工作线程池饱和而立即关闭的连接总数。每次拒绝都会计数，包括因日志限流而未打印告警的那些。该值上升表示客户端正在被拒绝；请结合 `thrift-server-pool` 的 `thread_pool` 指标一起查看，其增长速率可反映工作线程容量的缺口。
 
 ## `thrift_used_clients`
 

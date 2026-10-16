@@ -52,6 +52,7 @@ private:
                                                   const std::vector<paimon::Literal>& literals, bool neg);
     bool _ok_to_paimon_literal(Expr* lit);
     bool _ok_to_paimon_type(const TypeDescriptor& type);
+    static bool _ok_to_paimon_decimal(const TypeDescriptor& type);
     paimon::Literal translate_to_paimon_literal(Expr* lit);
     paimon::FieldType translate_to_paimon_type(const TypeDescriptor& type);
     void translate_to_paimon_in_list_literals(Expr* in_list_expr, std::vector<paimon::Literal>& ret);

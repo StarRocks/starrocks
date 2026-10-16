@@ -261,13 +261,14 @@ public:
     CastVariantToStruct(const TExprNode& node, std::vector<Expr*> field_casts)
             : Expr(node), _field_casts(std::move(field_casts)) {
         _variant_paths.reserve(_type.field_names.size());
-        for (int i = 0; i < _type.field_names.size(); i++) {
-            std::string path_string = "$." + _type.field_names[i];
-            auto res = VariantPathParser::parse(Slice(path_string));
-            if (!res.ok()) {
-                throw std::runtime_error("Failed to parse variant path: " + path_string);
-            }
-            _variant_paths.emplace_back(res.value());
+        for (const auto& field_name : _type.field_names) {
+            // Each struct field maps directly to a top-level object key of the variant.
+            // Build the path segment straight from the field name instead of formatting it
+            // into a "$.<name>" string and re-parsing it. Re-parsing rejects field names
+            // that are not "simple keys" (anything outside [a-zA-Z0-9_], e.g. a leading
+            // '$' or an embedded '.'), even though such names are perfectly valid object
+            // keys, e.g. STRUCT<`$currency` STRING>.
+            _variant_paths.emplace_back(std::vector<VariantSegment>{VariantSegment::make_object(field_name)});
         }
     }
 

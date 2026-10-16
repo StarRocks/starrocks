@@ -29,6 +29,7 @@
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/utils.h"
 #include "gutil/casts.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "types/date_value.h"
@@ -183,6 +184,11 @@ void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& valu
 Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, const TypeDescriptor& type,
                                            const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
                                            std::vector<std::string>& min_values, std::vector<std::string>& max_values) {
+    // Parquet requires readers to ignore min/max for GEO annotations, including stats
+    // emitted by non-compliant writers. The destination SQL type does not change this.
+    if (has_geo_annotation(field->schema_element)) {
+        return Status::Aborted("Parquet GEO min/max statistics have undefined sort order");
+    }
     // When statistics is empty, column_meta->__isset.statistics is still true,
     // but statistics.__isset.xxx may be false, so judgment is required here.
     bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
@@ -220,13 +226,6 @@ bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metada
                                                  const tparquet::ColumnMetaData& column_meta,
                                                  const SortOrder& sort_order) {
     return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
-}
-
-bool StatisticsHelper::has_correct_null_count(const FileMetaData* file_metadata) {
-    if (file_metadata == nullptr) {
-        return false;
-    }
-    return file_metadata->writer_version().HasCorrectNullCount();
 }
 
 } // namespace starrocks::parquet

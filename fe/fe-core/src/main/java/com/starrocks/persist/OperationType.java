@@ -654,6 +654,9 @@ public class OperationType {
     public static final short OP_DROP_GROUP_PROVIDER = 13531;
 
     @IgnorableOnReplayFailed
+    public static final short OP_ALTER_GROUP_PROVIDER = 13532;
+
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_SPM_BASELINE_LOG = 13540;
 
     @IgnorableOnReplayFailed
@@ -700,6 +703,12 @@ public class OperationType {
     // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+    // Release the history schema (the pre-alter schemas kept for loads still bound to them) of a done alter job.
+    // Only the leader can tell that no such load is left, so it journals the release; followers and checkpoint
+    // images would otherwise keep the payload until the job itself is removed. Ignorable: replay is idempotent
+    // and skips a job that is gone, and a skipped release only keeps the payload until the job is removed.
+    @IgnorableOnReplayFailed
+    public static final short OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA = 13562;
 
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
@@ -721,6 +730,21 @@ public class OperationType {
     // Grant Role to Group
     public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
+
+    // AI providers (SQL-managed OpenAI-compatible embedding / rerank endpoints).
+    // Ignorable on replay: an AI provider is auxiliary external-service config, so a failed replay
+    // should log and continue rather than halt the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_AI_PROVIDER = 20740;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_AI_PROVIDER = 20741;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_AI_PROVIDER = 20742;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_DEFAULT_AI_PROVIDER = 20743;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
@@ -749,7 +773,11 @@ public class OperationType {
                     opType != OP_DROP_SECURITY_INTEGRATION &&
                     opType != OP_ALTER_SECURITY_INTEGRATION &&
                     opType != OP_GRANT_ROLE_TO_GROUP &&
-                    opType != OP_REVOKE_ROLE_FROM_GROUP) {
+                    opType != OP_REVOKE_ROLE_FROM_GROUP &&
+                    opType != OP_CREATE_AI_PROVIDER &&
+                    opType != OP_ALTER_AI_PROVIDER &&
+                    opType != OP_DROP_AI_PROVIDER &&
+                    opType != OP_SET_DEFAULT_AI_PROVIDER) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

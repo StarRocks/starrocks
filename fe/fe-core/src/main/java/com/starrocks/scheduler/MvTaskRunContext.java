@@ -70,9 +70,19 @@ public class MvTaskRunContext extends TaskRunContext {
     // Set when auto_refresh_partitions_limit excluded older changed partitions from a complete refresh
     // this batch: the batch then does not cover the whole MV and must not confirm whole-MV freshness.
     private boolean partitionLimitExcludedPartitions = false;
+    // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
+    private long versionMapResetEpoch = -1;
 
     public MvTaskRunContext(TaskRunContext context) {
         super(context);
+    }
+
+    public long getVersionMapResetEpoch() {
+        return versionMapResetEpoch;
+    }
+
+    public void setVersionMapResetEpoch(long versionMapResetEpoch) {
+        this.versionMapResetEpoch = versionMapResetEpoch;
     }
 
     public MVRefreshRuntimeState getRefreshRuntimeState() {

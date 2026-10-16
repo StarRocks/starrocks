@@ -256,6 +256,13 @@ struct TOlapTableSink {
     // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
     // it knows every target CN supports the mode (rolling-upgrade interlock).
     35: optional bool enable_lake_per_partition_coordinator_txn_log
+    // Shared-data only: when true, a tablet's `TTabletLocation.node_ids` is a SHARD set rather than
+    // a replica set -- the sender round-robins rows across those nodes so one tablet is written by
+    // several CNs in parallel, instead of sending the same rows to every node in the list. FE sets
+    // it only when the session variable `lake_multi_node_tablet_write_mode` selects it AND the transaction uses
+    // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
+    // aggregates them into one before writing the combined log).
+    36: optional bool enable_multi_node_write
 }
 
 struct TSchemaTableSink {
@@ -302,6 +309,8 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Parquet encryption info for encrypted Iceberg tables
+    13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
 }
 
 struct THiveTableSink {

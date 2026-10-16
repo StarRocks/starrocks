@@ -110,6 +110,21 @@ SELECT n_nationkey, BOOL_OR(c_custkey), MIN_BY(c_name, c_acctbal), MAX_BY(c_name
 
 SELECT n_nationkey, BOOL_OR(c_custkey), MIN_BY(c_name, c_acctbal), MAX_BY(c_name, c_acctbal), MAP_SIZE(MAP_AGG(n_nationkey, c_name)) FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey LIMIT 10;
 
+-- The rest of this case runs with the salting rewrite disabled, so the hint is inert there. Turn it on:
+-- a hint must not change results, and the skewed keys used to vanish from the result entirely because
+-- the salt table was built by `generate_series(stop, start)` and came back empty.
+set enable_optimize_skew_join_v1=true;
+
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+
+SELECT n_nationkey, COUNT(*) as cnt FROM nation JOIN [skew|nation.n_nationkey(1)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey;
+
+SELECT n_nationkey, COUNT(*) as cnt FROM nation LEFT JOIN [skew|nation.n_nationkey(1,2,8)] skew_customer ON c_custkey = n_nationkey GROUP BY n_nationkey ORDER BY n_nationkey LIMIT 5;
+
+set enable_optimize_skew_join_v1=false;
+
 -- Cleanup
 drop table skew_customer;
 drop table nation;

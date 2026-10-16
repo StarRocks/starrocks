@@ -643,6 +643,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                         Config.azure_adls2_oauth2_client_secret);
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
                         Config.azure_adls2_oauth2_client_endpoint);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE,
+                        Config.azure_adls2_oauth2_token_file);
                 break;
             case "gs":
                 params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, Config.gcp_gcs_endpoint);

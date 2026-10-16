@@ -20,17 +20,19 @@ description: "为 StarRocks BE 节点启用和可视化 Jemalloc 堆内存分析
 ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().enable_prof())'
 ```
 
+启用要求 BE 启动时 `jemalloc_conf` 中带有 `prof:true`（默认即为如此），否则语句会失败。当前设置也可以在 `information_schema.be_configs` 中查看：查询 `NAME` 为 `jemalloc_conf` 的那一行，其 `VALUE` 中的 `prof_active` 选项即为当前值。
+
 `be_id`: BE/CN 节点的 ID。可以通过运行 SHOW BACKENDS 或 SHOW COMPUTE NODES 获取 ID。
 
 示例：
 
 ```SQL
 mysql> admin execute on 10001 'System.print(HeapProf.getInstance().enable_prof())';
-+----------------------+
-| result               |
-+----------------------+
-| instance of HeapProf |
-+----------------------+
++--------+
+| result |
++--------+
+| OK     |
++--------+
 1 row in set (0.00 sec)
 ```
 
@@ -62,11 +64,11 @@ ADMIN EXECUTE ON <be_id> 'System.print(HeapProf.getInstance().disable_prof())'
 
 ```SQL
 mysql> admin execute on 10001 'System.print(HeapProf.getInstance().disable_prof())';
-+----------------------+
-| result               |
-+----------------------+
-| instance of HeapProf |
-+----------------------+
++--------+
+| result |
++--------+
+| OK     |
++--------+
 1 row in set (0.00 sec)
 ```
 

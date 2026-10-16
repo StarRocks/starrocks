@@ -22,6 +22,7 @@
 #include "column/column.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/object_column.h"
@@ -78,11 +79,6 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
 
 template <bool PositiveSelect>
 Status AppendWithMaskVisitor<PositiveSelect>::do_visit(BinaryColumn* column) {
-    return append_binary(column);
-}
-
-template <bool PositiveSelect>
-Status AppendWithMaskVisitor<PositiveSelect>::do_visit(LargeBinaryColumn* column) {
     return append_binary(column);
 }
 
@@ -146,8 +142,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_fixed_length(FixedLengthCol
 }
 
 template <bool PositiveSelect>
-template <typename T>
-Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBase<T>* column) {
+Status AppendWithMaskVisitor<PositiveSelect>::append_binary(BinaryColumn* column) {
     if (_mask == nullptr || _count == 0) {
         return Status::OK();
     }
@@ -156,7 +151,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
         return Status::OK();
     }
 
-    auto* src_column = dynamic_cast<const BinaryColumnBase<T>*>(&_src);
+    auto* src_column = dynamic_cast<const BinaryColumn*>(&_src);
     if (src_column == nullptr) {
         append_fallback(column);
         return Status::OK();
@@ -188,7 +183,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
 
     auto* dest_bytes = bytes.data() + old_bytes;
 
-    using Offsets = typename BinaryColumnBase<T>::Offsets;
+    using Offsets = BinaryColumn::Offsets;
     Offsets::visit_storage_pair(offsets, src_offsets, [&](auto& dst_offsets_buf, const auto& src_offsets_buf) {
         using DstValue = typename std::decay_t<decltype(dst_offsets_buf)>::value_type;
         const auto* __restrict src_offsets_data = src_offsets_buf.data();

@@ -35,7 +35,7 @@ Status PrimaryKeyRecover::recover() {
     }
 
     // For simplicity, we use temp pk index for generate delvec, and then rebuild real pk index when retry publish
-    PrimaryIndex index(pkey_schema);
+    PrimaryIndex index(pkey_schema, encoding_type);
 
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;

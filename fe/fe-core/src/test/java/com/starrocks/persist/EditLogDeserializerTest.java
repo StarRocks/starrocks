@@ -50,4 +50,22 @@ public class EditLogDeserializerTest {
         Assertions.assertEquals(warehouseName, readLog.getWarehouseName());
         Assertions.assertEquals(payload, readLog.getPayload());
     }
+
+    @Test
+    public void testEditLogDeserializerReleaseAlterJobHistorySchemaLog() throws IOException {
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        buffer.writeShort(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA);
+        Text.writeString(buffer, GsonUtils.GSON.toJson(new ReleaseAlterJobHistorySchemaLog(101L, 102L, 103L)));
+        DataInputStream inStream = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        buffer.close();
+
+        short opCode = inStream.readShort();
+        Assertions.assertEquals(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, opCode);
+        Writable w = EditLogDeserializer.deserialize(opCode, inStream);
+        Assertions.assertInstanceOf(ReleaseAlterJobHistorySchemaLog.class, w);
+        ReleaseAlterJobHistorySchemaLog readLog = (ReleaseAlterJobHistorySchemaLog) w;
+        Assertions.assertEquals(101L, readLog.getJobId());
+        Assertions.assertEquals(102L, readLog.getDbId());
+        Assertions.assertEquals(103L, readLog.getTableId());
+    }
 }

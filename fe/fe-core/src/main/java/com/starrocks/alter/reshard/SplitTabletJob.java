@@ -72,6 +72,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.IntSupplier;
+import java.util.stream.Collectors;
 
 /*
  * SplitTabletJob is for tablet splitting.
@@ -346,8 +347,22 @@ public class SplitTabletJob extends TabletReshardJob {
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
-                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource));
+                    // The old tablets are read at commitVersion - 1, which for a partition resharded before its
+                    // first load is version 1. A file_bundling partition keeps that metadata only in the
+                    // partition-shared object, so tell the BE where to look, exactly as a normal load does.
+                    boolean preferSharedInitialMetadata =
+                            Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
+                    // Checked inside the future so a rejected result fails this publish attempt: it is
+                    // then retried with backoff and reported like any failed publish, and nothing of it
+                    // is installed.
+                    List<ExpectedSplit> expectedSplits = collectExpectedSplits(physicalPartition,
+                            reshardingPhysicalPartition);
+                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> {
+                        Map<Long, TabletRange> tabletRanges = publishVersion(tablets, commitVersion,
+                                useAggregatePublish, computeResource, preferSharedInitialMetadata);
+                        checkSplitTabletRanges(expectedSplits, tabletRanges);
+                        return tabletRanges;
+                    });
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -380,6 +395,9 @@ public class SplitTabletJob extends TabletReshardJob {
                                         for (long toRemoveTabletId : toRemoveTabletIds) {
                                             newIndex.removeTablet(toRemoveTabletId);
                                         }
+                                        LOG.warn("Tablet {} was not split, inheriting it into tablet {} and "
+                                                + "dropping {}. {}", splittingTablet.getOldTabletId(),
+                                                newTabletIds.get(0), toRemoveTabletIds, this);
                                         splittingTablet.fallbackToIdenticalTablet();
                                         break;
                                     }
@@ -567,6 +585,7 @@ public class SplitTabletJob extends TabletReshardJob {
     // Correspond to runRunningJob()
     @Override
     protected void replayCleaningJob() {
+        removeDroppedNewTabletsFromInvertedIndex();
         addNewMaterializedIndexes();
         LOG.info("Split tablet job replayed cleaning job. {}", this);
     }
@@ -597,7 +616,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     protected void registerReshardingTabletsOnRestart() {
-        if (jobState == JobState.PENDING || jobState.isFinalState()) {
+        if (!jobState.redirectsPublish()) {
             return;
         }
 
@@ -702,13 +721,22 @@ public class SplitTabletJob extends TabletReshardJob {
                     reshardingPhysicalPartition.setCommitVersion(commitVersion);
                 }
 
-                physicalPartition.setNextVersion(commitVersion + 1);
+                // Never move nextVersion backwards. The commit version is reserved here, in
+                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
+                // few steps later -- so a load transaction that commits in between journals its own
+                // entry first, and a replaying FE applies that entry before this one. By then the
+                // transaction has already carried nextVersion past the version reserved here, and
+                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
+                // version out twice.
+                if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                    physicalPartition.setNextVersion(commitVersion + 1);
+                }
             }
         }
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
-            boolean useAggregatePublish, ComputeResource computeResource) {
+            boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = transactionId;
@@ -730,13 +758,128 @@ public class SplitTabletJob extends TabletReshardJob {
             // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata);
 
             return tabletRange;
         } catch (Exception e) {
             LOG.warn("Failed to publish version for tablet reshard job {}. ", this, e);
             throw new TabletReshardException("Failed to publish version: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * What FE knows about one splitting tablet when its publish is submitted: the new tablet ids it asked
+     * for, in order, and the old tablet's range on FE.
+     */
+    record ExpectedSplit(long oldTabletId, List<Long> newTabletIds, TabletRange oldRange) {
+    }
+
+    /**
+     * Rejects a split publish result that disagrees with FE. The compute node returns either the range of
+     * every new tablet, which must exactly cover the old tablet's FE range in new-tablet-id order, or only
+     * the first new tablet's range when it fell back to an identical copy of the old tablet, which must
+     * then equal the old tablet's FE range. Anything else means the compute node's tablet metadata does
+     * not match FE, and installing it would corrupt FE's ranges, so the result is rejected instead.
+     */
+    static void checkSplitTabletRanges(List<ExpectedSplit> expectedSplits, Map<Long, TabletRange> tabletRanges) {
+        for (ExpectedSplit expected : expectedSplits) {
+            List<Long> newTabletIds = expected.newTabletIds();
+            Long first = newTabletIds.get(0);
+            long returnedCount = newTabletIds.stream().filter(tabletRanges::containsKey).count();
+            Range<Tuple> parent = expected.oldRange().getRange();
+            if (returnedCount == newTabletIds.size()) {
+                List<TabletRange> returned = newTabletIds.stream().map(tabletRanges::get).collect(Collectors.toList());
+                String gap = coverageGap(newTabletIds, returned, parent);
+                if (gap != null) {
+                    throw new TabletReshardException(String.format(
+                            "Split result rejected: tablet %d (range %s on FE) was split into %d tablets whose ranges "
+                                    + "do not exactly cover it: %s. The compute node's tablet metadata does not "
+                                    + "match FE; the result is not installed.",
+                            expected.oldTabletId(), expected.oldRange(), newTabletIds.size(), gap));
+                }
+            } else if (returnedCount == 1 && tabletRanges.containsKey(first)) {
+                TabletRange child = tabletRanges.get(first);
+                if (!TabletReshardUtils.sameLowerBound(child.getRange(), parent)
+                        || !TabletReshardUtils.sameUpperBound(child.getRange(), parent)) {
+                    throw new TabletReshardException(String.format(
+                            "Split result rejected: tablet %d fell back to identical tablet %d, whose range %s on "
+                                    + "the compute node differs from its range %s on FE. The compute node's tablet "
+                                    + "metadata does not match FE; the result is not installed.",
+                            expected.oldTabletId(), first, child, expected.oldRange()));
+                }
+            } else {
+                long missing = newTabletIds.stream().filter(id -> !tabletRanges.containsKey(id)).findFirst().get();
+                throw new TabletReshardException(String.format(
+                        "Split result rejected: the compute node returned ranges for %d of the %d new tablets of "
+                                + "tablet %d; new tablet %d has none. Expected all of them, or only the first after "
+                                + "an identical fallback. The result is not installed.",
+                        returnedCount, newTabletIds.size(), expected.oldTabletId(), missing));
+            }
+        }
+    }
+
+    // The old tablet's range is read from the old index because that is FE's own record of it, and it stays
+    // installed until the job finishes. Only tablets still being split are checked, and a tablet with no FE
+    // range has nothing to compare against.
+    private static List<ExpectedSplit> collectExpectedSplits(PhysicalPartition physicalPartition,
+                                                             ReshardingPhysicalPartition reshardingPhysicalPartition) {
+        List<ExpectedSplit> expectedSplits = new ArrayList<>();
+        for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+            MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+            if (oldIndex == null) {
+                continue;
+            }
+            for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
+                if (splittingTablet == null) {
+                    continue;
+                }
+                Tablet oldTablet = oldIndex.getTablet(splittingTablet.getOldTabletId());
+                if (oldTablet == null || oldTablet.getRange() == null) {
+                    continue;
+                }
+                expectedSplits.add(new ExpectedSplit(splittingTablet.getOldTabletId(),
+                        List.copyOf(splittingTablet.getNewTabletIds()), oldTablet.getRange()));
+            }
+        }
+        return expectedSplits;
+    }
+
+    // Returns why the children do not exactly cover the parent (the first failure only), or null when they do.
+    private static String coverageGap(List<Long> newTabletIds, List<TabletRange> children, Range<Tuple> parent) {
+        // Every child must be a proper interval; matching ends and adjacent edges alone would accept a reversed
+        // child such as [250, 150) between [100, 250) and [150, 300).
+        for (int i = 0; i < children.size(); i++) {
+            Range<Tuple> range = children.get(i).getRange();
+            if (range.isMinimum() || range.isMaximum()) {
+                continue;
+            }
+            int cmp = range.getLowerBound().compareTo(range.getUpperBound());
+            // [x, x] holds a single key; any other range whose lower bound is not below its upper is empty.
+            if (cmp > 0 || (cmp == 0 && !(range.isLowerBoundIncluded() && range.isUpperBoundIncluded()))) {
+                return String.format("new tablet %d has range %s, which is empty", newTabletIds.get(i), children.get(i));
+            }
+        }
+        if (!TabletReshardUtils.sameLowerBound(children.get(0).getRange(), parent)) {
+            return String.format("new tablet %d starts at range %s, not at the parent's lower bound",
+                    newTabletIds.get(0), children.get(0));
+        }
+        int last = children.size() - 1;
+        if (!TabletReshardUtils.sameUpperBound(children.get(last).getRange(), parent)) {
+            return String.format("new tablet %d ends at range %s, not at the parent's upper bound",
+                    newTabletIds.get(last), children.get(last));
+        }
+        for (int i = 1; i < children.size(); i++) {
+            Range<Tuple> prev = children.get(i - 1).getRange();
+            Range<Tuple> next = children.get(i).getRange();
+            if (prev.isMaximum() || next.isMinimum()
+                    || prev.getUpperBound().compareTo(next.getLowerBound()) != 0
+                    || prev.isUpperBoundIncluded() == next.isLowerBoundIncluded()) {
+                return String.format("new tablets %d and %d are not adjacent: %s then %s",
+                        newTabletIds.get(i - 1), newTabletIds.get(i), children.get(i - 1), children.get(i));
+            }
+        }
+        return null;
     }
 
     /**
@@ -964,6 +1107,49 @@ public class SplitTabletJob extends TabletReshardJob {
         }
     }
 
+    /**
+     * Take back the new tablets the leader's identical fallback dropped from a split family.
+     * replayPreparingJob put every preallocated id into the inverted index; the ones the fallback
+     * discarded never reach a materialized index, so they would otherwise stay there belonging to
+     * nothing and keep resolving by tablet id to an index that does not hold them.
+     *
+     * <p>What was dropped is read from the resharding-tablet registry, which still holds the family
+     * as of the previous journal entry, because TabletReshardJobMgr refreshes it only after
+     * replay() returns. Deriving it that way rather than from persisted state also covers a
+     * CLEANING record journaled by an FE that never recorded the fallback, and makes this a no-op
+     * on an FE that came up from an image already at CLEANING -- that one registered the shrunken
+     * family and never put the dropped ids into its inverted index in the first place. Likewise a
+     * no-op on the leader, which never replays and removed them from the inverted index itself.
+     */
+    private void removeDroppedNewTabletsFromInvertedIndex() {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        List<Long> droppedTabletIds = new ArrayList<>();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    ReshardingTablet registered = tabletReshardJobMgr
+                            .getReshardingTablet(reshardingTablet.getFirstOldTabletId(), commitVersion);
+                    if (registered == null) {
+                        continue;
+                    }
+                    // Hoisted: an identical tablet builds a fresh singleton on every call.
+                    List<Long> keptNewTabletIds = reshardingTablet.getNewTabletIds();
+                    for (long tabletId : registered.getNewTabletIds()) {
+                        if (!keptNewTabletIds.contains(tabletId)) {
+                            droppedTabletIds.add(tabletId);
+                        }
+                    }
+                }
+            }
+        }
+        // Batched: deleteTablet() takes the inverted index's global mutation lock on every call, and
+        // that lock is held in long batches by BE tablet reports. deleteTablets() no-ops on an empty
+        // list, so a job where nothing fell back still takes the lock zero times.
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(droppedTabletIds);
+    }
+
     private void removeTabletsFromInvertedIndex() {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
@@ -990,7 +1176,13 @@ public class SplitTabletJob extends TabletReshardJob {
             // a job that may never be queued (admission-time table-dropped race). The errorMessage
             // assignment is paired with setJobState here so it only fires when it is actually
             // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
-            if (!canAbort()) {
+            //
+            // Leader-only, because setJobState journals: replay reaches this method too, on a
+            // follower, on the leader's activation catch-up (which runs before feType becomes
+            // LEADER), and on the checkpoint worker (a separate GlobalStateMgr whose EditLog has no
+            // journal queue). Writing from any of those either throws at the closed WAL gate or
+            // NPEs, and replay() swallows it, leaving the record half-applied and silent.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !canAbort()) {
                 errorMessage = "Table not found";
                 setJobState(JobState.ABORTING);
             }

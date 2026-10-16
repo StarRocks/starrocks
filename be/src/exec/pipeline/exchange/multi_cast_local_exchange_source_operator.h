@@ -34,6 +34,8 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
+    bool pending_finish() const override { return _exchanger->has_pending_io_tasks(); }
+
     Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;

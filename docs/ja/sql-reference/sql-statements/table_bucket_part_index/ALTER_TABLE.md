@@ -482,15 +482,27 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 - `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：10 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
 
+  Tablet ID を指定しない手動 SPLIT では、目標サイズに正の値が必要です。FE 設定 `tablet_reshard_target_size` が `0` の場合は、`PROPERTIES` で正の値を指定してください。指定しないと、`Invalid tablet_reshard_target_size: 0` というエラーになります。以下の 1.5 倍の分割しきい値は、目標サイズが正の値の場合にのみ適用されます。
+
   - SPLIT が実行される条件：
-    - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
+    - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割では FE 設定 `tablet_reshard_target_size` を使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
-  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、`tablet_reshard_target_size` に達するのを待たずに分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。`PROPERTIES` で `tablet_reshard_target_size` を指定すると、この動作は無効になり、指定したターゲットサイズが厳密に適用されます。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を `tablet_reshard_target_size` 以上に設定します。
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、上記のしきい値に達する前に分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を `tablet_reshard_target_size` 以上に設定します。
 
-  - MERGE が実行される条件：
-    - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
-    - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
+  - MERGE を実行するには、FE 設定 `tablet_reshard_enable_tablet_merge` を `true` に設定する必要があります（デフォルト：`false`）。無効の場合、Tablet は自動的にマージされず、`ALTER TABLE ... MERGE` も拒否されます。有効にした場合、MERGE は次のように動作します：
+    - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定には FE 設定 `tablet_reshard_target_size` を使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
+    - 自動マージと、Tablet ID を指定しない手動 MERGE は、同じ方法でマージ対象の Tablet を選択します。手動 MERGE では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。マージ対象となるのは `ceil(0.8 × tablet_reshard_target_size)` 未満の Tablet のみです。隣接するこれらの Tablet はレンジ順にグループ化され、各グループの合計サイズは `tablet_reshard_target_size` を超えません。間にこれより大きい Tablet がある場合、グループはそこで区切られます。マージによって、マテリアライズドインデックスの Tablet 数が並列度の下限を下回ることはありません。この下限は、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` を上限とし、2 以上）です。マージできる Tablet が 1 つもない場合、手動のステートメントは `No tablets need to merge in table ...` というエラーになります。
+    - Tablet ID を指定した手動 MERGE は、Tablet のサイズや並列度の下限を確認せず、指定したグループをそのままマージします。各グループは、同じパーティションかつ同じマテリアライズドインデックス内の、連続する 2 つ以上の Tablet で構成する必要があります。
+    - いずれの場合も、現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満である必要があります。
+
+:::note
+
+`ORDER BY` が主キーと異なるレンジ分散の主キーテーブルでは、**MERGE はサポートされません**。この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。`ALTER TABLE ... MERGE TABLETS` とサイズに基づく自動マージはいずれも拒否され、`Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key` というエラーになります。
+
+SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。
+
+:::
 
 詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
 
@@ -511,7 +523,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意:
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
-2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。キー列を作成するとテーブルの集計キーが変わり、既存データが書き換えられるためです。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、以前のバージョンの動作に戻り、その列はキー列として作成されます。
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じてロールアップを再作成できます。）
 4. 共有データクラスタの Range 分散テーブルでは、Range ソートキーに加わるキー列の追加が、重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、およびユニークキー（Unique Key）テーブルで v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーし、追加するキー列には定数の `DEFAULT` 値を指定する必要があります。主キー（Primary Key）テーブル、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
@@ -543,7 +555,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
 
-2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、以前のバージョンの動作に戻ります。
 
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じて別のロールアップを作成できます。）
 
@@ -1097,7 +1109,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 

@@ -26,6 +26,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -245,7 +246,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
+    public boolean hasGlobalDict(OlapTable scanTable, ColumnId columnName, long versionTime) {
+        long tableId = scanTable.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         // A dump-seeded dict is authoritative for replay; deliberately ignore versionTime (the recreated
         // replay table has a fresh, larger version that would otherwise fail the version gate below).
@@ -263,24 +265,16 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             return false;
         }
 
-        Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
-        for (Long id : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
-            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
-                columnIdentifier.setDbId(db.getId());
-                break;
-            }
-        }
-
-        if (columnIdentifier.getDbId() == -1) {
+        long dbId = resolveDbId(scanTable);
+        Table table = dbId == -1 ? null : GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
             LOG.debug("{} couldn't find db id", columnName);
             return false;
         }
+        columnIdentifier.setDbId(dbId);
 
         // Column-level persisted forbid (survives FE restart / leader failover): the dictionary thrash
         // guard records such columns as a table property, checked here so they stop being collected.
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(columnIdentifier.getDbId(), tableId);
         if (table instanceof OlapTable olapTable && olapTable.isNoDictColumn(columnName.getId())) {
             LOG.debug("table {} column {} is a persisted no-dict column", tableId, columnName);
             return false;
@@ -307,6 +301,27 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
         LOG.debug("{} first get column dict", columnName);
         return false;
+    }
+
+    // The analyzer records the database on every OLAP table it resolves, including a view's base tables. The
+    // statement's database set cannot stand in for it: it holds only the databases the user wrote, so a table
+    // read through a view in another database would never get its dict. A materialized view picked by a rewrite
+    // was not resolved by the analyzer, but knows its database itself; fall back to that set for anything else.
+    private static long resolveDbId(OlapTable table) {
+        if (table instanceof MaterializedView mv) {
+            return mv.getDbId();
+        }
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        if (dbId.isPresent()) {
+            return dbId.get();
+        }
+        for (Long id : ConnectContext.get().getCurrentSqlDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(id, table.getId()) != null) {
+                return id;
+            }
+        }
+        return -1;
     }
 
     @Override

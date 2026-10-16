@@ -66,7 +66,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.oauth2_use_managed_identity | 是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。默认值：`false`。 |
 | azure.adls2.oauth2_tenant_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。 |
 | azure.adls2.oauth2_client_id        | <ul><li>对于托管身份验证：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。</li><li>对于 Workload Identity：与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。</li></ul> |
-| azure.adls2.oauth2_token_file       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+| azure.adls2.oauth2_token_file | Workload Identity 认证使用的联合令牌文件路径。请在所有 FE 和 CN 上将令牌文件挂载到相同路径，并确保进程可读取该文件。 |
 | gcp.gcs.service_account_email	      | 创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。 |
 | gcp.gcs.service_account_private_key_id | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
 | gcp.gcs.service_account_private_key | 创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
@@ -339,10 +339,13 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
   ```SQL
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
-  "azure.adls2.oauth2_token_file" = "<path_to_token>",
   "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+  "azure.adls2.oauth2_use_managed_identity" = "false"
   ```
+
+  Workload Identity 认证使用的联合令牌文件路径。请在所有 FE 和 CN 上将令牌文件挂载到相同路径，并确保进程可读取该文件。 使用 Workload Identity 时，将 `azure.adls2.oauth2_use_managed_identity` 设为 `false`。所有 FE 和 CN 均须支持 ADLS2 存储卷的 Workload Identity 认证。迁移现有存储卷时，请在同一条 `ALTER STORAGE VOLUME` 语句中将 `azure.adls2.shared_key`、`azure.adls2.sas_token` 和 `azure.adls2.oauth2_client_secret` 设为空字符串，因为 ALTER 会保留未指定的属性。
 
 :::note
 不支持 Azure Data Lake Storage Gen1。

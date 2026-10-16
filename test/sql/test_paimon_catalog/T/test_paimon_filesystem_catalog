@@ -1,8 +1,11 @@
 -- name: test_paimon_filesystem_catalog
 
-shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db/scalar_types/ >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/variant_basic oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db/variant_basic/ >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/scalar_types/ >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/variant_basic oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/variant_basic/ >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob/ >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_desc oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_desc/ >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_view oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_view/ >/dev/null
 
 create external catalog `paimon_filesystem_catalog_${uuid0}`
 properties (
@@ -17,10 +20,41 @@ set time_zone = 'Asia/Shanghai';
 -- Always go through paimon-cpp.
 set paimon_reader_mode = 'native';
 
-[ORDER]select * from paimon_filesystem_catalog_${uuid0}.test.scalar_types order by 1;
+use paimon_filesystem_catalog_${uuid0}.paimon_test;
+-- Print top-level VARBINARY as hex too, so c_binary never lands a raw NUL byte in the R file.
+set binary_encoding_level = 'all';
 
-[ORDER]select id, variant_typeof(v) from paimon_filesystem_catalog_${uuid0}.test.variant_basic order by 1;
+[ORDER]select * from scalar_types order by 1;
 
+[ORDER]select id, variant_typeof(v) from variant_basic order by 1;
+
+-- A predicate comparing two columns of the same table is a multi-slot conjunct; it cannot be pushed
+-- down and must be evaluated on the rows by the scanner. Expect ids 1 and 4 only.
+[ORDER]select id from scalar_types where c_int > c_smallint order by 1;
+
+[ORDER]select id from scalar_types where c_bigint > c_int and c_int > 0 order by 1;
+
+select count(*) from scalar_types where c_dec_20_4 > c_dec_9_2;
+
+-- start to test paimon blob
+-- blob-field: payload lives in .blob files, read back inline (hex like VARBINARY).
+desc image_blob;
+select * from image_blob order by id;
+-- FILE column not selected: the scanner must skip the blob column entirely.
+select id, name from image_blob where id = 2;
+select image from image_blob where id = 1;
+select count(*) from image_blob;
+-- blob-descriptor-field: the stored BlobDescriptor is surfaced as-is (length -1 = to end of file).
+select * from image_blob_desc order by id;
+-- blob-view-field: paimon-cpp resolves the view into a descriptor pointing at image_blob's .blob
+-- files; the warehouse prefix carries the per-run uuid, so the R side matches it with [REGEX].
+select * from image_blob_view order by id;
+
+-- start to test paimon-jni
+set paimon_reader_mode = jni;
+[ORDER]select * from scalar_types order by 1;
+
+set catalog default_catalog;
 drop catalog paimon_filesystem_catalog_${uuid0};
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null

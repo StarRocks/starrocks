@@ -18,6 +18,8 @@
 #include <column/column_view/column_view.h>
 #include <column/column_view/column_view_base.h>
 
+#include "gutil/strings/substitute.h"
+
 namespace starrocks {
 
 MutableColumnPtr ColumnViewBase::clone() const {
@@ -30,6 +32,22 @@ MutableColumnPtr ColumnViewBase::clone() const {
     c->_row_idx = _row_idx;
     c->_concat_column = _concat_column;
     return copy;
+}
+
+Status ColumnViewBase::capacity_limit_reached() const {
+    // Rows of a view are addressed by uint32_t positions (_habitat_idx, _row_idx and the indexes of
+    // append_selective_to), and _num_rows is counted eagerly on append, so this holds before the deferred tasks run.
+    if (_num_rows > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("Row count of column view exceeds the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    // Once concatenated, every read goes to _concat_column, so check it like a materialized column. Do not call
+    // _to_view() here: a capacity check must not force the deferred concatenation.
+    if (_concat_column != nullptr) {
+        return _concat_column->capacity_limit_reached();
+    }
+    // The habitats are upstream columns that the view only references and never appends to.
+    return Status::OK();
 }
 
 size_t ColumnViewBase::container_memory_usage() const {
@@ -173,13 +191,20 @@ void ColumnViewBase::_append_selective(int habitat_idx, const ColumnPtr& src,
 void ColumnViewBase::append_selective_to(Column& dest_column, const uint32_t* indexes, uint32_t from,
                                          uint32_t count) const {
     _to_view();
-    DCHECK(from + count <= _num_rows);
+    // `from` and `count` window the INDEXES array; they do not range over this column's rows. Each
+    // indexes[i] is a row ordinal here, and the same position may be selected any number of times.
+    // Asserting from + count <= _num_rows compared how many positions were selected against how many
+    // rows exist, which are unrelated quantities, and aborted debug builds on ordinary input: a hash
+    // join selects _probe_state->count positions out of the build column (join_hash_map.hpp,
+    // _copy_build_nullable_column), so any build side smaller than a probe chunk tripped it. What has
+    // to hold is that every ordinal is in range, which is checked per element below.
     if (_concat_column) {
         dest_column.append_selective(*_concat_column, indexes, from, count);
         return;
     }
     for (auto i = from; i < from + count; ++i) {
         const auto n = indexes[i];
+        DCHECK_LT(n, _num_rows);
         const auto& habitat_column = _habitats[_habitat_idx[n]];
         const auto ordinal = habitat_column->is_constant() ? 0 : _row_idx[n];
         if (habitat_column->is_null(ordinal)) {

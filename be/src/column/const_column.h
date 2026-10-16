@@ -48,6 +48,7 @@ public:
     bool is_nullable() const override { return _data->is_nullable(); }
     bool is_json() const override { return _data->is_json(); }
     bool is_variant() const override { return _data->is_variant(); }
+    bool is_file() const override { return _data->is_file(); }
     bool is_array() const override { return _data->is_array(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
@@ -265,12 +266,6 @@ public:
     }
 
     void check_or_die() const override;
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 

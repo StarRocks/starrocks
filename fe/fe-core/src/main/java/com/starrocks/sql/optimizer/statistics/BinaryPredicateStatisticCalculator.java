@@ -400,16 +400,17 @@ public class BinaryPredicateStatisticCalculator {
         Optional<Histogram> hist = enableJoinHistogram ?
                 updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic, rightColumn.getType()) :
                 Optional.empty();
+        double nonNullFactor = isEqualForNull ? 1 :
+                (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction());
         if (hist.isEmpty()) {
             double selectivity = 1.0 /
                     max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
-            rowCount = statistics.getOutputRowCount() * selectivity *
-                    (isEqualForNull ? 1 :
-                            (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         } else {
             double selectivity = hist.get().getTotalRows() / (double)
                     (leftColumnStatistic.getHistogram().getTotalRows() * rightColumnStatistic.getHistogram().getTotalRows());
-            rowCount = statistics.getOutputRowCount() * selectivity;
+            // Histograms exclude nulls, so their selectivity is conditional on both operands being non-null.
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         }
 
         ColumnStatistic.Builder newLeftStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());
@@ -658,6 +659,14 @@ public class BinaryPredicateStatisticCalculator {
         // so the predicate factor :
         //          pf = 1.0 / distinct_val.
         double predicateFactor = columnRange.overlapPercentWith(intersectRange);
+        // `col = c` on a column already narrowed to exactly c (e.g. by an earlier `col = c`, whose NDV is kept)
+        // keeps every row; 1 / NDV would apply the earlier filter again. Only a point predicate qualifies: `<` / `>`
+        // are encoded with c included and must still drop the row, and a string constant has no finite bounds while
+        // string columns carry a placeholder min = max.
+        if (!intersectRange.isEmpty() && columnRange.getLow() == columnRange.getHigh()
+                && predicateRange.getLow() == predicateRange.getHigh() && !predicateRange.isBothInfinite()) {
+            predicateFactor = 1.0;
+        }
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
 
         ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().

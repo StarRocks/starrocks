@@ -377,13 +377,11 @@ Status RowsMapperIterator::status() {
 }
 
 StatusOr<std::string> new_lake_rows_mapper_filename(lake::TabletManager* mgr, int64_t tablet_id, int64_t txn_id) {
-    // Always store the rows mapper on remote storage (.lcrm), independent of
-    // config::enable_pk_index_parallel_execution.
+    // Always store the rows mapper on remote storage (.lcrm).
     // WHY: The mapper file must be reachable by whichever compute node publishes the
     // compaction, and remote storage (S3/HDFS) guarantees shared access without file
     // replication. Keeping this unconditional avoids a class of local-vs-remote mismatch
-    // bugs (writer picks .crm while the publisher looks for .lcrm, or vice versa) when the
-    // config is toggled between the write and publish phases.
+    // bugs (writer picks .crm while the publisher looks for .lcrm, or vice versa).
     // TRADEOFF: Slower I/O (~50-200ms) than local .crm, accepted for correctness and
     // multi-node accessibility.
     return mgr->lcrm_location(tablet_id, lake::gen_lcrm_filename(txn_id));

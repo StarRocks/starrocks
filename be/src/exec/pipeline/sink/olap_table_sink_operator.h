@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "exec/pipeline/fragment_context.h"
@@ -57,6 +58,9 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
+    void _submit_close() const;
+    bool _pending_close() const;
+
     AsyncDataSink* _sink;
     FragmentContext* const _fragment_ctx;
     std::atomic<int32_t>& _num_sinkers;
@@ -68,6 +72,15 @@ private:
 
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;
+
+    // Set once the final close of _sink has been handed to the load sink close pool. From then on the sink belongs
+    // to that task, and this operator does not touch it again until _close_done is set.
+    mutable bool _close_submitted = false;
+    mutable std::atomic<bool> _close_done = false;
+    // Written by the close task before it sets _close_done.
+    mutable Status _close_status;
+    // Time the close waited in the load sink close pool queue before a thread picked it up.
+    RuntimeProfile::Counter* _close_queue_timer = nullptr;
 };
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {

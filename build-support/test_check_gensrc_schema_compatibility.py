@@ -390,21 +390,20 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
                 self.assertEqual(["unsupported_syntax"],
                                  [issue.rule for issue in module.check_repo(repo, mode="full", base="HEAD")])
 
-    def test_parquet_required_field_waivers_are_narrow(self) -> None:
+    def test_parquet_required_field_waivers_are_retired(self) -> None:
+        # The BoundingBox X/Y addition waivers were single-PR exceptions. Now that the
+        # comparison base carries the fields they can never match again, so keeping them
+        # would trip the stale-waiver check and leave a standing exception nobody reviewed.
         module = _load_module()
         waivers = module.load_waivers(MODULE_PATH.parent / "schema_compatibility_waivers.json")
         parquet_waivers = [w for w in waivers if w.path == "gensrc/thrift/parquet.thrift"]
-        self.assertEqual(4, len(parquet_waivers))
+        self.assertEqual([], parquet_waivers)
         for number, name in enumerate(("xmin", "xmax", "ymin", "ymax"), 1):
-            issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
-                                     field_number=number, field_name=name, rule="new_field_must_be_optional",
-                                     detail="", remediation="")
-            self.assertIsNotNone(module._match_waiver(issue, parquet_waivers))
-            for rule in ("field_deleted", "field_type_changed", "field_renumbered"):
+            for rule in ("new_field_must_be_optional", "field_deleted", "field_type_changed", "field_renumbered"):
                 issue = module.Violation(path="gensrc/thrift/parquet.thrift", container="BoundingBox",
                                          field_number=number, field_name=name, rule=rule,
                                          detail="", remediation="")
-                self.assertIsNone(module._match_waiver(issue, parquet_waivers))
+                self.assertIsNone(module._match_waiver(issue, waivers))
 
     def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
         module = _load_module()
@@ -1303,6 +1302,233 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
         self.assertIn("- 'build-support/schema_compatibility_waivers.json'", workflow_text)
         self.assertIn("git fetch origin ${{ github.base_ref }}\n", workflow_section)
         self.assertNotIn("git fetch origin ${{ github.base_ref }} --depth=1", workflow_section)
+
+    def test_changed_mode_allows_byte_identical_proto_message_relocation(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_BASE)
+            self._commit_all(repo, "base")
+
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_SOURCE_AFTER)
+            self._write_proto(
+                repo,
+                "moved.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                message MovedPB {
+                  optional string name = 1;
+                  required int64 id = 2;
+                  repeated  string  tags = 3;
+                }
+                """,
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
+    def test_changed_mode_allows_nested_proto_message_relocation(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(
+                repo,
+                "service.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                message OuterPB {
+                  message InnerPB {
+                    optional string name = 1;
+                  }
+                  optional InnerPB inner = 1;
+                }
+                """,
+            )
+            self._commit_all(repo, "base")
+
+            self._write_proto(
+                repo,
+                "service.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                import "moved.proto";
+                """,
+            )
+            self._write_proto(
+                repo,
+                "moved.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                message OuterPB {
+                  message InnerPB {
+                    optional string name = 1;
+                  }
+                  optional InnerPB inner = 1;
+                }
+                """,
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
+    def test_changed_mode_rejects_relocation_with_changed_field(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_BASE)
+            self._commit_all(repo, "base")
+
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_SOURCE_AFTER)
+            self._write_proto(
+                repo,
+                "moved.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                message MovedPB {
+                  optional bytes name = 1;
+                  required int64 id = 2;
+                  repeated string tags = 3;
+                }
+                """,
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            deleted = [issue for issue in issues if issue.rule == "field_deleted"]
+            self.assertEqual(3, len(deleted))
+            self.assertTrue(all(issue.path == "gensrc/proto/service.proto" for issue in deleted))
+            self.assertIn("new_field_must_be_optional", [issue.rule for issue in issues])
+
+    def test_changed_mode_rejects_relocation_with_added_field(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_BASE)
+            self._commit_all(repo, "base")
+
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_SOURCE_AFTER)
+            self._write_proto(
+                repo,
+                "moved.proto",
+                """\
+                syntax = "proto2";
+
+                package starrocks;
+
+                message MovedPB {
+                  optional string name = 1;
+                  required int64 id = 2;
+                  repeated string tags = 3;
+                  optional string extra = 4;
+                }
+                """,
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(3, len([issue for issue in issues if issue.rule == "field_deleted"]))
+
+    def test_changed_mode_rejects_relocation_into_other_package(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_BASE)
+            self._commit_all(repo, "base")
+
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_SOURCE_AFTER)
+            self._write_proto(
+                repo,
+                "moved.proto",
+                """\
+                syntax = "proto2";
+
+                package other;
+
+                message MovedPB {
+                  optional string name = 1;
+                  required int64 id = 2;
+                  repeated string tags = 3;
+                }
+                """,
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(3, len([issue for issue in issues if issue.rule == "field_deleted"]))
+
+    def test_changed_mode_still_rejects_plain_message_removal(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_BASE)
+            self._commit_all(repo, "base")
+
+            self._write_proto(repo, "service.proto", self._MOVED_MESSAGE_SOURCE_AFTER)
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_deleted"] * 3, [issue.rule for issue in issues])
+            self.assertEqual({"MovedPB"}, {issue.container for issue in issues})
+
+    _MOVED_MESSAGE_BASE = """\
+        syntax = "proto2";
+
+        package starrocks;
+
+        message KeptPB {
+          optional string name = 1;
+        }
+
+        message MovedPB {
+          optional string name = 1;
+          required int64 id = 2;
+          repeated string tags = 3;
+        }
+        """
+
+    _MOVED_MESSAGE_SOURCE_AFTER = """\
+        syntax = "proto2";
+
+        package starrocks;
+
+        import "moved.proto";
+
+        message KeptPB {
+          optional string name = 1;
+        }
+        """
+
+    def _write_proto(self, repo: Path, name: str, text: str) -> None:
+        (repo / "gensrc" / "proto" / name).write_text(textwrap.dedent(text))
 
     def _init_repo(self, repo: Path) -> None:
         (repo / "gensrc" / "proto").mkdir(parents=True)
