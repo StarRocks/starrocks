@@ -98,8 +98,8 @@ public class MVTimelinessMgr implements MemoryTrackable {
     }
 
     /**
-     * Waits on the check another lookup is computing, in slices so that a cancelled statement stops waiting:
-     * KILL QUERY and the query timeout only mark the statement, they do not interrupt this thread.
+     * Waits on the check another lookup is computing, in slices so that a killed statement stops waiting:
+     * KILL and the query timeout only mark the statement, they do not interrupt this thread.
      *
      * <p>Once the statement's budget is spent the lookup fails rather than computing the check itself: that would
      * repeat the same slow reads -- the base tables' partitions through the connector -- once per waiter, with nothing
@@ -113,7 +113,7 @@ public class MVTimelinessMgr implements MemoryTrackable {
                 ? Instant.MAX
                 : context.getStartTimeInstant().plusSeconds(context.getExecTimeout());
         while (true) {
-            if (context != null && context.isStatementCancelled()) {
+            if (context != null && context.isKilled()) {
                 throw new StarRocksPlannerException("statement cancelled while waiting for the timeliness of " +
                         "materialized view " + mv.getName(), ErrorType.USER_ERROR);
             }

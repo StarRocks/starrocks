@@ -288,17 +288,12 @@ public class MVTimelinessMgrTest {
         }
 
         Assertions.assertInstanceOf(IllegalStateException.class, failure.get());
-<<<<<<< HEAD
-        for (AtomicReference<MvUpdateInfo> result : results) {
-            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, result.get().getMvToRefreshType());
-=======
         for (AtomicReference<Throwable> waiterFailure : waiterFailures) {
             Assertions.assertInstanceOf(IllegalStateException.class, waiterFailure.get());
->>>>>>> ecb0be3 ([BugFix] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#80943))
         }
         Assertions.assertEquals(1, computeCount.get(), "a waiter of the failed check computed it again");
         MvUpdateInfo retried = lookup();
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, retried.getMVToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, retried.getMvToRefreshType());
         Assertions.assertSame(retried, lookup(), "the retried check was not cached");
         Assertions.assertEquals(2, computeCount.get());
     }

@@ -16,21 +16,10 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-import com.starrocks.common.util.concurrent.lock.LockParams;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
-=======
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.MVTaskRunProcessor;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.scheduler.TaskRunContext;
->>>>>>> ecb0be3 ([BugFix] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#80943))
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -44,12 +33,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
-=======
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
->>>>>>> ecb0be3 ([BugFix] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#80943))
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
