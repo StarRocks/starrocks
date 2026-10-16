@@ -93,26 +93,76 @@ Status SstReadStateMemoryContext::check_cancelled() const {
                    : Status::OK();
 }
 
+SstReadStateReadCredit::~SstReadStateReadCredit() {
+    if (_capacity == 0) return;
+    DCHECK_EQ(_available, _capacity);
+    _context->tracker.release(_capacity + object_reserve());
+    _context->active_read_credits.fetch_sub(1);
+    _context->memory_cv.notify_all();
+}
+
+bool SstReadStateReadCredit::try_reserve(size_t bytes) {
+    DCHECK_EQ(_capacity, 0);
+    if (bytes == 0) return true;
+    if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - object_reserve() ||
+        !_context->check_cancelled().ok() || _context->tracker.try_consume(bytes + object_reserve())) {
+        return false;
+    }
+    _capacity = _available = bytes;
+    _context->active_read_credits.fetch_add(1);
+    TRACE_COUNTER_INCREMENT("pindex_sst_read_credit_reserved_bytes", bytes + object_reserve());
+    return true;
+}
+
+size_t SstReadStateReadCredit::borrow(size_t bytes) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    const size_t taken = std::min(bytes, _available);
+    _available -= taken;
+    return taken;
+}
+
+void SstReadStateReadCredit::give_back(size_t bytes) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    DCHECK_LE(bytes, _capacity - _available);
+    _available += bytes;
+}
+
 SstReadStateMemoryContext::Reservation::~Reservation() {
     shrink_to(0);
 }
 
 void SstReadStateMemoryContext::Reservation::shrink_to(size_t bytes) {
     DCHECK_LE(bytes, _bytes);
-    _context->tracker.release(_bytes - bytes);
+    const size_t refund = _bytes - bytes;
+    const size_t returned_credit = std::min(refund, _credit_bytes);
+    if (returned_credit) _credit->give_back(returned_credit);
+    _credit_bytes -= returned_credit;
+    _context->tracker.release(refund - returned_credit);
     _bytes = bytes;
     _context->memory_cv.notify_all();
+}
+
+MemTracker* SstReadStateMemoryContext::Reservation::_try_add(size_t bytes) {
+    DCHECK(!_credit || _credit->context() == _context.get());
+    const size_t borrowed = _credit ? _credit->borrow(bytes) : 0;
+    if (auto* exceeded = _context->tracker.try_consume(bytes - borrowed)) {
+        if (borrowed) _credit->give_back(borrowed);
+        return exceeded;
+    }
+    _bytes += bytes;
+    _credit_bytes += borrowed;
+    TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
+    TRACE_COUNTER_INCREMENT("pindex_sst_read_credit_borrowed_bytes", borrowed);
+    return nullptr;
 }
 
 bool SstReadStateMemoryContext::Reservation::try_add(size_t bytes) {
     if (_context->refresh_usage) _context->refresh_usage();
     if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes ||
-        !_context->check_cancelled().ok() || _context->tracker.try_consume(bytes)) {
+        !_context->check_cancelled().ok()) {
         return false;
     }
-    _bytes += bytes;
-    TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
-    return true;
+    return _try_add(bytes) == nullptr;
 }
 
 Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, const std::function<bool()>& cancelled,
@@ -155,26 +205,20 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, cons
         if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes) {
             return Status::MemoryLimitExceeded("SST read-state reservation overflows");
         }
-        auto* exceeded = _context->tracker.try_consume(bytes);
+        auto* exceeded = _try_add(bytes);
         if (!exceeded) {
-            _bytes += bytes;
-            TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
             return Status::OK();
         }
         if (_context->reclaim) _context->reclaim(bytes);
-        exceeded = _context->tracker.try_consume(bytes);
+        exceeded = _try_add(bytes);
         if (!exceeded) {
-            _bytes += bytes;
-            TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
             return Status::OK();
         }
         // The global sweep skips the publish-pinned entry. Its lock owner can still drop its
         // own unpinned SSTs; otherwise one publisher can wait forever for memory it could free.
         if (wait && _reclaim_self) _reclaim_self(bytes);
-        exceeded = _context->tracker.try_consume(bytes);
+        exceeded = _try_add(bytes);
         if (!exceeded) {
-            _bytes += bytes;
-            TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
             return Status::OK();
         }
         // Optional filters fall back immediately. This open implementation retains compressed
@@ -244,10 +288,10 @@ StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::_open_file()
 
 StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_open_read_state(
         std::unique_ptr<RandomAccessFile> rf, const std::shared_ptr<SstReadStateMemoryContext>& context,
-        const std::function<void(size_t)>& reclaim_self) const {
+        const std::function<void(size_t)>& reclaim_self, const std::shared_ptr<SstReadStateReadCredit>& credit) const {
     auto state = std::make_shared<ReadState>();
     if (context && config::lake_pk_index_partial_eviction) {
-        state->reservation = std::make_shared<SstReadStateMemoryContext::Reservation>(context, reclaim_self);
+        state->reservation = std::make_shared<SstReadStateMemoryContext::Reservation>(context, reclaim_self, credit);
         // Table/iterator/filter-policy objects and open-time bookkeeping are small but nonzero.
         RETURN_IF_ERROR(state->reservation->add(kReadStateObjectMemoryReserve, true));
     }
@@ -369,7 +413,8 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     if (auto state = _transient_read_state.lock()) {
         return state;
     }
-    const bool cacheable = _read_state_cacheable || !config::lake_pk_index_partial_eviction;
+    const auto credit = _read_credit.lock();
+    const bool cacheable = (_read_state_cacheable && !credit) || !config::lake_pk_index_partial_eviction;
     const auto context = _memory_context;
     const auto reclaim_self = _reclaim_self;
     _read_state_opening = true;
@@ -390,7 +435,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_reopen_us");
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_count", 1);
     ASSIGN_OR_RETURN(auto rf, _open_file());
-    ASSIGN_OR_RETURN(auto state, _open_read_state(std::move(rf), context, reclaim_self));
+    ASSIGN_OR_RETURN(auto state, _open_read_state(std::move(rf), context, reclaim_self, credit));
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_bytes", state->table->memory_usage());
     lock.lock();
     if (cacheable || !context) {
@@ -412,6 +457,11 @@ void PersistentIndexSstable::set_read_state_cacheable(bool cacheable,
         TRACE_COUNTER_INCREMENT("pindex_sst_read_state_evict_bytes", _read_state->table->memory_usage());
         _read_state.reset();
     }
+}
+
+void PersistentIndexSstable::set_read_credit(const std::shared_ptr<SstReadStateReadCredit>& credit) const {
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    _read_credit = credit;
 }
 
 Status PersistentIndexSstable::reopen_read_state() const {
@@ -568,9 +618,14 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
-    if (state->reservation && config::lake_pk_index_partial_eviction) {
-        const auto limit = state->reservation->parent_limit();
-        if (_skip_data_block_cache.load() ||
+    if (config::lake_pk_index_partial_eviction) {
+        std::shared_ptr<SstReadStateMemoryContext> context;
+        {
+            std::lock_guard<std::mutex> lock(_read_state_mutex);
+            context = _memory_context;
+        }
+        const auto limit = state->reservation ? state->reservation->parent_limit() : -1;
+        if (_skip_data_block_cache.load() || (context && context->active_read_credits.load() > 0) ||
             (limit > 0 && state->table->memory_usage() > static_cast<size_t>(limit / 2))) {
             options.fill_cache = false;
             TRACE_COUNTER_INCREMENT("pindex_large_sst_data_cache_bypass_count", 1);

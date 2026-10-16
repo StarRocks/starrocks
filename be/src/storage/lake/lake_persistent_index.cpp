@@ -100,6 +100,7 @@ void LakePersistentIndex::_reset_index_state() {
     _partial_read_state = false;
     _publish_workspace_budget = 0;
     _publish_skip_optional_block_cache = false;
+    _publish_read_credit.reset();
     if (_memtable) {
         _memtable->clear();
     }
@@ -2207,6 +2208,15 @@ void LakePersistentIndex::disable_optional_data_block_cache() {
             }
         }
     }
+}
+
+void LakePersistentIndex::set_publish_read_credit(std::shared_ptr<SstReadStateReadCredit> credit) {
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable([&](const auto& sst) { sst.set_read_credit(credit); });
+        }
+    }
+    _publish_read_credit = std::move(credit);
 }
 
 Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial,

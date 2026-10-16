@@ -334,6 +334,7 @@ void PrimaryKeyManager::_bind_index_growth_reservation(IndexEntry* entry) {
     entry->value().set_growth_reservation_callbacks(
             [this, entry](size_t bytes) { return _reserve_index_growth(entry, bytes); },
             [this, entry](size_t keep_workspace) {
+                if (keep_workspace == 0) entry->value().set_publish_read_credit(nullptr);
                 update_index_cache_size(entry, true, keep_workspace);
                 _sst_memory_context->memory_cv.notify_all();
             });
@@ -349,19 +350,18 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
         return Status::MemoryLimitExceeded(
                 fmt::format("PK MemTable mutation needs {} bytes; update limit={}", bytes, limit));
     }
-    // A successful tree reservation alone must not grow the owner into a state where its
-    // following old-value lookup cannot open an SST. Preflight both against the real root
-    // before mutation, while flushing this owner is still safe. Return the read headroom
-    // immediately: ReadBlock owns its actual lifetime reservation, and must still compete
-    // with non-publish work through try_consume (this is not a second read-state charge).
+    // Keep the next old-value lookup's mandatory read credit until all this batch's readers
+    // join. ReadBlock borrows from the same root charge instead of releasing and reserving
+    // it again; a sibling tracker cannot steal that interval after the mutation is written.
     ASSIGN_OR_RETURN(auto minimum_read, entry->value().minimum_sst_read_memory());
     size_t required = 0;
     auto plan = [&]() -> Status {
-        if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) ||
-            minimum_read > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - bytes) {
+        const size_t object_bytes = minimum_read ? SstReadStateReadCredit::object_reserve() : 0;
+        if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - object_bytes ||
+            minimum_read > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - bytes - object_bytes) {
             return Status::MemoryLimitExceeded("PK MemTable mutation and SST read headroom overflow");
         }
-        required = bytes + minimum_read;
+        required = bytes + minimum_read + object_bytes;
         if (limit >= 0 && required > static_cast<size_t>(limit)) {
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_rejected", 1);
             return Status::MemoryLimitExceeded(
@@ -373,9 +373,16 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
     RETURN_IF_ERROR(plan());
     auto reserve = [&] {
         _block_cache->update_memory_usage();
-        std::lock_guard<std::mutex> lock(_index_accounting_mutex);
-        if (!_index_cache.try_reserve_object_growth(entry, required)) return false;
-        _index_cache.release_object_growth_reservation(entry, bytes);
+        std::shared_ptr<SstReadStateReadCredit> credit;
+        if (minimum_read) {
+            credit = std::make_shared<SstReadStateReadCredit>(_sst_memory_context);
+            if (!credit->try_reserve(minimum_read)) return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(_index_accounting_mutex);
+            if (!_index_cache.try_reserve_object_growth(entry, bytes)) return false;
+        }
+        entry->value().set_publish_read_credit(std::move(credit));
         TRACE_COUNTER_INCREMENT("pindex_memtable_growth_sst_headroom_bytes", minimum_read);
         return true;
     };
@@ -388,6 +395,7 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
         }
         if (reserve()) {
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
+            TEST_SYNC_POINT("PrimaryKeyManager::_reserve_index_growth:after_read_credit_reserved");
             return Status::OK();
         }
         // Cache inserts are accounted after lookup. Stop this owner's later lookups from
@@ -401,6 +409,7 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
         _reclaim_active_index_read_state(entry, required);
         if (reserve()) {
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
+            TEST_SYNC_POINT("PrimaryKeyManager::_reserve_index_growth:after_read_credit_reserved");
             return Status::OK();
         }
         if (!flushed) {
@@ -2824,6 +2833,23 @@ void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tab
     ADOPT_TRACE(trace_guard.get());
     TRACE("start preload_compaction_state tablet_id=$0 txn_id=$1", tablet.id(), txnlog.txn_id());
     auto start_ts = MonotonicMillis();
+    DeferOp report([&] {
+        const auto cost_ms = MonotonicMillis() - start_ts;
+        if (cost_ms >= config::lake_publish_version_slow_log_ms) {
+            LOG(INFO) << "Slow preload_compaction_state tablet_id=" << tablet.id() << " txn_id=" << txnlog.txn_id()
+                      << " segments=" << segments_size << " cost=" << cost_ms
+                      << "ms, trace: " << trace_guard->MetricsAsJSON();
+        }
+        TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:return");
+    });
+    const bool partial = config::lake_pk_index_partial_eviction;
+    auto preload_permit = _publish_limiter.try_acquire(partial ? 1 : std::numeric_limits<size_t>::max(), partial);
+    if (!preload_permit) {
+        TRACE_COUNTER_INCREMENT("pindex_compaction_preload_skipped_publish_active", 1);
+        StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.increment(1);
+        return;
+    }
+    TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:admitted");
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
                          tablet_schema);
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
@@ -2848,13 +2874,6 @@ void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tab
         // just release it, will use it again in publish
         _compaction_cache.release(compaction_entry);
     }
-    auto cost_ms = MonotonicMillis() - start_ts;
-    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
-        LOG(INFO) << "Slow preload_compaction_state tablet_id=" << tablet.id() << " txn_id=" << txnlog.txn_id()
-                  << " segments=" << segments_size << " cost=" << cost_ms
-                  << "ms, trace: " << trace_guard->MetricsAsJSON();
-    }
-    TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:return");
 }
 
 DEFINE_FAIL_POINT(fail_execute_index_major_compaction);

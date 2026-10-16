@@ -1016,6 +1016,95 @@ TEST_F(PersistentIndexSstableTest, test_existing_compressed_index_fits_with_boun
     EXPECT_EQ(0, counters["pindex_sst_byte_reservation_rejected"]);
 }
 
+TEST_F(PersistentIndexSstableTest, test_held_read_credit_survives_sibling_pressure_and_refunds_errors) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    const auto path = lake::join_path(kTestDir, "held-read-credit.sst");
+    const auto fixture = make_large_index_fixture(path, "held-read-credit.sst");
+    MemTracker tracker(fixture.minimum_bytes + SstReadStateReadCredit::object_reserve() + 64 * 1024);
+    MemTracker sibling(-1, "concurrent-compaction-input", &tracker);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    auto credit = std::make_shared<SstReadStateReadCredit>(context);
+    ASSERT_TRUE(credit->try_reserve(fixture.minimum_bytes));
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(fixture.pb, path, nullptr, false, nullptr, nullptr,
+                                                                  nullptr, context, true));
+    sst->set_read_credit(credit);
+    // This sibling keeps all remaining root space until the lookup has completed. With a
+    // refunded preflight it could take the decoded-index bytes and force a lookup timeout.
+    auto competitor = std::async(std::launch::async, [&] {
+        EXPECT_NE(nullptr, sibling.try_consume(fixture.minimum_bytes));
+        return sibling.try_consume(64 * 1024);
+    });
+    ASSERT_EQ(nullptr, competitor.get());
+    EXPECT_EQ(tracker.limit(), tracker.consumption());
+    auto lookup = std::async(std::launch::async, [&]() -> Status {
+        Slice key(fixture.keys[17]);
+        IndexValue value(NullIndexValue);
+        KeyIndexSet found;
+        auto st = sst->multi_get(&key, {0}, -1, &value, &found);
+        if (st.ok()) {
+            EXPECT_EQ(IndexValue(17), value);
+            EXPECT_EQ(KeyIndexSet{0}, found);
+        }
+        return st;
+    });
+    EXPECT_EQ(std::future_status::ready, lookup.wait_for(std::chrono::seconds(2)));
+    ASSERT_OK(lookup.get());
+    EXPECT_EQ(tracker.limit(), tracker.consumption());
+    EXPECT_EQ(fixture.minimum_bytes, credit->borrow(fixture.minimum_bytes));
+    credit->give_back(fixture.minimum_bytes);
+    auto* sync = SyncPoint::GetInstance();
+    const auto injected = Status::Corruption("injected held-credit open checksum failure");
+    sync->SetCallBack("PersistentIndexSstable::init:table_open_error",
+                      [&](void* arg) { *static_cast<Status*>(arg) = injected; });
+    sync->SetCallBack("PersistentIndexSstable::init:table_open_retry_error",
+                      [&](void* arg) { *static_cast<Status*>(arg) = injected; });
+    sync->EnableProcessing();
+    DeferOp clear([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    Slice key(fixture.keys[31]);
+    IndexValue value;
+    KeyIndexSet found;
+    auto failed = sst->multi_get(&key, {0}, -1, &value, &found);
+    EXPECT_EQ(injected.code(), failed.code());
+    EXPECT_EQ(injected.message(), failed.message());
+    EXPECT_EQ(fixture.minimum_bytes, credit->borrow(fixture.minimum_bytes));
+    credit->give_back(fixture.minimum_bytes);
+    sst.reset();
+    credit.reset();
+    EXPECT_EQ(64 * 1024, tracker.consumption());
+    EXPECT_EQ(0, context->active_read_credits.load());
+    sibling.release(sibling.consumption());
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+}
+
+TEST_F(PersistentIndexSstableTest, test_read_credit_cancel_returns_loans_without_double_charge) {
+    MemTracker tracker(1024 * 1024);
+    auto scope = std::make_shared<SstReadStateMemoryContext::WaitScope>();
+    std::atomic<bool> cancelled{false};
+    scope->cancelled = [&] { return cancelled.load(); };
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker, scope);
+    auto credit = std::make_shared<SstReadStateReadCredit>(context);
+    ASSERT_TRUE(credit->try_reserve(128 * 1024));
+    {
+        SstReadStateMemoryContext::Reservation reservation(context, {}, credit);
+        ASSERT_OK(reservation.add(64 * 1024, true));
+        EXPECT_EQ(128 * 1024 + SstReadStateReadCredit::object_reserve(), tracker.consumption());
+        cancelled.store(true);
+        EXPECT_TRUE(reservation.add(128 * 1024, true).is_cancelled());
+        EXPECT_EQ(64 * 1024, reservation.bytes());
+    }
+    EXPECT_EQ(128 * 1024, credit->borrow(128 * 1024));
+    credit->give_back(128 * 1024);
+    credit.reset();
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(0, context->active_read_credits.load());
+}
+
 TEST_F(PersistentIndexSstableTest, test_nonblocking_bulk_reservation_declines_without_reclaim_or_charge) {
     MemTracker tracker(1024);
     MemTracker inflight(-1, "inflight", &tracker);

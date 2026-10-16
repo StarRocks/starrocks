@@ -98,6 +98,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(lake_pk_index_cache_hit_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_pk_index_load_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_pk_index_load_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(lake_pk_index_compaction_preload_skipped_total, MetricUnit::REQUESTS);
 
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
     METRIC_DEFINE_INT_COUNTER(writable_blocks_total, MetricUnit::BLOCKS);

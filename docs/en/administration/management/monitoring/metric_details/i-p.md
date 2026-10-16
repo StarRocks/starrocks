@@ -329,11 +329,19 @@ With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `IND
 
 With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory. The index cache tracker also temporarily includes prepaid MemTable mutation bytes. Resident cache gauges and `INDEX_MEM` exclude unused reservations.
 
+Unused reusable SST read credit is also charged to the update tracker until its mutation batch and lookups finish. Resident gauges and `INDEX_MEM` exclude this credit; loan counters do not represent additional root allocations.
+
 ## `lake_pk_index_cache_overhead_bytes`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Estimated object, protobuf, path and fileset overhead of cached shared-data Primary Key indexes, including the reserved allowance for resident SST read-state objects. Included in the cache charge when `lake_pk_index_partial_eviction` is enabled. Delete vectors have their own metric.
+
+## `lake_pk_index_compaction_preload_skipped_total`
+
+- Unit: Requests
+- Type: Counter
+- Description: Shared-data only. Optional legacy Primary Key compaction preloads skipped because the partial-eviction publish lane was busy. This is an optimization skip, not a failed publish; publish can load the state on demand. OFF permits concurrent preloading as before.
 
 ## `lake_pk_index_load_duration_us`
 

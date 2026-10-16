@@ -1967,6 +1967,81 @@ TEST_P(LakePrimaryKeyPublishTest, test_pressure_prepare_discards_preloaded_wide_
     EXPECT_EQ(0, state.memory_usage());
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_excludes_optional_compaction_preload_from_publish) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<bool> light(&config::enable_light_pk_compaction_publish, false);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 50);
+    const auto old_limit = _mem_tracker->limit();
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore_limit([&] { _mem_tracker->set_limit(old_limit); });
+    auto metadata = new_cloud_native_pk_tablet();
+    auto [chunk, indexes] = gen_data_and_index(8192, 0, true, true);
+    const auto txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSIGN_OR_ABORT(auto written, _tablet_mgr->get_txn_log(metadata->id(), txn));
+    TxnLogPB compaction;
+    compaction.set_tablet_id(metadata->id());
+    compaction.set_txn_id(next_id());
+    compaction.mutable_op_compaction()->mutable_output_rowset()->CopyFrom(written->op_write().rowset());
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    auto schema = TabletSchema::create(metadata->schema());
+    const auto skipped = StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value();
+    ASSIGN_OR_ABORT(auto publish, _primary_key_mgr->acquire_publish_slot());
+    _primary_key_mgr->preload_compaction_state(compaction, tablet, schema);
+    EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+    EXPECT_EQ(skipped + 1, StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value());
+    publish.reset();
+    _primary_key_mgr->preload_compaction_state(compaction, tablet, schema);
+    EXPECT_FALSE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+    EXPECT_GT(_primary_key_mgr->compaction_state_mem_tracker()->consumption(), 0);
+    _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
+    // An OFF preload already admitted before switching ON must also drain before a
+    // publisher can mutate. The deliberate admission timeout never reaches tablet locks.
+    config::lake_pk_index_partial_eviction = false;
+    std::promise<void> admitted, finish_preload;
+    auto finish = finish_preload.get_future().share();
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PrimaryKeyManager::preload_compaction_state:admitted", [&](void*) {
+        admitted.set_value();
+        finish.wait();
+    });
+    sync->EnableProcessing();
+    auto preload = std::async(std::launch::async,
+                              [&] { _primary_key_mgr->preload_compaction_state(compaction, tablet, schema); });
+    bool unblocked = false;
+    auto drain = [&] {
+        if (!unblocked) {
+            finish_preload.set_value();
+            unblocked = true;
+        }
+        if (preload.valid()) preload.get();
+    };
+    DeferOp cleanup([&] {
+        drain();
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+        _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
+    });
+    EXPECT_EQ(std::future_status::ready, admitted.get_future().wait_for(std::chrono::seconds(2)));
+    config::lake_pk_index_partial_eviction = true;
+    EXPECT_TRUE(_primary_key_mgr->acquire_publish_slot().status().is_time_out());
+    drain();
+    ASSERT_OK(_primary_key_mgr->acquire_publish_slot().status());
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growth_before_tablet_locks) {
     const bool old_partial = config::lake_pk_index_partial_eviction;
     const bool old_strict = config::enable_pk_strict_memcheck;

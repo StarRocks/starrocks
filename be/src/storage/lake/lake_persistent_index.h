@@ -52,6 +52,7 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
+class SstReadStateReadCredit;
 
 // Resident memory of a LakePersistentIndex, by component.
 struct LakePersistentIndexMemoryStats {
@@ -274,6 +275,7 @@ public:
     // A pressured mutation must not refill optional data blocks after its headroom check.
     // Caller holds the tablet lock and has joined old-value lookups.
     void disable_optional_data_block_cache();
+    void set_publish_read_credit(std::shared_ptr<SstReadStateReadCredit> credit);
     size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
@@ -501,6 +503,7 @@ private:
     bool _partial_read_state = false;
     size_t _publish_workspace_budget = 0;
     bool _publish_skip_optional_block_cache = false;
+    std::shared_ptr<SstReadStateReadCredit> _publish_read_credit;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};
     std::atomic<size_t> _cached_legacy_charge{0};

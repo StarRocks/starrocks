@@ -48,6 +48,7 @@ namespace lake {
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
+class SstReadStateReadCredit;
 
 struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadStateMemoryContext> {
     struct WaitScope {
@@ -62,8 +63,9 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
     class Reservation {
     public:
         explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context,
-                             std::function<void(size_t)> reclaim_self = {})
-                : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)) {}
+                             std::function<void(size_t)> reclaim_self = {},
+                             std::shared_ptr<SstReadStateReadCredit> credit = {})
+                : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)), _credit(std::move(credit)) {}
         ~Reservation();
         Status add(size_t bytes, bool wait, const std::function<bool()>& cancelled = {}, int64_t wait_timeout_ms = -1);
         bool try_add(size_t bytes);
@@ -72,9 +74,12 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
         int64_t parent_limit() const { return _context->tracker.parent()->limit(); }
 
     private:
+        MemTracker* _try_add(size_t bytes);
         std::shared_ptr<SstReadStateMemoryContext> _context;
         std::function<void(size_t)> _reclaim_self;
+        std::shared_ptr<SstReadStateReadCredit> _credit;
         size_t _bytes = 0;
+        size_t _credit_bytes = 0;
     };
     MemTracker tracker;
     const std::shared_ptr<const WaitScope> wait_scope;
@@ -85,6 +90,28 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
     std::function<void()> refresh_usage;
     std::mutex memory_mutex;
     std::condition_variable memory_cv;
+    std::atomic<size_t> active_read_credits{0};
+};
+
+// Root-charged once for a mutation and its joined old-value lookups. SST reservations borrow
+// and return bytes without releasing ancestors; sibling reservations cannot steal the gap.
+class SstReadStateReadCredit {
+public:
+    explicit SstReadStateReadCredit(std::shared_ptr<SstReadStateMemoryContext> context)
+            : _context(std::move(context)) {}
+    ~SstReadStateReadCredit();
+    bool try_reserve(size_t bytes);
+    size_t borrow(size_t bytes);
+    void give_back(size_t bytes);
+    size_t capacity() const { return _capacity; }
+    static constexpr size_t object_reserve() { return 256; }
+    const SstReadStateMemoryContext* context() const { return _context.get(); }
+
+private:
+    std::shared_ptr<SstReadStateMemoryContext> _context;
+    std::mutex _mutex;
+    size_t _capacity = 0;
+    size_t _available = 0;
 };
 
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
@@ -150,6 +177,7 @@ public:
     // Changed only at a joined tablet-owner boundary. Tiny tail SSTs must not populate an
     // optional data-block cache when a mandatory index already occupies most of update.
     void set_skip_data_block_cache(bool skip) const { _skip_data_block_cache.store(skip); }
+    void set_read_credit(const std::shared_ptr<SstReadStateReadCredit>& credit) const;
     Status reopen_read_state() const;
     StatusOr<size_t> probe_minimum_read_memory() const;
 
@@ -209,9 +237,10 @@ private:
     static constexpr size_t kReadStateObjectMemoryReserve = 4096;
     struct ReadState;
     StatusOr<std::unique_ptr<RandomAccessFile>> _open_file() const;
-    StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf,
-                                                          const std::shared_ptr<SstReadStateMemoryContext>& context,
-                                                          const std::function<void(size_t)>& reclaim_self) const;
+    StatusOr<std::shared_ptr<ReadState>> _open_read_state(
+            std::unique_ptr<RandomAccessFile> rf, const std::shared_ptr<SstReadStateMemoryContext>& context,
+            const std::function<void(size_t)>& reclaim_self,
+            const std::shared_ptr<SstReadStateReadCredit>& credit = {}) const;
     StatusOr<std::shared_ptr<ReadState>> _get_read_state() const;
 
     // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
@@ -226,6 +255,7 @@ private:
     mutable std::shared_ptr<ReadState> _read_state;
     mutable std::weak_ptr<ReadState> _transient_read_state;
     mutable std::shared_ptr<SstReadStateMemoryContext> _memory_context;
+    mutable std::weak_ptr<SstReadStateReadCredit> _read_credit;
     mutable bool _read_state_cacheable = true;
     std::string _filename;
     Cache* _cache = nullptr;

@@ -47,6 +47,17 @@ public:
         PkIndexPublishLimiter* _owner;
     };
 
+    // Optional preloading must not queue ahead of a publish or steal its update workspace.
+    // OFF callers still hold a permit so a later ON transition drains in-flight preloads.
+    std::unique_ptr<Permit> try_acquire(size_t concurrency, bool respect_queue = true) {
+        auto permit = std::unique_ptr<Permit>(new Permit(nullptr));
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_active >= concurrency || (respect_queue && !_queue.empty())) return nullptr;
+        ++_active;
+        permit->_owner = this;
+        return permit;
+    }
+
     StatusOr<std::unique_ptr<Permit>> acquire(int64_t timeout_ms, const std::function<size_t()>& concurrency,
                                               const std::function<bool()>& cancelled, bool sst_read = false) {
         TRACE_COUNTER_SCOPE_LATENCY_US(sst_read ? "pindex_sst_memory_admission_us" : "pindex_publish_admission_us");

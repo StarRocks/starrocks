@@ -47,6 +47,7 @@ TEST(PkIndexPublishLimiterTest, fifo_wakeup_timeout_and_cancellation) {
     auto concurrency = [] { return 1; };
     auto running = [] { return false; };
     ASSIGN_OR_ABORT(auto first, limiter.acquire(1000, concurrency, running));
+    EXPECT_EQ(nullptr, limiter.try_acquire(1));
     EXPECT_TRUE(limiter.acquire(0, concurrency, running).status().is_time_out());
     EXPECT_TRUE(limiter.acquire(1000, concurrency, [] { return true; }).status().is_cancelled());
     std::promise<void> queued1;
@@ -74,10 +75,12 @@ TEST(PkIndexPublishLimiterTest, fifo_wakeup_timeout_and_cancellation) {
     auto third = std::async(std::launch::async, wait);
     EXPECT_EQ(std::future_status::ready, queued2.get_future().wait_for(std::chrono::seconds(2)));
     EXPECT_EQ(0, sequence.load());
+    EXPECT_EQ(nullptr, limiter.try_acquire(1));
     first.reset();
     EXPECT_EQ(0, second.get());
     EXPECT_EQ(1, third.get());
     ASSERT_OK(limiter.acquire(0, concurrency, running).status());
+    EXPECT_NE(nullptr, limiter.try_acquire(1));
 }
 
 } // namespace starrocks::lake

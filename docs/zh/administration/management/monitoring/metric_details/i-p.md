@@ -329,11 +329,19 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。SST 读状态在块分配前直接向 update tracker 预留字节，cache tracker 扣除这部分已预留字节以避免重复计数。临时读状态和打开时的工作内存不属于常驻缓存。 索引 cache tracker 还会临时包含 MemTable 修改的预留字节；常驻 cache 分项指标和 `INDEX_MEM` 不包含未使用的预留。
 
+可复用 SST 读额度中尚未借出的部分也持续计入 update tracker，直到本批修改及查找完成；常驻 gauge 和 `INDEX_MEM` 不包含该额度，借用计数不代表 root 新增分配。
+
 ## `lake_pk_index_cache_overhead_bytes`
 
 - 单位：字节
 - 类型：瞬时值
 - 描述：存算分离已缓存主键索引的对象、Protobuf、路径及 fileset 开销估算，包括常驻 SST 读状态对象的预留额度。启用 `lake_pk_index_partial_eviction` 时计入缓存记账。Delete Vector 由独立指标统计。
+
+## `lake_pk_index_compaction_preload_skipped_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离。部分淘汰 publish 准入通道繁忙时跳过的可选 legacy 主键 compaction 预加载次数。这是优化跳过，不是 publish 失败；发布时可按需加载状态。开关 OFF 时继续允许并发预加载。
 
 ## `lake_pk_index_load_duration_us`
 
