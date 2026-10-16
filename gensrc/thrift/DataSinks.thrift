@@ -309,6 +309,10 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Explicit data-file Parquet writer sizes. Unset preserves BE defaults.
+    13: optional i32 parquet_page_size_bytes
+    14: optional i32 parquet_dict_size_bytes
+    15: optional i32 parquet_row_group_size_bytes
 }
 
 struct THiveTableSink {

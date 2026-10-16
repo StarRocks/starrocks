@@ -20,6 +20,8 @@ keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
 
 与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句将 StarRocks 表的数据下沉到该 Iceberg 表（目前仅支持 Parquet 格式的 Iceberg 表）。
 
+对于 Parquet 数据文件，StarRocks 支持 Iceberg 表属性 `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes` 和 `write.parquet.row-group-size-bytes`。每个值必须是大于 0 且不超过 2,147,483,647 字节的整数；无效值会导致写入失败。未设置属性时，StarRocks 使用写入器默认值：数据页和字典页均为 1 MiB，行组为 128 MiB。这些属性不用于配置位置删除文件。
+
 ### 语法
 
 ```SQL

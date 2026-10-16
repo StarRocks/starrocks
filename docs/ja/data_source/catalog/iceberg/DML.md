@@ -20,6 +20,8 @@ Icebergテーブルにデータを挿入します。この機能はv3.1以降で
 
 StarRocksの内部テーブルと同様に、Icebergテーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocksテーブルのデータをそのIcebergテーブルにシンクできます（現在、Parquet形式のIcebergテーブルのみがサポートされています）。
 
+Parquet データファイルでは、StarRocks は Iceberg テーブルプロパティ `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes`、`write.parquet.row-group-size-bytes` を適用します。各値は 0 より大きく 2,147,483,647 バイト以下の整数である必要があり、無効な値の場合は書き込みが失敗します。プロパティを設定しない場合、ライターのデフォルト値（データページと辞書ページはそれぞれ 1 MiB、行グループは 128 MiB）が使用されます。これらのプロパティは位置削除ファイルには適用されません。
+
 ### 構文
 
 ```SQL

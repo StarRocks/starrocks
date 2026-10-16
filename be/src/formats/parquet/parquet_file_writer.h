@@ -101,6 +101,9 @@ struct ParquetWriterOptions : FileWriterOptions {
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
     inline static std::string VERSION = "version";
+    inline static std::string PAGE_SIZE_BYTES = "write.parquet.page-size-bytes";
+    inline static std::string DICT_SIZE_BYTES = "write.parquet.dict-size-bytes";
+    inline static std::string ROW_GROUP_SIZE_BYTES = "write.parquet.row-group-size-bytes";
 };
 
 class ParquetFileWriter final : public FileWriter {

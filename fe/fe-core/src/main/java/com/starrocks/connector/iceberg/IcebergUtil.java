@@ -64,6 +64,21 @@ public final class IcebergUtil {
     // StarRocks' historical default; Iceberg's own default is 512 MiB.
     static final long DEFAULT_TARGET_FILE_SIZE_BYTES = 1024L * 1024 * 1024;
 
+    /** Returns an explicitly configured positive Parquet writer size, or null when absent. */
+    public static Integer getPositiveIntProperty(Map<String, String> properties, String key) {
+        String value = properties.get(key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            int size = Integer.parseInt(value);
+            Preconditions.checkArgument(size > 0, "%s must be a positive 32-bit byte count: %s", key, value);
+            return size;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(key + " must be a positive 32-bit byte count: " + value, e);
+        }
+    }
+
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
     }

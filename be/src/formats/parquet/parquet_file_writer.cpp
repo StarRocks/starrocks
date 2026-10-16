@@ -24,6 +24,7 @@
 #include <parquet/statistics.h>
 #include <runtime/current_thread.h>
 
+#include <charconv>
 #include <future>
 #include <ostream>
 #include <sstream>
@@ -336,6 +337,23 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
+    auto apply_size = [this](const std::string& key, int64_t* target) -> Status {
+        auto it = _options.find(key);
+        if (it == _options.end()) {
+            return Status::OK();
+        }
+        int value = 0;
+        const auto& bytes = it->second;
+        auto [end, error] = std::from_chars(bytes.data(), bytes.data() + bytes.size(), value);
+        if (error != std::errc{} || end != bytes.data() + bytes.size() || value <= 0) {
+            return Status::InvalidArgument(fmt::format("{} must be a positive 32-bit byte count: {}", key, bytes));
+        }
+        *target = value;
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::PAGE_SIZE_BYTES, &_parsed_options->page_size));
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::DICT_SIZE_BYTES, &_parsed_options->dictionary_pagesize));
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::ROW_GROUP_SIZE_BYTES, &_parsed_options->rowgroup_size));
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
         _parsed_options->use_legacy_decimal_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING], "true");

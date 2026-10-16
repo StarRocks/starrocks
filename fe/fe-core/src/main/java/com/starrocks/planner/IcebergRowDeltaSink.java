@@ -33,6 +33,9 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_PARQUET_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_DICT_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_PAGE_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_ROW_GROUP_SIZE_BYTES;
 
 /**
  * IcebergRowDeltaSink is used to support row-delta operations on Iceberg tables
@@ -82,6 +85,9 @@ public class IcebergRowDeltaSink extends DataSink {
     private final String dataCompressionType;
     private final String deleteCompressionType;
     private final long targetMaxFileSize;
+    private final Integer parquetPageSizeBytes;
+    private final Integer parquetDictSizeBytes;
+    private final Integer parquetRowGroupSizeBytes;
     private final String tableIdentifier;
     private final TIcebergWriteMode writeMode;
     private CloudConfiguration cloudConfiguration;
@@ -115,6 +121,10 @@ public class IcebergRowDeltaSink extends DataSink {
         this.dataCompressionType = dataCodec;
         this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
+        this.parquetPageSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_PAGE_SIZE_BYTES);
+        this.parquetDictSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_DICT_SIZE_BYTES);
+        this.parquetRowGroupSizeBytes =
+                IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_ROW_GROUP_SIZE_BYTES);
         Preconditions.checkArgument(writeMode == TIcebergWriteMode.ROW_DELTA_UPDATE ||
                         writeMode == TIcebergWriteMode.ROW_DELTA_MIXED,
                 "IcebergRowDeltaSink write mode must be ROW_DELTA_UPDATE or ROW_DELTA_MIXED");
@@ -197,6 +207,15 @@ public class IcebergRowDeltaSink extends DataSink {
         tIcebergTableSink.setCompression_type(dataCompression);
         tIcebergTableSink.setDelete_compression_type(deleteCompression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
+        if (parquetPageSizeBytes != null) {
+            tIcebergTableSink.setParquet_page_size_bytes(parquetPageSizeBytes);
+        }
+        if (parquetDictSizeBytes != null) {
+            tIcebergTableSink.setParquet_dict_size_bytes(parquetDictSizeBytes);
+        }
+        if (parquetRowGroupSizeBytes != null) {
+            tIcebergTableSink.setParquet_row_group_size_bytes(parquetRowGroupSizeBytes);
+        }
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
