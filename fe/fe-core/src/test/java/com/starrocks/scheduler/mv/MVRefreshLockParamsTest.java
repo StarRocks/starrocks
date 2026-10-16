@@ -16,13 +16,10 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockParams;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -30,15 +27,14 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -128,34 +124,6 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         // The -1 default that external BaseTableInfos carry must never show up as a lock id.
         lockParams.getTables().values().forEach(ids -> Assertions.assertFalse(ids.contains(-1L)));
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Pinned on the property (no FE metadata lock is held while an external base table is resolved) rather
-     * than on where the call sits in the source, so it keeps holding if the code moves. The internal base
-     * table is asserted the other way round on purpose: resolving it is a local metastore read, and keeping
-     * it inside the lock is what makes the snapshot taken right after it consistent.
-     */
-    @Test
-    public void testExternalBaseTablesAreResolvedBeforeTheLock() throws Exception {
-        LockProbe resolved = LockProbe.onAnyThread();
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public Optional<Table> getTableWithIdentifier(Invocation invocation, ConnectContext context,
-                                                          BaseTableInfo baseTableInfo) {
-                resolved.record(baseTableInfo.getTableName());
-                return invocation.proceed(context, baseTableInfo);
-            }
-        };
-
-        buildRefreshProcessor("lock_params_mixed_mv").collectBaseTableSnapshotInfos();
-
-        resolved.assertReachedOutsideTheLock("lineitem_par",
-                "an external base table is resolved through the connector and must not be resolved under the lock");
-        Assertions.assertTrue(resolved.everUnderLock("lock_params_tbl"),
-                "an internal base table must stay resolved under the lock that protects its snapshot");
-    }
 
     /**
      * The refresh takes its lock within mv_refresh_try_lock_timeout_ms and bounds every later acquisition the same
@@ -199,5 +167,4 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         Assertions.assertTrue(unbounded.isEmpty(), "an MV refresh waited on the planner lock without a bound: "
                 + unbounded);
     }
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 }

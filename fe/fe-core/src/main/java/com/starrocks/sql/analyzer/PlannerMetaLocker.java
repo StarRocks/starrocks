@@ -192,13 +192,9 @@ public class PlannerMetaLocker implements AutoCloseable {
      */
     public PlannerMetaLocker forAllTablesOf(ConnectContext session, StatementBase analyzedStatement) {
         PlannerMetaLocker all = new PlannerMetaLocker(queryId, acquireTimeoutMs);
-<<<<<<< HEAD
-        new TableCollector(session, all.dbs, all.tables).visit(analyzedStatement);
-=======
-        TableCollector collector = new TableCollector(session, all.dbs, all.tables, false);
+        TableCollector collector = new TableCollector(session, all.dbs, all.tables);
         collector.analyzed = true;
         collector.visit(analyzedStatement);
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
         return all;
     }
 

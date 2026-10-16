@@ -15,20 +15,13 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.OlapTable;
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.DDLStmtExecutor;
->>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
