@@ -847,9 +847,10 @@ public class MetaFunctions {
         // Backquote each identifier individually: ParseUtil.backquote doubles embedded backticks,
         // whereas TableName.toSql() only wraps each component in backticks without escaping them.
         // Native db/table names allow any non-NUL character, so a backtick in the name would
-        // otherwise break out of the identifier. The table is a resolved native (internal-catalog)
-        // primary-key table, so only db and table need qualifying.
-        String qualifiedTable = ParseUtil.backquote(tableNameValue.getDb()) + "."
+        // otherwise break out of the identifier. Retain the resolved catalog as the internal query
+        // inherits the caller's session, whose current catalog may be external.
+        String qualifiedTable = ParseUtil.backquote(tableNameValue.getCatalog()) + "."
+                + ParseUtil.backquote(tableNameValue.getDb()) + "."
                 + ParseUtil.backquote(tableNameValue.getTbl());
         String sql = String.format("select cast(%s as string) from %s where %s = %s limit 1",
                 ParseUtil.backquote(returnColumnObj.getName()), qualifiedTable,

@@ -747,6 +747,12 @@ public class DefaultCoordinator extends Coordinator {
     private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
+            if (!queryStatus.ok()) {
+                // Preparation may publish a receiver and instances after cancel() has run.
+                // Clean them up and reject deployment under the same lock used by cancellation.
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                dealStatusToTryRetry(queryStatus);
+            }
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution, option.doDeploy);

@@ -18,6 +18,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -32,8 +33,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -406,6 +409,42 @@ public class SimpleExecutorTest {
                     times = 1;
                 }
             };
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCancellationDuringCoordinatorStartupPreservesStatus(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+        Status cancelled = new Status(TStatusCode.CANCELLED, "cancel during preparation");
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext child, List<PlanFragment> fragments,
+                                                           List<ScanNode> scans, TDescriptorTable descriptors,
+                                                           ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new Expectations() {
+            {
+                coordinator.exec();
+                result = new StarRocksException(cancelled.getErrorMsg());
+                coordinator.getExecStatus();
+                result = cancelled;
+            }
+        };
+        try {
+            var statement = SqlParser.parseOneWithStarRocksDialect("select 1", context.getSessionVariable());
+            ExecPlan plan = StatementPlanner.plan(statement, context, TResultSinkType.HTTP_PROTOCAL);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
+            context.setExecutor(executor);
+            Status result = executor.executeStmtWithExecPlan(context, plan).second;
+            assertTrue(result.isCancelled());
+            assertEquals("cancel during preparation", result.getErrorMsg());
         } finally {
             ConnectContext.remove();
         }

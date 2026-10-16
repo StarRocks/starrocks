@@ -4168,7 +4168,9 @@ public class StmtExecutor {
             } else {
                 LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             }
-            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            if (coord.getExecStatus().ok()) {
+                coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            }
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             recordExecStatsIntoContext();
