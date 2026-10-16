@@ -1,0 +1,85 @@
+-- name: test_unnest_left_join_chunk_boundary
+CREATE TABLE bnd_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `arr` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO bnd_${uuid0}
+SELECT g, CASE WHEN g % 3 = 0 THEN NULL WHEN g % 3 = 1 THEN [] ELSE [g, g * 2] END
+FROM TABLE(generate_series(1, 10000)) t(g);
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+-- result:
+13333	6666	49995000
+-- !result
+SET chunk_size = 7;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+-- result:
+13333	6666	49995000
+-- !result
+SET chunk_size = 13;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+-- result:
+13333	6666	49995000
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+-- result:
+13333	6666	49995000
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0}, UNNEST(arr) AS u(v);
+-- result:
+6666	6666	49995000
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0}, UNNEST(arr) AS u(v);
+-- result:
+6666	6666	49995000
+-- !result
+SET chunk_size = 4;
+-- result:
+-- !result
+SELECT count(1), count(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE WHERE id % 3 <> 2;
+-- result:
+6667	0
+-- !result
+SET chunk_size = 5;
+-- result:
+-- !result
+SELECT id, arr, v FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE WHERE id <= 7 ORDER BY id, v;
+-- result:
+1	[]	None
+2	[2,4]	2
+2	[2,4]	4
+3	None	None
+4	[]	None
+5	[5,10]	5
+5	[5,10]	10
+6	None	None
+7	[]	None
+-- !result
+DROP TABLE bnd_${uuid0};
+-- result:
+-- !result
