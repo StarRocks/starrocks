@@ -147,12 +147,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - Unit: Count
-- Description: Cumulative number of drivers taken from each level of the pipeline driver queue of each resource group.
+- Description: Cumulative number of drivers taken from each level of the pipeline driver queue of each resource group. This counter includes draining resource-group versions and retains their final totals after removal. Updating, deleting, or recreating a group with the same name preserves the total within the BE/CN process.
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - Unit: ns
-- Description: Cumulative time that the drivers taken from each level of the pipeline driver queue of each resource group waited in the ready queue. Divide its increase by the increase of `resource_group_driver_queue_level_schedule_count` to get the average wait of the level.
+- Description: Cumulative time that the drivers taken from each level of the pipeline driver queue of each resource group waited in the ready queue. Like the schedule-count counter, it includes draining versions and preserves totals across group updates, deletion, and recreation with the same name within the BE/CN process. Divide its increase by the increase of `resource_group_driver_queue_level_schedule_count` to get the average wait of the level.
 
 ## `resource_group_inuse_cpu_cores`
 

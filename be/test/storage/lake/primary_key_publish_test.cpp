@@ -2371,9 +2371,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
     }
     ASSERT_EQ(0, read_rows(tablet_id, version));

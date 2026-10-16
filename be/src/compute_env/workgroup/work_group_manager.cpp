@@ -15,6 +15,7 @@
 #include "compute_env/workgroup/work_group_manager.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "base/metrics.h"
@@ -38,10 +39,27 @@ struct WorkGroupMetrics {
         std::unique_ptr<IntAtomicCounter> wait_time_ns = nullptr;
         std::unique_ptr<IntAtomicCounter> schedule_count = nullptr;
 
-        void set_value(const pipeline::DriverQueueLevelStats& stats) {
-            if (accu_time_ns != nullptr) accu_time_ns->set_value(stats.accu_time_ns);
-            if (wait_time_ns != nullptr) wait_time_ns->set_value(stats.wait_time_ns);
-            if (schedule_count != nullptr) schedule_count->set_value(stats.schedule_count);
+        void begin_update() {
+            _wait_time_ns = _retired_wait_time_ns;
+            _schedule_count = _retired_schedule_count;
+        }
+
+        void collect(const pipeline::DriverQueueLevelStats& stats, bool current_version) {
+            _wait_time_ns = add_counter(_wait_time_ns, stats.wait_time_ns);
+            _schedule_count = add_counter(_schedule_count, stats.schedule_count);
+            if (current_version && accu_time_ns != nullptr) accu_time_ns->set_value(stats.accu_time_ns);
+        }
+
+        void retire(const pipeline::DriverQueueLevelStats& stats) {
+            _retired_wait_time_ns = add_counter(_retired_wait_time_ns, stats.wait_time_ns);
+            _retired_schedule_count = add_counter(_retired_schedule_count, stats.schedule_count);
+        }
+
+        void publish_counters() {
+            // Saturation stays sticky even if a wrapped queue counter later becomes positive again.
+            if (wait_time_ns != nullptr) wait_time_ns->set_value(std::max(wait_time_ns->value(), _wait_time_ns));
+            if (schedule_count != nullptr)
+                schedule_count->set_value(std::max(schedule_count->value(), _schedule_count));
         }
 
         // Take over the metrics of `other` that are registered, and keep the others.
@@ -50,6 +68,18 @@ struct WorkGroupMetrics {
             if (other.wait_time_ns != nullptr) wait_time_ns = std::move(other.wait_time_ns);
             if (other.schedule_count != nullptr) schedule_count = std::move(other.schedule_count);
         }
+
+    private:
+        static int64_t add_counter(int64_t total, int64_t value) {
+            constexpr auto max = std::numeric_limits<int64_t>::max();
+            // A negative cumulative queue counter has wrapped. Keep the exported total in range too.
+            return value < 0 || value > max - total ? max : total + value;
+        }
+
+        int64_t _retired_wait_time_ns = 0;
+        int64_t _retired_schedule_count = 0;
+        int64_t _wait_time_ns = 0;
+        int64_t _schedule_count = 0;
     };
 
     int128_t group_unique_id;
@@ -72,6 +102,17 @@ struct WorkGroupMetrics {
 
     // Indexed by the level of the driver queue.
     std::vector<DriverQueueLevelMetrics> driver_queue_levels;
+
+    void collect_driver_queue_stats(const WorkGroupPtr& wg, bool retire = false) {
+        const auto stats = wg->driver_sched_entity()->queue()->level_stats();
+        for (size_t level = 0; level < driver_queue_levels.size() && level < stats.size(); ++level) {
+            if (retire) {
+                driver_queue_levels[level].retire(stats[level]);
+            } else {
+                driver_queue_levels[level].collect(stats[level], group_unique_id == wg->unique_id());
+            }
+        }
+    }
 };
 
 // ------------------------------------------------------------------------------------
@@ -102,6 +143,10 @@ void WorkGroupManager::destroy() {
 
     unregister_default_workgroup_unlocked();
     update_metrics_unlocked();
+    for (const auto& [_, wg] : _workgroups) {
+        auto it = _wg_metrics.find(wg->name());
+        if (it != _wg_metrics.end()) it->second->collect_driver_queue_stats(wg, true);
+    }
     _workgroups.clear();
 }
 
@@ -257,6 +302,9 @@ static double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
 }
 
 void WorkGroupManager::update_metrics_unlocked() {
+    for (auto& [_, wg_metrics] : _wg_metrics) {
+        for (auto& level_metrics : wg_metrics->driver_queue_levels) level_metrics.begin_update();
+    }
     int64_t sum_cpu_runtime_ns = 0;
     int64_t sum_scan_runtime_ns = 0;
     int64_t sum_connector_scan_runtime_ns = 0;
@@ -268,6 +316,10 @@ void WorkGroupManager::update_metrics_unlocked() {
         sum_cpu_runtime_ns += wg->driver_sched_entity()->growth_runtime_ns();
         sum_scan_runtime_ns += wg->scan_sched_entity()->growth_runtime_ns();
         sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->growth_runtime_ns();
+
+        // Include draining versions as well as the current queue. Removed queues are kept in the retired base.
+        auto it = _wg_metrics.find(wg->name());
+        if (it != _wg_metrics.end()) it->second->collect_driver_queue_stats(wg);
     }
     DeferOp mark_last_runtime_op([this] {
         for (const auto& [_, wg] : _workgroups) {
@@ -309,12 +361,6 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->inuse_cpu_cores->set_value(inuse_cpu_cores);
             wg_metrics->timestamp_ns = new_timestamp_ns;
             wg_metrics->cpu_runtime_ns = new_cpu_runtime_ns;
-
-            const auto level_stats = wg->driver_sched_entity()->queue()->level_stats();
-            for (size_t level = 0; level < wg_metrics->driver_queue_levels.size() && level < level_stats.size();
-                 ++level) {
-                wg_metrics->driver_queue_levels[level].set_value(level_stats[level]);
-            }
         } else {
             VLOG(2) << "workgroup update_metrics " << name << ", workgroup not exists so cleanup metrics";
 
@@ -331,9 +377,10 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->bigquery_count->set_value(0);
             wg_metrics->inuse_cpu_cores->set_value(0);
             for (auto& level_metrics : wg_metrics->driver_queue_levels) {
-                level_metrics.set_value({});
+                if (level_metrics.accu_time_ns != nullptr) level_metrics.accu_time_ns->set_value(0);
             }
         }
+        for (auto& level_metrics : wg_metrics->driver_queue_levels) level_metrics.publish_counters();
     }
 }
 
@@ -377,6 +424,9 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
+            // Preserve the final increments even if the queue was not scraped since its last execution.
+            auto metrics_it = _wg_metrics.find(wg_it->second->name());
+            if (metrics_it != _wg_metrics.end()) metrics_it->second->collect_driver_queue_stats(wg_it->second, true);
             const auto id = wg_it->second->id();
             const auto version = wg_it->second->version();
             const auto mem_pool = wg_it->second->mem_pool();

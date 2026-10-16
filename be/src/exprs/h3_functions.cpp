@@ -15,6 +15,7 @@
 #include <h3/h3api.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -23,9 +24,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <unordered_set>
 #include <vector>
 
+#include "base/coding.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -205,6 +208,33 @@ struct H3ArrayBuilder {
 
     H3ArrayBuilder() { offsets->append(0); }
 
+    void reserve_rows(size_t rows) {
+        offsets->reserve(rows + 1);
+        nulls->reserve(rows);
+    }
+
+    H3Index* begin_row(size_t capacity, bool zero_fill) {
+        _row_begin = values->size();
+        values->resize_uninitialized(_row_begin + capacity);
+        // H3 can write through the corresponding unsigned type of the BIGINT storage.
+        static_assert(std::is_same_v<H3Index, std::make_unsigned_t<int64_t> >);
+        auto* cells = reinterpret_cast<H3Index*>(values->get_data().data() + _row_begin);
+        if (zero_fill) std::memset(cells, 0, capacity * sizeof(H3Index));
+        return cells;
+    }
+
+    Status finish_row(size_t count) {
+        const size_t end = _row_begin + count;
+        // Disk compaction may reduce its upper-bound allocation to fit the offset limit.
+        if (end > std::numeric_limits<uint32_t>::max()) {
+            return Status::InvalidArgument("H3 array offset limit exceeded");
+        }
+        values->resize(end);
+        nulls->append(0);
+        offsets->append(static_cast<uint32_t>(end));
+        return Status::OK();
+    }
+
     void append_null() {
         nulls->append(1);
         offsets->append(static_cast<uint32_t>(values->size()));
@@ -230,6 +260,9 @@ struct H3ArrayBuilder {
         if (constant) return ConstColumn::create(std::move(result), size);
         return result;
     }
+
+private:
+    size_t _row_begin = 0;
 };
 
 } // namespace
@@ -414,6 +447,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns& 
     ColumnViewer<TYPE_INT> ks(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    result.reserve_rows(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
         if (input.is_null(row) || ks.is_null(row)) {
             result.append_null();
@@ -426,15 +460,17 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns& 
         const H3Error size_error = maxGridDiskSize(k, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_GridDisk", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        std::vector<H3Index> cells;
-        cells.assign(static_cast<size_t>(count), 0);
-        const H3Error error = gridDisk(cell, k, cells.data());
+        // gridDisk requires a zero-initialized output buffer.
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), true);
+        const H3Error error = gridDisk(cell, k, cells);
         if (error != E_SUCCESS) return h3_error("H3_GridDisk", error);
-        cells.erase(std::remove(cells.begin(), cells.end(), H3_NULL), cells.end());
-        for (H3Index value : cells) {
-            if (!isValidCell(value)) return Status::InternalError("H3_GridDisk returned invalid cell");
+        size_t written = 0;
+        for (size_t i = 0; i < static_cast<size_t>(count); ++i) {
+            const H3Index value = cells[i];
+            if (value == H3_NULL) continue;
+            cells[written++] = value;
         }
-        RETURN_IF_ERROR(result.append(cells));
+        RETURN_IF_ERROR(result.finish_row(written));
     }
     return result.build(size, constant);
 }
@@ -446,6 +482,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
     ColumnViewer<TYPE_INT> resolutions(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    result.reserve_rows(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
@@ -460,17 +497,57 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
         const H3Error size_error = cellToChildrenSize(cell, resolution, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_ToChildren", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        std::vector<H3Index> cells;
-        cells.assign(static_cast<size_t>(count), 0);
-        const H3Error error = cellToChildren(cell, resolution, cells.data());
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), false);
+        const H3Error error = cellToChildren(cell, resolution, cells);
         if (error != E_SUCCESS) return h3_error("H3_ToChildren", error);
-        for (H3Index value : cells) {
-            if (!isValidCell(value)) return Status::InternalError("H3_ToChildren returned invalid cell");
-        }
-        RETURN_IF_ERROR(result.append(cells));
+        RETURN_IF_ERROR(result.finish_row(static_cast<size_t>(count)));
     }
     return result.build(size, constant);
 }
+
+namespace {
+// Encodes a cell boundary as canonical little-endian WKB: an XY POLYGON with one ring,
+// closed by copying the bytes of the first vertex (so its exact bits, including signed zero, repeat).
+class H3BoundaryWkb {
+public:
+    H3BoundaryWkb() {
+        _bytes[0] = 1;
+        encode_fixed32_le(_bytes.data() + 1, static_cast<uint32_t>(WkbGeometryType::POLYGON));
+        encode_fixed32_le(_bytes.data() + 1 + sizeof(uint32_t), 1);
+    }
+
+    Status encode(const CellBoundary& boundary) {
+        if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
+            return Status::InternalError("H3_ToBoundary returned invalid vertex count");
+        }
+        encode_fixed32_le(_bytes.data() + 1 + 2 * sizeof(uint32_t), boundary.numVerts + 1);
+        for (int i = 0; i < boundary.numVerts; ++i) {
+            const double x = boundary.verts[i].lng * kDegreesPerRadian;
+            const double y = boundary.verts[i].lat * kDegreesPerRadian;
+            if (!std::isfinite(x) || !std::isfinite(y) || x < -180 || x > 180 || y < -90 || y > 90) {
+                return Status::InternalError("H3_ToBoundary returned coordinates outside CRS84");
+            }
+            uint8_t* coordinate = vertex(i);
+            encode_fixed64_le(coordinate, std::bit_cast<uint64_t>(x));
+            encode_fixed64_le(coordinate + sizeof(double), std::bit_cast<uint64_t>(y));
+        }
+        std::memcpy(vertex(boundary.numVerts), vertex(0), kCoordinateSize);
+        _size = kHeaderSize + (boundary.numVerts + 1) * kCoordinateSize;
+        return Status::OK();
+    }
+
+    Slice slice() const { return Slice(reinterpret_cast<const char*>(_bytes.data()), _size); }
+
+private:
+    static constexpr size_t kHeaderSize = sizeof(uint8_t) + 3 * sizeof(uint32_t);
+    static constexpr size_t kCoordinateSize = 2 * sizeof(double);
+
+    uint8_t* vertex(int i) { return _bytes.data() + kHeaderSize + i * kCoordinateSize; }
+
+    std::array<uint8_t, kHeaderSize + (MAX_CELL_BNDRY_VERTS + 1) * kCoordinateSize> _bytes{};
+    size_t _size = 0;
+};
+} // namespace
 
 StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const Columns& columns) {
     const size_t size = columns[0]->size();
@@ -488,31 +565,27 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
     }
     ColumnViewer<TYPE_BIGINT> input(columns[0]);
     const bool constant = columns[0]->is_constant();
-    auto result = NullableColumn::create(GeoColumn::create(std::move(descriptor)), NullColumn::create());
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    const size_t rows = constant ? 1 : size;
+    auto data = GeoColumn::create(std::move(descriptor));
+    auto nulls = NullColumn::create();
+    data->reserve(rows);
+    auto& null_data = nulls->get_data();
+    null_data.resize(rows, 0);
+    H3BoundaryWkb wkb;
+    for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row)) {
-            result->append_nulls(1);
+            data->append_default();
+            null_data[row] = 1;
             continue;
         }
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
         CellBoundary boundary{};
         const H3Error error = cellToBoundary(cell, &boundary);
         if (error != E_SUCCESS) return h3_error("H3_ToBoundary", error);
-        if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
-            return Status::InternalError("H3_ToBoundary returned invalid vertex count");
-        }
-        WkbGeometry polygon;
-        polygon.type = WkbGeometryType::POLYGON;
-        auto& ring = polygon.rings.emplace_back();
-        ring.reserve(static_cast<size_t>(boundary.numVerts) + 1);
-        for (int i = 0; i < boundary.numVerts; ++i) {
-            ring.push_back({boundary.verts[i].lng * kDegreesPerRadian, boundary.verts[i].lat * kDegreesPerRadian});
-        }
-        ring.push_back(ring.front());
-        std::string wkb;
-        RETURN_IF_ERROR(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
-        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(wkb.encode(boundary));
+        data->append_wkb(wkb.slice());
     }
+    auto result = NullableColumn::create(std::move(data), std::move(nulls));
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;
 }
