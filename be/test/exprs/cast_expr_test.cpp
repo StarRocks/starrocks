@@ -2607,6 +2607,160 @@ static ColumnPtr cast_to_variant(const TypeDescriptor& from_type, const ColumnPt
     return expr->evaluate(nullptr, nullptr);
 }
 
+<<<<<<< HEAD
+=======
+static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPtr& column) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 1;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.child_type = to_thrift(TYPE_VARIANT);
+    cast_expr.type = to_type_desc;
+    cast_expr.__set_child_type_desc(TypeDescriptor(TYPE_VARIANT).to_thrift());
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    TExprNode child_node;
+    child_node.node_type = TExprNodeType::SLOT_REF;
+    child_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    child_node.child_type = TPrimitiveType::VARIANT;
+    child_node.num_children = 0;
+    child_node.__isset.child_type = true;
+    MockExpr child(child_node, column);
+    expr->_children.push_back(&child);
+    return expr->evaluate(nullptr, nullptr);
+}
+
+static ColumnPtr make_const_variant_column_from_json(const std::string& json_text, size_t size) {
+    auto json = JsonValue::parse(json_text);
+    CHECK(json.ok()) << json.status().to_string();
+    auto encoded = VariantEncoder::encode_json_to_variant(json.value());
+    CHECK(encoded.ok()) << encoded.status().to_string();
+
+    auto variant_column = VariantColumn::create();
+    variant_column->append(encoded.value());
+    return ConstColumn::create(std::move(variant_column), size);
+}
+
+static VariantRowValue make_variant_row_from_json(const std::string& json_text) {
+    auto json = JsonValue::parse(json_text);
+    CHECK(json.ok()) << json.status().to_string();
+    auto encoded = VariantEncoder::encode_json_to_variant(json.value());
+    CHECK(encoded.ok()) << encoded.status().to_string();
+    return encoded.value();
+}
+
+static StatusOr<std::string> variant_json_at(const ColumnPtr& result, size_t row_num) {
+    auto* data_col = ColumnHelper::get_data_column(result.get());
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
+    VariantRowValue cell;
+    const VariantRowValue* row = variant_col->get_row_value(row_num, &cell);
+    if (row == nullptr) {
+        return Status::InvalidArgument("failed to get variant row value");
+    }
+    return row->to_json();
+}
+
+static ColumnPtr make_root_typed_only_variant_bigint_column(const std::vector<int64_t>& values,
+                                                            const std::vector<uint8_t>& is_null) {
+    auto data = Int64Column::create();
+    auto null = NullColumn::create();
+    CHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+
+    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+}
+
+static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<DatumArray>& values,
+                                                           const std::vector<uint8_t>& is_null) {
+    CHECK_EQ(values.size(), is_null.size());
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
+    auto array_col = ColumnHelper::create_column(array_type, true);
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            array_col->append_nulls(1);
+        } else {
+            array_col->append_datum(Datum(values[i]));
+        }
+    }
+
+    return cast_to_variant(array_type, array_col);
+}
+
+static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector<int64_t>& values,
+                                                               const std::vector<uint8_t>& is_null) {
+    auto data = Int64Column::create();
+    auto null = NullColumn::create();
+    CHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+
+    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+}
+
+static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<DatumMap>& values,
+                                                         const std::vector<uint8_t>& is_null) {
+    CHECK_EQ(values.size(), is_null.size());
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT));
+    auto map_col = ColumnHelper::create_column(map_type, true);
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            map_col->append_nulls(1);
+        } else {
+            map_col->append_datum(Datum(values[i]));
+        }
+    }
+    return cast_to_variant(map_type, map_col);
+}
+
+static ColumnPtr make_root_typed_only_variant_struct_column(const std::vector<DatumStruct>& values,
+                                                            const std::vector<uint8_t>& is_null) {
+    CHECK_EQ(values.size(), is_null.size());
+    TypeDescriptor struct_type =
+            TypeDescriptor::create_struct_type({"x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    auto struct_col = ColumnHelper::create_column(struct_type, true);
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            struct_col->append_nulls(1);
+        } else {
+            struct_col->append_datum(Datum(values[i]));
+        }
+    }
+    return cast_to_variant(struct_type, struct_col);
+}
+
+static ColumnPtr make_base_shredded_root_typed_variant_column(const VariantRowValue& typed_variant, size_t rows) {
+    auto variant = VariantColumn::create();
+    for (size_t i = 0; i < rows; ++i) {
+        variant->append(typed_variant);
+    }
+    return variant;
+}
+
+static void assert_const_or_expanded_result(const ColumnPtr& result, size_t input_size,
+                                            const std::string& expected_debug) {
+    // A constant input must still cover every input row: the caller reads the result at the chunk's row count.
+    ASSERT_EQ(input_size, result->size());
+    const size_t rows = result->size();
+    for (size_t i = 0; i < rows; ++i) {
+        ASSERT_FALSE(result->is_null(i));
+        std::string debug = result->debug_item(i);
+        constexpr std::string_view kConstPrefix = "CONST: ";
+        if (debug.rfind(kConstPrefix.data(), 0) == 0) {
+            debug.erase(0, kConstPrefix.size());
+        }
+        EXPECT_EQ(expected_debug, debug);
+    }
+}
+
+>>>>>>> 41aebb4 ([BugFix] Keep a constant JSON/VARIANT to MAP cast as long as its input (#80679))
 TEST_F(VectorizedCastExprTest, json_to_map) {
     EXPECT_EQ(R"({'1':1,'2':true,'3':null,'4':[5, 6, 7],'5':{"k51": "v51"}})",
               cast_json_to_map(TYPE_VARCHAR, TYPE_JSON,
@@ -2622,6 +2776,44 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
     EXPECT_EQ(R"(NULL)", cast_json_to_map(TYPE_VARCHAR, TYPE_JSON, R"([1,2,3])"));
     EXPECT_EQ(R"({1:1,3:NULL,NULL:NULL})",
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
+}
+
+// A constant JSON input is viewed as its single row; the map result must still span every input row,
+// or an aggregate such as count() reads past the end of its null column.
+TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
+    constexpr size_t kInputSize = 3;
+    for (const auto& [text, expected] :
+         std::vector<std::pair<std::string, std::string>>{{R"({"1":2})", "{1:2}"}, {R"(1)", "NULL"}}) {
+        TExprNode cast_expr;
+        cast_expr.opcode = TExprOpcode::CAST;
+        cast_expr.node_type = TExprNodeType::CAST_EXPR;
+        cast_expr.num_children = 1;
+        cast_expr.__isset.opcode = true;
+        cast_expr.__isset.child_type = true;
+        cast_expr.child_type = to_thrift(TYPE_JSON);
+        cast_expr.type = gen_map_type_desc(to_thrift(TYPE_INT), to_thrift(TYPE_INT));
+
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+        auto json = JsonValue::parse(text);
+        ASSERT_TRUE(json.ok());
+        auto json_column = JsonColumn::create();
+        json_column->append(&json.value());
+        MockExpr child(TypeDescriptor(TYPE_JSON), ConstColumn::create(std::move(json_column), kInputSize));
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kInputSize, result->size());
+        for (size_t i = 0; i < kInputSize; ++i) {
+            std::string debug = result->debug_item(i);
+            constexpr std::string_view kConstPrefix = "CONST: ";
+            if (debug.rfind(kConstPrefix.data(), 0) == 0) {
+                debug.erase(0, kConstPrefix.size());
+            }
+            EXPECT_EQ(expected, debug);
+        }
+    }
 }
 
 // Test that struct-to-struct cast correctly reorders fields by name when field order differs
