@@ -26,6 +26,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -43,6 +44,7 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -268,6 +270,33 @@ public class DeltaLakeMetadataTest {
                 Optional.empty());
 
         Assertions.assertTrue(versionRange.end().isEmpty());
+    }
+
+    @Test
+    public void testGetTableVersionRangeLeavesExplicitVersionUnresolved(@Mocked ConnectorTableVersion startVersion) {
+        TvrVersionRange versionRange = deltaLakeMetadata.getTableVersionRange("db1", newTable(),
+                Optional.of(startVersion), Optional.empty());
+
+        Assertions.assertTrue(versionRange.end().isEmpty());
+    }
+
+    @Test
+    public void testPrepareMetadataSkipsNonDeltaTable() {
+        MetaPreparationItem item = new MetaPreparationItem(null, null, -1, TvrTableSnapshot.of(1L));
+
+        Assertions.assertTrue(deltaLakeMetadata.prepareMetadata(item, null, null));
+    }
+
+    @Test
+    public void testGetTableStatisticsUsesDefaultWhenExternalMetadataStatsAreDisabled() {
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(new HdfsEnvironment(Maps.newHashMap()), "delta0", null,
+                null, new ConnectorProperties(ConnectorType.DELTALAKE,
+                Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "false")));
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "id", true);
+
+        Assertions.assertTrue(metadata.getTableStatistics(null, null,
+                Map.of(columnRef, new Column("id", com.starrocks.type.IntegerType.INT)), Lists.newArrayList(),
+                null, -1, TvrTableSnapshot.empty()).getColumnStatistics().containsKey(columnRef));
     }
 
     @Test
