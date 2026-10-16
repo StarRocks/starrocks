@@ -658,7 +658,7 @@ public class StatementPlanner {
         // the original olapTable in queryStmt had been replaced with the copied olapTable
         Set<OlapTable> olapTables = originalOlapTables != null
                 ? originalOlapTables
-                : collectOriginalOlapTables(session, queryStmt);
+                : collectOriginalOlapTables(session, queryStmt, plannerMetaLocker);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             if (!isSchemaValid) {
                 planStartTime = OptimisticVersion.generate();
@@ -739,16 +739,24 @@ public class StatementPlanner {
         return olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
     }
 
-    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {
+    /**
+     * Copy every olap table of an analyzed statement, for a caller that still holds {@code heldLocker}. Only what
+     * that lock does not cover -- what analysis brought in -- is locked on top of it, and within the wait the caller
+     * set on it ({@link PlannerMetaLocker#setAcquireTimeoutMs}), which an MV refresh bounds: a locker of its own
+     * would wait for good, and building one from the statement would also look the policies up again and reset
+     * the session's statement databases.
+     */
+    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt,
+                                                           PlannerMetaLocker heldLocker) {
         Set<OlapTable> olapTables = Sets.newHashSet();
-        PlannerMetaLocker locker = new PlannerMetaLocker(session, queryStmt);
-        try {
-            // Need lock to avoid olap table metas ConcurrentModificationException
-            lock(locker);
+        try (PlannerMetaLocker missing = heldLocker.forTablesNotLockedOf(session, queryStmt)) {
+            // Need lock to avoid olap table metas ConcurrentModificationException. Usually the held lock covers every
+            // table already, and then there is nothing to acquire.
+            if (!missing.isEmpty()) {
+                lock(missing);
+            }
             AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
             return olapTables;
-        } finally {
-            unLock(locker);
         }
     }
 

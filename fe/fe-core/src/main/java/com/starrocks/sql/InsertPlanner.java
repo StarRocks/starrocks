@@ -324,7 +324,7 @@ public class InsertPlanner {
             // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
             // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
             // late, because the logical plan built here would still point at the live objects.
-            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt, plannerMetaLocker);
         }
         try {
             return planWithRetry(insertStmt, session);
