@@ -46,11 +46,6 @@ public class MysqlCredentialNormalizationTest {
         Assertions.assertEquals(AuthCredentialKind.MYSQL_NATIVE_SCRAMBLE, scrambled.kind());
         Assertions.assertArrayEquals(scramble, scrambled.rawSecret());
 
-        byte[] gssapi = {0x60, 0x2a, 0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x12, 0x01, 0x02, 0x02};
-        AuthCredentials kerberos = frame(AuthPlugin.Client.AUTHENTICATION_KERBEROS_CLIENT.toString(), gssapi);
-        Assertions.assertEquals(AuthCredentialKind.GSSAPI_TOKEN, kerberos.kind());
-        Assertions.assertArrayEquals(gssapi, kerberos.rawSecret());
-
         // The OAuth2 plugin sends no credential: the login is decided by the browser callback.
         AuthCredentials oauth2 = frame(AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString(), new byte[0]);
         Assertions.assertEquals(AuthCredentialKind.MYSQL_OAUTH2_CLIENT, oauth2.kind());

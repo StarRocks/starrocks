@@ -36,11 +36,8 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-=======
 import com.starrocks.authentication.AuthChannel;
 import com.starrocks.authentication.AuthCredentials;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
@@ -302,31 +299,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-<<<<<<< HEAD
-    public static class ActionAuthorizationInfo {
-        public String fullUserName;
-        public String remoteIp;
-        public String password;
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("user: ").append(fullUserName).append(", remote ip: ").append(remoteIp);
-            sb.append(", password: ").append(password);
-            return sb.toString();
-        }
-
-        public static ActionAuthorizationInfo of(String fullUserName, String password, String remoteIp) {
-            ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-            authInfo.fullUserName = fullUserName;
-            authInfo.remoteIp = remoteIp;
-            authInfo.password = password;
-            return authInfo;
-        }
-    }
-
-=======
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
@@ -343,79 +315,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-<<<<<<< HEAD
-    // return currentUserIdentity from StarRocks auth
-    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
-        try {
-            // HTTP Basic carries a cleartext password: declare that so security integrations that
-            // consume a password (LDAP) are matched instead of skipped.
-            return AuthenticationHandler.authenticateWithClearPassword(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password);
-        } catch (AuthenticationException e) {
-            throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
-        }
-    }
-
-    public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)
-            throws AccessDeniedException {
-        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-        try {
-            if (!parseAuthInfo(request, authInfo)) {
-                LOG.info("parse auth info failed, url {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
-                throw new AccessDeniedException("Need auth information.");
-            }
-            LOG.debug("get auth info: {}", authInfo);
-            return authInfo;
-        } catch (Exception e) {
-            throw new AccessDeniedException(e.getMessage());
-        }
-    }
-
-    private boolean parseAuthInfo(BaseRequest request, ActionAuthorizationInfo authInfo) {
-        String encodedAuthString = request.getAuthorizationHeader();
-        if (Strings.isNullOrEmpty(encodedAuthString)) {
-            return false;
-        }
-        String[] parts = encodedAuthString.split(" ");
-        if (parts.length != 2) {
-            return false;
-        }
-        encodedAuthString = parts[1];
-        ByteBuf buf = null;
-        ByteBuf decodeBuf = null;
-        try {
-            buf = Unpooled.copiedBuffer(ByteBuffer.wrap(encodedAuthString.getBytes()));
-
-            // The authString is a string connecting user-name and password with
-            // a colon(':')
-            decodeBuf = Base64.decode(buf);
-            String authString = decodeBuf.toString(CharsetUtil.UTF_8);
-            if (authString.isEmpty()) {
-                return false;
-            }
-            // Note that password may contain colon, so can not simply use a
-            // colon to split.
-            int index = authString.indexOf(":");
-            if (index == -1) {
-                return false;
-            }
-            authInfo.fullUserName = authString.substring(0, index);
-            final String[] elements = authInfo.fullUserName.split("@");
-            if (elements.length == 2) {
-                authInfo.fullUserName = elements[0];
-            }
-            authInfo.password = authString.substring(index + 1);
-            authInfo.remoteIp = request.getHostString();
-        } finally {
-            // release the buf and decode buf after using Unpooled.copiedBuffer
-            // or it will get memory leak
-            if (buf != null) {
-                buf.release();
-            }
-
-            if (decodeBuf != null) {
-                decodeBuf.release();
-=======
     /**
      * Parse the {@code Authorization} header into a protocol-neutral {@link AuthCredentials},
      * supporting both Basic (plaintext password) and Bearer (token). Returns {@code null} when the
@@ -459,7 +358,6 @@ public abstract class BaseAction implements IAction {
                 if (decodeBuf != null) {
                     decodeBuf.release();
                 }
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             }
         } else if (parts[0].equalsIgnoreCase("Bearer")) {
             return AuthCredentials.ofBearer(parts[1].trim(), AuthChannel.HTTP, host);
@@ -467,16 +365,6 @@ public abstract class BaseAction implements IAction {
         return null;
     }
 
-<<<<<<< HEAD
-    // Refer to {@link #parseAuthInfo(BaseRequest, ActionAuthorizationInfo)}
-    public static ActionAuthorizationInfo parseAuthInfo(String fullUserName, String password, String host) {
-        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-        final String[] elements = fullUserName.split("@");
-        if (elements.length == 2) {
-            authInfo.fullUserName = elements[0];
-        } else {
-            authInfo.fullUserName = fullUserName;
-=======
     /**
      * Authenticate onto the caller's own {@link ConnectContext}.
      *
@@ -513,7 +401,6 @@ public abstract class BaseAction implements IAction {
                 || (roleIds.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID)
                 && roleIds.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
             return;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         }
         checkUserOwnsAdminRole(currentUser);
     }

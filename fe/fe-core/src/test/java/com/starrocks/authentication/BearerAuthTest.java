@@ -318,7 +318,6 @@ public class BearerAuthTest {
         providers.put("jwt", new JWTAuthenticationProvider("jwks.json", "sub", requiredIssuer, requiredAudience));
         providers.put("oauth2", new OAuth2AuthenticationProvider(new OAuth2Context("http://as", "http://ts",
                 "http://rd", "cid", "secret", "jwks.json", "sub", requiredIssuer, requiredAudience, 10L)));
-        providers.put("kerberos", new KerberosAuthenticationProvider("harbor"));
 
         Map<String, Set<AuthCredentialKind>> expected = new LinkedHashMap<>();
         expected.put("plain_password", EnumSet.of(AuthCredentialKind.MYSQL_NATIVE_SCRAMBLE,
@@ -327,7 +326,6 @@ public class BearerAuthTest {
         expected.put("jwt", EnumSet.of(AuthCredentialKind.BEARER_TOKEN));
         expected.put("oauth2", EnumSet.of(AuthCredentialKind.MYSQL_NATIVE_SCRAMBLE,
                 AuthCredentialKind.MYSQL_OAUTH2_CLIENT, AuthCredentialKind.BEARER_TOKEN));
-        expected.put("kerberos", EnumSet.of(AuthCredentialKind.GSSAPI_TOKEN));
 
         Assertions.assertEquals(expected.keySet(), providers.keySet(), "every provider has a row");
         for (Map.Entry<String, AuthenticationProvider> p : providers.entrySet()) {

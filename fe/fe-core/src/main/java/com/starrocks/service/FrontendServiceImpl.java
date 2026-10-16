@@ -988,18 +988,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
             // DDL/ALTER on other tables in the same db proceed.
             Locker locker = new Locker();
-<<<<<<< HEAD
             locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-=======
-            // Skipped entirely for an external catalog: both ids come from MetadataMgr and are minted by the
-            // connector, so the lock guards no FE-owned state and, on a collision with the internal id space,
-            // would stall DDL on an unrelated internal table. Fail-closed via Table#isMetaLockTarget, which
-            // keeps the lock for a resource-mapping table rewritten in place under it.
-            boolean needLock = table.isMetaLockTarget();
-            if (needLock) {
-                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-            }
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             try {
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
@@ -1346,13 +1335,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // (e.g. INSERT granted via an LDAP/SI group mapping) are honored rather than user-only
         // roles.
         try {
-<<<<<<< HEAD
-            // Reuse the context authentication just populated: it already carries the identity and the
-            // group-derived roles. Rebuilding it from currentUser alone would drop those groups.
-            Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
-=======
             Authorizer.checkTableAction(authCtx, db, tbl, PrivilegeType.INSERT);
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1401,15 +1384,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnBeginResult loadTxnBegin(TLoadTxnBeginRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-<<<<<<< HEAD
         LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getLabel(), clientAddr);
-        LOG.debug("txn begin request: {}", request);
-=======
-        LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}, warehouse: {}",
-                request.getDb(), request.getTbl(), request.getLabel(), clientAddr, request.getWarehouse());
         LOG.debug("txn begin request: {}", () -> withCredentialRedacted(request));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
         TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
@@ -1788,18 +1765,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-<<<<<<< HEAD
         LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
-        LOG.debug("stream load put request: {}", request);
-=======
-        LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}, warehouse: {}",
-                request.getDb(), request.getTbl(),
-                request.getTxnId(), DebugUtil.printId(request.getLoadId()),
-                clientAddr, request.getWarehouse());
         LOG.debug("stream load put request: {}", () -> withCredentialRedacted(request));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
         ConnectContext context = new ConnectContext();
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -2140,13 +2109,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 " target cluster if you don't want to check the authorization and privilege.";
 
         // 1. check user and password
-        UserIdentity userIdentity;
+        ConnectContext context = new ConnectContext();
         try {
-<<<<<<< HEAD
-            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
-                    authParams.getUser(), authParams.getPasswd(), authParams.getHost());
-            userIdentity = BaseAction.checkPassword(authInfo);
-=======
             // The external-table check comes in over the BE->FE gateway RPC and always carries a
             // plaintext password. Strip a "user@host" form the same way the HTTP Basic parser does.
             String user = authParams.getUser();
@@ -2160,7 +2124,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // comes from a group mapping.
             BaseAction.checkCredential(context, AuthCredentials.ofPassword(
                     user, authParams.getPasswd(), AuthChannel.THRIFT_GATEWAY, authParams.getHost()));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         } catch (Exception e) {
             LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
                     authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
@@ -2174,9 +2137,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(userIdentity);
-                context.setCurrentRoleIds(userIdentity);
                 Authorizer.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);

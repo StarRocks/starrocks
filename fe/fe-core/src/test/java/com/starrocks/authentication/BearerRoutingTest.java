@@ -135,11 +135,6 @@ public class BearerRoutingTest {
                 "alice", new byte[0], AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString(), "127.0.0.1");
         Assertions.assertEquals(AuthCredentialKind.MYSQL_OAUTH2_CLIENT, browser.kind());
 
-        // A GSSAPI token is what it is on any channel; the entry point just names it.
-        Assertions.assertEquals(AuthCredentialKind.GSSAPI_TOKEN,
-                MysqlProto.handshakeCredentials("alice", new byte[] {1, 2, 3},
-                        AuthPlugin.Client.AUTHENTICATION_KERBEROS_CLIENT.toString(), "127.0.0.1").kind());
-
         // The native-password scramble is the one frame that stays MySQL-specific: it answers the
         // salt from the server greeting. An old client that sends no plugin name is speaking it too.
         for (String plugin : new String[] {AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), null}) {

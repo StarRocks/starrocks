@@ -295,19 +295,10 @@ public class SiLdapClearPasswordTest {
         // The HTTP Basic entry point itself, not just the handler underneath it: this is the line the
         // coverage bot flags, and reverting it (as a backport merge conflict easily could) silently brings
         // the 401 back for every action that authenticates through BaseAction.
-<<<<<<< HEAD
-        BaseAction.ActionAuthorizationInfo authInfo = new BaseAction.ActionAuthorizationInfo();
-        authInfo.fullUserName = "alice";
-        authInfo.remoteIp = "10.1.2.3";
-        authInfo.password = "ldap_password";
-
-        UserIdentity user = BaseAction.checkPassword(authInfo);
-=======
         ConnectContext ctx = new ConnectContext();
         BaseAction.checkCredential(ctx, AuthCredentials.ofPassword(
                 "alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3"));
         UserIdentity user = ctx.getCurrentUserIdentity();
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
@@ -322,12 +313,8 @@ public class SiLdapClearPasswordTest {
 
         // AccessDeniedException is what the HTTP layer turns into a 401
         Assertions.assertThrows(AccessDeniedException.class, () ->
-<<<<<<< HEAD
-                BaseAction.checkPassword(authInfo));
-=======
                 BaseAction.checkCredential(new ConnectContext(), AuthCredentials.ofPassword(
                         "alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         Assertions.assertEquals(1, ldapBindCount.get());
     }
 

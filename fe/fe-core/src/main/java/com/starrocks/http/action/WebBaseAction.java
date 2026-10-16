@@ -174,10 +174,6 @@ public class WebBaseAction extends BaseAction {
 
         // cookie is invalid.
         try {
-<<<<<<< HEAD
-            authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
-=======
             // Authenticate onto the context the NODE check below uses, so the roles an LDAP or
             // security-integration group maps to are present on it. Authenticating onto a throwaway
             // context and copying only the UserIdentity across would leave that check looking at
@@ -188,7 +184,6 @@ public class WebBaseAction extends BaseAction {
             checkCredential(ctx, parseAuthCredentials(request));
             UserIdentity currentUser = ctx.getCurrentUserIdentity();
 
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             if (needAdmin()) {
                 try {
                     ConnectContext context = new ConnectContext();
@@ -205,18 +200,7 @@ public class WebBaseAction extends BaseAction {
             value.currentUser = currentUser;
             addSession(request, response, value);
 
-<<<<<<< HEAD
-            ConnectContext ctx = new ConnectContext(null);
-            ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
-            ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
-
-=======
-            ctx.setQueryId(UUIDUtil.genUUID());
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             ctx.setThreadLocalInfo();
 
             return true;

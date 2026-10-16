@@ -1072,8 +1072,6 @@ public class Config extends ConfigBase {
     public static boolean enable_http_auth = false;
 
     /**
-<<<<<<< HEAD
-=======
      * Master switch for Bearer-token authentication on the non-MySQL channels: the HTTP endpoints
      * (SQL API, Stream Load, Web UI, /metrics), Arrow Flight SQL, and the load RPCs a BE forwards
      * with auth_type=bearer. The token is verified against the JWT and OAuth2 security integrations
@@ -1085,7 +1083,6 @@ public class Config extends ConfigBase {
     public static boolean enable_rest_bearer_authentication = true;
 
     /**
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
      * Fe https port
      * Currently, all FEs' https port must be the same.
      */
@@ -2521,8 +2518,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
-<<<<<<< HEAD
-=======
 
     /**
      * JWKS cache lifetime in seconds. HTTP Bearer authenticates fully on every request, so the JWK
@@ -2552,7 +2547,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int jwks_cache_refresh_rate_limit_seconds = 30;
 
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
     /**
      * If set to true, the granularity of auth check extends to the column level
      */

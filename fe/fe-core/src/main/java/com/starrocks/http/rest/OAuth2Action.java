@@ -14,12 +14,8 @@
 
 package com.starrocks.http.rest;
 
-<<<<<<< HEAD
-import com.nimbusds.jose.jwk.JWKSet;
-=======
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
@@ -133,14 +129,10 @@ public class OAuth2Action extends RestBaseAction {
             OAuth2Context oAuth2Context = ((OAuth2AuthenticationProvider) authenticationProvider).getoAuth2Context();
 
             String oidcToken = getToken(authorizationCode, oAuth2Context, connectionId);
-<<<<<<< HEAD
-            JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(oAuth2Context.jwksUrl());
-=======
             // Same cached source the Bearer and MySQL JWT paths use, so this callback also benefits
             // from key rotation and outage tolerance instead of fetching the JWKS on every login.
             JWKSource<SecurityContext> jwkSource =
                     GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(oAuth2Context.jwksUrl());
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
             JSONObject authResponse = new JSONObject(oidcToken);
             String idToken = authResponse.getString("id_token");

@@ -14,12 +14,8 @@
 
 package com.starrocks.authentication;
 
-<<<<<<< HEAD
-import com.nimbusds.jose.jwk.JWKSet;
-=======
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -63,22 +59,11 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
                 : OpenIdConnectVerifier.extractPrincipal(idToken, principalFiled);
 
         try {
-<<<<<<< HEAD
-            ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
-            //1 Byte for capability mysql client
-            MysqlCodec.readInt1(authBuffer);
-            byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
-            JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
-                    requiredAudience);
-            authContext.setAuthToken(new String(idToken));
-=======
             JWKSource<SecurityContext> jwkSource = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(jwksUrl);
             OpenIdConnectVerifier.verify(idToken, userName, jwkSource, principalFiled, requiredIssuer, requiredAudience);
             authContext.setAuthToken(idToken);
         } catch (AuthenticationException e) {
             throw e;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }

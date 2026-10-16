@@ -23,12 +23,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.InlineScope;
-import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
 import com.starrocks.metric.MetricRepo;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -133,14 +128,7 @@ public class AuthenticationHandler {
         // MySQL.
         AuthenticationResult authenticationResult = authenticateWithNative(authContext, cred);
         if (authenticationResult == null) {
-<<<<<<< HEAD
-            authenticationResult =
-                    authenticateWithSecurityIntegration(context.getAccessControlContext(), user, remoteHost, authResponse);
-=======
-            // An external directory may be slow: not on the HTTP event loop (see InlineScope).
-            InlineScope.refuse("security integration authentication");
             authenticationResult = authenticateWithSecurityIntegration(authContext, cred);
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         }
 
         if (authenticationResult == null) {
@@ -167,16 +155,7 @@ public class AuthenticationHandler {
         RejectedCredentialCache.invalidateAll();
     }
 
-<<<<<<< HEAD
-    private static AuthenticationResult authenticateWithNative(AccessControlContext authContext, String user, String remoteHost,
-                                                               byte[] authResponse)
-=======
-    private static boolean isLdapProvider(AuthenticationProvider provider) {
-        return provider instanceof LDAPAuthProvider || provider instanceof LDAPAuthProviderForExternal;
-    }
-
     private static AuthenticationResult authenticateWithNative(AccessControlContext authContext, AuthCredentials cred)
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             throws AuthenticationException {
         String user = cred.userDeclared();
         if (user == null || user.isEmpty()) {
@@ -386,22 +365,6 @@ public class AuthenticationHandler {
                 continue;
             }
 
-<<<<<<< HEAD
-            // Match the integration against the client plugin the caller declared: mysql_clear_password for a
-            // cleartext password (MySQL clear-password frame or HTTP Basic), a token plugin for JWT / OAuth2.
-            // Every type SecurityIntegrationFactory can build maps to a client plugin here, so no type is
-            // exempt from the match; the null branch below only guards the two tables drifting apart.
-            String expectedClientPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
-            if (expectedClientPlugin == null) {
-                // The type -> client plugin table is maintained by hand, so a type supported by
-                // SecurityIntegrationFactory but missing from it would silently refuse every user of that
-                // integration. Say so once per attempt instead of leaving nothing in the log.
-                LOG.warn("security integration {} has type {}, which maps to no client-side auth plugin; skipping it",
-                        authMechanism, securityIntegration.getType());
-                continue;
-            }
-            if (!expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())) {
-=======
             // A token needs one more filter than a password does. A password names the user it is
             // for, so the chain can just try each integration that consumes passwords; a token
             // names nobody, and which key verifies it depends on who issued it - hence the issuer
@@ -409,7 +372,6 @@ public class AuthenticationHandler {
             // the signature check decides.
             if (cred.kind() == AuthCredentialKind.BEARER_TOKEN
                     && !issuerAllows(securityIntegration, tokenIssuer)) {
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
                 continue;
             }
 
@@ -656,7 +618,6 @@ public class AuthenticationHandler {
     }
 
     /**
-<<<<<<< HEAD
      * Whether the credentials were checked against an LDAP directory. {@link LDAPAuthProvider} is the
      * only LDAP provider in this code base, so a single instanceof is enough.
      */
@@ -665,8 +626,6 @@ public class AuthenticationHandler {
     }
 
     /**
-=======
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
      * Ask the listed group providers which groups this user belongs to, and union their answers.
      * <p>
      * This is **one source out of two**, not the final group set of a session:

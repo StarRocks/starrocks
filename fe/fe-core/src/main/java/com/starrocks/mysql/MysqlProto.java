@@ -224,11 +224,6 @@ public class MysqlProto {
             return new AuthCredentials(user, new byte[0],
                     AuthCredentialKind.MYSQL_OAUTH2_CLIENT, AuthChannel.MYSQL, remoteHost);
         }
-        if (AuthPlugin.Client.AUTHENTICATION_KERBEROS_CLIENT.toString().equalsIgnoreCase(clientPlugin)) {
-            // The bytes are the GSSAPI token itself; nothing to unwrap.
-            return new AuthCredentials(user, authResponse, AuthCredentialKind.GSSAPI_TOKEN,
-                    AuthChannel.MYSQL, remoteHost);
-        }
         // mysql_native_password, and an old client that names no plugin - which is speaking it too.
         return AuthCredentials.ofNativeScramble(user, authResponse, remoteHost);
     }

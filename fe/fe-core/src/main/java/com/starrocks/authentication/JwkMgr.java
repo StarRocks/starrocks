@@ -24,12 +24,9 @@ import com.nimbusds.jose.util.DefaultResourceRetriever;
 import com.nimbusds.jose.util.Resource;
 import com.nimbusds.jose.util.ResourceRetriever;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -37,10 +34,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.text.ParseException;
-<<<<<<< HEAD
-
-public class JwkMgr {
-=======
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -89,19 +82,13 @@ public class JwkMgr {
      * Load a {@link JWKSet} directly (uncached). Kept for the OAuth2 MySQL browser-flow callback,
      * which runs at most once per login and does not need the cache.
      */
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
     public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
         InputStream jwksInputStream = null;
         try {
             if (jwksUrl.startsWith("http://") || jwksUrl.startsWith("https://")) {
                 jwksInputStream = new URL(jwksUrl).openStream();
             } else {
-<<<<<<< HEAD
-                String filePath = Config.STARROCKS_HOME_DIR + "/conf/" + jwksUrl;
-                jwksInputStream = new FileInputStream(filePath);
-=======
                 jwksInputStream = new FileInputStream(localKeyFile(jwksUrl));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             }
             return JWKSet.load(jwksInputStream);
         } finally {
@@ -110,8 +97,6 @@ public class JwkMgr {
             }
         }
     }
-<<<<<<< HEAD
-=======
 
     /**
      * Return a {@link JWKSource} for the given JWKS URL, or for a key file under {@code conf/}.
@@ -230,5 +215,4 @@ public class JwkMgr {
             }
         }
     }
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 }

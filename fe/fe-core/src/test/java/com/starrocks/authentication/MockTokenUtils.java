@@ -53,9 +53,6 @@ public class MockTokenUtils {
         return sb.toString();
     }
 
-<<<<<<< HEAD
-    String generateTestOIDCToken(long validity) throws Exception {
-=======
     public String generateTestOIDCToken(long validity) throws Exception {
         return generateTestOIDCToken(validity, "12345");
     }
@@ -72,13 +69,12 @@ public class MockTokenUtils {
 
     // issuer null: the token carries no iss claim.
     private String generateTestOIDCToken(long validity, String audience, String issuer) throws Exception {
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         MockJwkMgr mockJwkMgr = new MockJwkMgr();
         RSASSASigner signer = new RSASSASigner(mockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
         JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
 
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .issuer("http://localhost:38080/realms/master")
+                .issuer(issuer)
                 .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
                 .audience(audience)
                 .issueTime(new Date())

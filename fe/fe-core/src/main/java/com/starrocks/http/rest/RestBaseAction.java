@@ -39,15 +39,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationHandler;
-=======
-import com.starrocks.agentbase.AgentBase;
-import com.starrocks.agentbase.AgentBaseHooks;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthCredentials;
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeType;
@@ -86,7 +79,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -191,41 +183,6 @@ public class RestBaseAction extends BaseAction {
         HttpConnectContext ctx = request.getConnectContext();
 
         if (needAuth()) {
-<<<<<<< HEAD
-            ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-
-            // Authenticate via a temporary ConnectContext so AuthenticationHandler can populate
-            // identity *and* group-derived roles on it. The legacy BaseAction.checkPassword(authInfo)
-            // overload drops the temp ctx and only returns UserIdentity, which means group roles
-            // (e.g. db_admin granted via LDAP group mapping) would be lost on the real ctx and
-            // requireXxxIfHttpAuthEnabled() helpers would wrongly deny access.
-            ConnectContext authCtx = new ConnectContext();
-            UserIdentity currentUser;
-            Set<Long> currentRoleIds;
-            Set<String> currentGroups;
-            try {
-                AuthenticationHandler.authenticateWithClearPassword(authCtx, authInfo.fullUserName,
-                        authInfo.remoteIp, authInfo.password);
-                currentUser = authCtx.getCurrentUserIdentity();
-                currentRoleIds = authCtx.getCurrentRoleIds();
-                currentGroups = authCtx.getGroups();
-            } catch (AuthenticationException e) {
-                throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
-            }
-
-            // Change user for ConnectContext if necessary
-            UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
-            Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
-            String prevUserName = ctx.getQualifiedUser();
-            Set<String> prevGroups = ctx.getGroups();
-
-            ctx.setCurrentUserIdentity(currentUser);
-            ctx.setCurrentRoleIds(currentRoleIds);
-            ctx.setGroups(currentGroups);
-            ctx.setQualifiedUser(authInfo.fullUserName);
-
-            if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
-=======
             // Parse Basic or Bearer into a protocol-neutral credential.
             AuthCredentials cred = parseAuthCredentials(request);
 
@@ -247,19 +204,11 @@ public class RestBaseAction extends BaseAction {
             // Change user for ConnectContext if necessary
             String newUserName = ctx.getQualifiedUser();
             if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(newUserName)) {
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
                 ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
                 Pair<Boolean, String> userChangeRes =
                         connectScheduler.onUserChanged(ctx, prevUserName, newUserName);
                 if (!userChangeRes.first) {
-<<<<<<< HEAD
-                    ctx.setCurrentUserIdentity(prevUserIdentity);
-                    ctx.setCurrentRoleIds(prevRoleIds);
-                    ctx.setGroups(prevGroups);
-                    ctx.setQualifiedUser(prevUserName);
-=======
                     ctx.setAccessControlContext(previous);
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
                     throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
                 }
             }

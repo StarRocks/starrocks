@@ -97,13 +97,8 @@ public class AuthenticationManagerTest {
 
         AuthenticationMgr masterManager = new AuthenticationMgr();
         Assertions.assertThrows(AuthenticationException.class, () ->
-<<<<<<< HEAD
-                AuthenticationHandler.authenticate(ctx, testUserWithIp.getUser(), testUserWithIp.getHost(), scramble));
-
-=======
                 AuthenticationHandler.authenticate(ctx,
                         MysqlProto.handshakeCredentials(testUserWithIp.getUser(), scramble, null, testUserWithIp.getHost())));
->>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
         Assertions.assertFalse(masterManager.doesUserExist(testUser));
         Assertions.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
