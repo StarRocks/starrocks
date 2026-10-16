@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <unordered_set>
 #include <vector>
 
@@ -205,6 +206,33 @@ struct H3ArrayBuilder {
 
     H3ArrayBuilder() { offsets->append(0); }
 
+    void reserve_rows(size_t rows) {
+        offsets->reserve(rows + 1);
+        nulls->reserve(rows);
+    }
+
+    H3Index* begin_row(size_t capacity, bool zero_fill) {
+        _row_begin = values->size();
+        values->resize_uninitialized(_row_begin + capacity);
+        // H3 can write through the corresponding unsigned type of the BIGINT storage.
+        static_assert(std::is_same_v<H3Index, std::make_unsigned_t<int64_t> >);
+        auto* cells = reinterpret_cast<H3Index*>(values->get_data().data() + _row_begin);
+        if (zero_fill) std::memset(cells, 0, capacity * sizeof(H3Index));
+        return cells;
+    }
+
+    Status finish_row(size_t count) {
+        const size_t end = _row_begin + count;
+        // Disk compaction may reduce its upper-bound allocation to fit the offset limit.
+        if (end > std::numeric_limits<uint32_t>::max()) {
+            return Status::InvalidArgument("H3 array offset limit exceeded");
+        }
+        values->resize(end);
+        nulls->append(0);
+        offsets->append(static_cast<uint32_t>(end));
+        return Status::OK();
+    }
+
     void append_null() {
         nulls->append(1);
         offsets->append(static_cast<uint32_t>(values->size()));
@@ -230,6 +258,9 @@ struct H3ArrayBuilder {
         if (constant) return ConstColumn::create(std::move(result), size);
         return result;
     }
+
+private:
+    size_t _row_begin = 0;
 };
 
 } // namespace
@@ -414,6 +445,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns& 
     ColumnViewer<TYPE_INT> ks(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    result.reserve_rows(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
         if (input.is_null(row) || ks.is_null(row)) {
             result.append_null();
@@ -426,15 +458,17 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns& 
         const H3Error size_error = maxGridDiskSize(k, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_GridDisk", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        std::vector<H3Index> cells;
-        cells.assign(static_cast<size_t>(count), 0);
-        const H3Error error = gridDisk(cell, k, cells.data());
+        // gridDisk requires a zero-initialized output buffer.
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), true);
+        const H3Error error = gridDisk(cell, k, cells);
         if (error != E_SUCCESS) return h3_error("H3_GridDisk", error);
-        cells.erase(std::remove(cells.begin(), cells.end(), H3_NULL), cells.end());
-        for (H3Index value : cells) {
-            if (!isValidCell(value)) return Status::InternalError("H3_GridDisk returned invalid cell");
+        size_t written = 0;
+        for (size_t i = 0; i < static_cast<size_t>(count); ++i) {
+            const H3Index value = cells[i];
+            if (value == H3_NULL) continue;
+            cells[written++] = value;
         }
-        RETURN_IF_ERROR(result.append(cells));
+        RETURN_IF_ERROR(result.finish_row(written));
     }
     return result.build(size, constant);
 }
@@ -446,6 +480,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
     ColumnViewer<TYPE_INT> resolutions(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    result.reserve_rows(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
@@ -460,14 +495,10 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
         const H3Error size_error = cellToChildrenSize(cell, resolution, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_ToChildren", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        std::vector<H3Index> cells;
-        cells.assign(static_cast<size_t>(count), 0);
-        const H3Error error = cellToChildren(cell, resolution, cells.data());
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), false);
+        const H3Error error = cellToChildren(cell, resolution, cells);
         if (error != E_SUCCESS) return h3_error("H3_ToChildren", error);
-        for (H3Index value : cells) {
-            if (!isValidCell(value)) return Status::InternalError("H3_ToChildren returned invalid cell");
-        }
-        RETURN_IF_ERROR(result.append(cells));
+        RETURN_IF_ERROR(result.finish_row(static_cast<size_t>(count)));
     }
     return result.build(size, constant);
 }
