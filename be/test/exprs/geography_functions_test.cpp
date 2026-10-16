@@ -2918,7 +2918,7 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     EXPECT_FALSE((*nonnull_parent)->is_nullable());
 }
 
-TEST_F(geographyFunctionsTest, h3ResolutionUniformResultStillValidatesEveryRow) {
+TEST_F(geographyFunctionsTest, h3ResolutionValidatesEveryRow) {
     constexpr size_t size = 3073;
     for (int resolution = 0; resolution <= 15; ++resolution) {
         SCOPED_TRACE(resolution);
@@ -2929,11 +2929,11 @@ TEST_F(geographyFunctionsTest, h3ResolutionUniformResultStillValidatesEveryRow) 
             cells->append(static_cast<int64_t>(pentagons[row % pentagons.size()]));
         }
         ASSERT_FALSE(cells->is_constant());
-        auto uniform = GeoFunctions::h3_resolution(nullptr, {cells});
-        ASSERT_TRUE(uniform.ok()) << uniform.status();
-        EXPECT_TRUE((*uniform)->is_constant());
-        EXPECT_EQ(size, (*uniform)->size());
-        ColumnViewer<TYPE_INT> output(*uniform);
+        auto same_resolution = GeoFunctions::h3_resolution(nullptr, {cells});
+        ASSERT_TRUE(same_resolution.ok()) << same_resolution.status();
+        EXPECT_FALSE((*same_resolution)->is_constant());
+        EXPECT_EQ(size, (*same_resolution)->size());
+        ColumnViewer<TYPE_INT> output(*same_resolution);
         for (size_t row : {size_t{0}, size_t{1023}, size_t{1024}, size - 1}) {
             EXPECT_EQ(resolution, output.value(row));
         }

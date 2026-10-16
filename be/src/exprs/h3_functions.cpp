@@ -352,21 +352,12 @@ StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext*, const Columns&
         auto result = Int32Column::create();
         auto& values = result->get_data();
         values.resize(constant ? 1 : size);
-        int resolution_or = 0;
-        int resolution_and = 15;
         for (size_t row = 0; row < values.size(); ++row) {
             ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
             const int resolution = h3_cell_resolution(cell);
             values[row] = resolution;
-            resolution_or |= resolution;
-            resolution_and &= resolution;
         }
-        // All rows were validated even when their resolutions are identical.
-        // Preserve a uniform result as a constant column for downstream operators.
-        if (!values.empty() && resolution_or == resolution_and) {
-            result->resize(1);
-            return ConstColumn::create(std::move(result), size);
-        }
+        if (constant) return ConstColumn::create(std::move(result), size);
         return result;
     }
     auto values = Int32Column::create();
