@@ -122,14 +122,28 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
+- 導入バージョン: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - デフォルト: 0.5
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
+<<<<<<< HEAD
 - 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したとき、または手動の `ALTER TABLE ... COMPACT` がベースコンパクションを強制したときに実行されます。両方のしきい値を十分大きく設定すると自動トリガーを無効化できます。
 - 導入バージョン: v4.1.4
+=======
+- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
+- 導入バージョン: v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -137,8 +151,85 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
+<<<<<<< HEAD
 - 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
 - 導入バージョン: v4.1.4
+=======
+- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
+- 導入バージョン: v4.2
+
+### enable_lake_pk_compaction_score_gate
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタにおける主キーテーブルのサイズ階層型コンパクション「スコアゲート」のマスタースイッチ。デフォルトで有効な場合、価値の低い疎な中間層のコンパクションをスキップします。選択された層のコンパクションスコアが `lake_pk_compaction_min_level_score` を下回り、かつ以下のいずれの例外条件も発動しない場合、その層はコンパクションされず、わずかなファイル数の削減のために大量のベースデータを書き換えることを回避します。`false` に設定すると、ゲート全体を 1 つのスイッチで無効化できます。この場合、選択された各層は無条件にコンパクションされ (ゲート導入前の動作)、以下のしきい値パラメータは効果を持ちません。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_min_level_score
+
+- デフォルト: 2.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートのスコアしきい値 (`enable_lake_pk_compaction_score_gate` を参照)。サイズ階層型セレクタが選択した層の合計コンパクションスコアがこの値を下回り、かつ例外条件が一つも発動しない場合、そのコンパクションをスキップします。rowset ごとのスコアは `io_count * 1MB / read_bytes` で、層全体で合計されます。小さい rowset や重複した rowset が多い層はスコアが高く (有用なコンパクション)、大きく重複のない rowset が少数の層はスコアが低くなります (ほぼ純粋なベース書き換え)。`0` に設定するとゲートは無効になります。層のスコアは常に `0` 以上だからです。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- デフォルト: 0.005
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層を依然としてコンパクションするために必要な最小の利益/コスト比 (書き換え 1 MB あたりに削減される segment 数)。この利益には削除ベクトル (delvec) のクリーンアップ圧力も含まれます (`lake_pk_compaction_delvec_benefit_weight` を参照)。`0` に設定するとこの例外が無効になり、`lake_pk_compaction_min_level_score` のみが適用されます。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_emergency_score
+
+- デフォルト: 50.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。タブレット全体の読み取り圧力スコア (すべての rowset スコアの合計) がこの値に達すると、選択された層が `lake_pk_compaction_min_level_score` を下回っていてもコンパクションが実行され、読み取り増幅の大きいホットなタブレットが枯渇しないようにします。`0` に設定するとこの例外が無効になります。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- デフォルト: 12.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: `lake_pk_compaction_min_benefit_cost_ratio` で使用される利益/コスト比において、層の削除圧力を segment 換算の利益単位に変換する重み。計算式は `benefit = real_benefit_segments + delete_ratio * input_segments * weight` です。値が大きいほど削除ベクトルのクリーンアップに積極的になり、値が小さいほど書き込み増幅の削減を優先します。`0` に設定すると削除分の寄与がなくなり、この比は segment 数の利益のみを反映します。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- デフォルト: 2.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
+- 導入バージョン: v4.2
+
+### enable_lake_prepared_split_pre_refinement
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Prepared Physical Split Lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない Segment 範囲をカバーする追加の Coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（Coarse Range は常に Refined Range が差し引く対象のスーパーセットです）。早期の並列性を、冗長な Coarse スキャンの削減と引き換えにするだけです。
+- 導入バージョン: v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- デフォルト: 262144
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: Prepared Physical Split Lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（Split Morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、Split Morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
+- 導入バージョン: v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_put_txn_log_timeout_guard_ms
 

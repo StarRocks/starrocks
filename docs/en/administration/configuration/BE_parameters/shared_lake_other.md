@@ -122,14 +122,28 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
+- Introduced in: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - Default: 0.5
 - Type: Double
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
 - Introduced in: v4.1.4
+=======
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
+- Introduced in: v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -137,8 +151,85 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
 - Introduced in: v4.1.4
+=======
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Introduced in: v4.2
+
+### enable_lake_pk_compaction_score_gate
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for the Primary Key size-tiered compaction score gate in a shared-data cluster. When enabled (the default), low-value sparse mid-tier compaction picks are skipped: a picked level whose compaction score is below `lake_pk_compaction_min_level_score`, and which trips none of the override conditions, is left uncompacted to avoid rewriting large amounts of base data for a negligible reduction in file count. Set to `false` to turn off the whole gate in one step; every picked level then compacts unconditionally (the behavior before the gate existed), and the threshold parameters below have no effect.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_level_score
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Score threshold of the Primary Key compaction score gate (see `enable_lake_pk_compaction_score_gate`). When the size-tiered selector picks a level whose total compaction score is below this value and no override condition fires, the compaction is skipped. The per-rowset score is `io_count * 1MB / read_bytes` summed across the level: levels with many small or overlapped rowsets score high (useful compaction), while a few large non-overlapped rowsets score low (a near-pure base rewrite). Set to `0` to make the gate a no-op, because a level's score is always greater than or equal to `0`.
+- Introduced in: v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- Default: 0.005
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. The minimum benefit/cost ratio (segments saved per MB rewritten) at which a below-threshold level is still compacted. The benefit folds in delete-vector cleanup pressure (see `lake_pk_compaction_delvec_benefit_weight`). Set to `0` to disable this override so that only `lake_pk_compaction_min_level_score` applies.
+- Introduced in: v4.2
+
+### lake_pk_compaction_emergency_score
+
+- Default: 50.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When the tablet-wide read-pressure score (the sum of all rowset scores) reaches this value, compaction proceeds even if the picked level is below `lake_pk_compaction_min_level_score`, so that hot tablets with heavy read amplification are not starved. Set to `0` to disable this override.
+- Introduced in: v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- Default: 12.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The weight that converts a level's delete pressure into segment-equivalent benefit units in the benefit/cost ratio used by `lake_pk_compaction_min_benefit_cost_ratio`, computed as `benefit = real_benefit_segments + delete_ratio * input_segments * weight`. A higher value makes compaction more aggressive at cleaning up delete vectors; a lower value favors reducing write amplification. Set to `0` to drop the delete contribution so that the ratio reflects segment-count benefit only.
+- Introduced in: v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- Default: 2.0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
+- Introduced in: v4.2
+
+### enable_lake_prepared_split_pre_refinement
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Prepared Physical Split Lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
+- Introduced in: v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the Prepared Physical Split Lake Scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
+- Introduced in: v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_put_txn_log_timeout_guard_ms
 

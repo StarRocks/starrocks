@@ -119,14 +119,28 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
+- 引入版本：v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - 默认值：0.5
 - 类型：Double
 - 单位：-
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`、或手动执行 `ALTER TABLE ... COMPACT` 强制 Base Compaction 时触发。将两个阈值都调至足够大可关闭自动触发。
 - 引入版本：v4.1.4
+=======
+- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
+- 引入版本：v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -134,8 +148,85 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
 - 引入版本：v4.1.4
+=======
+- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 引入版本：v4.2
+
+### enable_lake_pk_compaction_score_gate
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下主键表 Size-tiered Compaction「评分门控」的总开关。默认开启时，会跳过低价值的稀疏中间层 Compaction：当被选中的层的 Compaction 评分低于 `lake_pk_compaction_min_level_score`，且未触发下述任一豁免条件时，该层不会被 Compaction，从而避免为极小的文件数收益而重写大量基线数据。设置为 `false` 可一键关闭整个门控；此时每个被选中的层都会无条件执行 Compaction（即门控引入前的行为），下述阈值参数也将不再生效。
+- 引入版本：v4.2
+
+### lake_pk_compaction_min_level_score
+
+- 默认值：2.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的评分阈值（参见 `enable_lake_pk_compaction_score_gate`）。当 Size-tiered 选层器选中的层的总评分低于该值，且未触发任何豁免条件时，跳过本次 Compaction。每个 Rowset 的评分为 `io_count * 1MB / read_bytes`，并按层求和：包含大量小 Rowset 或重叠 Rowset 的层评分高（值得 Compaction），而少量大的非重叠 Rowset 评分低（近乎纯粹的基线重写）。设置为 `0` 可使门控失效，因为层的评分恒大于等于 `0`。
+- 引入版本：v4.2
+
+### lake_pk_compaction_min_benefit_cost_ratio
+
+- 默认值：0.005
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。指低于阈值的层仍被 Compaction 所需的最小收益/成本比（每重写 1 MB 节省的 Segment 数）。该收益还会计入删除向量（delvec）的清理压力（参见 `lake_pk_compaction_delvec_benefit_weight`）。设置为 `0` 可禁用该豁免，此时仅 `lake_pk_compaction_min_level_score` 生效。
+- 引入版本：v4.2
+
+### lake_pk_compaction_emergency_score
+
+- 默认值：50.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。当 Tablet 整体的读取压力评分（所有 Rowset 评分之和）达到该值时，即使被选中的层低于 `lake_pk_compaction_min_level_score`，也会执行 Compaction，从而避免读放大严重的热点 Tablet 长期得不到 Compaction。设置为 `0` 可禁用该豁免。
+- 引入版本：v4.2
+
+### lake_pk_compaction_delvec_benefit_weight
+
+- 默认值：12.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：在 `lake_pk_compaction_min_benefit_cost_ratio` 使用的收益/成本比中，将层的删除压力换算为等效 Segment 收益单位的权重，计算公式为 `benefit = real_benefit_segments + delete_ratio * input_segments * weight`。值越大，Compaction 越积极地清理删除向量；值越小，越倾向于降低写放大。设置为 `0` 可去除删除项的贡献，此时该比值仅反映 Segment 数收益。
+- 引入版本：v4.2
+
+### lake_pk_compaction_size_overflow_ratio
+
+- 默认值：2.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
+- 引入版本：v4.2
+
+### enable_lake_prepared_split_pre_refinement
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Prepared Physical Split Lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 Seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 Segment 范围的 Coarse-range morsel，让原本空闲的 Driver 提前开始工作，直到裁剪后的 Refined Rang 就绪。关闭它不会丢失数据（Coarse Range 始终是 Refined Range 从中相减的超集），只是用提前并行换取更少的冗余 Coarse 扫描。
+- 引入版本：v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：仅在开启 Prepared Physical Split Lake 扫描（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 Split Morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 Split Morsel 拆得更细（把大 Tablet 切成更多子范围 Morsel 以填充原本空闲的 Driver），不会更粗。仅在存算分离集群中生效。
+- 引入版本：v4.2
+>>>>>>> aea63e1 ([BugFix] Make delete-triggered base compaction of lake primary-key tablets opt-in (#79926))
 
 ### lake_put_txn_log_timeout_guard_ms
 
