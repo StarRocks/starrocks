@@ -498,6 +498,9 @@ public class AlterJobMgr {
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
+            if (log.isClearVersionMap()) {
+                mv.getRefreshScheme().clearVersionState();
+            }
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
@@ -742,9 +745,22 @@ public class AlterJobMgr {
         relatedMvIds.clear();
     }
 
+<<<<<<< HEAD
     public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
+=======
+    public void alterView(AlterViewInfo alterViewInfo) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        if (db == null) {
+            throw new AlterJobException("database " + alterViewInfo.getDbId() + " was dropped concurrently");
+        }
+        View view = (View) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            throw new AlterJobException("view " + alterViewInfo.getTableId() + " was dropped concurrently");
+        }
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
         String comment = alterViewInfo.getComment();
@@ -757,8 +773,16 @@ public class AlterJobMgr {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
+<<<<<<< HEAD
             String viewName = view.getName();
             view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
+=======
+            // The view was looked up before the lock: a DROP VIEW in between leaves it detached from the db, and
+            // altering it would write a MODIFY entry for a view that no longer exists.
+            if (!db.isExist() || db.getTable(view.getId()) != view) {
+                throw new AlterJobException("view " + view.getName() + " was dropped concurrently");
+            }
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
             try {
                 view.init();
             } catch (StarRocksException e) {
@@ -779,7 +803,44 @@ public class AlterJobMgr {
         }
     }
 
+<<<<<<< HEAD
     public void setViewSecurity(AlterViewInfo alterViewInfo, boolean isReplay) {
+=======
+    public void replayAlterView(AlterViewInfo alterViewInfo) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        View view = db == null ? null : (View) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            // Journals written before the alter path rechecked the view under its lock can carry a MODIFY
+            // after the DROP of the same view.
+            LOG.warn("skip replaying alter of view {} in db {}: it no longer exists",
+                    alterViewInfo.getTableId(), alterViewInfo.getDbId());
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        try {
+            view.setInlineViewDefWithSqlMode(alterViewInfo.getInlineViewDef(), alterViewInfo.getSqlMode());
+            view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
+            view.setNewFullSchema(alterViewInfo.getNewFullSchema());
+            view.setComment(alterViewInfo.getComment());
+            if (alterViewInfo.isUpdateSecurity()) {
+                view.setSecurity(alterViewInfo.getSecurity());
+            }
+            LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+    }
+
+    public void setViewSecurity(AlterViewInfo alterViewInfo) {
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(
+                OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo, wal -> updateViewSecurity(alterViewInfo));
+    }
+
+    public void updateViewSecurity(AlterViewInfo alterViewInfo) {
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

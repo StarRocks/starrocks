@@ -21,18 +21,39 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.context.ai.AIProviderType;
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.DmlStmt;
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -338,5 +359,31 @@ public class InsertOverwriteJobRunnerTest {
                 "union all " +
                 "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
         cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testOverwriteOfAutoPartitionDroppedAfterCreationFails() throws Exception {
+        starRocksAssert.withTable("create table insert_overwrite_test.t_auto_list(k1 int, k2 varchar(10)) " +
+                "DUPLICATE KEY(k1) PARTITION BY (k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES('replication_num'='1');");
+        // A DROP PARTITION lands right after INSERT OVERWRITE created the partition and released the lock.
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void addPartitions(Invocation invocation, ConnectContext ctx, Database db, String tableName,
+                                      AddPartitionClause addPartitionClause) throws DdlException {
+                invocation.proceed();
+                OlapTable table = (OlapTable) db.getTable(tableName);
+                List<String> names = ((ListPartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                        Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    for (String name : names) {
+                        table.dropPartition(db.getId(), name, true);
+                    }
+                }
+            }
+        };
+        SQLException e = Assertions.assertThrows(SQLException.class, () -> cluster.runSql("insert_overwrite_test",
+                "insert overwrite t_auto_list partition(k2='a') values(1, 'a')"));
+        Assertions.assertTrue(e.getMessage().contains("was dropped concurrently"), e.getMessage());
     }
 }
