@@ -178,7 +178,8 @@ add_executable(connector_adbc_test
         ${BE_TEST_JNI_ENV_STUB}
         adbc_connector_test.cpp
 )
-target_link_libraries(connector_adbc_test ${CONNECTOR_ADBC_TEST_LINK_LIBS} gtest_main)
+# Keep Base before jemalloc to resolve allocator symbols in sanitizer builds.
+target_link_libraries(connector_adbc_test ${CONNECTOR_ADBC_TEST_LINK_LIBS} gtest_main Base jemalloc)
 set_target_properties(connector_adbc_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 if (WITH_CONNECTOR_MYSQL)
