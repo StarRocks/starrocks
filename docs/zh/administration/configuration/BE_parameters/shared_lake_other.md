@@ -55,6 +55,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 压力连接使用同一 update tracker 下的 `lake_pk_index_pressure_merge` 子 tracker。工作区、临时输入读状态和输出元数据共用一个绝对内存等待截止时间及取消信号，包括输入 `Table::Open` 和解压预留；安装后的输出使用普通读状态上下文。在当前输出额度下无文件数或元数据收益的 fileset，会跳过后续重复连接，直到输入或额度改变。 合并 trace 记录 `pindex_pressure_coalesce_workspace_bytes`、调用次数和 `pindex_pressure_coalesce_peak_bytes_sum`；后者累加每次调用的子 tracker 记账峰值，不代表全局并发峰值或进程峰值。 `pindex_pressure_coalesce_unproductive_skip_count` 记录这些已跳过的重复写入。 `pindex_pressure_coalesce_total_us` 包含实际工作和等待；`pindex_pressure_coalesce_memory_wait_us` 单独记录条件变量上的内存等待。同步文件系统 IO 在此仍不可抢占。
 
+每批 MemTable 修改前，会把有界增长与下一次 SST 打开的最小字节数一起向实际 update 根 tracker 预检。两者无法共存时，已 join reader 的 tablet 持锁方可先退休 pending MemTable，再写入新值。预检后归还读取余量；实际 SST 分配仍单独预留字节，并可能等待并发的非 publish 工作。`pindex_memtable_growth_sst_headroom_bytes` 累加各批次的预检大小提示，不代表常驻内存或长期预留。单个索引小于 update 预算一半时也执行此检查。 增长预检遇到压力后，本次 publish 的持锁方还会停止填充可选数据块缓存，包括新刷出的 SST；`pindex_memtable_growth_block_cache_bypass_count` 记录该状态切换。下次 prepare 会重新评估缓存。
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - 默认值：30000

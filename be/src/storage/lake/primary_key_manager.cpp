@@ -349,9 +349,35 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
         return Status::MemoryLimitExceeded(
                 fmt::format("PK MemTable mutation needs {} bytes; update limit={}", bytes, limit));
     }
+    // A successful tree reservation alone must not grow the owner into a state where its
+    // following old-value lookup cannot open an SST. Preflight both against the real root
+    // before mutation, while flushing this owner is still safe. Return the read headroom
+    // immediately: ReadBlock owns its actual lifetime reservation, and must still compete
+    // with non-publish work through try_consume (this is not a second read-state charge).
+    ASSIGN_OR_RETURN(auto minimum_read, entry->value().minimum_sst_read_memory());
+    size_t required = 0;
+    auto plan = [&]() -> Status {
+        if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) ||
+            minimum_read > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - bytes) {
+            return Status::MemoryLimitExceeded("PK MemTable mutation and SST read headroom overflow");
+        }
+        required = bytes + minimum_read;
+        if (limit >= 0 && required > static_cast<size_t>(limit)) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_rejected", 1);
+            return Status::MemoryLimitExceeded(
+                    fmt::format("PK MemTable mutation needs {} bytes plus {} SST read headroom; update limit={}", bytes,
+                                minimum_read, limit));
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(plan());
     auto reserve = [&] {
+        _block_cache->update_memory_usage();
         std::lock_guard<std::mutex> lock(_index_accounting_mutex);
-        return _index_cache.try_reserve_object_growth(entry, bytes);
+        if (!_index_cache.try_reserve_object_growth(entry, required)) return false;
+        _index_cache.release_object_growth_reservation(entry, bytes);
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_sst_headroom_bytes", minimum_read);
+        return true;
     };
     bool flushed = false;
     bool waited = false;
@@ -364,11 +390,15 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
             return Status::OK();
         }
+        // Cache inserts are accounted after lookup. Stop this owner's later lookups from
+        // refilling optional data blocks while making room for a mandatory SST read.
+        entry->value().disable_optional_data_block_cache();
         const size_t available = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
-        const size_t shortage = bytes - std::min(bytes, available);
+        const size_t shortage = required - std::min(required, available);
         const size_t cached = _index_cache.size();
         _evict_index_cache(cached - std::min(cached, shortage));
-        _reclaim_active_index_read_state(entry, bytes);
+        _sst_memory_context->reclaim(required);
+        _reclaim_active_index_read_state(entry, required);
         if (reserve()) {
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
             return Status::OK();
@@ -391,6 +421,11 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
             if (flush_status.is_time_out()) TRACE_COUNTER_INCREMENT("pindex_memtable_growth_flush_timeout", 1);
             if (flush_status.is_cancelled()) TRACE_COUNTER_INCREMENT("pindex_memtable_growth_cancelled", 1);
             RETURN_IF_ERROR(flush_status);
+            // Handoff can introduce a new immutable file; do not keep using the pre-flush
+            // sizing hint for an old set of SSTs. Probing happens outside accounting locks.
+            ASSIGN_OR_RETURN(minimum_read, entry->value().minimum_sst_read_memory());
+            RETURN_IF_ERROR(plan());
+            TEST_SYNC_POINT("PrimaryKeyManager::_reserve_index_growth:after_flush");
             flushed = true;
             continue;
         }

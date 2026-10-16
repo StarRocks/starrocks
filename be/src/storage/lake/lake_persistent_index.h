@@ -268,6 +268,12 @@ public:
     size_t sst_memory_demand() const { return _sst_memory_demand.load(); }
     // Includes read-state object reservations; caller holds the tablet index lock.
     size_t sst_read_state_reservation_demand() const;
+    // Immutable-file sizing hint for the next lookup. Caller has joined all lookup workers
+    // and holds the tablet lock; newly flushed SSTs must be included before admitting growth.
+    StatusOr<size_t> minimum_sst_read_memory() const;
+    // A pressured mutation must not refill optional data blocks after its headroom check.
+    // Caller holds the tablet lock and has joined old-value lookups.
+    void disable_optional_data_block_cache();
     size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
@@ -494,6 +500,7 @@ private:
     bool _growth_mutation_active = false;
     bool _partial_read_state = false;
     size_t _publish_workspace_budget = 0;
+    bool _publish_skip_optional_block_cache = false;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};
     std::atomic<size_t> _cached_legacy_charge{0};

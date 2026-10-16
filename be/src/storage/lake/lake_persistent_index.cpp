@@ -98,6 +98,8 @@ void LakePersistentIndex::_reset_index_state() {
     _sst_memory_demand.store(0);
     _cached_metadata_bytes.store(0);
     _partial_read_state = false;
+    _publish_workspace_budget = 0;
+    _publish_skip_optional_block_cache = false;
     if (_memtable) {
         _memtable->clear();
     }
@@ -242,7 +244,7 @@ bool LakePersistentIndex::too_many_rebuild_rows() const {
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
     sstable->set_read_state_reclaimer(_reclaim_read_state);
-    sstable->set_skip_data_block_cache(_publish_workspace_budget > 0);
+    sstable->set_skip_data_block_cache(_publish_workspace_budget > 0 || _publish_skip_optional_block_cache);
     // Track SST flush stats for publish phase monitoring
     _publish_sst_flush_count++;
     _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
@@ -2176,6 +2178,37 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
     return Status::OK();
 }
 
+StatusOr<size_t> LakePersistentIndex::minimum_sst_read_memory() const {
+    size_t minimum = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (!fileset) continue;
+        Status status;
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+            if (!status.ok()) return;
+            const auto probed = sst.probe_minimum_read_memory();
+            if (!probed.ok()) {
+                status = probed.status();
+            } else {
+                minimum = std::max(minimum, *probed);
+            }
+        });
+        RETURN_IF_ERROR(status);
+    }
+    return minimum;
+}
+
+void LakePersistentIndex::disable_optional_data_block_cache() {
+    if (!_publish_skip_optional_block_cache) {
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_block_cache_bypass_count", 1);
+        _publish_skip_optional_block_cache = true;
+        for (const auto& fileset : _sstable_filesets) {
+            if (fileset) {
+                fileset->for_each_sstable([](const auto& sst) { sst.set_skip_data_block_cache(true); });
+            }
+        }
+    }
+}
+
 Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial,
                                                        const std::function<void()>& refresh_memory,
                                                        const std::function<bool()>& cancelled) {
@@ -2195,12 +2228,9 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
     };
     collect_ssts();
     _publish_workspace_budget = 0;
+    _publish_skip_optional_block_cache = false;
     if (partial) {
-        size_t minimum_read = 0;
-        for (const auto* sst : ssts) {
-            ASSIGN_OR_RETURN(auto minimum, sst->probe_minimum_read_memory());
-            minimum_read = std::max(minimum_read, minimum);
-        }
+        ASSIGN_OR_RETURN(auto minimum_read, minimum_sst_read_memory());
         const auto limit = _tablet_mgr->primary_key_mgr()->mem_tracker()->limit();
         if (limit > 0 && minimum_read > static_cast<size_t>(limit / 2)) {
             // Keep the immutable decoded index plus encoded window, metadata and 64KiB of
