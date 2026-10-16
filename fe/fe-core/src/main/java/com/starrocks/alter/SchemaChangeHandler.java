@@ -2125,38 +2125,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
-<<<<<<< HEAD
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexSchemaMap, propertyMap, newIndexes,
                 modifyFieldColumns);
-        if (schemaChangeData.isShortKeyChanged()) {
-            fastSchemaEvolution = false;
-        }
-
-        if (schemaChangeData.getNewIndexSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
-=======
-        if (propertyMap.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
-            // A column clause may carry table properties ("ADD COLUMN c STRING PROPERTIES (...)"),
-            // and those keep the fast-schema-evolution path eligible. Both fast jobs finish by
-            // rebuilding the schema and the indexes and never persist this table-level property,
-            // so the change would reach the tablets and then be lost from FE metadata, leaving
-            // SHOW CREATE TABLE and every later tablet on the old setting. A ModifyTableProperties
-            // clause already leaves the fast path for the same reason.
-            fastSchemaEvolution = false;
-        }
-
-        SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
-                modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
         if (schemaChangeData.isShortKeyChanged() || schemaChangeData.isBloomFilterColumnsChanged()) {
             fastSchemaEvolution = false;
         }
 
         // After finalAnalyze, so a statement it already rejects keeps its own message.
-        checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
-        checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(),
-                indexMetaIdToSchema);
+        checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(), indexSchemaMap);
 
-        if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
->>>>>>> 5219cd9 ([BugFix] Reject unsupported column types under bloom filters)
+        if (schemaChangeData.getNewIndexSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
         }
@@ -2171,53 +2149,17 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-<<<<<<< HEAD
-=======
-    // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
-    // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
-    // against the final types, so an index added or dropped in the same statement is accounted for. Every
-    // materialized index is checked, not just the base one: an index may cover a column that only a rollup
-    // (synchronous MV) carries. Only columns that are new to a staged schema or whose type changes there are
-    // checked: a keyness change alone keeps the type, and an untouched column keeps whatever index it already has.
-    private static void checkBitmapIndexesForTypeChange(OlapTable table, List<Index> indexes,
-                                                        Map<Long, ? extends List<Column>> indexMetaIdToSchema)
-            throws DdlException {
-        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
-            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
-            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
-            for (Index index : indexes) {
-                if (index.getIndexType() != IndexType.BITMAP) {
-                    continue;
-                }
-                for (ColumnId columnId : index.getColumns()) {
-                    Column oldColumn = oldColumns.get(columnId);
-                    Column newColumn = newColumns.get(columnId);
-                    if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
-                        continue;
-                    }
-                    String columnName = oldColumn != null ? oldColumn.getName()
-                            : Column.removeNamePrefix(newColumn.getName());
-                    try {
-                        IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
-                    } catch (SemanticException e) {
-                        throw new DdlException(e.getDetailMsg());
-                    }
-                }
-            }
-        }
-    }
-
     // A cast can skip reading an old filter, but future writes still build one from the new schema.
     // Check only changed types: legacy metadata on an untouched column must not block other ALTERs.
     // DecimalV3 is writable by the BE for an inherited filter even though CREATE uses a stricter policy.
     private static void checkBloomFilterColumnsForTypeChange(OlapTable table, Set<ColumnId> bfColumns,
-                                                             Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+                                                             Map<Long, ? extends List<Column>> indexSchemaMap)
             throws DdlException {
         if (bfColumns == null || bfColumns.isEmpty()) {
             return;
         }
-        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
-            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexSchemaMap.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexId(entry.getKey()));
             Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
             for (ColumnId columnId : bfColumns) {
                 Column newColumn = newColumns.get(columnId);
@@ -2238,7 +2180,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
->>>>>>> 5219cd9 ([BugFix] Reject unsupported column types under bloom filters)
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws StarRocksException {

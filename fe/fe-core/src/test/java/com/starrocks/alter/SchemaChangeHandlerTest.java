@@ -36,12 +36,15 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -906,250 +909,25 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void testModifyColumnCommentOnlyForDuplicateTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_dup (k1 INT, v1 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_dup",
-                "ALTER TABLE test.cmt_dup MODIFY COLUMN v1 INT COMMENT 'dup comment';",
-                "v1", "dup comment");
+    private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = tbl.getBaseSchema();
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
     }
 
-    @Test
-    public void testModifyColumnCommentOnlyForAggregateTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_agg (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_agg",
-                "ALTER TABLE test.cmt_agg MODIFY COLUMN v1 INT SUM COMMENT 'agg comment';",
-                "v1", "agg comment");
-    }
-
-    @Test
-    public void testModifyColumnCommentOnlyForUniqueTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_uniq (k1 INT, v1 INT) UNIQUE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_uniq",
-                "ALTER TABLE test.cmt_uniq MODIFY COLUMN v1 INT COMMENT 'uniq comment';",
-                "v1", "uniq comment");
-    }
-
-    // A comment-only MODIFY COLUMN takes the lightweight path even for a primary key table's key column,
-    // which the regular processModifyColumn path rejects ("Can not modify key column ... for primary key table").
-    @Test
-    public void testModifyColumnCommentOnlyForPrimaryKeyTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_pk (k1 INT, v1 INT) PRIMARY KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_pk",
-                "ALTER TABLE test.cmt_pk MODIFY COLUMN k1 INT COMMENT 'pk key comment';",
-                "k1", "pk key comment");
-        assertCommentOnlyModify("cmt_pk",
-                "ALTER TABLE test.cmt_pk MODIFY COLUMN v1 INT COMMENT 'pk value comment';",
-                "v1", "pk value comment");
-    }
-
-    // On an AGGREGATE table the aggregation method is omitted for key columns, so MODIFY COLUMN k1 INT COMMENT '...'
-    // rebuilds k1 with no aggregation type; isCommentOnlyModification must infer the key flag from "no aggregation
-    // method == key column" (the AGG_KEYS branch), otherwise the comment-only change on the key column would be
-    // misclassified and spawn a schema change job.
-    @Test
-    public void testModifyColumnCommentOnlyForKeyColumnOfAggregateTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_agg_key (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_agg_key",
-                "ALTER TABLE test.cmt_agg_key MODIFY COLUMN k1 INT COMMENT 'agg key comment';",
-                "k1", "agg key comment");
-    }
-
-    // On a DUPLICATE table the helper only treats a MODIFY COLUMN target as a key column when the clause carries the
-    // KEY keyword (otherwise it fills in the NONE value-column aggregation). So a comment-only change on a key column
-    // must spell out KEY -- "MODIFY COLUMN k1 INT KEY COMMENT '...'" -- for the rebuilt column to match the stored key
-    // column and take the lightweight path.
-    @Test
-    public void testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_dup_key (k1 INT, v1 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_dup_key",
-                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT KEY COMMENT 'dup key comment';",
-                "k1", "dup key comment");
-    }
-
-    // Same as the DUPLICATE case: on a UNIQUE table a key column omitting KEY would be rebuilt as a REPLACE value
-    // column, so the comment-only clause has to carry the KEY keyword to stay on the lightweight path.
-    @Test
-    public void testModifyColumnCommentOnlyForKeyColumnOfUniqueTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_uniq_key (k1 INT, v1 INT) UNIQUE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertCommentOnlyModify("cmt_uniq_key",
-                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT KEY COMMENT 'uniq key comment';",
-                "k1", "uniq key comment");
-    }
-
-    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable: omitting the KEY keyword makes the helper
-    // rebuild k1 as a NONE value column, so the modify is no longer comment-only and demoting the sole key column is
-    // rejected. The comment must stay unchanged.
-    @Test
-    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForDuplicateTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_dup_key_nokey (k1 INT, v1 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertModifyColumnFails("cmt_dup_key_nokey",
-                "ALTER TABLE test.cmt_dup_key_nokey MODIFY COLUMN k1 INT COMMENT 'dup key comment';",
-                "k1");
-    }
-
-    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfUniqueTable: omitting the KEY keyword makes the helper
-    // rebuild k1 as a REPLACE value column, so the modify is rejected and the comment stays unchanged.
-    @Test
-    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForUniqueTable() throws Exception {
-        createTable("CREATE TABLE test.cmt_uniq_key_nokey (k1 INT, v1 INT) UNIQUE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        assertModifyColumnFails("cmt_uniq_key_nokey",
-                "ALTER TABLE test.cmt_uniq_key_nokey MODIFY COLUMN k1 INT COMMENT 'uniq key comment';",
-                "k1");
-    }
-
-    @Test
-    public void testModifyColumnCommentOnlyCannotCombineWithOtherClause() throws Exception {
-        createTable("CREATE TABLE test.cmt_combine (k1 INT, v1 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        String alterSql = "ALTER TABLE test.cmt_combine MODIFY COLUMN v1 INT COMMENT 'x', ADD COLUMN v2 INT;";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("cmt_combine");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        DdlException exception = Assertions.assertThrows(DdlException.class,
-                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
-        Assertions.assertTrue(exception.getMessage()
-                        .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
-                exception.getMessage());
-    }
-
-    @Test
-    public void testModifyColumnRepositionIsNotCommentOnly() throws Exception {
-        createTable("CREATE TABLE test.cmt_reposition (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("cmt_reposition");
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                "ALTER TABLE test.cmt_reposition MODIFY COLUMN v2 INT AFTER k1;");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        handler.process(alterTableStmt.getAlterClauseList(), db, table);
-
-        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertFalse(jobs.isEmpty());
-        waitAlterJobDone(handler.getAlterJobsV2());
-        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
-        // absolute job-count assertions in sibling tests
-        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
-    }
-
-    // Omitting an explicit aggregation type on an AGGREGATE table value column (v INT SUM -> v INT) is a real
-    // schema change, not a comment-only one: the stored SUM is explicit user schema, so isCommentOnlyModification
-    // must NOT inherit it. The clause has to fall through to processModifyColumn, which treats the missing
-    // aggregation as turning the value column into a key column and rejects it on this table.
-    @Test
-    public void testModifyColumnOmittingExplicitAggregationIsNotCommentOnly() throws Exception {
-        createTable("CREATE TABLE test.cmt_agg_omit (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("cmt_agg_omit");
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                "ALTER TABLE test.cmt_agg_omit MODIFY COLUMN v1 INT COMMENT 'agg comment';");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        DdlException exception = Assertions.assertThrows(DdlException.class,
-                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
-        // It must not have been silently routed to the comment-only path: the comment stays unchanged.
-        Assertions.assertEquals("", table.getColumn("v1").getComment(), exception.getMessage());
-    }
-
-    @Test
-    public void testNoOpModifyColumnCanCombineWithOtherClause() throws Exception {
-        createTable("CREATE TABLE test.noop_batch_dup (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
-                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("noop_batch_dup");
-        // "MODIFY COLUMN v1 INT" changes nothing (no-op); batched with a real change on v2.
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                "ALTER TABLE test.noop_batch_dup MODIFY COLUMN v1 INT, MODIFY COLUMN v2 BIGINT;");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        // Must not throw the comment-combine error; the no-op clause stays on the schema-change path.
-        handler.process(alterTableStmt.getAlterClauseList(), db, table);
-
-        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertFalse(jobs.isEmpty());
-        waitAlterJobDone(handler.getAlterJobsV2());
-        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
-        // absolute job-count assertions in sibling tests
-        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
-    }
-
-    @Test
-    public void testNoOpModifyColumnCanCombineWithOtherClauseOnPrimaryKeyTable() throws Exception {
-        createTable("CREATE TABLE test.noop_batch_pk (k1 INT NOT NULL, v10 VARCHAR(40) NULL, v11 INT NULL) "
-                + "PRIMARY KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("noop_batch_pk");
-        // "MODIFY COLUMN v10 VARCHAR(40)" is a no-op (v10 already is VARCHAR(40)); batched with a real change on v11.
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                "ALTER TABLE test.noop_batch_pk MODIFY COLUMN v10 VARCHAR(40), MODIFY COLUMN v11 BIGINT;");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        handler.process(alterTableStmt.getAlterClauseList(), db, table);
-
-        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertFalse(jobs.isEmpty());
-        waitAlterJobDone(handler.getAlterJobsV2());
-        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
-    }
-
-    private void assertCommentOnlyModify(String tableName, String alterSql, String columnName, String expectedComment)
-            throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        Assertions.assertNotNull(table);
-
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        handler.process(alterTableStmt.getAlterClauseList(), db, table);
-
-        // A comment-only MODIFY COLUMN must take the lightweight path: no schema change job is created and
-        // the table stays in NORMAL state, while the column comment is updated in place.
-        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
-        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
-        Assertions.assertEquals(expectedComment, table.getColumn(columnName).getComment());
-    }
-
-    private void assertModifyColumnFails(String tableName, String alterSql, String columnName) throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        Assertions.assertNotNull(table);
-        String originalComment = table.getColumn(columnName).getComment();
-
-        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        DdlException exception = Assertions.assertThrows(DdlException.class,
-                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
-
-        // The rejected modify must not have been routed to the comment-only path: the comment stays unchanged, no
-        // schema change job is created, and the table remains NORMAL.
-        Assertions.assertEquals(originalComment, table.getColumn(columnName).getComment(), exception.getMessage());
-        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
-        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
-    }
-
-    private static final String BITMAP_UNSUPPORTED_SUFFIX = " is not supported in bitmap index. invalid column: ";
-
-    private OlapTable createBitmapIndexedTable(String tableName, boolean fastSchemaEvolution) throws Exception {
-        createTable("CREATE TABLE test." + tableName + " (k BIGINT NOT NULL, x INT, s VARCHAR(16), d DECIMAL(38,9), y INT,"
-                + " INDEX ix_x (x) USING BITMAP, INDEX ix_s (s) USING BITMAP, INDEX ix_d (d) USING BITMAP)"
-                + " DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
-                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = '" + fastSchemaEvolution + "');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        return (OlapTable) db.getTable(tableName);
-    }
-
-    private boolean hasAlterJobOf(SchemaChangeHandler handler, OlapTable table) {
-        return handler.getAlterJobsV2().values().stream().anyMatch(job -> job.getTableId() == table.getId());
+    private void executeAlterAndWaitDone(String sql) throws Exception {
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(sql);
+        DDLStmtExecutor.execute(alterStmt, connectContext);
+        jobSize++;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        waitAlterJobDone(alterJobs);
     }
 
     @Test
@@ -1221,13 +999,15 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         OlapTable table = createBloomFilterTable("bf_remove_bundled", "INT", false);
         Map<Long, AlterJobV2> jobsBefore = new HashMap<>(handler.getAlterJobsV2());
         try {
-            AlterTableStmt bundled = (AlterTableStmt) parseAndAnalyzeStmt(
-                    "ALTER TABLE test.bf_remove_bundled MODIFY COLUMN x DOUBLE "
-                            + "PROPERTIES ('bloom_filter_columns'='')");
+            String bundledSql = "ALTER TABLE test.bf_remove_bundled MODIFY COLUMN x DOUBLE "
+                    + "PROPERTIES ('bloom_filter_columns'='')";
+            AlterTableStmt bundled = (AlterTableStmt) parseAndAnalyzeStmt(bundledSql);
             Assertions.assertNotNull(handler.analyzeAndCreateJob(bundled.getAlterClauseList(), db, table));
-            Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
+            Assertions.assertEquals(Type.INT, table.getColumn("x").getType());
             Assertions.assertTrue(table.getBfColumnNames().contains("x"));
-            handler.process(bundled.getAlterClauseList(), db, table);
+            // This branch mutates the analyzed column while creating the job, so execute a fresh statement.
+            AlterTableStmt applyBundled = (AlterTableStmt) parseAndAnalyzeStmt(bundledSql);
+            handler.process(applyBundled.getAlterClauseList(), db, table);
             waitAlterJobDone(handler.getAlterJobsV2());
             Assertions.assertEquals(PrimitiveType.DOUBLE, table.getColumn("x").getPrimitiveType());
             Assertions.assertTrue(table.getBfColumnIds() == null || table.getBfColumnIds().isEmpty());
@@ -1309,140 +1089,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(16, ((ScalarType) table.getColumn("x").getType()).getLength());
     }
 
-    private void assertBitmapModifyRejected(OlapTable table, String alterClauses, String columnName) throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test." + table.getName() + " " + alterClauses);
-        DdlException e = Assertions.assertThrows(DdlException.class,
-                () -> handler.process(stmt.getAlterClauseList(), db, table), alterClauses);
-        Assertions.assertTrue(e.getMessage().contains(BITMAP_UNSUPPORTED_SUFFIX + columnName), e.getMessage());
-        Assertions.assertFalse(e.getMessage().contains(SchemaChangeHandler.SHADOW_NAME_PREFIX), e.getMessage());
-        Assertions.assertFalse(hasAlterJobOf(handler, table), alterClauses);
-        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
-    }
-
-    @Test
-    public void testModifyBitmapIndexedColumnToUnsupportedTypeIsRejected() throws Exception {
-        OlapTable table = createBitmapIndexedTable("bm_mod_reject", true);
-        assertBitmapModifyRejected(table, "MODIFY COLUMN x DOUBLE", "x");
-        assertBitmapModifyRejected(table, "MODIFY COLUMN s DOUBLE", "s");
-        assertBitmapModifyRejected(table, "MODIFY COLUMN d DECIMAL(76,20)", "d");
-        Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
-        Assertions.assertEquals(16, ((ScalarType) table.getColumn("s").getType()).getLength());
-        Assertions.assertEquals(PrimitiveType.DECIMAL128, table.getColumn("d").getPrimitiveType());
-    }
-
-    @Test
-    public void testModifyBitmapIndexedColumnMatchesIndexColumnCaseInsensitively() throws Exception {
-        createTable("CREATE TABLE test.bm_case_reject (k BIGINT NOT NULL, x INT,"
-                + " INDEX ix_x (x) USING BITMAP) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
-                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("bm_case_reject");
-        // An index created before column ids existed may keep the spelling typed in the INDEX clause.
-        table.setIndexes(List.of(new Index("ix_x", List.of(ColumnId.create("X")), IndexDef.IndexType.BITMAP, "")));
-        assertBitmapModifyRejected(table, "MODIFY COLUMN x DOUBLE", "x");
-        Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
-    }
-
-    @Test
-    public void testIncompatibleTypeChangeKeepsItsOwnMessageUnderBitmapIndex() throws Exception {
-        createTable("CREATE TABLE test.bm_date_incompat (k BIGINT NOT NULL, dt DATE,"
-                + " INDEX ix_dt (dt) USING BITMAP) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
-                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("bm_date_incompat");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test.bm_date_incompat MODIFY COLUMN dt DOUBLE");
-        DdlException e = Assertions.assertThrows(DdlException.class,
-                () -> handler.process(stmt.getAlterClauseList(), db, table));
-        Assertions.assertFalse(e.getMessage().contains(BITMAP_UNSUPPORTED_SUFFIX), e.getMessage());
-        Assertions.assertFalse(hasAlterJobOf(handler, table));
-        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
-    }
-
-    @Test
-    public void testAddBitmapIndexAndModifyColumnInOneStatementIsRejected() throws Exception {
-        OlapTable table = createBitmapIndexedTable("bm_add_mod_reject", true);
-        assertBitmapModifyRejected(table, "ADD INDEX ix_y (y) USING BITMAP, MODIFY COLUMN y DOUBLE", "y");
-        assertBitmapModifyRejected(table, "MODIFY COLUMN y DOUBLE, ADD INDEX ix_y (y) USING BITMAP", "y");
-        Assertions.assertEquals(IntegerType.INT, table.getColumn("y").getType());
-    }
-
-    @Test
-    public void testModifyBitmapIndexedColumnToSupportedTypeIsAccepted() throws Exception {
-        OlapTable table = createBitmapIndexedTable("bm_mod_accept", false);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        int jobCount = handler.getAlterJobsV2().size();
-        for (String clauses : new String[] {"DROP INDEX ix_x, MODIFY COLUMN x DOUBLE",
-                "MODIFY COLUMN x DOUBLE, DROP INDEX ix_x", "MODIFY COLUMN x BIGINT", "MODIFY COLUMN x VARCHAR(32)"}) {
-            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test.bm_mod_accept " + clauses);
-            Assertions.assertNotNull(handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table), clauses);
-            Assertions.assertEquals(jobCount, handler.getAlterJobsV2().size(), clauses);
-            Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType(), clauses);
-        }
-
-        createTable("CREATE TABLE test.bm_mod_accept_agg (kx INT NOT NULL, kh INT NOT NULL, v BIGINT SUM,"
-                + " INDEX ix_kx (kx) USING BITMAP) AGGREGATE KEY(kx, kh) DISTRIBUTED BY HASH(kh) BUCKETS 1"
-                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'false');");
-        OlapTable aggTable = (OlapTable) db.getTable("bm_mod_accept_agg");
-        AlterTableStmt aggStmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                "ALTER TABLE test.bm_mod_accept_agg MODIFY COLUMN kx BIGINT KEY");
-        Assertions.assertNotNull(handler.analyzeAndCreateJob(aggStmt.getAlterClauseList(), db, aggTable));
-        Assertions.assertEquals(jobCount, handler.getAlterJobsV2().size());
-        Assertions.assertEquals(IntegerType.INT, aggTable.getColumn("kx").getType());
-    }
-
-    @Test
-    public void testWidenBitmapIndexedVarcharColumn() throws Exception {
-        OlapTable table = createBitmapIndexedTable("bm_widen_varchar", true);
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Map<Long, AlterJobV2> before = new HashMap<>(handler.getAlterJobsV2());
-        List<AlterJobV2> added = new LinkedList<>();
-        try {
-            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
-                    "ALTER TABLE test.bm_widen_varchar MODIFY COLUMN s VARCHAR(32)");
-            handler.process(stmt.getAlterClauseList(), db, table);
-            handler.getAlterJobsV2().forEach((id, job) -> {
-                if (!before.containsKey(id)) {
-                    added.add(job);
-                }
-            });
-            for (AlterJobV2 job : added) {
-                while (!job.getJobState().isFinalState()) {
-                    Thread.sleep(100);
-                }
-                Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-            }
-            Assertions.assertEquals(32, ((ScalarType) table.getColumn("s").getType()).getLength());
-            Assertions.assertTrue(table.getIndexes().stream().anyMatch(index -> index.getIndexName().equals("ix_s")));
-            Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
-        } finally {
-            added.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
-        }
-    }
-
->>>>>>> 5219cd9 ([BugFix] Reject unsupported column types under bloom filters)
-    private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
-        List<Column> columns = tbl.getBaseSchema();
-        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
-        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
-        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
-        Assertions.assertNotNull(sortKeyUniqueIds);
-        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
-        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
-            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
-                    (int) sortKeyUniqueIds.get(i));
-        }
-    }
-
-    private void executeAlterAndWaitDone(String sql) throws Exception {
-        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(sql);
-        DDLStmtExecutor.execute(alterStmt, connectContext);
-        jobSize++;
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        waitAlterJobDone(alterJobs);
+    private boolean hasAlterJobOf(SchemaChangeHandler handler, OlapTable table) {
+        return handler.getAlterJobsV2().values().stream().anyMatch(job -> job.getTableId() == table.getId());
     }
 }
