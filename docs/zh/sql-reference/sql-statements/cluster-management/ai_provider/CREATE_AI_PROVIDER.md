@@ -9,7 +9,7 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 并按**类型各自保留一个默认值**：
 
 - `embedding`——OpenAI 兼容的 `/v1/embeddings` 端点，供 semantic-context 模块在 `CONTEXT UPSERT`
-  写入和 `query_text` 检索时计算 embedding。
+  写入和 `query_text` 检索时计算 embedding，也供 [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) 使用。
 - `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
   `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
 - `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
@@ -17,12 +17,18 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
 为 `openai`，`rerank` 为 `cohere`。
 
+[ai_custom_query](../../../sql-functions/ai-functions/ai_custom_functions.md) 和 [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
+
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
 
 > **注意**
 >
 > 任何能读取 FE meta image / BDB journal 目录的人都能看到 `api_key`；请用文件系统权限保护这些文件。
+
+## 权限
+
+创建或管理 Provider 需要 SYSTEM `OPERATE` 权限。通过 AI 函数调用 Provider，同时需要相应的 [AI 函数权限](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)和该 AI PROVIDER 的 `USAGE` 权限。创建 Provider 不会自动授予普通用户使用权限。
 
 ## 语法
 

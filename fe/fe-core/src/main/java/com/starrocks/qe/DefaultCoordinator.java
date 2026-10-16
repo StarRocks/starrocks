@@ -70,6 +70,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -97,6 +98,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
@@ -513,7 +515,7 @@ public class DefaultCoordinator extends Coordinator {
             if (!jobSpec.getFragments().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
                         DebugUtil.printId(jobSpec.getQueryId()),
-                        jobSpec.getFragments().get(0).toThrift());
+                        jobSpec.getFragments().get(0).getExplainString(TExplainLevel.VERBOSE));
             }
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
@@ -626,13 +628,26 @@ public class DefaultCoordinator extends Coordinator {
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
+        } catch (RangeColocateUnalignedException e) {
+            // Nothing is deployed yet. Give the query-queue slot back now rather than after the statement is re-planned
+            // (the retry loop releases it again when it unregisters this coordinator, which is harmless), and close any
+            // external scan sources this attempt opened: the retry loop does not clear them.
+            onReleaseSlots();
+            clearExternalResources();
+            throw e;
         }
 
-        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
-            deliverExecFragments(option);
-        }
+        try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
+                deliverExecFragments(option);
+            }
 
-        scheduler.continueSchedule(option);
+            scheduler.continueSchedule(option);
+        } catch (RangeColocateUnalignedException e) {
+            // Fragments may already be running here (phased scheduling assigns more scan ranges after deploying the
+            // first ones), so this attempt must not be re-planned: fail it as the plain scheduling error it was.
+            throw new IllegalStateException(e.getMessage(), e);
+        }
 
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {

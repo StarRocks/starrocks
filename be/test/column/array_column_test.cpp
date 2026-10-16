@@ -38,56 +38,6 @@ PARALLEL_TEST(ArrayColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
-    // normal
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-
-    column->elements_column_raw_ptr()->append_datum("1");
-    column->elements_column_raw_ptr()->append_datum("2");
-    column->offsets_column_raw_ptr()->append(2);
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_EQ(column->size(), 1);
-    auto array = column->get(0).get_array();
-    ASSERT_EQ(array[0].get_slice(), Slice("1"));
-    ASSERT_EQ(array[1].get_slice(), Slice("2"));
-}
-
-// NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    elements->append_datum("1");
-    elements->append_datum("2");
-    offsets->append(2);
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-    ASSERT_FALSE(column->has_large_column());
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    offsets = UInt32Column::create();
-    auto large_elements = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
-    column = ArrayColumn::create(std::move(large_elements), std::move(offsets));
-    for (size_t i = 0; i < 10; i++) {
-        column->elements_column_raw_ptr()->append_datum(Slice(std::to_string(i)));
-        column->offsets_column_raw_ptr()->append(i + 1);
-    }
-    ASSERT_TRUE(column->has_large_column());
-    ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(column->has_large_column());
-    ASSERT_EQ(column->size(), 10);
-    for (size_t i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get(i).get_array()[0].get_slice(), Slice(std::to_string(i)));
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     auto offsets = UInt32Column::create();
     auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
@@ -1233,6 +1183,91 @@ PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
         ASSERT_EQ(10, column->reference_memory_usage(2, 2));
         ASSERT_EQ(6, column->reference_memory_usage(3, 1));
     }
+}
+
+// Builds an ArrayColumn from row-major data. The nulls of the wrapping NullableColumn are supplied
+// separately, which is exactly the shape null_rows_are_empty() takes.
+static ArrayColumn::MutablePtr make_array_column(const std::vector<std::vector<int32_t>>& rows) {
+    auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                      UInt32Column::create());
+    uint32_t offset = 0;
+    for (const auto& row : rows) {
+        for (int32_t v : row) {
+            column->elements_column_raw_ptr()->append_datum(Datum(v));
+        }
+        offset += static_cast<uint32_t>(row.size());
+        column->offsets_column_raw_ptr()->append(offset);
+    }
+    return column;
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_null_rows_are_empty) {
+    // No NULL row at all: there is nothing that could disagree with the offsets.
+    {
+        auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+        Filter nulls{0, 0, 0};
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A NULL row whose payload was cleared - what append_nulls() produces, and what the zero-copy
+    // UNNEST path relies on: the offsets already say the row expands to nothing.
+    {
+        auto column = make_array_column({{10, 20}, {}, {40, 50}});
+        Filter nulls{0, 1, 0};
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A NULL row that still carries elements: the offsets would claim rows that do not logically
+    // exist, so the caller has to rebuild instead of forwarding them.
+    {
+        auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+        Filter nulls{0, 1, 0};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Same, in the last position - the loop must not stop one row early.
+    {
+        auto column = make_array_column({{10}, {20}});
+        Filter nulls{0, 1};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Same, in the first position.
+    {
+        auto column = make_array_column({{10}, {20}});
+        Filter nulls{1, 0};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // A row count that does not match the column is rejected rather than read out of bounds.
+    {
+        auto column = make_array_column({{10, 20}, {30}});
+        Filter nulls{1};
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Empty column: vacuously true, and the null buffer is never dereferenced.
+    {
+        auto column = make_array_column({});
+        ASSERT_TRUE(column->null_rows_are_empty(nullptr, 0));
+    }
+}
+
+// null_rows_are_empty() is the check for the invariant that fill_default() establishes, so one is the
+// inverse of the other over the same filter.
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_fill_default_establishes_null_rows_are_empty) {
+    auto column = make_array_column({{10, 20}, {30}, {40, 50}});
+    Filter nulls{0, 1, 0};
+    ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+
+    column->fill_default(nulls);
+
+    ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    ASSERT_EQ(3, column->size());
+    ASSERT_EQ(2, column->get_element_size(0));
+    ASSERT_EQ(0, column->get_element_size(1));
+    ASSERT_EQ(2, column->get_element_size(2));
+
+    // fill_default() on an already-clean column is a no-op.
+    column->fill_default(nulls);
+    ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    ASSERT_EQ(0, column->get_element_size(1));
 }
 
 } // namespace starrocks

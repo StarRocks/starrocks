@@ -27,6 +27,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.thrift.TIcebergColumnStats;
+import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
@@ -44,13 +46,17 @@ import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.EdgeAlgorithm;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.StructProjection;
@@ -59,9 +65,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -180,6 +191,50 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.StructType.of(fields);
         Type resType = fromIcebergType(icebergType);
         assertTrue(resType.isStructType());
+    }
+
+    @Test
+    public void testNativeGeographyIsExposedWithoutConfiguration() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "geo", Types.GeographyType.crs84()),
+                Types.NestedField.required(2, "required_geo", Types.GeographyType.crs84()),
+                Types.NestedField.optional(3, "id", Types.IntegerType.get()));
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertEquals(PrimitiveType.GEOGRAPHY, columns.get(0).getType().getPrimitiveType());
+        assertTrue(columns.get(0).isAllowNull());
+        assertEquals(PrimitiveType.GEOGRAPHY, columns.get(1).getType().getPrimitiveType());
+        assertFalse(columns.get(1).isAllowNull());
+        assertTrue(columns.get(2).getType().isIntegerType());
+    }
+
+    @Test
+    public void testOnlyCanonicalGeographyIsExposed() {
+        for (EdgeAlgorithm edge : EdgeAlgorithm.values()) {
+            for (String crs : new String[] {"OGC:CRS84", "EPSG:4326", "srid:4326", "EPSG:3857"}) {
+                Schema schema = new Schema(
+                        Types.NestedField.optional(1, "geo", Types.GeographyType.of(crs, edge)));
+                Type type = IcebergApiConverter.toFullSchemas(schema).get(0).getType();
+                assertEquals(!crs.equals("OGC:CRS84") || edge != EdgeAlgorithm.SPHERICAL, type.isUnknown());
+            }
+        }
+    }
+
+    @Test
+    public void testNestedGeographyUsesSharedTypeConversion() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "array_geo",
+                        Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
+                Types.NestedField.optional(3, "struct_geo", Types.StructType.of(
+                        Types.NestedField.optional(4, "shape", Types.GeographyType.crs84()))),
+                Types.NestedField.optional(5, "map_geo", Types.MapType.ofOptional(
+                        6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())));
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((ArrayType) columns.get(0).getType()).getItemType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((StructType) columns.get(1).getType()).getField("shape").getType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((MapType) columns.get(2).getType()).getValueType().getPrimitiveType());
     }
 
     @Test
@@ -351,6 +406,92 @@ public class IcebergApiConverterTest {
         assertEquals(3, byteBuffer.get(2));
         assertEquals(2, byteBuffer.get(3));
         assertEquals(1, byteBuffer.get(4));
+    }
+
+    // Iceberg spec Appendix D (single-value serialization) requires a decimal bound to be the unscaled
+    // value as two's-complement big-endian binary using the minimum number of bytes. buildDataFileMetrics
+    // must re-encode BE's raw, fixed-width Parquet statistics (little-endian INT32/INT64 for
+    // decimal32/64, sign-extended big-endian FIXED_LEN_BYTE_ARRAY for decimal128) down to that minimal
+    // form for every precision, not just precision <= 18 -- a strict Iceberg REST catalog such as
+    // Databricks Unity Catalog rejects a non-minimal bound at commit.
+    @Test
+    public void testBuildDataFileMetricsDecimalBoundsAreMinimalEncoded() {
+        Schema schema = new Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "d32", Types.DecimalType.of(9, 2)),
+                Types.NestedField.required(3, "d64", Types.DecimalType.of(18, 5)),
+                Types.NestedField.required(4, "d128", Types.DecimalType.of(38, 5)));
+        Table nativeTable = mock(Table.class);
+        when(nativeTable.schema()).thenReturn(schema);
+
+        long d32Lower = -12345L;
+        long d32Upper = 123456L;
+        long d64Lower = 150000L;
+        long d64Upper = 999999999999L;
+        long d128Lower = 150000L;
+        long d128Upper = 250000L;
+
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        lowerBounds.put(2, rawLittleEndianStat(d32Lower, 4));
+        upperBounds.put(2, rawLittleEndianStat(d32Upper, 4));
+        lowerBounds.put(3, rawLittleEndianStat(d64Lower, 8));
+        upperBounds.put(3, rawLittleEndianStat(d64Upper, 8));
+        lowerBounds.put(4, rawPaddedBigEndianStat(d128Lower, 16));
+        upperBounds.put(4, rawPaddedBigEndianStat(d128Upper, 16));
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setLower_bounds(lowerBounds);
+        columnStats.setUpper_bounds(upperBounds);
+
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setFormat("parquet");
+        dataFile.setColumn_stats(columnStats);
+
+        Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTable);
+
+        assertMinimalDecimalBound(metrics.lowerBounds().get(2), 9, 2, d32Lower);
+        assertMinimalDecimalBound(metrics.upperBounds().get(2), 9, 2, d32Upper);
+        assertMinimalDecimalBound(metrics.lowerBounds().get(3), 18, 5, d64Lower);
+        assertMinimalDecimalBound(metrics.upperBounds().get(3), 18, 5, d64Upper);
+        assertMinimalDecimalBound(metrics.lowerBounds().get(4), 38, 5, d128Lower);
+        assertMinimalDecimalBound(metrics.upperBounds().get(4), 38, 5, d128Upper);
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal32/decimal64: the raw
+    // native-endian (little-endian) fixed-width Parquet INT32/INT64 physical statistic.
+    private static ByteBuffer rawLittleEndianStat(long unscaledValue, int width) {
+        ByteBuffer buf = ByteBuffer.allocate(width).order(ByteOrder.LITTLE_ENDIAN);
+        if (width == 4) {
+            buf.putInt((int) unscaledValue);
+        } else {
+            buf.putLong(unscaledValue);
+        }
+        buf.flip();
+        return buf;
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal128: the raw, sign-extended,
+    // fixed-width big-endian Parquet FIXED_LEN_BYTE_ARRAY physical statistic.
+    private static ByteBuffer rawPaddedBigEndianStat(long unscaledValue, int width) {
+        byte[] minimal = BigInteger.valueOf(unscaledValue).toByteArray();
+        byte[] padded = new byte[width];
+        Arrays.fill(padded, (byte) (unscaledValue < 0 ? 0xFF : 0x00));
+        System.arraycopy(minimal, 0, padded, width - minimal.length, minimal.length);
+        return ByteBuffer.wrap(padded);
+    }
+
+    // Asserts a decimal bound follows spec Appendix D: the unscaled value as two's-complement
+    // big-endian binary using the minimum number of bytes, and decodes to the expected value.
+    private static void assertMinimalDecimalBound(ByteBuffer bound, int precision, int scale, long expectedUnscaled) {
+        assertNotNull(bound);
+        byte[] expectedMinimal = BigInteger.valueOf(expectedUnscaled).toByteArray();
+        byte[] actual = new byte[bound.remaining()];
+        bound.duplicate().get(actual);
+        Assertions.assertArrayEquals(expectedMinimal, actual,
+                "decimal(" + precision + "," + scale + ") bound must use the minimum number of bytes");
+        BigDecimal decoded = (BigDecimal) Conversions.fromByteBuffer(Types.DecimalType.of(precision, scale), bound);
+        assertEquals(new BigDecimal(BigInteger.valueOf(expectedUnscaled), scale), decoded);
     }
 
     @Test

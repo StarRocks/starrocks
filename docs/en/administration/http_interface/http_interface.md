@@ -36,7 +36,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | POST                | `/api/colocate/group_unstable`                                  | |
 | POST                | `/api/colocate/update_group`                                    | |
 | POST                | `/api/global_dict/table/enable`                                 | |
-| GET                 | `/api/profile?query_id={}`                                      | Get profile information for the specified query ID.                                                                  |
+| GET                 | `/api/profile?query_id={}`                                      | Get profile information for the specified query ID. If the FE configuration item `authorization_enable_query_profile_access_check` is set to `true`, only the user who ran the query or a user with the SYSTEM-level OPERATE privilege can read it. |
 | GET                 | `/api/query_detail`                                             | Get query details. See [Query detail API](./query_detail.md).                                         |
 | GET                 | `/api/connection`                                               | |
 | GET                 | `/api/show_data?db={}`                                          | Query the size of the specified database.                                                                            |

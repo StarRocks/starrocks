@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -132,8 +133,7 @@ public class ScalarOperatorToExpr {
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
-            this.colRefToExpr = variableToSlotRef;
-            this.projectOperatorMap = new HashMap<>();
+            this(variableToSlotRef, new HashMap<>());
         }
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef,
@@ -573,7 +573,8 @@ public class ScalarOperatorToExpr {
                     } else if (call.getFunction().isAi()) {
                         callExpr = new FunctionCallExpr(call.getFnName(),
                                 new FunctionParams(call.isDistinct(), arg),
-                                AIModelConfigs.SYSTEM_CHAT_CONFIG_ID);
+                                call.getFunction().getAiModelSource() == TAIModelSource.SYSTEM
+                                        ? AIModelConfigs.systemConfigId(call.getFunction()) : null);
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }

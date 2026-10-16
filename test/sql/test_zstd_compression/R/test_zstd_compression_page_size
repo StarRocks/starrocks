@@ -1,0 +1,81 @@
+-- name: test_zstd_compression_page_size
+CREATE DATABASE test_zstd_page_${uuid0};
+-- result:
+-- !result
+USE test_zstd_page_${uuid0};
+-- result:
+-- !result
+
+CREATE TABLE t_page (
+  k BIGINT NOT NULL,
+  v STRING,
+  w STRING,
+  j JSON
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "zstd_compression_columns" = "v:1m, w:256k, j");
+-- result:
+-- !result
+
+function: assert_query_contains("show create table t_page", "\"zstd_compression_columns\" = \"j, v:1048576, w:262144\"")
+-- result:
+None
+-- !result
+
+insert into t_page values
+  (1, repeat('shared scaffolding that repeats across rows ', 200), 'small one', parse_json('{"a":1}')),
+  (2, repeat('shared scaffolding that repeats across rows ', 210), 'small two', parse_json('{"a":2}')),
+  (3, repeat('shared scaffolding that repeats across rows ', 220), 'small three', parse_json('{"a":3}'));
+-- result:
+-- !result
+
+select count(*) from t_page;
+-- result:
+3
+-- !result
+select length(v), w, get_json_string(j, 'a') from t_page order by k;
+-- result:
+8800	small one	1
+9240	small two	2
+9680	small three	3
+-- !result
+
+ALTER TABLE t_page SET ("zstd_compression_columns" = "v:256k, w");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_page", "\"zstd_compression_columns\" = \"v:262144, w\"")
+-- result:
+None
+-- !result
+
+select count(*) from t_page;
+-- result:
+3
+-- !result
+select length(v), w from t_page order by k;
+-- result:
+8800	small one
+9240	small two
+9680	small three
+-- !result
+
+ALTER TABLE t_page DROP COLUMN v;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_page", "\"zstd_compression_columns\" = \"w\"")
+-- result:
+None
+-- !result
+
+DROP DATABASE test_zstd_page_${uuid0};
+-- result:
+-- !result

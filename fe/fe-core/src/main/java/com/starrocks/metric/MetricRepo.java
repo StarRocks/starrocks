@@ -373,6 +373,7 @@ public final class MetricRepo {
     // no rollback path), which means a deterministic failure never shows up as an aborted job. This
     // counter is the only signal that a reshard job is stuck retrying, so alert on its rate.
     public static LongCounterMetric COUNTER_TABLET_RESHARD_PUBLISH_FAILED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED;
 
     // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
     // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
@@ -401,9 +402,15 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("reason",
                     () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
                             MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_DATA_TIER_FILE_SELECTION =
+            new MetricWithLabelGroup<>("mode",
+                    () -> new LongCounterMetric("tablet_pre_split_data_tier_file_selection",
+                            MetricUnit.REQUESTS,
+                            "total data-tier FILES samples by how their scanned files were chosen"));
     public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT;
 
     public static Histogram HISTO_QUERY_LATENCY;
 
@@ -501,6 +508,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
     public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
     public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
+    public static LongCounterMetric COUNTER_THRIFT_CLIENT_RETRIES;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -547,6 +555,11 @@ public final class MetricRepo {
                 "total connections the thrift server closed unserved because they waited in the pending "
                         + "queue longer than thrift_server_queue_timeout_ms");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
+
+        COUNTER_THRIFT_CLIENT_RETRIES = new LongCounterMetric(
+                "thrift_client_retries_total", MetricUnit.REQUESTS,
+                "total requests FE thrift rpc calls resent on a reopened connection after the previous one broke");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_CLIENT_RETRIES);
 
         // 1. gauge
         // build info
@@ -1168,6 +1181,13 @@ public final class MetricRepo {
                 MetricUnit.REQUESTS, "total tablet reshard publish attempts that failed and will be retried");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_PUBLISH_FAILED);
 
+        COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = new LongCounterMetric(
+                "tablet_reshard_merge_candidate_blocked", MetricUnit.NOUNIT,
+                "cumulative count of tablet-exclusion events from merge planning (monitor the rate of "
+                        + "increase, not the raw value); a tablet is excluded because it still holds "
+                        + "merge-blocking shared data files, or has not yet been proven free of them");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED);
+
         COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
                 "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
                 "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
@@ -1222,6 +1242,8 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "data_tier_scanned_bytes", "percent"));
         // Compaction score (rounded to the nearest integer) of the most recent partition that
         // triggered a lake compaction. The trigger picks partitions by *max* tablet score, so we
         // expose the max (not the average) — keeps the metric aligned with the scheduler's

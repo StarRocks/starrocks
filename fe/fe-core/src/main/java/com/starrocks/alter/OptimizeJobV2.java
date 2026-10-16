@@ -35,6 +35,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -326,6 +327,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             rewriteTask.setLastVersion(partitionLastVersion.get(i));
             // use half of the alter timeout as rewrite task timeout
             rewriteTask.getProperties().put(SessionVariable.INSERT_TIMEOUT, String.valueOf(timeoutMs / 2000));
+            // A re-run of this job after a leader change cancels itself on the task name collision, so the task must
+            // stay registered while the job can still run. It expires no earlier than one task TTL after the job
+            // deadline, and TaskManager removes it then.
+            rewriteTask.setExpireTime(rewriteTask.getCreateTime() + timeoutMs + Config.task_ttl_second * 1000L);
             rewriteTasks.add(rewriteTask);
         }
 
@@ -870,6 +875,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             default:
                 break;
         }
+    }
+
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * temp and source partition lists and the optimize clause. getInfo reads none of them, and a done job never runs
+     * again (the leader handoff reset skips it too), so nothing reads the clause either. The lists are replaced, not
+     * cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tmpPartitionIds = Lists.newArrayList();
+        sourcePartitionNames = Lists.newArrayList();
+        tmpPartitionNames = Lists.newArrayList();
+        optimizeClause = null;
     }
 
     @Override

@@ -47,7 +47,8 @@ void shutdown_staros_worker();
 void set_starlet_in_shutdown();
 
 // Applies the starlet_fslib_*_part_size BE configs to their starlet gflags, validating each value
-// with starlet's own predicate. Called during worker init; exposed for tests.
+// with starlet's own predicate, and s3_multipart_equal_part_size to the starlet gflag that decides
+// how those parts are cut. Called during worker init; exposed for tests.
 void apply_starlet_upload_threshold_configs();
 
 #ifdef BE_TEST

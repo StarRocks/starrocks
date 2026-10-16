@@ -52,6 +52,14 @@ using S2Point = Vector3_d;
 
 namespace starrocks {
 
+enum class GeoPointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
+
+struct GeoCartesianCentroid {
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
 class GeoShape {
 public:
     virtual ~GeoShape() = default;
@@ -115,6 +123,8 @@ public:
 
     GeoShapeType type() const override { return GEO_SHAPE_LINE_STRING; }
     const S2Polyline* polyline() const { return _polyline.get(); }
+    double length_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
 
     std::string as_wkt() const override;
 
@@ -124,6 +134,27 @@ protected:
 
 private:
     std::unique_ptr<S2Polyline> _polyline;
+};
+
+// Prepared spherical LINESTRING/MULTILINESTRING components for exact point-to-edge distance queries.
+// S2 implementation details stay in geo_types.cpp so expression code does not depend on S2 headers.
+class GeoSphericalLine {
+public:
+    GeoSphericalLine();
+    ~GeoSphericalLine();
+    GeoSphericalLine(GeoSphericalLine&&) noexcept;
+    GeoSphericalLine& operator=(GeoSphericalLine&&) noexcept;
+
+    GeoSphericalLine(const GeoSphericalLine&) = delete;
+    GeoSphericalLine& operator=(const GeoSphericalLine&) = delete;
+
+    GeoParseStatus add_component(const GeoCoordinateList& coordinates);
+    bool distance(const GeoPoint& point, double* meters) const;
+    bool dwithin(const GeoPoint& point, double meters) const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> _impl;
 };
 
 class GeoPolygon : public GeoShape {
@@ -137,6 +168,12 @@ public:
     const S2Polygon* polygon() const { return _polygon.get(); }
 
     bool contains(const GeoShape* rhs) const override;
+    bool intersects_inclusive(const GeoPolygon& rhs) const;
+    GeoPointPolygonRelation point_relation(const GeoPoint& point) const;
+    bool intersects_interior(const GeoPolygon& rhs) const;
+    double area_square_meters() const;
+    double perimeter_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
     std::string as_wkt() const override;
 
 protected:

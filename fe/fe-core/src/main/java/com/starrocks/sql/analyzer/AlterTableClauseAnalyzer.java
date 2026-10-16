@@ -240,6 +240,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
             // do nothing, these 2 properties will be analyzed when creating alter job
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // do nothing, this property will be analyzed when creating alter job (compression dict)
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
             if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -378,10 +380,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                        || olapTable.isCloudNativeTableOrMaterializedView()) {
+                        && !olapTable.isCloudNativeTableOrMaterializedView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);

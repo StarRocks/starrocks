@@ -60,7 +60,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
@@ -293,11 +295,19 @@ public class ColumnTest {
 
         Set<ColumnId> bfColumns = new HashSet<>();
         bfColumns.add(ColumnId.create("f0"));
+        Set<ColumnId> zstdCompressionColumns = new HashSet<>();
+        zstdCompressionColumns.add(ColumnId.create("f0"));
+        Map<ColumnId, Integer> zstdCompressionPageSizes = new HashMap<>();
+        zstdCompressionPageSizes.put(ColumnId.create("f0"), 1024 * 1024);
         TColumn t0 = f0.toThrift();
-        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
+        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns, zstdCompressionColumns,
+                zstdCompressionPageSizes);
 
         Assertions.assertEquals(t0.has_bitmap_index, true);
         Assertions.assertEquals(t0.is_bloom_filter_column, true);
+        Assertions.assertEquals(t0.use_zstd_compression, true);
+        // the page size has to travel with the flag, or the writer falls back to the default
+        Assertions.assertEquals(1024 * 1024, t0.zstd_compression_page_size);
 
         Assertions.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);

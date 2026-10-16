@@ -17,9 +17,11 @@ package com.starrocks.catalog;
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -316,5 +318,59 @@ public class ForeignKeyConstraintTest {
     public void testFKGetShowCreateTableConstraintDesc() {
         Assertions.assertEquals("", ForeignKeyConstraint.getShowCreateTableConstraintDesc(null, null));
         Assertions.assertEquals("", UniqueConstraint.getShowCreateTableConstraintDesc(null, null));
+    }
+
+    /**
+     * Mapping a constraint's column ids to names must not resolve a table that lives in an external catalog:
+     * every caller does it under an FE metadata lock, and resolving is a connector RPC. Touching
+     * GlobalStateMgr at all is the observable signal, since that is the only way into either metastore.
+     */
+    @Test
+    public void testColumnNameRefPairsDoesNotResolveExternalTables() {
+        String constraintDesc = "hive_catalog.hive_db.lineorder(lo_custkey, lo_partkey) " +
+                "REFERENCES hive_catalog.hive_db.customer(c_custkey, c_partkey)";
+        List<ForeignKeyConstraint> constraints = ForeignKeyConstraint.parse(constraintDesc);
+        Assertions.assertEquals(1, constraints.size());
+        ForeignKeyConstraint constraint = constraints.get(0);
+
+        // The child table is external too, so the table passed in is only the fallback for constraints
+        // that carry no child table info.
+        Table unusedChildTable = new Table(2000, "lineorder", Table.TableType.HIVE, Lists.newArrayList());
+        List<Pair<String, String>> columnNameRefPairs = constraint.getColumnNameRefPairs(unusedChildTable);
+
+        Assertions.assertEquals(2, columnNameRefPairs.size());
+        Assertions.assertEquals(Pair.create("lo_custkey", "c_custkey"), columnNameRefPairs.get(0));
+        Assertions.assertEquals(Pair.create("lo_partkey", "c_partkey"), columnNameRefPairs.get(1));
+
+        new Verifications() {
+            {
+                GlobalStateMgr.getCurrentState();
+                times = 0;
+            }
+        };
+    }
+
+    /**
+     * The same property for the SHOW CREATE TABLE print path, which is the one that runs under the table
+     * read lock, and the printed form must still round-trip through {@link ForeignKeyConstraint#parse}.
+     */
+    @Test
+    public void testShowCreateTableConstraintDescDoesNotResolveExternalTables() {
+        String constraintDesc = "hive_catalog.hive_db.lineorder(lo_custkey) " +
+                "REFERENCES hive_catalog.hive_db.customer(c_custkey)";
+        List<ForeignKeyConstraint> constraints = ForeignKeyConstraint.parse(constraintDesc);
+        Assertions.assertEquals(1, constraints.size());
+
+        String desc = ForeignKeyConstraint.getShowCreateTableConstraintDesc(null, constraints);
+        Assertions.assertEquals("hive_catalog.hive_db.lineorder(lo_custkey) REFERENCES " +
+                "hive_catalog.hive_db.customer(c_custkey)", desc);
+        Assertions.assertEquals(constraints, ForeignKeyConstraint.parse(desc));
+
+        new Verifications() {
+            {
+                GlobalStateMgr.getCurrentState();
+                times = 0;
+            }
+        };
     }
 }

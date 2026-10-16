@@ -157,6 +157,72 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException(
                     "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
+
+        checkShadowIndexesLoaded(txnState);
+    }
+
+    /**
+     * Reject a transaction that resolved its index set before a shadow index it was required to write
+     * existed. A lake alter job exposes each shadow index under the table WRITE lock and stamps it with
+     * its watershed txn id W (MaterializedIndex#getShadowWatershedTxnId). Every transaction with id >= W
+     * must carry that shadow index: the shadow tablets replay a log version for each partition version
+     * published after the job samples its conversion version, and a version without one wedges the job's
+     * final publish.
+     *
+     * <p>A writer that begins its transaction before resolving tablets always passes: its id was drawn
+     * after W and it resolves under the table READ lock, so it sees the shadow index. Only a writer that
+     * resolves first can fail -- ReplicationJob, which snapshots tablets before beginning, or a bypass-write
+     * client reusing cached metadata.
+     *
+     * <p>This is deliberately conservative: such a writer that publishes before the job samples its
+     * conversion version would be harmless (its rows reach the shadow through the conversion), but the
+     * commit path cannot see that point, so it is rejected as well. Do not narrow this to "published after
+     * the sample" without a reliable marker for it.
+     *
+     * <p>Not checked: lake compaction, which compacts only visible tablets by design; a shadow index with no
+     * stamp (loaded from an image written by an FE without the field); and a transaction with no recorded
+     * index set, which falls back to the partition's latest indexes and is already enforced by the
+     * unfinished-tablet check above.
+     *
+     * <p>The compaction exemption is safe only while CompactionScheduler keeps compaction off the table for
+     * the whole alter. Its table-state gate skips every table in SCHEMA_CHANGE or ROLLUP state, which covers
+     * schema changes and both rollup paths (LakeRollupJob for hash-distributed tables and sync MVs,
+     * LakeRangeRollupJob for range-distribution tables). A compaction committed after W would carry no shadow
+     * vlog and wedge the job's final publish just like a writer this method rejects.
+     *
+     * <p>The check runs only while the index is still SHADOW. The alter jobs wait only for transactions below W,
+     * so a writer that resolved its tablets early and is still open when the alter makes the index NORMAL is not
+     * caught here. After a schema change its tablets no longer resolve and it commits nothing; after a rollup it
+     * publishes the base index only. That case needs a separate fix.
+     */
+    private void checkShadowIndexesLoaded(TransactionState txnState) throws TransactionCommitFailedException {
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            return;
+        }
+        long txnId = txnState.getTransactionId();
+        for (Long partitionId : dirtyPartitionSet) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            List<Long> loadedIndexIds = txnState.getPartitionLoadedIndexIdsWithoutLock(table.getId(), partitionId);
+            if (partition == null || loadedIndexIds == null) {
+                continue;
+            }
+            for (MaterializedIndex shadowIndex : partition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.SHADOW)) {
+                long requiredSinceTxnId = shadowIndex.getShadowWatershedTxnId();
+                if (requiredSinceTxnId <= 0 || requiredSinceTxnId > txnId
+                        || loadedIndexIds.contains(shadowIndex.getId())) {
+                    continue;
+                }
+                String msg = "transaction " + txnId + " (" + txnState.getSourceType() + ") wrote partition "
+                        + partitionId + " of table '" + table.getName() + "' without shadow index "
+                        + shadowIndex.getId() + ", which every transaction since " + requiredSinceTxnId
+                        + " must write while the table is being altered. The writer resolved the table's"
+                        + " tablets before the alter added the index; refresh the table metadata and retry"
+                        + " the load";
+                LOG.warn(msg);
+                throw new TransactionCommitFailedException(msg);
+            }
+        }
     }
 
     @Override

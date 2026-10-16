@@ -1,0 +1,45 @@
+-- name: test_dict_decode_group_by_key_range
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (s STRING, name STRING) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES ('1001', 'a'), ('1002', 'b'), ('1003', 'c');
+-- result:
+-- !result
+[UC] ANALYZE FULL TABLE t;
+function: wait_global_dict_ready('s', 't')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('name', 't')
+-- result:
+
+-- !result
+function: assert_explain_verbose_contains('SELECT CAST(s AS INT), name FROM t GROUP BY 1, 2', 'DictDecode')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('SELECT CASE WHEN name = \'a\' THEN 1001 WHEN name = \'b\' THEN 1002 ELSE 1003 END, name FROM t GROUP BY 1, 2', 'DictDecode')
+-- result:
+None
+-- !result
+[ORDER]SELECT CAST(s AS INT), name FROM t GROUP BY 1, 2 ORDER BY 1, 2;
+-- result:
+1001	a
+1002	b
+1003	c
+-- !result
+[ORDER]SELECT CASE WHEN name = 'a' THEN 1001 WHEN name = 'b' THEN 1002 ELSE 1003 END, name FROM t GROUP BY 1, 2 ORDER BY 1, 2;
+-- result:
+1001	a
+1002	b
+1003	c
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

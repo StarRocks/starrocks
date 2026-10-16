@@ -46,6 +46,64 @@ select id, tokenize('english', english_text), tokenize('standard', standard_text
 4	None	None	None
 5	None	None	None
 -- !result
+-- A constant second argument makes tokenize() produce a single row, and that row has to cover the
+-- whole chunk. Returning it as an ordinary one-row column instead of a constant one loses rows,
+-- because Chunk::num_rows() is the length of the chunk's first column, and then crashes the backend
+-- as soon as anything materialises the rows that are not there.
+--
+-- The first statement is the one that fails without ever crashing: it is the only projected column,
+-- so the chunk collapses to its length and the scan's five rows come back as one. Measured on a
+-- release cluster, it returned a single row before the fix.
+select array_length(tokenize('english', 'Today is saturday')) as n from t_tokenized_table;
+-- result:
+3
+3
+3
+3
+3
+-- !result
+-- The same shape with a column argument, which was never affected. The pair is what says the
+-- statement above is about the constant and not about tokenize() in general.
+select array_length(tokenize('english', english_text)) as n from t_tokenized_table order by n;
+-- result:
+None
+None
+1
+2
+7
+-- !result
+-- A constant that tokenizes to nothing has to be NULL for every row, not for one row.
+select array_length(tokenize('english', '')) as n from t_tokenized_table;
+-- result:
+None
+None
+None
+None
+None
+-- !result
+-- The shape the fuzzer hit. On a debug backend it trips
+--   chunk.cpp] Check failed: num_rows() == c->size() (5 vs. 1)   ProjectOperator::push_chunk
+-- and on a release backend, where that check is compiled out, ORDER BY materialises rows that the
+-- short column does not have:
+--   SIGSEGV BinaryColumnBase::_append_binary_impl <- ArrayColumn::append
+--                                                 <- ChunksSorterFullSort::_partial_sort
+select id, tokenize('english', english_text), tokenize('english', 'Today is saturday') from t_tokenized_table order by id;
+-- result:
+1	["hello"]	["today","is","saturday"]
+2	["hello","world"]	["today","is","saturday"]
+3	["shanghai","tap","water","comes","from","the","sea"]	["today","is","saturday"]
+4	None	["today","is","saturday"]
+5	None	["today","is","saturday"]
+-- !result
+select id, tokenize('english', '') from t_tokenized_table order by id;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+-- !result
+
 DROP TABLE t_tokenized_table;
 -- result:
 -- !result

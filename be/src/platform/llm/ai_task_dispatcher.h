@@ -54,15 +54,17 @@ public:
     AITaskSuccess(AITaskSuccess&& other) noexcept;
     AITaskSuccess& operator=(AITaskSuccess&& other) noexcept;
 
-    static StatusOr<AITaskSuccess> create(std::string content, AIMemoryContext memory);
+    static StatusOr<AITaskSuccess> create(AIProviderValue result, AIMemoryContext memory);
 
-    std::string_view content() const noexcept { return _content; }
+    const AIProviderValue& result() const noexcept { return _result; }
+    std::string_view content() const { return std::get<std::string>(_result); }
+    const std::vector<float>& embedding() const { return std::get<std::vector<float>>(_result); }
 
 private:
-    AITaskSuccess(std::string content, AIMemoryContext memory, size_t reserved_bytes) noexcept;
+    AITaskSuccess(AIProviderValue result, AIMemoryContext memory, size_t reserved_bytes) noexcept;
     void _release() noexcept;
 
-    std::string _content;
+    AIProviderValue _result;
     AIMemoryContext _memory;
     size_t _reserved_bytes = 0;
 };
@@ -94,6 +96,7 @@ struct AIDispatchRequest {
     uint64_t task_id = 0;
     AIChatRequest chat_request;
     int64_t request_deadline_ns = 0;
+    int64_t attempt_timeout_ms = 0;
     int64_t connect_timeout_ms = 0;
     size_t max_response_bytes = 0;
     std::shared_ptr<const ResolvedHttpEndpoint> resolved_endpoint;

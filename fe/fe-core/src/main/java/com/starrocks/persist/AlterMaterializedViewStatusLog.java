@@ -18,7 +18,10 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.common.io.Writable;
+
+import java.util.List;
 
 public class AlterMaterializedViewStatusLog implements Writable {
 
@@ -30,6 +33,15 @@ public class AlterMaterializedViewStatusLog implements Writable {
     private String status;
     @SerializedName(value = "reason")
     private String reason;
+    // ACTIVE only: the base tables the leader activated the MV with. Replay adopts them instead of
+    // re-analyzing the define query, which would resolve every base table through the connector while
+    // holding the MV lock. Null in entries written by older versions, which replay the old way.
+    @SerializedName(value = "baseTableInfos")
+    private List<BaseTableInfo> baseTableInfos;
+    // INACTIVE only: also clear the visible version maps and the confirmed freshness, because the MV's data no longer
+    // matches what its definition reads. False in entries written by older versions, which did not journal the clear.
+    @SerializedName(value = "clearVersionMap")
+    private boolean clearVersionMap;
 
     public AlterMaterializedViewStatusLog(long dbId, long tableId, String status, String reason) {
         this.dbId = dbId;
@@ -64,5 +76,21 @@ public class AlterMaterializedViewStatusLog implements Writable {
 
     public String getReason() {
         return reason;
+    }
+
+    public List<BaseTableInfo> getBaseTableInfos() {
+        return baseTableInfos;
+    }
+
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
+        this.baseTableInfos = baseTableInfos;
+    }
+
+    public boolean isClearVersionMap() {
+        return clearVersionMap;
+    }
+
+    public void setClearVersionMap(boolean clearVersionMap) {
+        this.clearVersionMap = clearVersionMap;
     }
 }

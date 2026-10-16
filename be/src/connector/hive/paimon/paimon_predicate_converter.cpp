@@ -29,13 +29,7 @@ namespace starrocks {
 
 PaimonPredicateConverter::PaimonPredicateConverter(const std::vector<SlotDescriptor*>& slots) : _slots(slots) {}
 std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert(const std::vector<Expr*>* conjuncts) {
-    DLOG(INFO) << "PaimonPredicateConverter evaluating " << conjuncts->size() << " conjuncts";
-    for (size_t i = 0; i < conjuncts->size(); ++i) {
-        DLOG(INFO) << "Conjunct " << i << ": " << (*conjuncts)[i]->debug_string();
-    }
-    auto result = convert_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
-    DLOG(INFO) << "PaimonPredicateConverter result: " << (result ? "predicate created" : "null predicate");
-    return result;
+    return convert_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
 }
 
 std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks::Expr* conjunct, bool neg) {
@@ -97,10 +91,9 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
                 std::string null_function_name;
                 if (conjunct->is_null_scalar_function(null_function_name)) {
                     if (null_function_name == "null") {
-                        DLOG(INFO) << "convert IS_NULL " << fieldName;
                         return convert_null(i, fieldName, fieldType, neg);
-                    } else if (null_function_name == "not null") {
-                        DLOG(INFO) << "convert IS_NOT_NULL " << fieldName;
+                    }
+                    if (null_function_name == "not null") {
                         return convert_null(i, fieldName, fieldType, !neg);
                     }
                 }

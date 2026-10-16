@@ -9,13 +9,15 @@ description: "外部 AI サービスプロバイダー (embedding または rera
 異なる**タイプ**のプロバイダーを保持し、**タイプごとに**1 つのデフォルトを保持します。
 
 - `embedding` — OpenAI 互換の `/v1/embeddings` エンドポイント。セマンティックコンテキストモジュールが
-  `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際に使用されます。
+  `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際と、[ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) で使用されます。
 - `rerank` — Cohere 互換の `/rerank` エンドポイント (Cohere / Jina / Voyage / OpenRouter / ローカル TEI)。
   `/api/context/search` のオプションであるクロスエンコーダーによる第 2 フェーズで使用されます。
 - `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。
 
 各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
 が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
+
+[ai_custom_query](../../../sql-functions/ai-functions/ai_custom_functions.md) と [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) は現在 `openai` プロトコルを必要とします。これらの関数に他の登録済みプロトコルを指定すると、クエリの計画時にエラーになります。
 
 プロバイダーオブジェクトは `api_key` プロパティを含めて FE のメタデータジャーナルとイメージに永続化されるため、
 クラスターの再起動やアップグレード後も認証情報は保持されます。これらの設定に対応する `fe.conf` の項目はありません。
@@ -24,6 +26,10 @@ description: "外部 AI サービスプロバイダー (embedding または rera
 >
 > FE のメタイメージ / BDB ジャーナルディレクトリへの読み取りアクセス権を持つ人は誰でもプロバイダーの `api_key`
 > の値を読むことができます。これらのファイルはファイルシステムの権限で保護してください。
+
+## 権限
+
+プロバイダーの作成や管理には SYSTEM `OPERATE` が必要です。AI 関数から呼び出す場合は、[AI 関数の権限](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)と、その AI PROVIDER の `USAGE` の両方が必要です。作成しても一般ユーザーに使用権限は自動付与されません。
 
 ## 構文
 

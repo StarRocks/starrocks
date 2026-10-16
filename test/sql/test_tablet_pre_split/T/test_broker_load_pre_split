@@ -1,0 +1,117 @@
+-- name: test_broker_load_pre_split @cloud @sequential
+-- A Broker Load into an empty range-distributed table pre-splits it by re-reading the source as
+-- SELECT <sort key> FROM FILES(...) and cutting at the sampled key values. FE unit tests pin that
+-- synthesized query but never run it, so they cannot tell whether the BE hands back the column the
+-- sampler asked for. That binding differs by format: FILES matches a CSV file against the declared
+-- schema by POSITION, while Parquet resolves by NAME.
+--
+-- A wrong binding does not fail the load; it only plans the cuts from the wrong column. Every arm
+-- therefore carries a decoy column v = k + 1000000000 whose values never overlap the sort key k:
+-- cuts sampled from v would all land above max(k), and the tablets past them would stay empty. The
+-- check script asserts that the table was widened and that no tablet is empty, which holds exactly
+-- when every cut lies inside the loaded key range.
+--
+-- The layout is read right after each load returns. The background split/merge daemon runs on a
+-- minutes cadence and sizes against tablet_reshard_target_size, far above these few megabytes, so
+-- the split seen here is the load's own pre-split. The tablet count follows the compute-node count,
+-- so only the widening is asserted.
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_tablet_pre_split/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- CSV fields (v, k): the decoy first, the sort key second.
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_vk/",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x + 1000000000 as v, x as k from table(generate_series(1, 100000)) as g(x);
+
+-- CSV fields (k, v): the sort key first.
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_kv/",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x as k, x + 1000000000 as v from table(generate_series(1, 100000)) as g(x);
+
+-- Parquet columns in the order (v, k), so a positional read would pick the decoy.
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/parquet_vk/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x + 1000000000 as v, x as k from table(generate_series(1, 100000)) as g(x);
+
+set enable_range_distribution = true;
+create table t_csv_schema (v bigint, k int) order by (k) properties('replication_num' = '1');
+create table t_csv_columns (v bigint, k int) order by (k) properties('replication_num' = '1');
+create table t_parquet (k int, v bigint) order by (k) properties('replication_num' = '1');
+set enable_range_distribution = false;
+
+-- Every target starts as one tablet.
+SELECT TABLE_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' ORDER BY TABLE_NAME;
+
+-- CSV with no COLUMNS list: the fields map onto the base schema by position, so field 2 is k.
+LOAD LABEL label_csv_schema_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_vk/*")
+    INTO TABLE t_csv_schema
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "csv"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+function: wait_load_finish("label_csv_schema_${uuid0}")
+select state, error_msg from information_schema.loads where label = "label_csv_schema_${uuid0}";
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_csv_schema bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_csv_schema;
+
+-- CSV with a COLUMNS list that disagrees with the table's column order: field 1 is k here, while
+-- the base schema would put v there. The sampler has to follow the COLUMNS list.
+LOAD LABEL label_csv_columns_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_kv/*")
+    INTO TABLE t_csv_columns
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "csv"
+    (k, v)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+function: wait_load_finish("label_csv_columns_${uuid0}")
+select state, error_msg from information_schema.loads where label = "label_csv_columns_${uuid0}";
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_csv_columns bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_csv_columns;
+
+-- Parquet resolves by name, so k is found even though the file stores it second.
+LOAD LABEL label_parquet_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/parquet_vk/*")
+    INTO TABLE t_parquet
+    FORMAT AS "parquet"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+function: wait_load_finish("label_parquet_${uuid0}")
+select state, error_msg from information_schema.loads where label = "label_parquet_${uuid0}";
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_parquet bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_parquet;
+
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_tablet_pre_split/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop database db_${uuid0} force;

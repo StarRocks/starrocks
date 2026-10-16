@@ -93,6 +93,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ModifyColumnCommentLog;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -176,6 +177,102 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // all shadow indexes should have this prefix in name
     public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
+
+    // The table keys page sizes by ColumnId, which is the column's ORIGINAL name and stops
+    // following it through RENAME COLUMN, while the property always names columns as they are
+    // called now. Re-key to the current names so the two sides are comparable at all; comparing
+    // them raw reports a change for a restatement that changed nothing.
+    private static Map<String, Integer> currentNamePageSizes(OlapTable olapTable) {
+        Map<String, Integer> normalized = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Integer> pageSizes = olapTable.getZstdCompressionPageSizes();
+        if (pageSizes == null) {
+            return normalized;
+        }
+        for (Map.Entry<ColumnId, Integer> entry : pageSizes.entrySet()) {
+            if (entry.getValue() == null || entry.getValue() <= 0) {
+                continue;
+            }
+            Column column = olapTable.getColumn(entry.getKey());
+            normalized.put(column == null ? entry.getKey().toString() : column.getName(), entry.getValue());
+        }
+        return normalized;
+    }
+
+    /** The name a column will carry once the job finishes, i.e. without the in-flight shadow prefix. */
+    private static String unshadowedName(String columnName) {
+        return columnName.startsWith(SHADOW_NAME_PREFIX) ? columnName.substring(SHADOW_NAME_PREFIX.length())
+                : columnName;
+    }
+
+    /**
+     * Rejects a schema this ALTER is about to install in which a column the property still names is
+     * no longer eligible -- its type or its keyness changed underneath it. Such a table emits a SHOW
+     * CREATE TABLE that CREATE TABLE would reject. Called from finalAnalyze and from the routed
+     * keyness flip, which returns before finalAnalyze ever runs.
+     */
+    private static void checkZstdCompressionColumnsStillEligible(Set<ColumnId> zstdCompressionColumnIds,
+                                                                 List<Column> newBaseSchema) throws DdlException {
+        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds, newBaseSchema, null);
+    }
+
+    /**
+     * As above, and additionally rejects a schema in which a nominated column's rendered
+     * "&lt;name&gt;:&lt;bytes&gt;" form has become another column's name -- which a plain ADD COLUMN can do
+     * without ever restating the property. {@code pageSizes} may be null when the caller has none.
+     */
+    private static void checkZstdCompressionColumnsStillEligible(Set<ColumnId> zstdCompressionColumnIds,
+                                                                 List<Column> newBaseSchema,
+                                                                 Map<ColumnId, Integer> pageSizes)
+            throws DdlException {
+        if (zstdCompressionColumnIds == null || newBaseSchema == null) {
+            return;
+        }
+        for (Column column : newBaseSchema) {
+            if (!zstdCompressionColumnIds.contains(column.getColumnId())) {
+                continue;
+            }
+            String rejection = PropertyAnalyzer.zstdCompressionColumnRejection(column);
+            if (rejection != null) {
+                throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
+                        + "column: " + rejection + ". Remove it from "
+                        + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " first.");
+            }
+            Integer pageSize = pageSizes == null ? null : pageSizes.get(column.getColumnId());
+            if (pageSize == null) {
+                continue;
+            }
+            // A column this same statement modifies is carried here under a shadow name
+            // (processModifyColumn renames it to __starrocks_shadow_<name>), and the prefix is
+            // stripped again when the job finishes -- without anything revalidating. Compare the
+            // names the table will actually end up with, on both sides, or MODIFY COLUMN v ... plus
+            // ADD COLUMN `v:<bytes>` slips through: the rendered form would be looked up as
+            // "__starrocks_shadow_v:<bytes>" and never match the column just added.
+            String finalName = unshadowedName(column.getName());
+            List<String> finalNames = new ArrayList<>(newBaseSchema.size());
+            for (Column candidate : newBaseSchema) {
+                finalNames.add(unshadowedName(candidate.getName()));
+            }
+            String collision = PropertyAnalyzer.zstdCompressionRenderCollision(finalNames, finalName, pageSize);
+            if (collision != null) {
+                throw new DdlException("Column " + finalName + " can no longer be a zstd compression "
+                        + "column: " + collision);
+            }
+        }
+    }
+
+    // Page sizes keyed by lower-cased column name, with "no size" and "the default"
+    // both erased, so two spellings of the same request compare equal.
+    private static Map<String, Integer> normalizedPageSizes(Map<String, Integer> pageSizes) {
+        Map<String, Integer> normalized = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        if (pageSizes != null) {
+            for (Map.Entry<?, Integer> entry : pageSizes.entrySet()) {
+                if (entry.getValue() != null && entry.getValue() > 0) {
+                    normalized.put(entry.getKey().toString(), entry.getValue());
+                }
+            }
+        }
+        return normalized;
+    }
 
     public SchemaChangeHandler() {
         super("schema change");
@@ -1817,6 +1914,10 @@ public class SchemaChangeHandler extends AlterHandler {
         if (bfColumns == null) {
             bfFpp = 0;
         }
+        // Removing an absent filter is a no-op after empty-set normalization.
+        if (bfColumns == null && (oriBfColumns == null || oriBfColumns.isEmpty())) {
+            hasBfChange = false;
+        }
 
         Set<ColumnId> bfColumnIds = null;
         if (bfColumns != null) {
@@ -1832,6 +1933,82 @@ public class SchemaChangeHandler extends AlterHandler {
 
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
+        // property 2.5: compression dict columns (compression dict)
+        // eg. "zstd_compression_columns" = "v1,v2"
+        Set<String> zstdCompressionColumns = null;
+        Map<String, Integer> zstdCompressionPageSizeNames = null;
+        try {
+            zstdCompressionPageSizeNames = PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(propertyMap,
+                    indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
+            zstdCompressionColumns =
+                    zstdCompressionPageSizeNames == null ? null : zstdCompressionPageSizeNames.keySet();
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
+        boolean hasZstdCompressionChange = false;
+        Set<String> oriZstdCompressionColumns = olapTable.getZstdCompressionColumnNames();
+        Map<String, Integer> oriZstdCompressionPageSizes = currentNamePageSizes(olapTable);
+        Map<String, Integer> newZstdCompressionPageSizes = normalizedPageSizes(zstdCompressionPageSizeNames);
+        if (zstdCompressionColumns != null) {
+            // the property is specified in this ALTER statement. Comparing the column
+            // names alone would miss "v:64k" -> "v:4m": the same column set, a
+            // different page size, and no index marked for alteration -- the request
+            // would be accepted and silently dropped.
+            if (!zstdCompressionColumns.equals(oriZstdCompressionColumns)
+                    || !newZstdCompressionPageSizes.equals(oriZstdCompressionPageSizes)) {
+                hasZstdCompressionChange = true;
+            }
+        } else {
+            // not specified, keep the existing set unchanged
+            zstdCompressionColumns = oriZstdCompressionColumns;
+        }
+
+        if (zstdCompressionColumns != null && zstdCompressionColumns.isEmpty()) {
+            zstdCompressionColumns = null;
+        }
+
+        Set<ColumnId> zstdCompressionColumnIds = null;
+        if (zstdCompressionColumns != null) {
+            zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String columnName : zstdCompressionColumns) {
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    throw new DdlException("can not find column by name: " + columnName);
+                }
+                zstdCompressionColumnIds.add(column.getColumnId());
+            }
+        }
+
+        // Page sizes travel with the column set: when the property is restated they
+        // come from it, and when it is not restated the existing ones stay.
+        Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+        if (zstdCompressionColumnIds != null) {
+            if (zstdCompressionPageSizeNames != null) {
+                zstdCompressionPageSizeIds = Maps.newHashMap();
+                for (Map.Entry<String, Integer> entry : zstdCompressionPageSizeNames.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue() > 0) {
+                        Column column = olapTable.getColumn(entry.getKey());
+                        if (column != null) {
+                            zstdCompressionPageSizeIds.put(column.getColumnId(), entry.getValue());
+                        }
+                    }
+                }
+                if (zstdCompressionPageSizeIds.isEmpty()) {
+                    zstdCompressionPageSizeIds = null;
+                }
+            } else {
+                zstdCompressionPageSizeIds = olapTable.getZstdCompressionPageSizes();
+            }
+        }
+
+        // Two things this same statement can do to a column the property still names, without ever
+        // restating the property: change its type or keyness so it is no longer eligible, and -- via a
+        // plain ADD COLUMN -- introduce a column whose name is exactly how this entry renders, which
+        // makes the emitted DDL ambiguous. Both are checked against the schema about to be installed.
+        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds,
+                indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()), zstdCompressionPageSizeIds);
+
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -1843,6 +2020,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
+                .withZstdCompressionColumns(zstdCompressionColumnIds)
+                .withZstdCompressionPageSizes(zstdCompressionPageSizeIds)
+                .withZstdCompressionColumnsChanged(hasZstdCompressionChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
@@ -1895,6 +2075,28 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             } else if (hasIndexChange) {
                 needAlter = true;
+            }
+
+            // compression dict columns change should also trigger a schema change on this index
+            if (!needAlter && hasZstdCompressionChange) {
+                for (Column alterColumn : alterSchema) {
+                    String columnName = alterColumn.getName();
+                    boolean isOldZstdCompressionColumn = oriZstdCompressionColumns != null
+                            && oriZstdCompressionColumns.contains(columnName);
+                    boolean isNewZstdCompressionColumn = zstdCompressionColumns != null
+                            && zstdCompressionColumns.contains(columnName);
+                    if (isOldZstdCompressionColumn != isNewZstdCompressionColumn) {
+                        needAlter = true;
+                        break;
+                    }
+                    // the column set can stay the same while its page size changes ("v:64k" -> "v:1m").
+                    // that still has to rewrite the index, otherwise the ALTER is accepted and dropped.
+                    if (isOldZstdCompressionColumn && !Objects.equals(oriZstdCompressionPageSizes.get(columnName),
+                            newZstdCompressionPageSizes.get(columnName))) {
+                        needAlter = true;
+                        break;
+                    }
+                }
             }
 
             if (!needAlter) {
@@ -2211,6 +2413,13 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds)
+                // This job rewrites every tablet, and the shadow tablets are created from the sets
+                // handed to the builder rather than from the table, so the existing per-column ZSTD
+                // setting has to travel with it or the rewritten data comes out with the table codec
+                // while the property stays on the table. Not marked as changed: the property itself
+                // is not being modified, so the job must not write it back at finish.
+                .withZstdCompressionColumns(olapTable.getZstdCompressionColumnIds())
+                .withZstdCompressionPageSizes(olapTable.getZstdCompressionPageSizes())
                 .withAlterIndexInfo(false, olapTable.getCopiedIndexes());
 
         if (RunMode.isSharedDataMode()) {
@@ -2854,6 +3063,21 @@ public class SchemaChangeHandler extends AlterHandler {
                         throw new DdlException("MODIFY COLUMN that changes keyness on a range-distribution table "
                                 + "can not be combined with other alter operations");
                     }
+                    // This return bypasses finalAnalyze, so two of its jobs have to be done here.
+                    // First: a property attached to this same statement would be collected into
+                    // propertyMap and then never consumed -- the rewrite job builds its shadow
+                    // schema from the table's current set and nothing writes a new one back, so the
+                    // flip would succeed while the compression request disappeared.
+                    if (propertyMap.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+                        throw new DdlException(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                + " can not be changed by the same ALTER that changes the keyness of a column "
+                                + "on a range-distribution table; run it as a separate ALTER TABLE ... SET");
+                    }
+                    // Second: the nominated columns must still be eligible under the post-flip schema.
+                    // Promoting one of them to a key would otherwise leave the property naming a key
+                    // column, which CREATE TABLE rejects when the emitted DDL is replayed.
+                    checkZstdCompressionColumnsStillEligible(olapTable.getZstdCompressionColumnIds(),
+                            postFlipBaseSchema);
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
                     return createRangeRewriteJob(db, olapTable, postFlipBaseSchema);
@@ -2938,15 +3162,42 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
-        SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
-                modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
-        if (schemaChangeData.isShortKeyChanged()) {
+        if (propertyMap.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // A column clause may carry table properties ("ADD COLUMN c STRING PROPERTIES (...)"),
+            // and those keep the fast-schema-evolution path eligible. Both fast jobs finish by
+            // rebuilding the schema and the indexes and never persist this table-level property,
+            // so the change would reach the tablets and then be lost from FE metadata, leaving
+            // SHOW CREATE TABLE and every later tablet on the old setting. A ModifyTableProperties
+            // clause already leaves the fast path for the same reason.
             fastSchemaEvolution = false;
         }
+
+        SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
+                modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
+        if (schemaChangeData.isShortKeyChanged() || schemaChangeData.isBloomFilterColumnsChanged()) {
+            fastSchemaEvolution = false;
+        }
+
+        // After finalAnalyze, so a statement it already rejects keeps its own message.
+        checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
+        checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(),
+                indexMetaIdToSchema);
 
         if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
+        }
+
+        // Both routed branches below return before the fastSchemaEvolution flag set above is ever
+        // read, and neither job carries this property: the async trailing-key job updates the tablet
+        // schemas but its updateCatalogUnprotected never calls setZstdCompressionColumns, and the
+        // K-tablet rewrite builds its shadow schema from the table's current (old) set. Accepting the
+        // request here would report success and then lose it, so say no and let the caller issue it
+        // on its own. (bloom_filter_columns has the same hole on these routes; it predates this.)
+        if ((rangeKeyAddPending || rangeKeyWidenPending) && schemaChangeData.isZstdCompressionColumnsChanged()) {
+            throw new DdlException(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                    + " can not be changed by the same ALTER that adds or widens a key column of a "
+                    + "range-distribution table; run it as a separate ALTER TABLE ... SET");
         }
 
         if (rangeKeyAddPending) {
@@ -2989,6 +3240,71 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
+        }
+    }
+
+    // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
+    // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
+    // against the final types, so an index added or dropped in the same statement is accounted for. Every
+    // materialized index is checked, not just the base one: an index may cover a column that only a rollup
+    // (synchronous MV) carries. Only columns that are new to a staged schema or whose type changes there are
+    // checked: a keyness change alone keeps the type, and an untouched column keeps whatever index it already has.
+    private static void checkBitmapIndexesForTypeChange(OlapTable table, List<Index> indexes,
+                                                        Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+            throws DdlException {
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (Index index : indexes) {
+                if (index.getIndexType() != IndexType.BITMAP) {
+                    continue;
+                }
+                for (ColumnId columnId : index.getColumns()) {
+                    Column oldColumn = oldColumns.get(columnId);
+                    Column newColumn = newColumns.get(columnId);
+                    if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                        continue;
+                    }
+                    String columnName = oldColumn != null ? oldColumn.getName()
+                            : Column.removeNamePrefix(newColumn.getName());
+                    try {
+                        IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
+                    } catch (SemanticException e) {
+                        throw new DdlException(e.getDetailMsg());
+                    }
+                }
+            }
+        }
+    }
+
+    // A cast can skip reading an old filter, but future writes still build one from the new schema.
+    // Check only changed types: legacy metadata on an untouched column must not block other ALTERs.
+    // DecimalV3 is writable by the BE for an inherited filter even though CREATE uses a stricter policy.
+    private static void checkBloomFilterColumnsForTypeChange(OlapTable table, Set<ColumnId> bfColumns,
+                                                             Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+            throws DdlException {
+        if (bfColumns == null || bfColumns.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (ColumnId columnId : bfColumns) {
+                Column newColumn = newColumns.get(columnId);
+                Column oldColumn = oldColumns.get(columnId);
+                if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                    continue;
+                }
+                Type type = newColumn.getType();
+                if ((type.isFixedPointType() && !type.isTinyint()) || type.isDecimalOfAnyVersion()
+                        || type.isDateType() || type.isStringType()) {
+                    continue;
+                }
+                String columnName = oldColumn != null ? oldColumn.getName()
+                        : Column.removeNamePrefix(newColumn.getName());
+                throw new DdlException("Invalid bloom filter column '" + columnName
+                        + "': unsupported type " + newColumn.getPrimitiveType());
+            }
         }
     }
 
@@ -3938,8 +4254,9 @@ public class SchemaChangeHandler extends AlterHandler {
         // override the two-arg form, so routing every cancel through
         // `cancel(reason, force)` would skip that pre-work and a non-force
         // cancel against a PENDING job could deadlock until task timeout.
-        // Lake jobs have a two-arg override that preserves the same pre-work,
-        // so the force path stays safe.
+        // Lake jobs need no such pre-work at all: their PENDING phase dispatches
+        // the CreateReplicaTasks and polls the latch from later scheduler rounds
+        // instead of waiting on it, so run() never holds the monitor for long.
         boolean force = cancelAlterTableStmt.isForce();
         if (force && !Config.enable_admin_skip_committed_txn) {
             throw new DdlException(
@@ -4246,9 +4563,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Translate a catalog {@link Index} to the thrift payload consumed by
-     * BE's do_process_add_index_only. BE re-resolves column names via the
-     * new tablet schema, so we pass names, not unique ids.
+     * Build the persisted fast-path index definition. Keep column display names
+     * for compatibility with existing journaled jobs; LakeTableAddIndexJob
+     * converts a copy to stable ColumnIds before sending it to BE.
      */
     private static com.starrocks.thrift.TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
         com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
@@ -4578,6 +4895,9 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaChangeJob.setWatershedTxnId(txnId);
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
+            // This job is only a history record: SHOW ALTER reads none of the per-job schema maps,
+            // and the history schema already keeps the pre-change schema.
+            schemaChangeJob.pruneMeta();
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
@@ -4662,6 +4982,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     .addColumns(entry.getValue())
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
+                    .setZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns(),
+                            schemaChangeData.getZstdCompressionPageSizes())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
@@ -4760,6 +5082,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(schemaChangeData.getBloomFilterColumns(), schemaChangeData.getBloomFilterFpp())
                 .withBloomFilterColumnsChanged(schemaChangeData.isBloomFilterColumnsChanged())
+                .withZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns())
+                .withZstdCompressionPageSizes(schemaChangeData.getZstdCompressionPageSizes())
+                .withZstdCompressionColumnsChanged(schemaChangeData.isZstdCompressionColumnsChanged())
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
@@ -4845,6 +5170,23 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         job.setComputeResource(computeResource);
         return job;
+    }
+
+    /**
+     * Replays the leader's release of a job's history schema. Idempotent, and skips a job that is gone or has no
+     * history schema; never writes the journal.
+     */
+    public void replayReleaseHistorySchema(ReleaseAlterJobHistorySchemaLog log) {
+        AlterJobV2 job = alterJobsV2.get(log.getJobId());
+        Optional<OlapTableHistorySchema> historySchema = job == null ? Optional.empty() : job.getHistorySchema();
+        if (historySchema.isEmpty()) {
+            LOG.info("skip replaying the release of the history schema of alter job {}, db {}, table {}: "
+                    + "the job or its history schema does not exist", log.getJobId(), log.getDbId(), log.getTableId());
+            return;
+        }
+        historySchema.get().setExpire();
+        LOG.info("replay releasing the history schema of alter job {}, db {}, table {}",
+                log.getJobId(), log.getDbId(), log.getTableId());
     }
 
     /**

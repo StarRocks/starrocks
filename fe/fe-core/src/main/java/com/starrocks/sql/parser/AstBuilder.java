@@ -509,6 +509,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1897,8 +1898,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
 
+        // INTEGER_VALUE() is an empty list, never null, when no job ids are given. Keep the list
+        // null in that case so the handler cancels all unfinished jobs of the table.
         List<Long> alterJobIdList = null;
-        if (context.INTEGER_VALUE() != null) {
+        if (!context.INTEGER_VALUE().isEmpty()) {
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
@@ -7824,6 +7827,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
         return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterGroupProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        // Case-sensitive like CREATE GROUP PROVIDER: property values (DNs, filters, passwords) must not be
+        // folded. The list may legally be empty here - the analyzer turns that into a readable error.
+        Map<String, String> properties = getProperties(context.property(), false);
+        return new AlterGroupProviderStmt(name, properties, createPos(context));
     }
 
     @Override
