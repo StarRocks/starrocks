@@ -18,6 +18,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 
 public class AuthenticationException extends StarRocksException {
+    /**
+     * True when the failure came from the directory / IdP being unusable (connection refused, timeout, JWKS
+     * fetch failed) rather than from the credential being wrong. Callers that remember failures must not
+     * remember these: the same credential will be valid again as soon as the service recovers.
+     */
+    private boolean transientFailure;
+
     public AuthenticationException(String msg) {
         super(msg);
     }
@@ -28,5 +35,14 @@ public class AuthenticationException extends StarRocksException {
 
     public AuthenticationException(ErrorCode errorCode, Object... objs) {
         super(errorCode, objs);
+    }
+
+    public AuthenticationException asTransient() {
+        this.transientFailure = true;
+        return this;
+    }
+
+    public boolean isTransientFailure() {
+        return transientFailure;
     }
 }

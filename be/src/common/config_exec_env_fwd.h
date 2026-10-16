@@ -250,4 +250,10 @@ CONF_Int32(merge_commit_thread_pool_queue_size, "4096");
 
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 
+// Maximum number of threads that run the final close of load sinks, which writes the combined txn log to object
+// storage in shared-data. Running it here keeps a slow PUT off the pipeline poller and the pipeline executor threads.
+// When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
+// Must be positive. Runtime changes resize the existing pool without interrupting running closes.
+CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
+
 } // namespace starrocks::config

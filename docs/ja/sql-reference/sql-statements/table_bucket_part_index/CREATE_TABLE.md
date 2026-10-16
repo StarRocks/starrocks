@@ -869,10 +869,12 @@ Fast Schema Evolution v2が有効になっているクラウドネイティブ�
 
 ### ベースコンパクションの禁止
 
-`base_compaction_forbidden_time_ranges`: テーブルのベースコンパクションが禁止される時間範囲。このプロパティが設定されている場合、システムは指定された時間範囲外でのみ、対象となるタブレットに対してベースコンパクションを実行します。このプロパティはv3.2.13以降でサポートされています。
+`base_compaction_forbidden_time_ranges`: テーブルのベースコンパクションを制限する時間範囲。具体的な動作は、以下に示すテーブルのアーキテクチャとコンパクションポリシーによって異なります。このプロパティはv3.2.13以降でサポートされています。
+
+共有データの主キーテーブルと、Base and Cumulative ポリシーを使用する非主キーテーブルでは、自動コンパクションの開始時にこの時間範囲を確認し、ベースコンパクションを制限します。禁止時間帯にも累積コンパクションは実行できます。Size Tiered ポリシーを使用する非主キーテーブルでは、削除バージョン数のしきい値によるベースコンパクションの強制だけを無効にします。通常のレベル選択では、禁止時間帯にも最も古いレベルが選ばれる場合があります。BE/CN パラメータ `base_compaction_interval_seconds_since_last_operation` は、最小間隔が経過するまで同じ制限を適用します。手動の `ALTER TABLE ... COMPACT` はこれらの制限を上書きします。
 
 :::note
-ベースコンパクションが禁止されている期間中、テーブルへのデータロード数が500を超えないようにしてください。
+共有なしテーブルでは、ベースコンパクションが禁止されている期間中、テーブルへのデータロード数が500を超えないようにしてください。
 :::
 
 `base_compaction_forbidden_time_ranges`の値は[Quartz cron構文](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)に従い、`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`のフィールドのみをサポートします。ここで`<minute>`は`*`である必要があります。

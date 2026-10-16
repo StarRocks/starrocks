@@ -380,10 +380,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                        || olapTable.isCloudNativeTableOrMaterializedView()) {
+                        && !olapTable.isCloudNativeTableOrMaterializedView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);

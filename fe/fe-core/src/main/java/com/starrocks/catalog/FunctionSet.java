@@ -55,6 +55,7 @@ import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -83,6 +84,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -204,10 +206,23 @@ public class FunctionSet {
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
+    public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_COVERAGE_SIMPLIFY = "st_coveragesimplify";
+    public static final String ST_INTERSECTION = "st_intersection";
+    public static final String ST_UNION = "st_union";
+    public static final String ST_DIFFERENCE = "st_difference";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
+    public static final String H3_TOBOUNDARY = "h3_toboundary";
+    public static final String ST_SRID = "st_srid";
+    public static final String ST_SETSRID = "st_setsrid";
+    public static final String ST_TRANSFORM = "st_transform";
     public static final String ST_CONTAINS = "st_contains";
     public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
     public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
     public static final String ST_GEOMFROMTEXT = "st_geomfromtext";
+    public static final String ST_GEOMFROMWKB = "st_geomfromwkb";
     public static final String ST_LINEFROMTEXT = "st_linefromtext";
     public static final String ST_LINESTRINGFROMTEXT = "st_linestringfromtext";
     public static final String ST_POINT = "st_point";
@@ -283,6 +298,7 @@ public class FunctionSet {
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String GET_JSON_SCALAR = "get_json_scalar";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
@@ -292,6 +308,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -620,6 +637,9 @@ public class FunctionSet {
     //user and role function
     public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
 
+    // query profile function
+    public static final String GET_QUERY_PROFILE = "get_query_profile";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
@@ -800,6 +820,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -868,6 +889,7 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add(FunctionSet.ST_COVERAGE_SIMPLIFY)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -1195,6 +1217,24 @@ public class FunctionSet {
         return null;
     }
 
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        TAIModelSource modelSource = family.get(0).getAiModelSource();
+        if (modelSource == null || family.stream().anyMatch(fn -> !fn.isAi() || !fn.isUserVisible()
+                || fn.getAiModelSource() != modelSource)) {
+            return null;
+        }
+        return canonicalName;
+    }
+
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
@@ -1227,7 +1267,6 @@ public class FunctionSet {
     }
 
     private void addBuiltInFunction(Function fn) {
-        Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
@@ -1600,6 +1639,14 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
+        Type coverageGeometry = AnyGeometryType.GEOMETRY;
+        AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageTwo);
+        AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
+                coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));

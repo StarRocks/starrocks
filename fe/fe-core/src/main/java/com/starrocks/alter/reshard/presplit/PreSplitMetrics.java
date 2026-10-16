@@ -99,6 +99,23 @@ final class PreSplitMetrics {
     }
 
     /**
+     * Record how a data-tier FILES sample chose the files it scans, under {@code mode}, and the share of
+     * the input's bytes it scans as a whole percentage, rounded down so that only a sample that scans every
+     * file records 100.
+     */
+    static void recordDataTierFileSelection(String mode, long scannedBytes, long totalBytes) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_DATA_TIER_FILE_SELECTION.getMetric(mode).increase(1L);
+        if (totalBytes > 0L) {
+            // Compared exactly: a double quotient of two huge byte counts can round up to 100.
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT.update(scannedBytes >= totalBytes
+                    ? 100L : Math.min(99L, (long) Math.floor(100.0 * scannedBytes / totalBytes)));
+        }
+    }
+
+    /**
      * Outcomes of one pre-create attempt by the multi-partition coordinator.
      * {@link #ALREADY_EXISTS} means the partition raced into the catalog
      * between the grouper's snapshot and the coordinator's pre-create call;

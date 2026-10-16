@@ -742,6 +742,61 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
+TEST_F(TabletParallelCompactionManagerTest, test_forced_non_pk_base_selects_oldest_rowset) {
+    constexpr int64_t tablet_id = 10064;
+    constexpr int64_t txn_id = 20064;
+    constexpr int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("forced_base_pool").set_max_threads(1).build(&pool));
+    std::promise<void> block_promise;
+    auto block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+    ASSERT_OK(pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    }));
+    start_promise.get_future().wait();
+
+    auto result = _manager->create_parallel_tasks(
+            tablet_id, txn_id, version, config, callback, true /* force_base_compaction */, pool.get(),
+            []() { return true; }, [](bool) {});
+    EXPECT_TRUE(result.ok()) << result.status();
+    if (result.ok()) {
+        EXPECT_EQ(2, result.value());
+        auto state = _manager->get_tablet_state(tablet_id, txn_id);
+        EXPECT_NE(nullptr, state);
+        if (state != nullptr) {
+            EXPECT_TRUE(state->is_base_compaction);
+            EXPECT_EQ(2, state->running_subtasks.size());
+            auto oldest_group = state->running_subtasks.find(0);
+            EXPECT_NE(state->running_subtasks.end(), oldest_group);
+            if (oldest_group != state->running_subtasks.end()) {
+                EXPECT_FALSE(oldest_group->second.input_rowset_ids.empty());
+                if (!oldest_group->second.input_rowset_ids.empty()) {
+                    EXPECT_EQ(0, oldest_group->second.input_rowset_ids.front());
+                }
+            }
+        }
+    }
+
+    block_promise.set_value();
+    pool->wait();
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
 TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_multiple_groups) {
     int64_t tablet_id = 10002;
     int64_t txn_id = 20002;
@@ -4562,6 +4617,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->total_subtasks_created = 2;
     state->large_rowset_split_groups[0] = {0, 1};
     state->expected_large_rowset_split_counts[0] = 2;
@@ -4619,6 +4675,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     ASSERT_TRUE(closure.is_finished());
     ASSERT_EQ(1, response.txn_logs_size());
     const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
+    EXPECT_GT(op_parallel.base_compaction_time(), 0);
     ASSERT_EQ(1, op_parallel.subtask_compactions_size());
     const auto& merged = op_parallel.subtask_compactions(0);
     EXPECT_TRUE(merged.has_output_rowset());
@@ -4648,6 +4705,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->total_subtasks_created = 2;
     state->large_rowset_split_groups[0] = {0, 1};
     state->expected_large_rowset_split_counts[0] = 2;
@@ -4683,6 +4741,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     ASSERT_EQ(1, response.txn_logs_size());
     const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
     EXPECT_EQ(0, op_parallel.subtask_compactions_size());
+    EXPECT_EQ(0, op_parallel.base_compaction_time());
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -6180,6 +6239,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->max_parallel = 4;
     state->is_range_split = false;
 
@@ -6261,6 +6321,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
 
     const auto& op_parallel = result.value().op_parallel_compaction();
     EXPECT_FALSE(op_parallel.is_range_split());
+    // The oldest-rowset group failed, but the successful selected subtask still did
+    // Base work and starts the interval for either key type.
+    EXPECT_GT(op_parallel.base_compaction_time(), 0);
 
     // Only the normal subtask (2) should be in success_subtask_ids
     // Large rowset group should be entirely skipped due to failure

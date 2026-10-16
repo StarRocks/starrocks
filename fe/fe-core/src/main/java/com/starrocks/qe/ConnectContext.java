@@ -51,7 +51,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -77,7 +76,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.PreResolvedViewBodies;
+import com.starrocks.sql.analyzer.PreResolvedState;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -270,9 +269,9 @@ public class ConnectContext {
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
 
-    // View bodies the unlocked pre-pass resolved for the statement being planned, handed to the locked
-    // analyzer when it expands those views. Scoped to one statement: StatementPlanner clears it.
-    private final PreResolvedViewBodies preResolvedViewBodies = new PreResolvedViewBodies();
+    // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
+    // Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedState preResolvedState = new PreResolvedState();
 
     // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
     // its per-statement timings here so the eventual profile can attach them. Broker Load instead
@@ -1417,8 +1416,8 @@ public class ConnectContext {
         this.queryMVContext = queryMVContext;
     }
 
-    public PreResolvedViewBodies getPreResolvedViewBodies() {
-        return preResolvedViewBodies;
+    public PreResolvedState getPreResolvedState() {
+        return preResolvedState;
     }
 
     public StatisticsLoadBudget getStatisticsLoadBudget() {
@@ -1924,7 +1923,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1932,7 +1931,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time

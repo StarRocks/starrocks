@@ -19,6 +19,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -181,7 +182,7 @@ public class InsertPlanner {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
         this.originalOlapTables = snapshot == null ? null : snapshot.originalOlapTables();
-        this.originalInsertTarget = snapshot == null ? null : snapshot.originalInsertTarget();
+        this.originalInsertTarget = snapshot == null ? null : snapshot.originalWriteTarget();
         this.planStartTime = snapshot == null ? null : snapshot.planStartTime();
     }
 
@@ -362,11 +363,22 @@ public class InsertPlanner {
             // too); either way the finally below leaves it held, as the caller expects.
             plannerMetaLocker.unlock();
             ExecPlan plan;
+            Throwable planFailure = null;
             try {
                 plan = doPlan(insertStmt, session);
+            } catch (Throwable t) {
+                planFailure = t;
+                throw t;
             } finally {
                 try (Timer ignore = Tracers.watchScope("Lock")) {
                     StatementPlanner.lock(plannerMetaLocker);
+                } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                    // A bounded re-acquire that ran out must not hide why planning failed: report that failure,
+                    // as the caller would have seen it had the lock come back.
+                    if (planFailure == null) {
+                        throw e;
+                    }
+                    planFailure.addSuppressed(e);
                 }
             }
             long validateAgainst = planStartTime;
@@ -588,6 +600,10 @@ public class InsertPlanner {
                     Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
                             ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    // Same estimate pre-split sizes its tablet count from, reused to size the local-first
+                    // write set. Reading it here rather than inside the sink keeps the sink free of the
+                    // exec plan; complete() below is what consumes it.
+                    olapTableSink.setEstimatedWriteBytes(PreSplitEstimates.fromExecPlan(execPlan).totalBytes());
                     olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());

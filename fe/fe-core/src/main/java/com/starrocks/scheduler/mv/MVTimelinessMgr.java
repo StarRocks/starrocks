@@ -24,6 +24,9 @@ import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
 
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Manage the timeliness of materialized view according to the MVChangeEvent across multiple queries.
@@ -37,8 +40,10 @@ import java.util.Map;
  * TODO: we can track more mv/base table's changes to update the timeliness info in the future.
  */
 public class MVTimelinessMgr implements MemoryTrackable {
-    // materialized view -> MvUpdateInfo
-    private final Map<MaterializedView, MvUpdateInfo> mvTimelinessMap = Maps.newConcurrentMap();
+    // materialized view -> MvUpdateInfo, completed by the lookup that put the future and awaited by the others. An
+    // invalidation removes the future, also one still being computed: later lookups put a new one, so a result read
+    // from the state before the invalidation is never handed to them.
+    private final Map<MaterializedView, CompletableFuture<MvUpdateInfo>> mvTimelinessMap = Maps.newConcurrentMap();
 
     public enum MVChangeEvent {
         MV_REFRESHED,
@@ -49,10 +54,35 @@ public class MVTimelinessMgr implements MemoryTrackable {
                                             MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         if (!isEnableMVTimelinessGlobalCache(mv)) {
             return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
-        } else {
-            return mvTimelinessMap.computeIfAbsent(mv,
-                    (ignored) -> MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams));
         }
+        CompletableFuture<MvUpdateInfo> mine = new CompletableFuture<>();
+        while (true) {
+            CompletableFuture<MvUpdateInfo> existing = mvTimelinessMap.putIfAbsent(mv, mine);
+            if (existing == null) {
+                break;
+            }
+            try {
+                return existing.join();
+            } catch (CompletionException | CancellationException e) {
+                // The lookup computing it failed and removed its future before failing it. Try again to put one, so
+                // that one of the waiters computes for all of them and its result is cached.
+            }
+        }
+        MvUpdateInfo computed;
+        try {
+            computed = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
+        } catch (Throwable t) {
+            mvTimelinessMap.remove(mv, mine);
+            mine.completeExceptionally(t);
+            throw t;
+        }
+        // UNKNOWN is a failed check, not a timeliness: caching it would keep the MV out of rewrite until the next
+        // invalidation. The lookups already waiting get it all the same.
+        if (computed == null || computed.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.UNKNOWN) {
+            mvTimelinessMap.remove(mv, mine);
+        }
+        mine.complete(computed);
+        return computed;
     }
 
     public static boolean isEnableMVTimelinessGlobalCache(MaterializedView mv) {

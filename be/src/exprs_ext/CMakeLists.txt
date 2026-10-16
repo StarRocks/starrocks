@@ -47,3 +47,7 @@ set(EXPR_UTILITY_FILES
 ADD_BE_LIB(ExprUtility ${EXPR_UTILITY_FILES})
 target_link_libraries(ExprUtility PUBLIC Expr Runtime)
 target_link_libraries(ExprUtility PRIVATE ExecRuntime Platform StoragePrimitive)
+
+# Targets for expression extensions that are not part of this tree. See
+# extension_targets.cmake for how they join EXPR_EXTENSION_LIBS.
+include(${CMAKE_CURRENT_LIST_DIR}/CMakeLists.local.cmake OPTIONAL)

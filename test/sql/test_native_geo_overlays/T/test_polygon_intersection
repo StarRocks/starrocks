@@ -1,0 +1,14 @@
+-- name: test_native_geo_polygon_intersection
+
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')) AS g) SELECT ST_Area(g), ST_SRID(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((4 0,8 0,8 4,4 4,4 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_Length(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((4 4,5 4,5 5,4 5,4 4))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_X(g), ST_Y(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),((10 0,12 0,12 2,10 2,10 0)),((20 0,22 0,22 2,20 2,20 0)))', 'EPSG:3857'), ST_GeomFromText('MULTIPOLYGON (((2 0,6 0,6 4,2 4,2 0)),((12 0,14 0,14 2,12 2,12 0)),((22 2,24 2,24 4,22 4,22 2)))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_Area(g), ST_Length(g), ST_SRID(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((10 0,12 0,12 2,10 2,10 0)))', 'EPSG:3857'), ST_GeomFromText('MULTIPOLYGON (((2 2,4 2,4 4,2 4,2 2)),((12 2,14 2,14 4,12 4,12 2)))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g) FROM t;
+SELECT ST_AsText(ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), NULL));
+SELECT ST_AsText(ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((8 0,9 0,9 1,8 1,8 0))', 'EPSG:3857')));
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:4326'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:4326')) AS g) SELECT ST_Area(g), ST_SRID(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_Area(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,8 0,8 8,0 8,0 0),(2 2,2 6,6 6,6 2,2 2))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 2,6 2,6 6,2 6,2 2))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_Length(g), ST_Area(g) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,8 -7,6 2,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((-2 0,0 0,8 2,-2 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_GeometryType(ST_Union(g, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'))) FROM t;
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((-2 0,0 0,8 2,-2 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((0 0,8 -7,6 2,0 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_GeometryType(ST_Union(g, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'))) FROM t;

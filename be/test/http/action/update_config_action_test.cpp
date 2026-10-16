@@ -29,6 +29,7 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_staros_worker_fwd.h"
@@ -53,6 +54,7 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
 
 #ifdef USE_STAROS
 DECLARE_int64(fslib_s3_max_single_part_size);
@@ -60,6 +62,7 @@ DECLARE_int64(fslib_s3_min_upload_part_size);
 DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
 #endif
 
 namespace brpc {
@@ -126,6 +129,32 @@ TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, _runtime_env->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(registry->update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     auto* executor =
             static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
@@ -140,7 +169,10 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     {
         auto st = ConfigUpdateRegistry::instance()->update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
@@ -261,6 +293,46 @@ TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
     CHECK_OK(st);
     ASSERT_EQ(2, drop_pool->max_threads());
     ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_reset_pk_index_execution_threads_to_auto) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    for (int cores : {8, 1, 0}) {
+        SCOPED_TRACE(cores);
+        SCOPED_UPDATE(int, CpuInfo::num_cores_, cores);
+        for (int automatic_value : {0, -1}) {
+            SCOPED_TRACE(automatic_value);
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+            EXPECT_EQ(7, thread_pool->max_threads());
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads",
+                                              std::to_string(automatic_value)));
+            EXPECT_EQ(std::max(1, cores), thread_pool->max_threads());
+            EXPECT_EQ(automatic_value, config::pk_index_parallel_execution_threadpool_max_threads);
+        }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, test_invalid_pk_index_execution_threads_preserve_pool) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+    EXPECT_TRUE(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "invalid")
+                        .is_invalid_argument());
+    EXPECT_EQ(7, thread_pool->max_threads());
+    EXPECT_EQ(7, config::pk_index_parallel_execution_threadpool_max_threads);
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
@@ -401,6 +473,27 @@ TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non
             EXPECT_EQ(mapping.valid_value, *mapping.config_value)
                     << mapping.be_config << " config not rolled back on rejected " << bad_value;
         }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
+    const bool saved = config::s3_multipart_equal_part_size;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("s3_multipart_equal_part_size", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        FLAGS_fslib_s3_multipart_equal_part_size = !value;
+        auto st = registry->update_config("s3_multipart_equal_part_size", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::s3_multipart_equal_part_size);
+        EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
     }
 }
 

@@ -38,7 +38,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
     ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
 
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());

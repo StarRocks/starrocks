@@ -387,6 +387,15 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
+    public void testPartitionWithCommittedLoadButStaleRowCountSkipped() {
+        // The row count still reads 0 until the next TabletStatMgr sweep, but the visible version
+        // shows a load already committed rows to this partition.
+        when(partition.getVisibleVersion()).thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+
+        assertSkipped(invokeMaybeAct(), SkipReason.PARTITION_NOT_EMPTY);
+    }
+
+    @Test
     public void testMissingPartitionSkipped() {
         when(table.getPhysicalPartition(PARTITION_ID)).thenReturn(null);
 

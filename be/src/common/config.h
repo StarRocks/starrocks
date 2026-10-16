@@ -264,15 +264,16 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Maximum number of files copied concurrently for one tablet during lake-to-lake replication.
+CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
-// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
-// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
-// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
-// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
-// guard. The pool is built once at startup; CN restart is required to change its size.
-CONF_Int32(lake_replication_file_copy_threads, "0");
+// Number of threads in the dedicated thread pool used by lake replication for per-file copy.
+// The fixed default bounds per-copy read buffers independently of CPU count. 0 means
+// cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;
+// CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "16");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -471,6 +472,8 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B
@@ -893,9 +896,14 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
-// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
-// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
-// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+// Whether to require Basic Auth for the BE HTTP endpoints. Default false for backward
+// compatibility. Immutable; requires a BE restart to change. When true:
+// - Exempt are the token-gated internal transport (BE-to-BE tablet clone and internal load
+//   download: /api/_tablet/_download, /api/_download_load), and the Stream Load and transaction
+//   endpoints, which authenticate inside the handler.
+// - Every other endpoint requires a user the FE leader authenticates, including the health probe
+//   and the Prometheus metrics (/api/health, /metrics, /metrics/memory), which need no privilege.
+//   Most admin endpoints also require a SYSTEM privilege, such as OPERATE.
 CONF_Bool(enable_http_auth, "false");
 
 // Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
@@ -1395,6 +1403,19 @@ CONF_mInt64(object_storage_client_cache_size, "8");
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
+// Some S3-compatible stores (e.g. Cloudflare R2) reject a multipart upload whose non-trailing parts
+// differ in length. When enabled, every part of an S3 multipart upload except the last one is
+// exactly the configured part size, and only the last part may be shorter. The default, false,
+// keeps the current behavior, which cuts a part whenever the buffer reaches the part size.
+//
+// One switch for both S3 writers: starlet in a shared-data cluster, forwarded to the starlet gflag
+// `fslib_s3_multipart_equal_part_size` and cutting parts of `starlet_fslib_s3_min_upload_part_size`,
+// and the BE S3 filesystem, cutting parts of `experimental_s3_min_upload_part_size`.
+//
+// Mutable. The value is snapshotted once per output stream, so a change applies to the uploads
+// started afterwards. S3 allows at most 10,000 parts per upload, so an object is limited to
+// 10,000 times the part size; raise the part size for larger objects.
+CONF_mBool(s3_multipart_equal_part_size, "false");
 
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
@@ -1485,6 +1506,13 @@ CONF_Int64(max_load_dop, "16");
 
 CONF_Bool(enable_load_colocate_mv, "true");
 
+// Whether this BE takes part in the ENCODE_ALL_NULL layout on the tablet sink RPC: as a receiver it
+// advertises the bit in the tablet-writer open result, and as a sender it asks for it. Turning it off on
+// either end of a load falls back to the unencoded layout for that load. Deliberately immutable: the
+// receiver decides from this flag both what to advertise and whether to honor the levels a sender sends,
+// and a mid-process flip would desynchronize those two decisions.
+CONF_Bool(enable_load_chunk_all_null_encoding, "true");
+
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
 
@@ -1539,6 +1567,15 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -1585,6 +1622,17 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+// Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
+// tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
+// "zstd" compresses the payload on the heartbeat thread, inside the same
+// starmgr_client_rpc_timeout_ms budget, and the FE decompresses it. "none", the default, sends the
+// heartbeat uncompressed as before.
+//
+// The FE must be able to decompress before any node is switched: an FE that predates this
+// mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this on
+// the compute nodes. An unrecognized value is reported and falls back to "none" rather than
+// keeping the node from starting.
+CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
@@ -1652,6 +1700,13 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Whether a scheduled lake primary-key compaction switches to base compaction on its own once the
+// tablet's deletes reach one of the two thresholds below. Off by default: the rows threshold is an
+// absolute count, so on a large tablet whose existing keys keep being updated or deleted it is
+// reached again soon after each base compaction, and every such round rewrites up to
+// update_compaction_ratio_threshold of the tablet's data. A manual ALTER TABLE ... COMPACT runs
+// base compaction whether or not this is on.
+CONF_mBool(lake_pk_compaction_base_enable_delete_trigger, "false");
 // Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
 // tablet from cumulative selection (the size-tiered small-file merge, which favors small
 // freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
@@ -1664,6 +1719,7 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 //      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
 // Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
 // deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+// Both thresholds are checked only while lake_pk_compaction_base_enable_delete_trigger is on.
 CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
 CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
@@ -1826,7 +1882,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.5"); // 50%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
@@ -2081,6 +2137,12 @@ CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
+// Memory limit of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.
+// A shuffle keeps one partial chunk per destination pipeline driver and only sends it once it holds
+// vector_chunk_size rows; with many destinations x dop and wide rows those partial chunks can retain the whole
+// input. When their total size exceeds this limit they are all sent and cleared; if the capacity they keep is
+// still above half of the limit, partial chunks are released until it is not. A value <= 0 disables the limit.
+CONF_mInt64(exchange_sink_buffer_flush_threshold_bytes, "67108864");
 
 CONF_mInt64(wait_apply_time, "6000"); // 6s
 
@@ -2492,7 +2554,17 @@ CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
+// Maximum number of threads that run the final close of load sinks, which writes the combined txn log to object
+// storage in shared-data. Running it here keeps a slow PUT off the pipeline poller and the pipeline executor threads.
+// When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
+// Must be positive. Runtime changes resize the existing pool without interrupting running closes.
+CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
+// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
+// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
+// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
+CONF_mBool(lake_enable_tablet_location_handoff, "true");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics
@@ -2524,6 +2596,8 @@ CONF_mInt64(ai_function_request_timeout_ms, "600000");
 // A zero connect timeout disables the independent connection cap.
 CONF_mInt64(ai_function_connect_timeout_ms, "10000");
 CONF_mInt64(ai_function_max_response_bytes, "8388608");
+// Maximum raw inline FILE bytes before copying into the AI payload or encoding. Must be positive.
+CONF_mInt64(ai_function_max_input_file_bytes, "10485760");
 CONF_mInt32(ai_function_worker_thread_num, "16");
 CONF_mInt32(ai_function_sub_chunk_size, "64");
 CONF_mInt32(ai_function_max_retries, "3");
@@ -2557,4 +2631,16 @@ CONF_mInt32(table_schema_service_max_retries, "3");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// Evaluate each THEN branch of a searched CASE WHEN only on the rows that branch actually owns,
+// instead of evaluating it over the whole chunk and picking rows afterwards. Only applies when the
+// CASE result is a collection/variant type, where building a row is expensive enough to pay for
+// compacting the branch's input rows into a sub-chunk.
+// A branch is compacted when `owned_rows * ratio < chunk_rows`, i.e. when its selectivity is below
+// 1/ratio; above that threshold copying the branch's input costs more than the skipped evaluation
+// saves. 1 means "always compact", and 0 or less turns the whole thing off and restores the previous
+// behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
+// an error is no longer evaluated when no row selects it.
+CONF_mInt32(case_when_selective_eval_ratio, "2");
+
 } // namespace starrocks::config
