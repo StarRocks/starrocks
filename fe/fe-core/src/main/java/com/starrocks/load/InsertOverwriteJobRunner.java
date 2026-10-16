@@ -32,6 +32,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -718,7 +719,7 @@ public class InsertOverwriteJobRunner {
                 for (Long partitionId : job.getSourcePartitionIds()) {
                     Partition partition = targetTable.getPartition(partitionId);
                     if (partition == null) {
-                        throw new DmlException("Partition id:%s does not exist in table id:%s", partitionId, tableId);
+                        throw sourcePartitionMissing(targetTable, "id " + partitionId);
                     } else {
                         sourcePartitionNames.add(partition.getName());
                     }
@@ -739,6 +740,9 @@ public class InsertOverwriteJobRunner {
                     .collect(Collectors.toList());
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
+                if (partition == null) {
+                    throw sourcePartitionMissing(targetTable, "'" + name + "'");
+                }
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
@@ -924,6 +928,96 @@ public class InsertOverwriteJobRunner {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Nothing stops a source partition from disappearing between prepare() and the swap: DROP PARTITION,
+    // RENAME PARTITION and the partition TTL / dynamic partition schedulers do not wait for a running
+    // INSERT OVERWRITE. The hint tells the user where to look instead of surfacing a NullPointerException.
+    private static DmlException sourcePartitionMissing(OlapTable targetTable, String partitionDesc) {
+        String message = String.format("partition %s of table '%s' no longer exists. Check whether it was dropped " +
+                "or renamed while the INSERT OVERWRITE was running", partitionDesc, targetTable.getName());
+        if (DynamicPartitionUtil.isTTLPartitionTable(targetTable)
+                || DynamicPartitionUtil.isDynamicPartitionTable(targetTable)) {
+            message += ". The table has partition TTL or dynamic partition configured, so also check whether " +
+                    "the partition is still within the retention range";
+        }
+        return new DmlException(message);
+    }
+
+    private static String buildReplacePartitionsFailedMessage(Throwable throwable) {
+        String detail = null;
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && !current.getMessage().isEmpty()) {
+                detail = current.getMessage();
+            }
+        }
+        if (detail == null) {
+            return "replace partitions failed";
+        }
+        return "replace partitions failed: " + detail;
+    }
+
+    private void replacePartition(OlapTable targetTable,
+                                  List<String> sourcePartitionNames,
+                                  List<String> tmpPartitionNames) {
+        PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+        if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+            if (job.isDynamicOverwrite()) {
+                targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
+            } else {
+                targetTable.replaceTempPartitionsWithoutCheck(dbId, sourcePartitionNames, tmpPartitionNames,  false);
+            }
+        } else {
+            targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+        }
+    }
+
+    /**
+     * Sampling and the actual load use separate source snapshots. If rows for a sampled partition
+     * disappear before the load starts, its pre-created temporary partition is never registered in
+     * transaction state and therefore is not promoted. Drop every transaction-scoped temporary
+     * partition left after the successful replacement.
+     */
+    void dropUnusedDynamicOverwriteTempPartitions(OlapTable targetTable) {
+        if (!job.isDynamicOverwrite() || job.getTxnId() <= 0) {
+            return;
+        }
+        String tempPartitionPrefix = "txn" + job.getTxnId() + "_";
+        List<String> unusedPartitionNames = targetTable.getTempPartitions().stream()
+                .map(Partition::getName)
+                .filter(name -> name.startsWith(tempPartitionPrefix))
+                .toList();
+        for (String partitionName : unusedPartitionNames) {
+            targetTable.dropTempPartition(partitionName, true);
+        }
+        if (!unusedPartitionNames.isEmpty()) {
+            LOG.info("dynamic overwrite job {} dropped unused pre-split temp partitions: {}",
+                    job.getJobId(), unusedPartitionNames);
+        }
+    }
+
+    protected void replayCommit() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+            return;
+        }
+        try {
+            final OlapTable targetTable = checkAndGetTable(db, tableId);
+            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .toList();
+            replacePartition(targetTable, job.getSourcePartitionNames(), tmpPartitionNames);
+            dropUnusedDynamicOverwriteTempPartitions(targetTable);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+    }
+
+>>>>>>> 33f465c ([BugFix] Report a clear error when INSERT OVERWRITE finds a source partition gone at commit (#79902))
     private void prepareInsert() {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
