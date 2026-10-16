@@ -2299,6 +2299,204 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     }
 }
 
+<<<<<<< HEAD
+=======
+// Deciding whether a bundle file goes with the deleted tablets reads its footer, which may come from a
+// read that mixed locally cached blocks of two writes while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the footer was read again, and
+// leaving the damage in place proves nothing is deleted on a bundle that stays bad.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_rereads_corrupted_bundle) {
+    ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    const std::string segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    create_data_file(segment);
+    auto t720_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[720] = *t720_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    auto fs = FileSystem::Default();
+    auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(720, 2);
+    auto overwrite = [&](const std::string& content) {
+        ASSERT_OK(fs->delete_file(bundle_path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(bundle_path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto intact_content, rf->read_all());
+    // The footer ends with [crc32][size]; flipping a byte of the stored crc fails the footer check.
+    std::string mixed_content = intact_content;
+    mixed_content[mixed_content.size() - sizeof(uint64_t) - sizeof(uint32_t)] ^= 0xFF;
+
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+    auto delete_tablet_720 = [&]() {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(720);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    {
+        // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+        config::lake_clear_corrupted_cache_meta = false;
+        overwrite(mixed_content);
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(0, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is still there after the drop, so the second read fails and nothing is deleted.
+        config::lake_clear_corrupted_cache_meta = true;
+        restore_on_drop = false;
+        cache_drops = 0;
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is gone after the drop, so the second read succeeds and the tablet's files go.
+        restore_on_drop = true;
+        cache_drops = 0;
+        EXPECT_EQ(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(segment));
+    }
+}
+
+// A split-shared segment's .vi is named by the recorded owner, so it is the SAME file for every
+// sibling tablet. It must follow the shared segment's deletion policy: kept while any sibling still
+// references the segment, deleted only once none do. Owner (710) differs from the sibling (711) to
+// prove the .vi name is owner-based, not per-vacuuming-tablet.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_shared_vector_index_files) {
+    const std::string shared_segment = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat";
+    // gen_vector_index_filename(shared_segment, owner=710, index=100)
+    const std::string shared_vi = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1_710_100.vi";
+    // Decoy named by the sibling tablet id (711): must never be touched (proves owner-based naming).
+    const std::string decoy_vi = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1_711_100.vi";
+    create_data_file(shared_segment);
+    create_data_file(shared_vi);
+    create_data_file(decoy_vi);
+
+    auto t710_v1 = json_to_pb<TabletMetadataPB>(R"DEL({"id": 710, "version": 1, "rowsets": []})DEL");
+    auto t711_v1 = json_to_pb<TabletMetadataPB>(R"DEL({"id": 711, "version": 1, "rowsets": []})DEL");
+
+    // Both tablets reference the shared segment, which records owner 710 (carried verbatim by the
+    // split cross-publish CopyFrom), so both resolve the .vi to ..._710_100.vi.
+    auto t710_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 710,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
+                            "shared": true,
+                            "vector_index_ids": [100],
+                            "segment_vector_index_uid": 710
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    auto t711_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 711,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
+                            "shared": true,
+                            "vector_index_ids": [100],
+                            "segment_vector_index_uid": 710
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v1{{710, *t710_v1}, {711, *t711_v1}};
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2{{710, *t710_v2}, {711, *t711_v2}};
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    {
+        // Delete tablet 710 only: 711 still references the shared segment, so its owner-named .vi
+        // must be kept.
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(710);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_TRUE(file_exist(shared_segment));
+        EXPECT_TRUE(file_exist(shared_vi));
+        EXPECT_TRUE(file_exist(decoy_vi));
+    }
+
+    {
+        // Delete both: nothing references the shared segment now, so its .vi is deleted too.
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(710);
+        request.add_tablet_ids(711);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_FALSE(file_exist(shared_segment));
+        EXPECT_FALSE(file_exist(shared_vi));
+        // The decoy (sibling-id name) was never referenced by metadata, so vacuum leaves it to the
+        // orphan-file sweep, not this path — it must remain untouched here.
+        EXPECT_TRUE(file_exist(decoy_vi));
+    }
+}
+
+>>>>>>> 093a04b ([BugFix] Re-read bundle metadata when a read fails verification (#79928))
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files_with_dcg) {
     const std::string shared_dcg_file = "0000000000f359e4_33333333-3333-3333-3333-3333333333c1.dat";
