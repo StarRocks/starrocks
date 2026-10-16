@@ -265,7 +265,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **有効な値**: `CIRCULAR`, `RANDOM`
 * **導入バージョン**: -
 
-### broadcast_memory_limit_exceeded_cost_multiplier
+### broadcast_mem_exceeded_penalty_factor
 
 * **説明**: 各 BE/CN に送信されるビルド側の推定サイズが `exec_mem_limit` を超える場合に、ブロードキャストの CPU、メモリ、ネットワークコストに適用する倍率を設定します。推定値が制限と等しい場合はペナルティを適用しません。デフォルト値は従来の 1000 倍のコストペナルティを維持します。`1.0` に設定するとこのペナルティを除去できますが、オプティマイザは引き続き他のプランのコストを比較し、ブロードキャスト候補の適格性を確認します。この変数は実行時のメモリ制限を変更せず、ブロードキャスト結合を強制しません。
 * **スコープ**: Session, Global
@@ -276,8 +276,8 @@ MySQL クライアント互換性のために使用されます。実際の用�
 `SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定できます。例：
 
 ```sql
-SET broadcast_memory_limit_exceeded_cost_multiplier = 10.0;
-SET GLOBAL broadcast_memory_limit_exceeded_cost_multiplier = 10.0;
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 ```
 
 ### catalog
