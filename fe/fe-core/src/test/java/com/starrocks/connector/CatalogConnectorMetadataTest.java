@@ -186,6 +186,14 @@ public class CatalogConnectorMetadataTest {
 
     @Test
     void testPrefetchInformationSchemaMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.getTableType();
+                result = Table.TableType.HIVE;
+                times = 1;
+            }
+        };
+
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
                 informationSchemaMetadata,
