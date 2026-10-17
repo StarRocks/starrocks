@@ -34,7 +34,11 @@
 
 #pragma once
 
+#include <string_view>
+#include <utility>
+
 #include "platform/http/http_handler.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 
@@ -55,6 +59,14 @@ public:
     // incremental-coverage attributes the line to a be/src translation unit; a
     // header-inline override is inlined into callers and not counted.
     bool need_auth() const override;
+
+    // Maps the process crashing state to the response for handle(): HTTP status plus
+    // JSON body. The crash flag (set_process_is_crashing()) is process-lifetime
+    // one-way, so a handler-level test cannot exercise the crashing state without
+    // poisoning every later test in the same binary; this pure helper keeps both
+    // states unit-testable. Defined out-of-line in the .cpp for the same
+    // coverage-attribution reason as need_auth().
+    static std::pair<HttpStatus, std::string_view> health_response(bool crashing);
 
 private:
     [[maybe_unused]] ExecEnv* _exec_env;
