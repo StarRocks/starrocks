@@ -67,6 +67,10 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
     }
 
+    // MVRefreshSchemaChecker#isLikelyDriftException matches these, so wording and detection can't drift apart.
+    public static final String MV_SCHEMA_COLUMN_CHANGED_MARKER = "base table schema changed for columns: ";
+    public static final String MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER = "column schema not compatible: ";
+
     public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {
         return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }
@@ -88,11 +92,20 @@ public class MaterializedViewExceptions {
     }
 
     public static String inactiveReasonForColumnNotCompatible(String existingType, String newType) {
-        return String.format("column schema not compatible: (%s) and (%s)", existingType, newType);
+        return String.format("%s(%s) and (%s)", MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER, existingType, newType);
     }
 
     public static String inactiveReasonForColumnChanged(Set<String> columns) {
-        return "base table schema changed for columns: " + StringUtils.join(columns, ",");
+        return MV_SCHEMA_COLUMN_CHANGED_MARKER + StringUtils.join(columns, ",");
+    }
+
+    public static String unsupportedReasonForIvmColumnChange(String operation, String columnName, String mvName) {
+        return String.format("Cannot %s column '%s' on incrementally maintained materialized view '%s': its "
+                        + "stored schema carries hidden columns whose layout is fixed at creation, so a column "
+                        + "change breaks every later incremental refresh. Rebuild instead: CREATE a new "
+                        + "materialized view with the columns you want, REFRESH it, 'ALTER MATERIALIZED VIEW %s "
+                        + "SWAP WITH <new_mv>', then DROP the swapped-out one.",
+                operation, columnName, mvName, mvName);
     }
 
     public static String inactiveReasonForSchemaCheckFailed(String mvName, String detail) {

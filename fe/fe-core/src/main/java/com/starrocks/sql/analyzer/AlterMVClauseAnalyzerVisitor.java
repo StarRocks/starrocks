@@ -15,6 +15,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.DropMVColumnClause;
@@ -36,9 +37,23 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
         return null;
     }
 
+    /**
+     * Both conditions are needed to recognise a real IVM MV: the mode alone misfires on a
+     * non-IVM-eligible AUTO MV, and __ROW_ID__ alone on a PCT MV that merely outputs a column
+     * with that name.
+     */
+    private void rejectColumnChangeOnIvmMv(String operation, String columnName) {
+        MaterializedView mv = (MaterializedView) table;
+        if (mv.getCurrentRefreshMode().isIncrementalOrAuto() && mv.getRowIdStrategy() != null) {
+            throw new SemanticException(MaterializedViewExceptions.unsupportedReasonForIvmColumnChange(
+                    operation, columnName, mv.getName()));
+        }
+    }
+
     public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
-        // Validate the column name
         String columnName = clause.getColumnName();
+        rejectColumnChangeOnIvmMv("add", columnName);
+
         if (columnName == null || columnName.isEmpty()) {
             throw new SemanticException("Column name cannot be empty");
         }
@@ -77,13 +92,15 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
 
     public Void visitDropMVColumnClause(DropMVColumnClause clause, ConnectContext context) {
         String columnName = clause.getColumnName();
+        rejectColumnChangeOnIvmMv("drop", columnName);
+
         if (columnName == null || columnName.isEmpty()) {
             throw new SemanticException("Column name cannot be empty");
         }
 
         MaterializedView mv = (MaterializedView) table;
         if (mv.getColumn(columnName) == null) {
-            throw new SemanticException("Column '{}' does not exist in materialized view", columnName);
+            throw new SemanticException("Column '%s' does not exist in materialized view", columnName);
         }
 
         ParseNode astParseNode = mv.getDefineQueryParseNode();
