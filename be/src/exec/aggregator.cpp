@@ -580,6 +580,9 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         if (state->query_options().__isset.group_concat_max_len) {
             _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
         }
+        if (state->query_options().__isset.max_array_length) {
+            _agg_fn_ctxs[i]->set_max_array_length(state->query_options().max_array_length);
+        }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
     }
@@ -1870,7 +1873,11 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
             ++it;
         }
 
-        {
+        // A streaming DISTINCT aggregation re-drains the hash set every time the sink re-arms
+        // streaming_all_states, so this can run right after reset_state() emptied it. results is
+        // then a buffer of default constructed keys with nothing to deserialize out of it; mirror
+        // the read_index > 0 guard convert_hash_map_to_chunk() already has.
+        if (read_index > 0) {
             SCOPED_TIMER(_agg_stat->group_by_append_timer);
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }

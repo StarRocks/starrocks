@@ -123,7 +123,7 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
         return 0;
     }
 
-    if (column->is_large_binary() || column->is_view()) {
+    if (column->is_view()) {
         return 0;
     }
 
@@ -354,8 +354,7 @@ Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
         _hash_map = {};
     });
 
-    RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
-    _table_items->has_large_column = _table_items->build_chunk->has_large_column();
+    RETURN_IF_ERROR(_table_items->build_chunk->capacity_limit_reached());
 
     // If the join key is column ref of build chunk, fetch from build chunk directly
     size_t join_key_count = _table_items->join_keys.size();
@@ -366,7 +365,7 @@ Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
         }
     }
 
-    RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
+    RETURN_IF_ERROR(_check_key_columns_capacity());
 
     if (_table_items->row_count == 0 && allow_build_empty_table) {
         _is_empty_map = true;
@@ -787,18 +786,11 @@ void JoinHashTable::remove_duplicate_index(Filter* filter) {
     }
 }
 
-Status JoinHashTable::_upgrade_key_columns_if_overflow() {
-    for (auto& column : _table_items->key_columns) {
-        auto mut_col = column->as_mutable_ptr();
-        auto ret = mut_col->upgrade_if_overflow();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = ret.value();
-        } else {
-            // keep the original column
-            column = std::move(mut_col);
-        }
+// A key column that comes from an expression is built separately from build_chunk, so check its row-count and
+// nested-element limits on its own.
+Status JoinHashTable::_check_key_columns_capacity() const {
+    for (const auto& column : _table_items->key_columns) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
     }
     return Status::OK();
 }
@@ -960,17 +952,11 @@ void JoinHashTable::reset_probe_state(RuntimeState* state) {
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                             bool* eos) {
     _hash_map->probe(state, key_columns, probe_chunk, chunk, eos);
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
     return Status::OK();
 }
 
 Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     _hash_map->probe_remain(state, chunk, eos);
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
     return Status::OK();
 }
 
@@ -980,9 +966,6 @@ Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, Ch
         _hash_map->lazy_output_for_remain(state, probe_chunk, result_chunk);
     } else {
         _hash_map->lazy_output_for_probe(state, probe_chunk, result_chunk);
-    }
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*result_chunk)->downgrade());
     }
     return Status::OK();
 }

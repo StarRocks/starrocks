@@ -44,6 +44,10 @@ public class SimpleSelector implements Selector {
                 .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getTableId()))
                 .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getPartitionId()))
+                // CN can report zero when automatic Base is cooling down and no other work is eligible.
+                // Keep explicit requests eligible regardless of their score.
+                .filter(p -> p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
+                        || p.getCompactionScore().getMax() > 0)
                 .filter(p -> isReadyForCompaction(p, now))
                 .map(p -> {
                     return p.getSnapshot(); })

@@ -14,7 +14,9 @@
 
 #include "storage/tablet_updates_test.h"
 
+#include <atomic>
 #include <random>
+#include <tuple>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
@@ -25,6 +27,7 @@
 #include "common/config_storage_fwd.h"
 #include "data_workflows/consistency/engine_checksum_task.h"
 #include "fs/fs_factory.h"
+#include "rapidjson/document.h"
 #include "runtime/runtime_state.h"
 #include "script/script.h"
 #include "storage/chunk_helper.h"
@@ -33,6 +36,7 @@
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset_update_state.h"
+#include "storage/storage_metrics.h"
 #include "storage/txn_manager.h"
 
 namespace starrocks {
@@ -4027,6 +4031,51 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     ASSERT_EQ(3, rowsets.size());
 }
 
+TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
+    const int64_t old_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp restore([&]() {
+        config::vertical_compaction_max_columns_per_group = old_columns_per_group;
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:input_rowset_count");
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:algorithm");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    for (size_t count : {size_t{32767}, size_t{32768}, size_t{34173}, size_t{65536}}) {
+        _tablet = create_tablet(rand(), rand());
+        _tablet->updates()->stop_compaction(true);
+        const std::vector<int64_t> keys = {1, 2, 3};
+        auto empty = create_rowset(_tablet, keys, nullptr, true);
+        ASSERT_EQ(0, empty->num_segments());
+        ASSERT_TRUE(_tablet->rowset_commit(2, empty).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        std::vector<RowsetSharedPtr> rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(4, &rowsets).ok());
+        std::vector<uint32_t> inputs;
+        for (const auto& rowset : rowsets) {
+            inputs.emplace_back(rowset->rowset_meta()->get_rowset_seg_id());
+        }
+        bool algorithm_checked = false;
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:input_rowset_count",
+                                              [&](void* arg) { *static_cast<size_t*>(arg) = count; });
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:algorithm", [&](void* arg) {
+            EXPECT_EQ(count <= 32767 ? VERTICAL_COMPACTION : HORIZONTAL_COMPACTION,
+                      *static_cast<CompactionAlgorithm*>(arg));
+            algorithm_checked = true;
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        _tablet->updates()->stop_compaction(false);
+        auto st = _tablet->updates()->compaction(_compaction_mem_tracker.get(), inputs);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_TRUE(algorithm_checked);
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        ASSERT_EQ(4, _tablet->updates()->max_version());
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
+}
+
 TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
@@ -4383,11 +4432,85 @@ TEST_F(TabletUpdatesTest, test_get_compaction_status) {
     test_horizontal_compaction(false, true);
 }
 
+// While a compaction is committed but not yet applied, the latest version holds only the output rowset and
+// the apply version still holds the inputs. get_compaction_status() used to fill apply_rowset_details from the
+// latest version's rowsets, indexing past its end and crashing the BE on /api/compaction/show.
+TEST_F(TabletUpdatesTest, get_compaction_status_while_compaction_waits_for_apply) {
+    const int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    std::vector<RowsetSharedPtr> inputs;
+    for (int64_t version = 2; version <= 4; version++) {
+        inputs.emplace_back(create_rowset(_tablet, keys));
+        ASSERT_TRUE(_tablet->rowset_commit(version, inputs.back()).ok());
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // Stop apply so that the compaction commits its output rowset and then waits for that version to be applied.
+    _tablet->updates()->stop_apply(true);
+    std::thread th([&]() { ASSERT_FALSE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    DeferOp resume_apply([&]() {
+        _tablet->updates()->stop_apply(false);
+        _tablet->updates()->check_for_apply();
+        if (th.joinable()) {
+            th.join();
+        }
+    });
+    RowsetSharedPtr output_rs;
+    for (int retry = 0; output_rs == nullptr && retry < 10; retry++) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        output_rs = _tablet->updates()->get_rowset(inputs.back()->rowset_meta()->get_rowset_seg_id() + 1);
+    }
+    ASSERT_TRUE(output_rs != nullptr);
+
+    std::string json_result;
+    _tablet->updates()->get_compaction_status(&json_result);
+    rapidjson::Document doc;
+    doc.Parse(json_result.c_str());
+    ASSERT_FALSE(doc.HasParseError()) << json_result;
+    EXPECT_STREQ("4_1", doc["last_version"].GetString()) << json_result;
+
+    const auto& rowset_details = doc["rowset_details"];
+    ASSERT_EQ(1u, rowset_details.Size()) << json_result;
+    EXPECT_EQ(output_rs->rowset_id().to_string(), rowset_details[0]["rowset_id"].GetString()) << json_result;
+
+    const auto& apply_rowset_details = doc["apply_rowset_details"];
+    ASSERT_EQ(inputs.size(), apply_rowset_details.Size()) << json_result;
+    for (size_t i = 0; i < inputs.size(); i++) {
+        EXPECT_EQ(inputs[i]->rowset_id().to_string(), apply_rowset_details[i]["rowset_id"].GetString()) << json_result;
+    }
+
+    _tablet->updates()->stop_apply(false);
+    _tablet->updates()->check_for_apply();
+    th.join();
+    EXPECT_EQ(N, read_tablet(_tablet, 4));
+    ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
+}
+
 TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
     _tablet = create_tablet(rand(), rand());
     ASSERT_FALSE(_tablet->updates()->is_apply_stop());
     StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), kKeepMetaAndFiles);
     ASSERT_TRUE(_tablet->updates()->is_apply_stop());
+}
+
+TEST_F(TabletUpdatesTest, test_drop_tablet_does_not_increment_error_state_metric) {
+    _tablet = create_tablet(rand(), rand());
+    const auto error_state_count = StorageMetrics::instance()->primary_key_table_error_state_total.value();
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_EQ(error_state_count + 1, StorageMetrics::instance()->primary_key_table_error_state_total.value());
+    _tablet->updates()->reset_error();
+
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    ASSERT_OK(tablet_manager->drop_tablet(_tablet->tablet_id(), kDeleteFiles));
+    _tablet.reset();
+    ASSERT_OK(tablet_manager->start_trash_sweep());
+
+    EXPECT_EQ(error_state_count + 1, StorageMetrics::instance()->primary_key_table_error_state_total.value());
 }
 
 TEST_F(TabletUpdatesTest, test_skip_schema) {
@@ -4820,5 +4943,235 @@ TEST_F(TabletUpdatesTest, test_do_manual_compaction_via_task_queue) {
     ASSERT_EQ(N, read_tablet(_tablet, 4));
     EXPECT_TRUE(_tablet->verify().ok());
 }
+
+// Full/non-full input selection, light publish and index rebuild are independent
+// inputs. In particular, the two config switches must not reset an index that
+// the light conflict resolver subsequently updates with replace().
+class TabletUpdatesCompactionIndexSizeTest : public TabletUpdatesTest,
+                                             public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
+protected:
+    void run_index_size_regression(bool immediate_merge, bool use_wal, bool retry) {
+        const auto [full_compaction, light_publish, enable_rebuild] = GetParam();
+        std::atomic<int> first_light_path{-1};
+        const auto old_light = config::enable_light_pk_compaction_publish;
+        const auto old_rebuild = config::enable_pindex_rebuild_in_compaction;
+        const auto old_minor = config::enable_pindex_minor_compaction;
+        const auto old_max_mem = config::l0_max_mem_usage;
+        const auto old_snapshot = config::l0_snapshot_size;
+        const auto old_retry_timeout = config::retry_apply_timeout_second;
+        DeferOp restore([&] {
+            if (_tablet) {
+                _tablet->updates()->stop_and_wait_apply_done();
+            }
+            SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_apply_compaction_commit:output_rowset");
+            SyncPoint::GetInstance()->DisableProcessing();
+            config::enable_light_pk_compaction_publish = old_light;
+            config::enable_pindex_rebuild_in_compaction = old_rebuild;
+            config::enable_pindex_minor_compaction = old_minor;
+            config::l0_max_mem_usage = old_max_mem;
+            config::l0_snapshot_size = old_snapshot;
+            config::retry_apply_timeout_second = old_retry_timeout;
+        });
+        config::enable_light_pk_compaction_publish = light_publish;
+        config::enable_pindex_rebuild_in_compaction = enable_rebuild;
+        config::enable_pindex_minor_compaction = false;
+        config::l0_max_mem_usage = 1L << 30;
+        config::l0_snapshot_size = use_wal ? 0 : (1L << 30);
+        config::retry_apply_timeout_second = 0;
+
+        _tablet = create_tablet(rand(), rand());
+        _tablet->set_enable_persistent_index(true);
+        auto* updates = _tablet->updates();
+        auto* manager = StorageEngine::instance()->update_manager();
+        std::vector<RowsetSharedPtr> inputs;
+        // Versions 2 and 3 overlap; version 4 has a disjoint key range. The
+        // non-full case must preserve version 4's keys outside the compaction.
+        for (const auto& keys : {std::make_pair(0, 32), std::make_pair(16, 48), std::make_pair(48, 64)}) {
+            std::vector<int64_t> rowset_keys;
+            for (int64_t key = keys.first; key < keys.second; ++key) {
+                rowset_keys.push_back(key);
+            }
+            auto rowset = create_rowset(_tablet, rowset_keys);
+            inputs.push_back(rowset);
+            ASSERT_OK(_tablet->rowset_commit(inputs.size() + 1, rowset));
+            updates->wait_apply_done();
+            ASSERT_FALSE(updates->is_error());
+        }
+        ASSERT_EQ(64, read_tablet(_tablet, 4));
+        PersistentIndexMetaPB meta;
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        ASSERT_EQ(64, meta.size());
+        ASSERT_FALSE(meta.has_l1_version());
+        ASSERT_EQ(0, meta.l2_versions_size());
+
+        SyncPoint::GetInstance()->SetCallBack(
+                "TabletUpdates::_apply_compaction_commit:output_rowset", [&, updates](void* arg) {
+                    int unset = -1;
+                    first_light_path.compare_exchange_strong(
+                            unset, updates->_use_light_apply_compaction(static_cast<Rowset*>(arg)) ? 1 : 0);
+                });
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        std::vector<uint32_t> input_ids;
+        for (size_t i = 0; i < (full_compaction ? 3 : 2); ++i) {
+            input_ids.push_back(inputs[i]->rowset_meta()->get_rowset_seg_id());
+        }
+        if (immediate_merge) {
+            // replace/insert flushes L0 during compaction publish. The same
+            // commit must then merge and check actual KV count against size.
+            config::l0_max_mem_usage = 1;
+        }
+
+        if (retry) {
+            auto* fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_index_commit_failed");
+            ASSERT_NE(nullptr, fp);
+            PFailPointTriggerMode mode;
+            mode.set_mode(FailPointTriggerModeType::ENABLE);
+            fp->setMode(mode);
+            DeferOp disable([&] {
+                mode.set_mode(FailPointTriggerModeType::DISABLE);
+                fp->setMode(mode);
+            });
+            // Fail after index.commit(), before tablet metadata becomes
+            // durable; replay must load the last committed version.
+            (void)updates->compaction(_compaction_mem_tracker.get(), input_ids);
+            updates->wait_apply_done();
+            ASSERT_TRUE(updates->is_error());
+            mode.set_mode(FailPointTriggerModeType::DISABLE);
+            fp->setMode(mode);
+            updates->reset_update_state();
+            updates->reset_error();
+            updates->check_for_apply();
+            updates->wait_apply_done();
+            ASSERT_FALSE(updates->is_error());
+        } else {
+            ASSERT_OK(updates->compaction(_compaction_mem_tracker.get(), input_ids));
+            updates->wait_apply_done();
+            ASSERT_FALSE(updates->is_error());
+        }
+        ASSERT_EQ(full_compaction ? 1 : 2, updates->num_rowsets());
+        std::vector<RowsetSharedPtr> applied_rowsets;
+        ASSERT_OK(updates->get_applied_rowsets(4, &applied_rowsets));
+        size_t output_count = 0;
+        for (const auto& rowset : applied_rowsets) {
+            bool is_input = std::any_of(inputs.begin(), inputs.end(),
+                                        [&](const auto& input) { return input->rowset_id() == rowset->rowset_id(); });
+            if (!is_input) {
+                ++output_count;
+            }
+        }
+        ASSERT_EQ(1, output_count);
+        ASSERT_EQ(light_publish ? 1 : 0, first_light_path.load());
+        ASSERT_EQ(64, read_tablet(_tablet, 4));
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        // Keep this non-fatal: on the old code the low-volume case can continue
+        // and expose the persisted deficit at a later ordinary import merge.
+        EXPECT_EQ(64, meta.size());
+        EXPECT_EQ(4, meta.version().major_number());
+        EXPECT_EQ(1, meta.version().minor_number());
+        if (immediate_merge) {
+            ASSERT_TRUE(meta.has_l1_version());
+        } else {
+            ASSERT_FALSE(meta.has_l1_version());
+            if (use_wal) {
+                EXPECT_GT(meta.l0_meta().wals_size(), 0);
+            } else {
+                EXPECT_EQ(4, meta.l0_meta().snapshot().version().major_number());
+                EXPECT_EQ(1, meta.l0_meta().snapshot().version().minor_number());
+            }
+        }
+
+        // Drop the live PrimaryIndex. The next import must reconstruct its
+        // state from the persisted snapshot/WAL and metadata, not from cache.
+        ASSERT_TRUE(manager->index_cache().try_remove_by_key(_tablet->tablet_id()));
+        ASSERT_OK(_tablet->rowset_commit(5, create_rowset(_tablet, {1, 64, 65})));
+        updates->wait_apply_done();
+        ASSERT_FALSE(updates->is_error());
+        ASSERT_EQ(66, read_tablet(_tablet, 5));
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        EXPECT_EQ(66, meta.size());
+        if (!immediate_merge) {
+            ASSERT_FALSE(meta.has_l1_version());
+        }
+
+        // No further compaction or reset is needed: a normal upsert flushes
+        // and merges the persisted index. Old full+light+rebuild has 67 actual
+        // keys but size 3 (the 64-key deficit was persisted by version 4.1).
+        config::l0_max_mem_usage = 1;
+        ASSERT_OK(_tablet->rowset_commit(6, create_rowset(_tablet, {2, 66})));
+        updates->wait_apply_done();
+        ASSERT_FALSE(updates->is_error());
+        ASSERT_EQ(67, read_tablet(_tablet, 6));
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        ASSERT_EQ(67, meta.size());
+        ASSERT_TRUE(meta.has_l1_version());
+        ASSERT_EQ(0, meta.l2_versions_size());
+
+        Int64Column deletes;
+        deletes.append(0);
+        deletes.append(64);
+        deletes.append(999); // deleting an absent key must not change size
+        ASSERT_OK(_tablet->rowset_commit(7, create_rowset(_tablet, {}, &deletes)));
+        updates->wait_apply_done();
+        ASSERT_FALSE(updates->is_error());
+        ASSERT_EQ(65, read_tablet(_tablet, 7));
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        ASSERT_EQ(65, meta.size());
+
+        ASSERT_TRUE(manager->index_cache().try_remove_by_key(_tablet->tablet_id()));
+        ASSERT_OK(_tablet->rowset_commit(8, create_rowset(_tablet, {0, 64, 66})));
+        updates->wait_apply_done();
+        ASSERT_FALSE(updates->is_error());
+        ASSERT_EQ(67, read_tablet(_tablet, 8));
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(_tablet->data_dir(), _tablet->tablet_id(), &meta));
+        ASSERT_EQ(67, meta.size());
+        Schema schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
+        TabletReader reader(_tablet, Version(0, 8), schema);
+        auto iter = create_tablet_iterator(reader, schema);
+        ASSERT_NE(nullptr, iter);
+        auto chunk = ChunkFactory::new_chunk(schema, 100);
+        std::vector<int64_t> actual_keys;
+        while (true) {
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                int64_t key = chunk->get_column_by_index(0)->get(i).get_int64();
+                actual_keys.push_back(key);
+                EXPECT_EQ(key % 100 + 1, chunk->get_column_by_index(1)->get(i).get_int16());
+                EXPECT_EQ(key % 1000 + 2, chunk->get_column_by_index(2)->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+        iter->close();
+        std::sort(actual_keys.begin(), actual_keys.end());
+        ASSERT_EQ(67, actual_keys.size());
+        for (int64_t key = 0; key < 67; ++key) {
+            EXPECT_EQ(key, actual_keys[key]);
+        }
+        ASSERT_OK(_tablet->verify());
+    }
+};
+
+TEST_P(TabletUpdatesCompactionIndexSizeTest, snapshot_then_import_merge) {
+    run_index_size_regression(false, false, false);
+}
+
+TEST_P(TabletUpdatesCompactionIndexSizeTest, wal_then_import_merge) {
+    run_index_size_regression(false, true, false);
+}
+
+TEST_P(TabletUpdatesCompactionIndexSizeTest, immediate_merge) {
+    run_index_size_regression(true, false, false);
+}
+
+TEST_P(TabletUpdatesCompactionIndexSizeTest, retry_then_import_merge) {
+    run_index_size_regression(false, false, true);
+}
+
+INSTANTIATE_TEST_SUITE_P(FullLightRebuild, TabletUpdatesCompactionIndexSizeTest,
+                         testing::Combine(testing::Bool(), testing::Bool(), testing::Bool()));
 
 } // namespace starrocks

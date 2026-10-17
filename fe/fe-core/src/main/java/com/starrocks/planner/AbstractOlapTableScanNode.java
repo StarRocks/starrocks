@@ -104,8 +104,8 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
                 // This bucket-count computation is reached from
                 // ExecutionFragment.getOrCreateColocatedAssignment only when BackendSelectorFactory has
                 // chosen a colocate-dispatch path. Verify alignment HERE, after the dispatch decision: a
-                // misaligned ColocateRangeMgr would silently produce wrong join results under colocate
-                // dispatch. Non-colocate scans go through NormalBackendSelector and never reach this point.
+                // misaligned ColocateRangeMgr would silently produce wrong join / aggregation results under
+                // colocate dispatch. Non-colocate scans go through NormalBackendSelector and never reach this point.
                 //
                 // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
                 // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
@@ -113,7 +113,7 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
                 // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
                 // still works); if the group then re-aligns before this guard runs, comparing the built
                 // assignment against the aligned mapping catches the stale position pairing that would
-                // otherwise reach the colocate join and silently return wrong results.
+                // otherwise reach the colocate plan and silently return wrong results.
                 //
                 // Invariant: the bucketSeq fill always runs before backend selection reaches this guard, so
                 // tabletId2BucketSeq holds the whole scan's built assignment here — an empty map would itself

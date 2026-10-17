@@ -1,0 +1,6 @@
+position: 36
+label: 'AI provider'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

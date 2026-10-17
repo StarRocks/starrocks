@@ -53,20 +53,6 @@ TEST(BinaryColumnCoreTest, BinaryAppendSelectiveAndSerialize) {
     EXPECT_EQ("gamma", slice_to_string(restored->get_slice(0)));
 }
 
-TEST(BinaryColumnCoreTest, LargeBinaryAppendSelective) {
-    auto src = LargeBinaryColumn::create();
-    src->append("long-value-1");
-    src->append("long-value-2");
-    src->append("long-value-3");
-
-    auto dst = LargeBinaryColumn::create();
-    const uint32_t indexes[] = {2, 0, 1};
-    dst->append_selective(*src, indexes, 0, 2);
-    ASSERT_EQ(2, dst->size());
-    EXPECT_EQ("long-value-3", slice_to_string(dst->get_slice(0)));
-    EXPECT_EQ("long-value-1", slice_to_string(dst->get_slice(1)));
-}
-
 TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     auto src = BinaryColumn::create();
     src->append("a");
@@ -75,12 +61,7 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     src->get_offset().ensure_width_for_value(kLargeOffset);
     ASSERT_TRUE(src->get_offset().is_large());
     EXPECT_TRUE(src->is_binary());
-    EXPECT_FALSE(src->has_large_column());
     EXPECT_EQ(6, src->byte_size(1));
-
-    auto upgraded = src->upgrade_if_overflow();
-    ASSERT_TRUE(upgraded.ok());
-    ASSERT_TRUE(upgraded.value() == nullptr);
 
     auto dst = BinaryColumn::create();
     dst->append(*src, 1, 2);
@@ -95,12 +76,6 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     EXPECT_EQ("ccc", slice_to_string(selected->get_slice(0)));
     EXPECT_EQ("a", slice_to_string(selected->get_slice(1)));
 
-    auto large_dst = LargeBinaryColumn::create();
-    large_dst->append(*src, 0, 2);
-    ASSERT_EQ(2, large_dst->size());
-    EXPECT_EQ("a", slice_to_string(large_dst->get_slice(0)));
-    EXPECT_EQ("bb", slice_to_string(large_dst->get_slice(1)));
-
     Buffer<uint32_t> repeats = {0, 2, 2, 3};
     auto replicated = src->replicate(repeats);
     ASSERT_TRUE(replicated.ok());
@@ -108,22 +83,6 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     EXPECT_EQ("a", replicated.value()->get(0).get_slice().to_string());
     EXPECT_EQ("a", replicated.value()->get(1).get_slice().to_string());
     EXPECT_EQ("ccc", replicated.value()->get(2).get_slice().to_string());
-}
-
-TEST(BinaryColumnCoreTest, StickyLargeBinaryDowngradesWhenOffsetsFit) {
-    auto src = LargeBinaryColumn::create();
-    src->append("x");
-    src->append("yy");
-    src->get_offset().ensure_width_for_value(kLargeOffset);
-    ASSERT_TRUE(src->get_offset().is_large());
-
-    auto downgraded = src->downgrade();
-    ASSERT_TRUE(downgraded.ok());
-    ASSERT_TRUE(downgraded.value() != nullptr);
-    EXPECT_TRUE(downgraded.value()->is_binary());
-    ASSERT_EQ(2, downgraded.value()->size());
-    EXPECT_EQ("x", downgraded.value()->get(0).get_slice().to_string());
-    EXPECT_EQ("yy", downgraded.value()->get(1).get_slice().to_string());
 }
 
 TEST(BinaryColumnCoreTest, AppendValueMultipleTimesHandlesStickyLargeOffsets) {

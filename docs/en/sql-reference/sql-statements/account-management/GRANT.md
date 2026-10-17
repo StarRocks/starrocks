@@ -36,6 +36,18 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 <GrantCreateWarehouse />
 
+#### AI functions and providers
+
+```sql
+GRANT USAGE ON ALL AI FUNCTIONS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI FUNCTION <function_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+```
+
+AI FUNCTION uses an unqualified public builtin family name without a parameter signature. `USAGE ON ALL AI FUNCTIONS` covers current and future families; with `WITH GRANT OPTION`, it permits delegating usage on named or all families. It does not include provider usage. Provider names retain their exact spelling. See [AI privileges](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges).
+
+
 #### Resource group
 
 ```SQL
@@ -124,7 +136,7 @@ GRANT
 
 ```SQL
 GRANT  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -134,6 +146,7 @@ GRANT
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<view_name>` to represent a view.
 * For tables in an External Catalog, you can only grant the SELECT privilege on Hive table views (since v3.1).
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the view via `EXPORT TABLE` is not supported.
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
@@ -143,7 +156,7 @@ GRANT
 
 ```SQL
 GRANT
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -152,10 +165,17 @@ GRANT
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<mv_name>` to represent an mv.
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the materialized view via `EXPORT TABLE` is not supported.
 
   ```SQL
   GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> }
   ```
+
+:::caution
+
+`ALL PRIVILEGES` on views and materialized views now includes `EXPORT`. A user who was granted `ALL ... WITH GRANT OPTION` on a view or a materialized view before the upgrade and does not have the system-level `GRANT` privilege must be additionally granted `EXPORT ... WITH GRANT OPTION` by an administrator, otherwise they can no longer grant or revoke `ALL PRIVILEGES` on that object.
+
+:::
 
 #### Function
 
@@ -271,4 +291,3 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 <UserPrivilegeCase />
 
 <MultiServiceAccess />
-

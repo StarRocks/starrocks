@@ -22,6 +22,7 @@
 #include "types/decimalv2_value.h"
 
 namespace starrocks {
+class GeoColumn;
 class ColumnVisitorMutable {
 public:
     virtual ~ColumnVisitorMutable() = default;
@@ -34,7 +35,6 @@ public:
     virtual Status visit(MapColumn* column);
     virtual Status visit(StructColumn* column);
     virtual Status visit(BinaryColumn* column);
-    virtual Status visit(LargeBinaryColumn* column);
     virtual Status visit(Int8Column* column);
     virtual Status visit(UInt8Column* column);
     virtual Status visit(Int16Column* column);
@@ -58,6 +58,7 @@ public:
     virtual Status visit(PercentileColumn* column);
     virtual Status visit(JsonColumn* column);
     virtual Status visit(VariantColumn* column);
+    virtual Status visit(FileColumn* column);
     virtual Status visit(FixedLengthColumn<int96_t>* column);
     virtual Status visit(FixedLengthColumn<uint24_t>* column);
     virtual Status visit(FixedLengthColumn<decimal12_t>* column);
@@ -86,5 +87,6 @@ public:
     virtual Status visit(ObjectColumn<VariantRowValue>* column);
     virtual Status visit(ArrayViewColumn* column) { return Status::NotSupported("ArrayViewColumn is not supported"); }
     virtual Status visit(ColumnView* column) { return Status::NotSupported("ColumnView is not supported"); }
+    virtual Status visit(GeoColumn* column);
 };
 } // namespace starrocks

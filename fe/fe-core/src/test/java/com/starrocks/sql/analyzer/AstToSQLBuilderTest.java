@@ -380,6 +380,28 @@ public class AstToSQLBuilderTest {
     }
 
     @Test
+    public void testOrderByOrdinalIsNotExpanded() {
+        // SelectAnalyzer replaces `ORDER BY <n>` with the n-th output expression. Printing that
+        // expression back yields SQL the analyzer rejects when the select item holds a subquery.
+        String sql = "select v1 in (select v1 from t0 x) from t0 order by 1";
+        Assertions.assertTrue(deparseAnalyzed(sql).contains("ORDER BY 1 ASC"), deparseAnalyzed(sql));
+        assertReanalyzable(sql);
+
+        // Sort options survive, and so do multiple ordinals.
+        Assertions.assertTrue(deparseAnalyzed("select v1, v2 from t0 order by 2 desc nulls first, 1")
+                .contains("ORDER BY 2 DESC NULLS FIRST, 1 ASC"));
+
+        // An explicitly written sort expression is a distinct object and must NOT collapse to an ordinal.
+        Assertions.assertTrue(deparseAnalyzed("select v1 from t0 order by v1 + 1").contains("+ 1 ASC"));
+        Assertions.assertTrue(deparseAnalyzed("select v1 + 1 as x from t0 order by x").contains("`x` ASC"));
+        assertReanalyzable("select v1 from t0 union all select v2 from t0 order by 1");
+
+        // The pretty-format path renders ORDER BY itself, so it needs the same restoration.
+        StatementBase analyzed = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Analyzer.analyze(analyzed, AnalyzeTestUtil.getConnectContext());
+        Assertions.assertTrue(toPrettySQL(analyzed).contains("ORDER BY 1 ASC"), toPrettySQL(analyzed));
+    }
+    @Test
     public void testCreateTableAsSelect() {
         // CTAS used to have no deparse visitor and fell through to visitNode() which returns an empty
         // string, so the profile and audit log of a CTAS in a multi-statement request showed no SQL.

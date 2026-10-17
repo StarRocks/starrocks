@@ -18,6 +18,13 @@ const isVersioningDisabled = !!process.env.DISABLE_VERSIONING || false;
 // (a redirect stub carries no document content). Keep in sync with the same list
 // in the doc-build repo's docusaurus.config.js.
 const MOVED_DOCS = [
+  // The introduction and maturity pages, reorganized so that every product has the same pages.
+  { from: "/docs/introduction/StarRocks_intro/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/what_is_starrocks/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/feature_difference/", to: "/docs/introduction/Architecture/" },
+  { from: "/docs/introduction/maturity/", to: "/docs/maturity/features/" },
+  { from: "/docs/introduction/versioning/", to: "/docs/maturity/release_numbering/" },
+  { from: "/docs/sql-reference/sql-functions/scalar-functions/ai_complete/", to: "/docs/sql-reference/sql-functions/ai-functions/ai_complete/" },
   // Former `generated-index` category pages, replaced by real DocCardList
   // nav pages so the URL and breadcrumbs follow the directory structure.
   { from: "/docs/category/aggregate/", to: "/docs/sql-reference/sql-functions/aggregate-functions/" },
@@ -338,12 +345,12 @@ const config = {
             '/docs/integrations/streaming/',
             '/docs/integrations/streaming/kafka/',
             '/docs/integrations/streaming/pipe/',
-            '/docs/introduction/',
             '/docs/loading/',
             '/docs/loading/kafka/',
             '/docs/loading/loading_introduction/',
             '/docs/loading/objectstorage/',
             '/docs/loading/spark/',
+            '/docs/maturity/',
             '/docs/sql-reference/data-types/',
             '/docs/sql-reference/data-types/date-types/',
             '/docs/sql-reference/sql-functions/',
@@ -444,12 +451,12 @@ const config = {
             '/docs/integrations/streaming/',
             '/docs/integrations/streaming/kafka/',
             '/docs/integrations/streaming/pipe/',
-            '/docs/introduction/',
             '/docs/loading/',
             '/docs/loading/kafka/',
             '/docs/loading/loading_introduction/',
             '/docs/loading/objectstorage/',
             '/docs/loading/spark/',
+            '/docs/maturity/',
             '/docs/sql-reference/data-types/',
             '/docs/sql-reference/data-types/date-types/',
             '/docs/sql-reference/sql-functions/',
@@ -581,7 +588,7 @@ const config = {
             items: [
               {
                 label: "Documentation",
-                to: "/docs/introduction/StarRocks_intro",
+                to: "/docs/introduction/",
               },
             ],
           },

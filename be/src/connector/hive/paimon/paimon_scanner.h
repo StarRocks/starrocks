@@ -40,6 +40,7 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     void do_update_counter(HdfsScannerProfile* profile) override;
+    int64_t estimated_mem_usage() const override;
 
 private:
     Status _next_arrow_record_batch();
@@ -64,7 +65,6 @@ private:
     // downstream operators keep returned chunks and their columns alive across calls.
     ChunkPtr _read_chunk_template;
     Filter _chunk_filter;
-    Filter _conjunct_filter;
     ArrowConvertContext _convert_context;
 };
 

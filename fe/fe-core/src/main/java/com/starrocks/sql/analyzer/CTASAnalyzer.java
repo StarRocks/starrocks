@@ -149,7 +149,9 @@ public class CTASAnalyzer {
             }
             AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             rangePartitionDesc.setAutoPartitionTable(true);
-        } else if (partitionDesc instanceof ListPartitionDesc) {
+        } else if (partitionDesc instanceof ListPartitionDesc && createTableStmt.isOlapEngine()) {
+            // Only OLAP needs a non-nullable list partition column. External engines keep the
+            // nullability the query derived: an Iceberg identity partition accepts NULL.
             for (ColumnDef columnDef : columnDefs) {
                 for (String partitionColName : ((ListPartitionDesc) partitionDesc).getPartitionColNames()) {
                     if (columnDef.getName().equalsIgnoreCase(partitionColName)) {

@@ -120,4 +120,30 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
         Assertions.assertTrue(tokenFetches.get() >= 2,
                 "recovery must have re-authenticated with the client credential, fetches=" + tokenFetches.get());
     }
+
+    @Test
+    public void testShutdownStopsTokenRefreshThread() throws InterruptedException {
+        String uri = "http://127.0.0.1:" + server.getAddress().getPort();
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog("shutdown_catalog", new Configuration(),
+                ImmutableMap.of(
+                        "iceberg.catalog.uri", uri,
+                        "iceberg.catalog.security", "oauth2",
+                        "iceberg.catalog.oauth2.credential", "id:secret"));
+        Assertions.assertEquals(List.of("db1"), catalog.listAllDatabases(connectContext));
+        Assertions.assertTrue(refreshThreadAlive("shutdown_catalog"), "the OAuth2 session schedules a token refresh");
+
+        catalog.shutdown();
+        catalog.shutdown();
+
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (refreshThreadAlive("shutdown_catalog") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        Assertions.assertFalse(refreshThreadAlive("shutdown_catalog"), "token refresh thread survived shutdown");
+    }
+
+    private static boolean refreshThreadAlive(String catalogName) {
+        return Thread.getAllStackTraces().keySet().stream()
+                .anyMatch(thread -> thread.isAlive() && thread.getName().startsWith(catalogName + "-token-refresh"));
+    }
 }

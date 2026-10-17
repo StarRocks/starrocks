@@ -41,7 +41,9 @@ public class DatabaseQuotaRefresherTest {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
+        // No BDB: the quota checks do not need a real journal, and binding the BDB port on a shared CI host
+        // can fail with "Address already in use", which leaves the FE unready.
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_NOTHING);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

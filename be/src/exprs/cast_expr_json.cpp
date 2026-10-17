@@ -153,9 +153,6 @@ public:
             if (key_col->is_binary()) {
                 auto binary_col = ColumnHelper::as_column<BinaryColumn>(key_col);
                 name = binary_col->get_slice(i);
-            } else if (key_col->is_large_binary()) {
-                auto binary_col = ColumnHelper::as_column<LargeBinaryColumn>(key_col);
-                name = binary_col->get_slice(i);
             } else {
                 // TODO(murphy) cast to string instead of debug
                 name = key_col->debug_item(i);

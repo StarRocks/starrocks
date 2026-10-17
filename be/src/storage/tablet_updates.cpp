@@ -51,7 +51,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
-#include "storage/full_sort_key_codec.h"
 #include "storage/local_primary_key_compaction_conflict_resolver.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/persistent_index.h"
@@ -80,6 +79,7 @@
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/empty_iterator.h"
 #include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/row_source_mask.h"
 #include "storage_primitive/tablet_basic_info.h"
 #include "storage_primitive/union_iterator.h"
 
@@ -1769,14 +1769,19 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
-                // full_rowset_size is the segment file bytes (column data + embedded indexes).
-                // index_disk_size tracks additional index bytes recorded in RowsetMeta; these may
-                // be separately persisted (e.g. primary-key SSTable indexes) or otherwise accounted
-                // for outside the segment file.
-                // Canonical invariant: data_disk_size = segment_size - index_size,
-                //                      total_disk_size = segment_size (== data + index).
-                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - index_disk_size));
-                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
+                // full_rowset_size is the segment (.dat) file bytes: column data + embedded indexes.
+                // index_disk_size counts all index bytes, including standalone index files (the
+                // vector index .vi) that live outside the segment files. Subtracting the full
+                // index_disk_size from the segment-file size would remove the standalone bytes that
+                // were never part of full_rowset_size and drive data_disk_size to zero for
+                // vector-index rowsets, so subtract only the embedded portion.
+                const auto standalone_index_size = rowset->rowset_meta()->standalone_index_size();
+                const auto embedded_index_size =
+                        index_disk_size - std::min<int64_t>(standalone_index_size, index_disk_size);
+                // Invariant: data_disk_size = segment_size - embedded_index_size,
+                //            total_disk_size = segment_size + standalone_index_size (== data + index).
+                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - embedded_index_size));
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size + standalone_index_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
@@ -2083,6 +2088,15 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(all_rowsets)->schema();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, num_segments);
+    size_t input_rowset_count = input_rowsets.size();
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_compaction:input_rowset_count", &input_rowset_count);
+    if (input_rowset_count > RowSourceMask::MAX_SOURCES && algorithm == VERTICAL_COMPACTION) {
+        algorithm = HORIZONTAL_COMPACTION;
+        LOG(INFO) << strings::Substitute(
+                "Fall back to horizontal update compaction: tablet:$0 rowsets:$1 segments:$2 source_limit:$3",
+                _tablet.tablet_id(), input_rowsets.size(), num_segments, RowSourceMask::MAX_SOURCES);
+    }
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_compaction:algorithm", &algorithm);
 
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -2363,6 +2377,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     Status apply_st;
     // If `use_light_apply_compaction` is true, we don't need compaction state to generate delvec.
     const bool use_light_apply_compaction = _use_light_apply_compaction(output_rowset);
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_apply_compaction_commit:output_rowset", output_rowset);
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
@@ -2394,7 +2409,10 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     google::protobuf::Arena arena;
     auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
 
-    bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
+    // Light publish replaces existing keys and must preserve the loaded index and its key count.
+    // Only non-light publish can rebuild an empty index by inserting every output key.
+    const bool rebuild_index = !use_light_apply_compaction && version_info.rowsets.size() == 1 &&
+                               config::enable_pindex_rebuild_in_compaction;
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
         st = index.reset(&_tablet, version_info.version, index_meta);
@@ -3530,7 +3548,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document rowset_details;
     rowset_details.SetArray();
-    for (int i = 0; i < rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
@@ -3553,21 +3571,21 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document apply_rowset_details;
     apply_rowset_details.SetArray();
-    for (int i = 0; i < apply_version_rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < apply_version_rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
         rapidjson::Value rowset_id;
-        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        std::string rowset_id_value = apply_version_rowsets[i]->rowset_id().to_string();
         rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
         value.AddMember("rowset_id", rowset_id, root.GetAllocator());
 
         rapidjson::Value num_segments;
-        num_segments.SetInt64(rowsets[i]->num_segments());
+        num_segments.SetInt64(apply_version_rowsets[i]->num_segments());
         value.AddMember("num_segments", num_segments, root.GetAllocator());
 
         rapidjson::Value rowset_size;
-        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        rowset_size.SetInt64(apply_version_rowsets[i]->data_disk_size());
         value.AddMember("rowset_size", rowset_size, root.GetAllocator());
 
         apply_rowset_details.PushBack(value, apply_rowset_details.GetAllocator());
@@ -3848,6 +3866,10 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 
 void TabletUpdates::_set_error(const string& msg) {
     StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    _mark_unusable(msg);
+}
+
+void TabletUpdates::_mark_unusable(const string& msg) {
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -4450,12 +4472,6 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
             }
             ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(), new_chunk.get());
 
-            // Primary key tables never take the MemTable schema change path: convert_from and
-            // reorder_from build a RowsetWriter directly, so both re-encode the sort key unchecked
-            // unless the guard runs here.
-            RETURN_IF_ERROR(check_sort_key_size(new_schema, _tablet.tablet_schema()->sort_key_idxes(), *new_chunk, 0,
-                                                new_chunk->num_rows()));
-
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
@@ -4605,11 +4621,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                 chunk_arr.push_back(new_chunk);
                 ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(),
                                                   new_chunk.get());
-                // ALTER ... ORDER BY on a primary key table lands here, and can promote a wide value
-                // column into the sort key. Checked after padding, since padding mutates the chunk
-                // that chunk_arr already holds.
-                RETURN_IF_ERROR(check_sort_key_size(new_schema, tschema->sort_key_idxes(), *new_chunk, 0,
-                                                    new_chunk->num_rows()));
             }
         }
 
@@ -5225,7 +5236,9 @@ Status TabletUpdates::clear_meta() {
     auto data_store = _tablet.data_dir();
     auto meta_store = data_store->get_meta();
 
-    _set_error("clear_meta inprogress"); // Mark this tablet unusable first.
+    // This is an expected part of dropping a tablet, not a storage error. Keep the tablet unusable while its
+    // metadata is being cleared without incrementing primary_key_table_error_state_total.
+    _mark_unusable("clear_meta inprogress");
 
     // Clear permanently stored meta.
     RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id()));

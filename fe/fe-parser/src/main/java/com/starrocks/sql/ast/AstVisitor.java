@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -164,6 +165,38 @@ public interface AstVisitor<R, C> {
 
     default R visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    // ------------------------------------- AI Provider -------------------------------------
+
+    default R visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     default R visitDropTaskStmt(DropTaskStmt statement, C context) {
@@ -393,6 +426,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropGroupProviderStatement(DropGroupProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -848,6 +885,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, C context) {
         return visitNode(clause, context);
     }
 

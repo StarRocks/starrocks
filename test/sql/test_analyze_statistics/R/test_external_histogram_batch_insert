@@ -8,9 +8,6 @@ CREATE EXTERNAL CATALOG analyze_hive_batch_${uuid0} PROPERTIES (
 );
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
--- result:
--- !result
 ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
 -- result:
 -- !result
@@ -58,7 +55,6 @@ DROP CATALOG analyze_hive_batch_${uuid0};
 -- result:
 -- !result
 CLEANUP {
-    ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
     ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
     DROP CATALOG IF EXISTS analyze_hive_batch_${uuid0};
 } END CLEANUP

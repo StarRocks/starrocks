@@ -35,6 +35,9 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 
@@ -45,6 +48,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /*
  * AuditEvent contains all information about audit log info.
@@ -97,6 +101,9 @@ public class AuditEvent {
     public String state = "";
     @AuditField(value = "ErrorCode")
     public String errorCode = "";
+    // The message the client received; errorCode alone only carries a coarse category.
+    @AuditField(value = "ErrorMessage", ignore_empty = true)
+    public String errorMessage = "";
     @AuditField(value = "Time")
     public long queryTime = -1;
     @AuditField(value = "ScanBytes")
@@ -173,6 +180,32 @@ public class AuditEvent {
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
+    // Observed completed-task statistics, not an exactly-once billing record.
+    @AuditField(value = "AITaskCount")
+    public long aiTaskCount = -1;
+    @AuditField(value = "AIRequestCount")
+    public long aiRequestCount = -1;
+    @AuditField(value = "AIRetryCount")
+    public long aiRetryCount = -1;
+    @AuditField(value = "AITimeoutCount")
+    public long aiTimeoutCount = -1;
+    @AuditField(value = "AIErrorCount")
+    public long aiErrorCount = -1;
+    @AuditField(value = "AIHttpTimeNs")
+    public long aiHttpTimeNs = -1;
+    @AuditField(value = "AIPromptTokens")
+    public long aiPromptTokens = -1;
+    @AuditField(value = "AICompletionTokens")
+    public long aiCompletionTokens = -1;
+    @AuditField(value = "AITotalTokens")
+    public long aiTotalTokens = -1;
+    @AuditField(value = "AIPromptUsageCount")
+    public long aiPromptUsageCount = -1;
+    @AuditField(value = "AICompletionUsageCount")
+    public long aiCompletionUsageCount = -1;
+    @AuditField(value = "AITotalUsageCount")
+    public long aiTotalUsageCount = -1;
+
     @AuditField(value = "QuerySource")
     public String querySource = "";
 
@@ -189,6 +222,39 @@ public class AuditEvent {
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
     public String cacheHitRatio = "";
+
+    // NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR. \p{Cntrl} is US-ASCII only, so it covers the line
+    // terminators below 0x7F (LF, VT, FF, CR) but not these three, and a reader that follows the
+    // Unicode rules (java.util.Scanner) starts a new line on them all the same.
+    private static final String NON_ASCII_LINE_TERMINATORS = "\\u0085\\u2028\\u2029";
+
+    // The audit log keeps one record per line with '|' between the fields, so a message may carry neither.
+    private static final Pattern ERROR_MESSAGE_SEPARATORS =
+            Pattern.compile("[\\p{Cntrl}" + NON_ASCII_LINE_TERMINATORS + "|]+");
+
+    public static String collapseSeparators(String value) {
+        return Strings.isNullOrEmpty(value) ? "" : ERROR_MESSAGE_SEPARATORS.matcher(value).replaceAll(" ").trim();
+    }
+
+    public static String normalizeErrorMessage(String errorMessage) {
+        int maxLength = Config.audit_log_error_message_max_length;
+        if (maxLength <= 0 || Strings.isNullOrEmpty(errorMessage)) {
+            return "";
+        }
+        // The message quotes the very values that desensitizing the statement takes out.
+        if (Config.enable_sql_desensitize_in_log) {
+            return "";
+        }
+        // Redact credentials the same way the audited statement itself is, as defense in depth.
+        String normalized = collapseSeparators(SqlCredentialRedactor.redact(errorMessage));
+        if (normalized.length() > maxLength) {
+            // Back off one char rather than cut a surrogate pair in half.
+            int end = Character.isHighSurrogate(normalized.charAt(maxLength - 1)) ? maxLength - 1 : maxLength;
+            normalized = normalized.substring(0, end)
+                    + "... /* truncated, audit_log_error_message_max_length=" + maxLength + " */";
+        }
+        return normalized;
+    }
 
     public void calculateCacheHitRatio() {
         if (!isQuery || RunMode.isSharedNothingMode()) {
@@ -285,6 +351,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setErrorCode(String errorCode) {
             auditEvent.errorCode = errorCode;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorMessage(String errorMessage) {
+            auditEvent.errorMessage = normalizeErrorMessage(errorMessage);
             return this;
         }
 
@@ -509,6 +580,77 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addAITaskCount(Long value) {
+            auditEvent.aiTaskCount = addAICounter(auditEvent.aiTaskCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIRequestCount(Long value) {
+            auditEvent.aiRequestCount = addAICounter(auditEvent.aiRequestCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIRetryCount(Long value) {
+            auditEvent.aiRetryCount = addAICounter(auditEvent.aiRetryCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAITimeoutCount(Long value) {
+            auditEvent.aiTimeoutCount = addAICounter(auditEvent.aiTimeoutCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIErrorCount(Long value) {
+            auditEvent.aiErrorCount = addAICounter(auditEvent.aiErrorCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIHttpTimeNs(Long value) {
+            auditEvent.aiHttpTimeNs = addAICounter(auditEvent.aiHttpTimeNs, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIPromptTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiPromptUsageCount = addAICounter(auditEvent.aiPromptUsageCount, usageCount);
+                auditEvent.aiPromptTokens = addAICounter(auditEvent.aiPromptTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiPromptUsageCount = addAICounter(auditEvent.aiPromptUsageCount, 0L);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addAICompletionTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiCompletionUsageCount = addAICounter(auditEvent.aiCompletionUsageCount, usageCount);
+                auditEvent.aiCompletionTokens = addAICounter(auditEvent.aiCompletionTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiCompletionUsageCount = addAICounter(auditEvent.aiCompletionUsageCount, 0L);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addAITotalTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiTotalUsageCount = addAICounter(auditEvent.aiTotalUsageCount, usageCount);
+                auditEvent.aiTotalTokens = addAICounter(auditEvent.aiTotalTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiTotalUsageCount = addAICounter(auditEvent.aiTotalUsageCount, 0L);
+            }
+            return this;
+        }
+
+        // -1 means unavailable; explicit zero must remain visible for AI statistics.
+        private static long addAICounter(long current, Long value) {
+            if (value == null || value < 0) {
+                return current;
+            }
+            if (current < 0) {
+                return value;
+            }
+            return Long.MAX_VALUE - current < value ? Long.MAX_VALUE : current + value;
+        }
+
         public AuditEventBuilder setQuerySource(String querySource) {
             auditEvent.querySource = querySource;
             return this;
@@ -553,6 +695,18 @@ public class AuditEvent {
             this.auditEvent.readRemoteCnt = event.readRemoteCnt;
             this.auditEvent.returnRows = event.returnRows;
             this.auditEvent.transmittedBytes = event.transmittedBytes;
+            this.auditEvent.aiTaskCount = event.aiTaskCount;
+            this.auditEvent.aiRequestCount = event.aiRequestCount;
+            this.auditEvent.aiRetryCount = event.aiRetryCount;
+            this.auditEvent.aiTimeoutCount = event.aiTimeoutCount;
+            this.auditEvent.aiErrorCount = event.aiErrorCount;
+            this.auditEvent.aiHttpTimeNs = event.aiHttpTimeNs;
+            this.auditEvent.aiPromptTokens = event.aiPromptTokens;
+            this.auditEvent.aiCompletionTokens = event.aiCompletionTokens;
+            this.auditEvent.aiTotalTokens = event.aiTotalTokens;
+            this.auditEvent.aiPromptUsageCount = event.aiPromptUsageCount;
+            this.auditEvent.aiCompletionUsageCount = event.aiCompletionUsageCount;
+            this.auditEvent.aiTotalUsageCount = event.aiTotalUsageCount;
         }
     }
 }

@@ -23,6 +23,7 @@
 #include "exec/pipeline/set/except_context.h"
 #include "exec/pipeline/set/except_output_source_operator.h"
 #include "exec/pipeline/set/except_probe_sink_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -94,13 +95,64 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     ASSIGN_OR_RETURN(auto ops_with_except_build_sink, child(0)->decompose_to_pipeline(context));
 
-    if (_local_partition_by_exprs.empty()) {
-        ops_with_except_build_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
-                context, runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
-    } else {
-        ops_with_except_build_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
-                context, runtime_state(), id(), ops_with_except_build_sink, _local_partition_by_exprs[0]);
+    // Every child of a set operation must be partitioned by the SAME scheme, or a key reaches a
+    // different driver from each child and the two never meet in the partitioned hash set. Settle the
+    // scheme once, from the build child, and hand it to all of them; each child still supplies its own
+    // corresponding key exprs. Reading it per child is what broke: a scan whose bucket key is the set
+    // key kept its bucket transform while a child behind a UNION had no bucket properties at all.
+    //
+    // Whether the children can be left alone is a property of all of them together, so decompose the
+    // probe children before deciding anything. They used to be decomposed inside the dependent-pipeline
+    // scope opened below, which is what made every pipeline built underneath them wait for the build
+    // pipeline; subscribe_pipelines_since() puts that back for the ones built here.
+    // Decomposing a child can leave a different execution group current, and each pipeline is
+    // registered into whichever group is current at the time. Remember the group every child ends in
+    // so each pipeline still lands where it did before the children were hoisted up here.
+    auto* group_after_build_child = context->current_execution_group();
+    const auto probe_children_begin = context->mark();
+    std::vector<OpFactories> probe_child_ops(_children.size());
+    std::vector<ExecutionGroupRawPtr> probe_child_groups(_children.size(), nullptr);
+    for (size_t i = 1; i < _children.size(); i++) {
+        ASSIGN_OR_RETURN(probe_child_ops[i], child(i)->decompose_to_pipeline(context));
+        probe_child_groups[i] = context->current_execution_group();
     }
+    const auto probe_children_end = context->mark();
+    context->set_current_execution_group(group_after_build_child);
+
+    const bool set_op_is_colocate = !_local_partition_by_exprs.empty();
+    auto set_op_part_type =
+            set_op_is_colocate ? TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED : TPartitionType::HASH_PARTITIONED;
+    std::vector<TBucketProperty> set_op_bucket_properties;
+    if (set_op_is_colocate) {
+        set_op_bucket_properties = context->source_operator(ops_with_except_build_sink)->get_bucket_properties();
+    }
+
+    // A child that reports could_local_shuffle() == false has already had its rows assigned to
+    // drivers upstream -- for a colocate set operation the FE hands each driver its own bucket
+    // morsels -- and when that holds for EVERY child they are aligned on that assignment for free.
+    // Both maybe_interpolate_local_shuffle_exchange and maybe_interpolate_local_bucket_shuffle_exchange
+    // return early in that case, so the original code interpolated nothing at all, and forcing an
+    // exchange on all of them would only add cost. Force the shared scheme only once some child would
+    // be shuffled, which is where the children could disagree and be silently wrong.
+    bool force_shuffle = context->source_operator(ops_with_except_build_sink)->could_local_shuffle();
+    for (size_t i = 1; i < _children.size() && !force_shuffle; i++) {
+        force_shuffle = context->source_operator(probe_child_ops[i])->could_local_shuffle();
+    }
+
+    auto partition_child = [&](OpFactories& ops, size_t i) {
+        const auto& keys = set_op_is_colocate ? _local_partition_by_exprs[i] : _child_expr_lists[i];
+        if (force_shuffle) {
+            return ::starrocks::pipeline::builder::interpolate_local_forced_shuffle_exchange(
+                    context, runtime_state(), id(), ops, keys, set_op_part_type, set_op_bucket_properties);
+        }
+        // No child can be locally shuffled: the original per-child call, which skips every one of them.
+        return set_op_is_colocate ? ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
+                                            context, runtime_state(), id(), ops, keys)
+                                  : ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                                            context, runtime_state(), id(), ops, keys);
+    };
+
+    ops_with_except_build_sink = partition_child(ops_with_except_build_sink, 0);
 
     ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
@@ -110,18 +162,13 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     context->add_pipeline(ops_with_except_build_sink);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
+    context->bind_dependent_pipeline_between(probe_children_begin, probe_children_end, context->last_pipeline(),
+                                             !context->current_execution_group()->is_colocate_exec_group());
 
     // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        ASSIGN_OR_RETURN(auto ops_with_except_probe_sink, child(i)->decompose_to_pipeline(context));
-        if (_local_partition_by_exprs.empty()) {
-            ops_with_except_probe_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
-                    context, runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
-        } else {
-            ops_with_except_probe_sink =
-                    ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
-                            context, runtime_state(), id(), ops_with_except_probe_sink, _local_partition_by_exprs[i]);
-        }
+        context->set_current_execution_group(probe_child_groups[i]);
+        auto ops_with_except_probe_sink = partition_child(probe_child_ops[i], i);
         ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.

@@ -82,7 +82,16 @@ PROPERTIES (
 ##### authentication_ldap_simple_user_search_attr
 
 - 必須: いいえ
-- 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。検索バインドモードを使用する場合は必須です。
+- 説明: ユーザーエントリー上でログイン名を保持する属性。検索バインドモードの検索フィルターに埋め込まれるため、ユーザーがログイン時に実際に入力する値を保持する属性である必要があります。デフォルト: `uid`。これは OpenLDAP の慣例で、その場合は通常エントリーの RDN でもあります（`uid=alice,ou=People,dc=example,dc=com`）。ダイレクトバインドモードでは使用されません。
+
+:::note Active Directory では `sAMAccountName` を設定してください
+
+AD のエントリーの RDN は表示名（`CN=Dana Scully,OU=People,DC=company,DC=com`）ですが、ユーザーがログイン時に入力するのはその `sAMAccountName`（`dscully`）です。AD のスキーマに `uid` 属性は存在しますが、管理者が値を設定しない限り空のままなので、デフォルト値では誰も見つからず、すべてのログインが失敗します。この選択に伴い、他に 2 つの設定が決まります。
+
+- **ダイレクトバインドではなく検索バインドを使用してください。** `sAMAccountName` は AD エントリーの DN の一部ではないため、`authentication_ldap_simple_bind_dn_pattern` では有効な DN を生成できません。このプロパティは設定せず、代わりに `authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_bind_root_dn`、`authentication_ldap_simple_bind_root_pwd` を設定してください。
+- **Group Provider も `sAMAccountName` でメンバーを照合できません。** AD のグループはメンバーを DN で列挙し（`member: CN=Dana Scully,OU=People,...`）、その DN に `sAMAccountName` は含まれません。したがって group provider に `"ldap_user_search_attr" = "sAMAccountName"` を設定しても誰にも一致しません。group provider 側の `ldap_user_search_attr` を未設定のままにして DN で照合させるか、`authentication_ldap_simple_group_source = memberof` でユーザー自身のエントリーからグループを読み取ってください。
+
+:::
 
 :::note
 
@@ -111,6 +120,34 @@ PROPERTIES (
 
 - 必須: いいえ
 - 説明: ダイレクトバインド認証の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@domain` のような UPN 形式はサポートされていません。例: `uid=${USER},ou=People,dc=example,dc=com`。複数のパターンはセミコロンで区切ることができ、システムは成功するまで各パターンを順番に試行します。このパラメータを設定すると、検索ステップがスキップされ、構築した DN で直接バインドされるため、`authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_bind_root_dn`、`authentication_ldap_simple_bind_root_pwd` は不要です。
+
+##### authentication_ldap_simple_group_source
+
+- 必須: いいえ
+- 説明: LDAP で認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `memberof`: ユーザー自身の LDAP エントリーのグループメンバーシップ属性のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  `memberof` または `both` の場合、ディレクトリー側で新しく作成されたグループは、ここの設定を変更しなくても次回ログイン時に反映されます。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。クラスター全体のデフォルト値は同名の FE 設定項目です。v4.2 以降でサポートされます。
+
+##### authentication_ldap_simple_memberof_attr
+
+- 必須: いいえ
+- 説明: `authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性の名前。すべての LDAP 属性名と同様、大文字小文字を無視して照合されます。デフォルト: `memberOf`。Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。クラスター全体のデフォルト値は同名の FE 設定項目です。v4.2 以降でサポートされます。
+
+:::note ユーザーエントリーからのグループメンバーシップの読み取り
+
+- 直接のメンバーシップのみが解決されます。ネストされたグループ、Active Directory のプライマリーグループ（デフォルトは `Domain Users`）、および他のドメインやフォレストのグループは、この属性に現れないため含まれません。
+- グループ名は各グループ DN の最初の RDN の値です。例えば `CN=SR Analysts,OU=Groups,DC=company,DC=com` は `SR Analysts` になり、ディレクトリー上の大文字小文字がそのまま保持されます。
+- この属性は認証がすでに確立した接続上で読み取られるため、LDAP 接続は追加されません。検索バインドモードではリクエスト数は変わりません。ダイレクトバインドモード（`authentication_ldap_simple_bind_dn_pattern`）では、bind レスポンスが属性を返せないため、読み取りリクエストが 1 つ増えます。
+- ダイレクトバインドモードでは、ユーザー自身がこの属性を読み取ります。ディレクトリーがそれを許可しない場合でも、`authentication_ldap_simple_bind_root_dn` と `authentication_ldap_simple_bind_root_pwd` が設定されていれば、FE はそのアカウントで 1 回だけ再試行するため、認証モードを変更する必要はありません。どちらの読み取り主体も属性を参照できない場合、グループは空になり、ログインは成功します。
+- グループが空で `permitted_groups` が設定されている場合、積集合が必ず空になるため、そのユーザーはログインを拒否されます。
+- グループはログイン時に一度計算され、セッションに保存されます。ディレクトリー側のメンバーシップ変更は次回ログイン時に反映され、実行中のセッションには影響しません。
+- 旧来のユーザー単位の形式 `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'` はこの機能をサポートしません。代わりに security integration を使用してください。
+- `EXECUTE AS` は**対象**の identity のグループを、その identity 自身の設定に従って解決します。native パスワードのユーザーは LDAP identity を持たないため group provider のグループのみを取得し、`EXECUTE AS EXTERNAL USER` は `authentication_chain` の最初の `authentication_ldap_simple` 統合を使用します。impersonation は対象ユーザーのパスワードを提示しないため、この属性は `authentication_ldap_simple_bind_root_dn` と `authentication_ldap_simple_bind_root_pwd` で読み取られます。サービスアカウントが設定されていない場合は group provider のみが有効です。
+
+:::
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

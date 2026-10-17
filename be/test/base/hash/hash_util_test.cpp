@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstring>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -134,6 +135,30 @@ TEST(HashUtilTest, Hash64Fallback) {
     EXPECT_EQ(HashUtil::hash64_fallback(data.data(), static_cast<int32_t>(data.size()), seed), expected);
 }
 
+// DataCache keys embed murmur_hash3_x64_64(file_name): they are persisted in the local disk cache
+// and are sent to other BEs in PFetchDataCacheRequest.cache_key. If this test fails, the change
+// under review silently orphans every cached block on upgrade and breaks peer-cache hits between
+// mixed-version BEs -- fix the change, do not update the constants.
+TEST(HashUtilTest, MurmurHash3X64_64GoldenVectors) {
+    const std::string long_path(137, 'x');
+    const struct {
+        std::string_view data;
+        uint64_t seed;
+        uint64_t expected;
+    } cases[] = {
+            {"a", 0UL, 0x1d3547705c43c07eUL},
+            {"abc", 0UL, 0x37cf0eb5f11c0ee3UL},
+            {"hdfs://ns/warehouse/db/tbl/part-00000.parquet", 0UL, 0xd4436bccbc0623ceUL},
+            {"s3://bucket/db/tbl/data/00000-0-1a2b3c.parquet", 0UL, 0xeb93e55c35c63745UL},
+            {long_path, 0UL, 0x0b58ebb2a26c715dUL},
+    };
+    for (const auto& c : cases) {
+        uint64_t hash = 0;
+        murmur_hash3_x64_64(c.data.data(), static_cast<int>(c.data.size()), c.seed, &hash);
+        EXPECT_EQ(hash, c.expected);
+    }
+}
+
 TEST(HashUtilTest, Hash32Selection) {
     const std::string_view data = "starrocks";
     const uint32_t seed = 12345;
@@ -239,18 +264,121 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
     EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
 }
 
-#if (defined(__x86_64__) && defined(__SSE4_2__)) || defined(__aarch64__)
+#if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
 TEST(HashUtilTest, CrcHash64UnmixedDoesNotDoubleHashTail) {
     const uint64_t seed = 0x12345678abcdef90ULL;
     const uint64_t data = 0x1122334455667788ULL;
     uint64_t expected = seed;
 #if defined(__x86_64__) && defined(__SSE4_2__)
     expected = _mm_crc32_u64(expected, data);
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     expected = __crc32cd(expected, data);
 #endif
     const uint64_t actual = crc_hash_64_unmixed(&data, sizeof(data), seed);
     EXPECT_EQ(expected, actual);
+}
+
+TEST(HashUtilTest, CrcSoftwareFallbackMatchesHardwareAcrossLengths) {
+    std::array<uint8_t, 65> buffer{};
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        buffer[i] = static_cast<uint8_t>((i * 31 + 17) & 0xff);
+    }
+
+    auto hw_raw_crc32 = [](const void* data, int32_t bytes, uint32_t hash) -> uint32_t {
+        uint32_t words = bytes / sizeof(uint32_t);
+        bytes = bytes % 4;
+        auto* p = reinterpret_cast<const uint8_t*>(data);
+        while (words--) {
+#if defined(__x86_64__) && defined(__SSE4_2__)
+            hash = _mm_crc32_u32(hash, HashUtil::unaligned_load<uint32_t>(p));
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+            hash = __crc32cw(hash, HashUtil::unaligned_load<uint32_t>(p));
+#endif
+            p += sizeof(uint32_t);
+        }
+        while (bytes--) {
+#if defined(__x86_64__) && defined(__SSE4_2__)
+            hash = _mm_crc32_u8(hash, *p);
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+            hash = __crc32cb(hash, *p);
+#endif
+            ++p;
+        }
+        return hash;
+    };
+
+    auto sw_crc_hash_32 = [](const void* data, int32_t bytes, uint32_t hash) -> uint32_t {
+        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(data), bytes);
+        hash = phmap_mix<4>()(hash);
+        return hash;
+    };
+
+    auto sw_crc_hash_64_unmixed = [&](const void* data, int32_t length, uint64_t hash) -> uint64_t {
+        if (UNLIKELY(length < 8)) {
+            return sw_crc_hash_32(data, length, static_cast<uint32_t>(hash));
+        }
+
+        uint64_t words = length / sizeof(uint64_t);
+        uint64_t remainder = length % sizeof(uint64_t);
+        auto* p = reinterpret_cast<const uint8_t*>(data);
+        auto* end = reinterpret_cast<const uint8_t*>(data) + length;
+        while (words--) {
+            hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
+            p += sizeof(uint64_t);
+        }
+        if (remainder != 0) {
+            p = end - 8;
+            hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
+        }
+
+        return hash;
+    };
+
+    const std::vector<uint32_t> seeds32 = {0u, 1u, 0x12345678u, 0xdeadbeefu, 0xffffffffu, HashUtil::FNV_SEED};
+    for (uint32_t seed : seeds32) {
+        for (int32_t len = 0; len <= 64; ++len) {
+            uint32_t hw = hw_raw_crc32(buffer.data(), len, seed);
+            uint32_t sw = ~starrocks::crc32c::Extend(~seed, reinterpret_cast<const char*>(buffer.data()), len);
+            EXPECT_EQ(hw, sw) << "raw CRC32 mismatch at len=" << len << ", seed=" << seed;
+            EXPECT_EQ(crc_hash_32(buffer.data(), len, seed), sw_crc_hash_32(buffer.data(), len, seed))
+                    << "crc_hash_32 mismatch at len=" << len << ", seed=" << seed;
+        }
+    }
+
+    const std::vector<uint64_t> seeds64 = {0ULL,
+                                           1ULL,
+                                           0x12345678abcdef90ULL,
+                                           0xdeadbeefcafebabeULL,
+                                           0xffffffffffffffffULL,
+                                           CRC_HASH_SEEDS::CRC_HASH_SEED1,
+                                           CRC_HASH_SEEDS::CRC_HASH_SEED2};
+    for (uint64_t seed : seeds64) {
+        for (int32_t len = 0; len <= 64; ++len) {
+            uint64_t hw = crc_hash_64_unmixed(buffer.data(), len, seed);
+            uint64_t sw = sw_crc_hash_64_unmixed(buffer.data(), len, seed);
+            EXPECT_EQ(hw, sw) << "crc_hash_64_unmixed mismatch at len=" << len << ", seed=" << seed;
+            EXPECT_EQ(crc_hash_64(buffer.data(), len, seed), phmap_mix<8>()(sw))
+                    << "crc_hash_64 mismatch at len=" << len << ", seed=" << seed;
+
+            uint64_t hw_unaligned = crc_hash_64_unmixed(buffer.data() + 1, len, seed);
+            uint64_t sw_unaligned = sw_crc_hash_64_unmixed(buffer.data() + 1, len, seed);
+            EXPECT_EQ(hw_unaligned, sw_unaligned)
+                    << "unaligned crc_hash_64_unmixed mismatch at len=" << len << ", seed=" << seed;
+        }
+    }
+}
+#endif
+
+#if !(defined(__x86_64__) && !defined(__SSE4_2__))
+TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
+    const std::string_view s1 = "hello";                                      // 5 bytes (< 8)
+    const std::string_view s2 = "12345678";                                   // 8 bytes (= 8)
+    const std::string_view s3 = "hello world, starrocks crc64 unmixed test!"; // 42 bytes (> 8, remainder 2)
+    const uint64_t seed = 0x12345678abcdef90ULL;
+
+    EXPECT_EQ(crc_hash_64_unmixed(s1.data(), static_cast<int32_t>(s1.size()), seed), 0x7583172cULL);
+    EXPECT_EQ(crc_hash_64_unmixed(s2.data(), static_cast<int32_t>(s2.size()), seed), 0x6a03190bULL);
+    EXPECT_EQ(crc_hash_64_unmixed(s3.data(), static_cast<int32_t>(s3.size()), seed), 0xf369fa27ULL);
 }
 #endif
 

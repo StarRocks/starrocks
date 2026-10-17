@@ -61,6 +61,11 @@ public:
     }
 
     // TODO: The TableFunction framework should support streaming processing to avoid generating large Column
+    // Expansion is unbounded (bitmap cardinality / batch_size). Locals are MutableColumnPtr plus a
+    // by-value vector<BitmapValue> from split_bitmap(), and ObjectColumn::append() copies the value in
+    // (object_column.cpp), so nothing survives or leaks when a std::bad_alloc unwinds.
+    bool is_exception_safe() const override { return true; }
+
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* state) const override {
         if (state->get_columns().size() != 2) {

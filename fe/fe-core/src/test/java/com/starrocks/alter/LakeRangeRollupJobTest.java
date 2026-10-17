@@ -30,11 +30,15 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,6 +52,8 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -260,6 +266,50 @@ public class LakeRangeRollupJobTest {
         assertEquals(AlterJobV2.JobType.ROLLUP, target.getType());
     }
 
+    @Test
+    public void testRunningRewriteCompletionCopyGsonReplaySkipsEvictedTxn() throws Exception {
+        List<Column> schema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob source = newConfiguredRollupJobWithReservedCommit(List.of(schema.get(1), schema.get(0)));
+        source.setJobState(AlterJobV2.JobState.RUNNING);
+        source.watershedTxnId = 555060L;
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long id = partition.getId();
+        LakeOnlineRewriteJobBase.PartitionRewriteState state = source.stateOf(id);
+        state.shadowIndex = partition.getLatestIndex(source.getShadowIndexMetaId());
+        state.watershedVersion = 1L;
+        state.rewriteTxnId = 555061L;
+        state.sourceEmpty = true;
+        state.rewriteFinished = true;
+        LakeRangeRollupJob copied = (LakeRangeRollupJob) source.copyForPersist();
+        String json = GsonUtils.GSON.toJson(copied, AlterJobV2.class);
+        LakeRangeRollupJob replayed = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        LakeRangeRollupJob target = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        target.partitionStates.get(id).rewriteFinished = false;
+        target.partitionStates.get(id).sourceEmpty = null;
+        target.replay(replayed);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long txnId) {
+                return null;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 entry, WALApplier applier) {
+                applier.apply(entry);
+            }
+        };
+        for (LakeRangeRollupJob restored : List.of(copied, target)) {
+            restored.setRewriteExecutor((context, stmt) -> {
+                throw new AssertionError("a persisted completed rollup must not execute again");
+            });
+            restored.runRunningJob();
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, restored.getJobState());
+            assertEquals(555061L, restored.getRewriteTxnId(id).longValue());
+            assertEquals(Boolean.TRUE, restored.getSourceEmpty(id));
+        }
+    }
+
     // ---- getRollupIndexName test --------------------------------------------
 
     @Test
@@ -336,6 +386,54 @@ public class LakeRangeRollupJobTest {
     }
 
     // ---- planPartitionShadow test (Task 3 Step 1 / Step 2 / Step 4) -------------
+
+    @Test
+    public void testZeroTargetPreservesSingleTabletWithoutSampling() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            LakeRangeRollupJob job = newConfiguredRollupJob(
+                    List.of(table.getSchemaByIndexMetaId(baseIndexMetaId).get(0)));
+            job.setSampler(request -> {
+                throw new AssertionError("K=1 must bypass sampling");
+            });
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(1, plan.shadowTabletCount);
+            assertTrue(plan.boundaries.isEmpty());
+            assertEquals(1, plan.shadowIndex.getTablets().size());
+            assertTrue(plan.shadowIndex.getTablets().get(0).getRange().getRange().isAll());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    @Test
+    public void testZeroTargetPreservesMultipleLatestIndexTablets() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+            LakeRangeRollupJob job = newConfiguredRollupJob(List.of(baseSchema.get(1), baseSchema.get(0)));
+            job.setSampler(stubSamplerReturning(sampleOver(baseSchema.get(1), baseSchema.get(0))));
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(3, plan.shadowTabletCount);
+            assertEquals(2, plan.boundaries.size());
+            assertEquals(3, plan.shadowIndex.getTablets().size());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
 
     @Test
     public void testPlanPartitionShadowBuildsKTabletShadowByRollupSortKey() throws Exception {
@@ -721,5 +819,37 @@ public class LakeRangeRollupJobTest {
             assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(), "sibling r1 must stay NORMAL");
         }
         assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must survive r2 cancel");
+    }
+
+    // ---- pruning the per-partition state of a done job ----------------------------------------
+
+    /**
+     * Each replay of a FINISHED entry, the first one and a repeated one, leaves the job kept by the handler without
+     * its partition states, while the flip itself runs once.
+     */
+    @Test
+    public void testReplayPrunesFinishedJob() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(
+                List.of(baseSchema.get(1), baseSchema.get(0)));
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        String text = GsonUtils.GSON.toJson(job.copyForPersist());
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long visibleBeforeFlip = physicalPartition.getVisibleVersion();
+        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+
+        for (int i = 0; i < 2; i++) {
+            // An independently deserialized copy of the entry each time, as a follower may replay it twice.
+            LakeRangeRollupJob entry = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+            assertFalse(entry.partitionStates.isEmpty());
+            followerHandler.replayAlterJobV2(entry);
+
+            LakeRangeRollupJob retained = (LakeRangeRollupJob) followerHandler.getAlterJobsV2().get(job.getJobId());
+            assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+            assertTrue(retained.partitionStates.isEmpty());
+            assertFalse(retained.flipNotYetApplied(table));
+            assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion());
+        }
     }
 }

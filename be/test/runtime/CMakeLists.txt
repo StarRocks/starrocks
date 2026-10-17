@@ -44,6 +44,7 @@ set(RUNTIME_TEST_FILES
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
     serde_core_test.cpp
+    geo_transport_test.cpp
     time_guard_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp

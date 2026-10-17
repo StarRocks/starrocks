@@ -1,0 +1,65 @@
+-- name: test_parquet_flba_decimal_dict
+
+-- A DECIMAL(38,2) column is stored as FIXED_LEN_BYTE_ARRAY(16), and BinaryToDecimalConverter walks
+-- the source bytes at a fixed type_length stride rather than loading an offset per row. That holds
+-- only while a non-NULL row occupies exactly type_length bytes and a NULL row occupies none.
+-- DictDecoder<Slice> used to break it: for a row excluded by a filter pushed into the decoder it
+-- skipped the dictionary lookup, leaving the row with zero bytes but still marked NOT NULL, so the
+-- converter consumed type_length bytes for it anyway and decoded every following row -- including
+-- the rows that survive the filter -- from a misaligned offset.
+--
+-- data/flba_decimal_dict.parquet is one row group of 200000 rows, cat = 'c<i%10>' and
+-- amt = (i+1)/100, written zstd with use_dictionary and dictionary_pagesize_limit raised to 64MB.
+-- Each parameter is load-bearing if the fixture ever has to be regenerated:
+--   * DECIMAL(38,2) is what makes parquet store the column as FIXED_LEN_BYTE_ARRAY(16); a
+--     DECIMAL(<=18) would be INT32/INT64 backed and would never reach BinaryToDecimalConverter.
+--   * every amt value is distinct, so the dictionary is 200000 * 16 = 3.2MB uncompressed.
+--     CacheAwareDictDecoder only honours a pushed-down filter when the dictionary exceeds the host's
+--     L2, so the dictionary has to clear the L2 of whatever machine runs this; 3.2MB covers up to a
+--     3MB L2, including the 2MB of Sapphire Rapids and Neoverse V2. On a host with a larger L2 this
+--     case silently passes instead of failing, so the decoder unit test
+--     DictEncodingReadTest.FilterExcludedRowsAreMarkedNull is the hardware-independent guard.
+--   * dictionary_pagesize_limit has to be raised: at the 1MB default the writer abandons the
+--     dictionary and falls back to PLAIN once it fills, capping it at ~1MB.
+--   * cat has 10 distinct values so `cat = 'c7'` selects 10%, under the 0.2 selectivity threshold at
+--     which StoredColumnReaderImpl::_convert_filter_row_to_value pushes the filter into the decoder.
+--   * 200000 rows in one row group is ~49 chunks of 4096. ColumnReadOrderCtx randomises the column
+--     read order for the first 10 chunks of a row group and then locks in the cheapest, so the rest
+--     reliably read cat first -- the order that pushes a narrow filter into the amt decoder.
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_external_file/data/flba_decimal_dict.parquet oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE flba_decimal_dict
+(
+    cat string,
+    amt decimal(38, 2)
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+-- Both predicates together are what triggers it: `cat` narrows the filter below 0.2 in the first
+-- round, then `amt` is read with that filter pushed into its dictionary decoder. Before the fix the
+-- aggregates were wrong and differed between executions, and count(*) was below 20000 because rows
+-- whose corrupted value stopped matching `amt > 0` were silently dropped.
+select count(*), max(amt), min(amt), sum(amt) from flba_decimal_dict where cat = 'c7' and amt > 0;
+
+-- Every value in the fixture is under 2000, so a corrupted read is the only way to return a row.
+select count(*) from flba_decimal_dict where cat = 'c7' and abs(amt) >= 1e10;
+
+-- Control: with no second predicate the selectivity stays at 1.0, the filter is never pushed into
+-- the decoder, and this path was already correct before the fix.
+select count(*), max(amt) from flba_decimal_dict where amt > 0;
+
+-- Control: `amt` carries no conjunct here, so it is a lazy column and is converted after
+-- filter_range() has already dropped the excluded rows. Also unaffected before the fix.
+select count(*), max(amt), min(amt), sum(amt) from flba_decimal_dict where cat = 'c7';
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_flba_decimal_dict/${uuid0}/ > /dev/null

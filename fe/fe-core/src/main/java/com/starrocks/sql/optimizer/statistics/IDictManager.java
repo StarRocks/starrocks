@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface IDictManager {
-    boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
+    // Takes the scanned table rather than its id so the table's database can be resolved from the table
+    // itself: a view's base tables may live in a database the statement never names.
+    boolean hasGlobalDict(OlapTable table, ColumnId columnName, long versionTime);
 
     void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
 
@@ -34,6 +36,17 @@ public interface IDictManager {
     void disableGlobalDict(long tableId);
 
     void enableGlobalDict(long tableId);
+
+    // Clear the in-memory forbid state for specific columns (used by ALTER TABLE ... ENABLE DICTIONARY
+    // and its edit-log replay, so an explicit ENABLE takes effect immediately on every FE).
+    default void clearForbiddenColumns(long tableId, java.util.Set<String> columnNames) {
+    }
+
+    // True if the column currently has an in-memory low-cardinality dict forbid (thrash guard or
+    // cardinality blacklist). Used to coordinate a pending async guard write with a concurrent ENABLE.
+    default boolean isColumnForbidden(long tableId, String columnName) {
+        return false;
+    }
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);

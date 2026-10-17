@@ -114,6 +114,10 @@ public class Status {
         return this.errorCode == TStatusCode.REMOTE_FILE_NOT_FOUND;
     }
 
+    public boolean isLakeMetaVersionNotFound() {
+        return this.errorCode == TStatusCode.LAKE_META_VERSION_NOT_FOUND;
+    }
+
     public boolean isGlobalDictError() {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }

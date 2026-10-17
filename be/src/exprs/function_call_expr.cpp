@@ -40,7 +40,8 @@ DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(
+        const TFunction& fn, const std::vector<TypeDescriptor>& arg_types) {
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
     // refs: https://github.com/StarRocks/starrocks/pull/17803
     // @todo: remove this code when branch-3.0 is deprecated
@@ -51,6 +52,17 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const
         fid = 150104;
     } else if (fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
         fid = 150105;
+    }
+    // Contract 4.3 (#79786) renumbered existing native GEOGRAPHY functions.
+    // Accept plans from the earlier registry without renumbering the current one again.
+    // 120081 is also the current ST_X(GEOMETRY): distinguish it by the native argument type,
+    // never by WKB contents. Normal GEO execution still validates the semantic descriptor.
+    if (arg_types.size() == 1 && arg_types[0].type == TYPE_GEOGRAPHY) {
+        if (fid == 120081) fid = 120090; // ST_Y(GEOGRAPHY)
+        if (fid == 120082) fid = 120170; // ST_GeometryType(GEOGRAPHY)
+    } else if (fid == 120083 && arg_types.size() == 2 && arg_types[0].type == TYPE_GEOGRAPHY &&
+               arg_types[1].type == TYPE_GEOGRAPHY) {
+        fid = 120180; // ST_Distance(GEOGRAPHY, GEOGRAPHY)
     }
     return BuiltinFunctions::find_builtin_function(fid);
 }
@@ -78,7 +90,7 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunct
                                                                     prepare_func, close_func, true, false);
         return _agg_func_desc.get();
     } else {
-        return _get_function_by_fid(fn);
+        return _get_function_by_fid(fn, arg_types);
     }
 }
 
