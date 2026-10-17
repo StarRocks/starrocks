@@ -365,13 +365,35 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void testBroadcastHintExceedMaxExecMemByte() throws Exception {
-        long maxMemExec = connectContext.getSessionVariable().getMaxExecMemByte();
-        connectContext.getSessionVariable().setMaxExecMemByte(200);
-        String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "join op: INNER JOIN (BROADCAST)");
-        connectContext.getSessionVariable().setMaxExecMemByte(maxMemExec);
+    public void testBroadcastHintExceedThreshold() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemExceedThreshold();
+        try {
+            connectContext.getSessionVariable().setBroadcastMemExceedThreshold(0);
+            String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemExceedThreshold(threshold);
+        }
+    }
+
+    @Test
+    public void testBroadcastThresholdIndependentOfExecMemLimit() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemExceedThreshold();
+        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        String sql = "select l_orderkey from lineitem join nation on l_suppkey = n_nationkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemExceedThreshold(2147483648L);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            Assertions.assertEquals(plan, getFragmentPlan(sql));
+            connectContext.getSessionVariable().setBroadcastMemExceedThreshold(0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemExceedThreshold(threshold);
+            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+        }
     }
 
     @Test

@@ -274,6 +274,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Valid values**: `CIRCULAR`, `RANDOM`
 * **Introduced in**: -
 
+### broadcast_mem_exceed_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
+
 ### broadcast_row_limit
 
 * **Scope**: Session
