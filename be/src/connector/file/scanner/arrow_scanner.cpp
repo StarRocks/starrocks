@@ -282,6 +282,7 @@ Status ArrowScanner::open_next_reader() {
     _conv_ctx.current_batch_first_row_in_file = -1;
     _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
     _conv_ctx.file_size = range_desc.size;
+    _conv_ctx.clear_current_column();
     _last_file_scan_rows = 0;
     return Status::OK();
 }
@@ -297,20 +298,6 @@ Status ArrowScanner::next_batch() {
         _last_file_scan_rows += _batch->num_rows();
         return Status::OK();
     }
-
-    auto format_source_info = [this]() {
-        std::string info;
-        if (_conv_ctx.consumer_partition != -1) {
-            info += " at partition=" + std::to_string(_conv_ctx.consumer_partition);
-        }
-        if (_conv_ctx.consumer_offset != -1) {
-            info += " offset=" + std::to_string(_conv_ctx.consumer_offset);
-        }
-        if (!_conv_ctx.consumer_message_id.empty()) {
-            info += " message_id=" + _conv_ctx.consumer_message_id;
-        }
-        return info;
-    };
 
     while (true) {
         if (_file == nullptr) {
@@ -350,6 +337,7 @@ Status ArrowScanner::next_batch() {
 
             _last_file_scan_rows = 0;
             _conv_ctx.current_batch_first_row_in_file = -1;
+            _conv_ctx.clear_current_column();
             _conv_ctx.consumer_partition = -1;
             _conv_ctx.consumer_offset = -1;
             _conv_ctx.consumer_message_id.clear();
@@ -390,7 +378,8 @@ Status ArrowScanner::next_batch() {
 
         arrow::Status status = _curr_file_reader->ReadNext(&_batch);
         if (!status.ok()) {
-            std::string error_msg = "ReadNext batch failed, reason: " + status.ToString() + format_source_info();
+            _conv_ctx.clear_current_column();
+            std::string error_msg = "ReadNext batch failed, reason: " + status.ToString();
             _conv_ctx.report_error_message(error_msg, "", -1);
             LOG(WARNING) << "Arrow routine load: " << error_msg;
             _counter->num_rows_filtered++;
@@ -590,6 +579,7 @@ void ArrowScanner::reject_discrete_message(const std::string& reason, int64_t fi
     _conv_ctx.consumer_partition = -1;
     _conv_ctx.consumer_offset = -1;
     _conv_ctx.consumer_message_id.clear();
+    _conv_ctx.clear_current_column();
 }
 
 void ArrowScanner::filter_current_discrete_message(const std::string& reason, int64_t pending_rows) {
@@ -677,6 +667,7 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         }
     }
 
+    _conv_ctx.clear_current_column();
     _chunk_start_idx += num_elements;
     _batch_start_idx += num_elements;
     return Status::OK();
