@@ -81,6 +81,11 @@ struct ArrowConvertContext {
         current_column_name = std::string(column_name);
         current_type_length = type.len > 0 ? static_cast<size_t>(type.len) : 0;
     }
+
+    void clear_current_column() {
+        current_column_name.clear();
+        current_type_length = 0;
+    }
 };
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with
