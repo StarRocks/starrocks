@@ -556,6 +556,8 @@ public class DatabaseTransactionMgr {
             } catch (Throwable t) {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
+            // the commit went through, so the rows of the tablets it skipped are lost now
+            TxnStateLogUtils.logIgnoredTablets(copiedState);
 
             // 6. update nextVersion because of the failure of persistent transaction resulting in error version
             Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -959,6 +961,96 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    /**
+     * Find the running transactions that may write to any of the given physical partitions.
+     * <p>
+     * A transaction is reported as conflicting when either
+     * <ul>
+     *   <li>it is already COMMITTED and its commit info covers one of the partitions, or</li>
+     *   <li>it is still in flight (PREPARE/PREPARED) and its tablet sink has registered one of the
+     *       partitions as a write target, see {@link TransactionState#getLoadedPhysicalPartitionIds}.</li>
+     * </ul>
+     * Callers that are about to replace or drop those partitions must invoke this while holding the
+     * table write lock, so that no transaction can commit in between.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     * @return ids of the conflicting transactions, empty if there is none
+     */
+    public List<Long> getConflictingTxnIds(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> conflictingTxnIds = Lists.newArrayList();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            if (!getTouchedPartitions(txn, tableId, physicalPartitionIds).isEmpty()) {
+                conflictingTxnIds.add(txn.getTransactionId());
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    /**
+     * Same as {@link #getConflictingTxnIds(long, Set)}, but per partition: each running transaction is looked at
+     * once whatever the number of partitions, so the cost stays linear even when a load targets every one of the
+     * thousands of partitions that a whole table optimize replaces. Callers must hold the table write lock too.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     * @return physical partition id -> ids of the conflicting transactions, only for the partitions that have any
+     */
+    public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, List<Long>> conflictingTxnIds = Maps.newHashMap();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            for (Long physicalPartitionId : getTouchedPartitions(txn, tableId, physicalPartitionIds)) {
+                conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList())
+                        .add(txn.getTransactionId());
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    private List<TransactionState> getRunningTxnsOfTable(long tableId) {
+        // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
+        // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),
+        // so holding both at the same time would invert the lock order.
+        readLock();
+        try {
+            return idToRunningTransactionState.values().stream()
+                    .filter(txn -> txn.isRunning() && txn.getTableIdList().contains(tableId))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * The given physical partitions that the transaction committed into or registered as write targets.
+     */
+    private static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
+        Set<Long> touched = Sets.newHashSet();
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {
+            addIntersection(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds, touched);
+        }
+        addIntersection(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds, touched);
+        return touched;
+    }
+
+    // Iterates the smaller set, so a load that targets every partition costs one pass over its targets
+    private static void addIntersection(Set<Long> left, Set<Long> right, Set<Long> intersection) {
+        Set<Long> smaller = left.size() <= right.size() ? left : right;
+        Set<Long> larger = smaller == left ? right : left;
+        for (Long id : smaller) {
+            if (larger.contains(id)) {
+                intersection.add(id);
+            }
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
@@ -1314,10 +1406,7 @@ public class DatabaseTransactionMgr {
                         // partition maybe dropped between commit and publish version, ignore this error
                         if (physicalPartition == null) {
                             droppedPartitionIds.add(physicalPartitionId);
-                            LOG.warn(
-                                    "partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    physicalPartitionId,
-                                    copiedState);
+                            TxnStateLogUtils.logDroppedCommittedPartition(copiedState, tableId, physicalPartitionId);
                             continue;
                         }
                         // The version of a replication transaction may not continuously

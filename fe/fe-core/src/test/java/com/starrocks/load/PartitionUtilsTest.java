@@ -98,4 +98,14 @@ public class PartitionUtilsTest {
 
     }
 
+    @Test
+    public void testFormatConflictingTxnIds() {
+        assertEquals("", PartitionUtils.formatConflictingTxnIds(Lists.newArrayList()));
+        assertEquals(" (txn: 1001, 1002)", PartitionUtils.formatConflictingTxnIds(Lists.newArrayList(1001L, 1002L)));
+
+        // the message goes into a persisted job error, so a long list is cut short but still reports the total
+        List<Long> many = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L);
+        String formatted = PartitionUtils.formatConflictingTxnIds(many);
+        assertEquals(" (txn: 1, 2, 3, 4, 5, ... 7 in total)", formatted);
+    }
 }
