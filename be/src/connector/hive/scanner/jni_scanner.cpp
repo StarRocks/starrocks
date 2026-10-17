@@ -17,17 +17,23 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/url_coding.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
+#include "common/config.h"
+#include "common/object_pool.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
+#include "exprs/in_const_predicate.hpp"
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/java/java_runtime.h"
 #include "runtime/java/jvm_helper.h"
 #include "runtime/java/native_method_helper.h"
+#include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -456,6 +462,210 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     return data;
 }
 
+namespace {
+
+// Wire format shared with com.starrocks.paimon.reader.PaimonRuntimePredicates:
+// records separated by '\x03', fields by '\x01'; a record is
+// <column>\x01<op>\x01<base64(v1)>[\x01<base64(v2)>...] with op "minmax" (both
+// bounds inclusive) or "in". Values are canonical strings: integers in decimal,
+// strings raw, dates as YYYY-MM-DD.
+constexpr char kRuntimePredFieldSep = '\x01';
+constexpr char kRuntimePredRecordSep = '\x03';
+
+// Only the Paimon reader consumes "runtime_predicate_info"; other JNI scanners must
+// not pay the serialization cost.
+constexpr const char* kPaimonScannerFactoryClass = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
+
+std::string encode_runtime_pred_value(const std::string& raw) {
+    std::string encoded;
+    base64_encode(raw, &encoded);
+    return encoded;
+}
+
+void append_runtime_pred_record(std::string* out, const std::string& column, const char* op,
+                                const std::vector<std::string>& values) {
+    if (!out->empty()) {
+        out->push_back(kRuntimePredRecordSep);
+    }
+    out->append(column);
+    out->push_back(kRuntimePredFieldSep);
+    out->append(op);
+    for (const auto& v : values) {
+        out->push_back(kRuntimePredFieldSep);
+        out->append(encode_runtime_pred_value(v));
+    }
+}
+
+bool extract_rf_minmax_values(const RuntimeFilter* minmax, LogicalType ltype, ObjectPool* pool,
+                              std::vector<std::string>* values) {
+    switch (ltype) {
+#define EXTRACT_RF_NUMERIC(TYPE)                                                             \
+    case TYPE: {                                                                             \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<TYPE>*>(minmax);                  \
+        if (xrf == nullptr || !xrf->left_close_interval() || !xrf->right_close_interval()) { \
+            return false;                                                                    \
+        }                                                                                    \
+        values->push_back(std::to_string(xrf->min_value(pool)));                             \
+        values->push_back(std::to_string(xrf->max_value(pool)));                             \
+        return true;                                                                         \
+    }
+        EXTRACT_RF_NUMERIC(TYPE_TINYINT)
+        EXTRACT_RF_NUMERIC(TYPE_SMALLINT)
+        EXTRACT_RF_NUMERIC(TYPE_INT)
+        EXTRACT_RF_NUMERIC(TYPE_BIGINT)
+#undef EXTRACT_RF_NUMERIC
+#define EXTRACT_RF_STRING(TYPE)                                                              \
+    case TYPE: {                                                                             \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<TYPE>*>(minmax);                  \
+        if (xrf == nullptr || !xrf->left_close_interval() || !xrf->right_close_interval()) { \
+            return false;                                                                    \
+        }                                                                                    \
+        Slice min_slice = xrf->min_value(pool);                                              \
+        Slice max_slice = xrf->max_value(pool);                                              \
+        values->emplace_back(min_slice.data, min_slice.size);                                \
+        values->emplace_back(max_slice.data, max_slice.size);                                \
+        return true;                                                                         \
+    }
+        EXTRACT_RF_STRING(TYPE_VARCHAR)
+        EXTRACT_RF_STRING(TYPE_CHAR)
+#undef EXTRACT_RF_STRING
+    case TYPE_DATE: {
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<TYPE_DATE>*>(minmax);
+        if (xrf == nullptr || !xrf->left_close_interval() || !xrf->right_close_interval()) {
+            return false;
+        }
+        values->push_back(xrf->min_value(pool).to_string());
+        values->push_back(xrf->max_value(pool).to_string());
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+template <LogicalType LT>
+bool extract_rf_in_values(const Expr* root, size_t max_in_values, std::vector<std::string>* values) {
+    const auto* pred = down_cast<const VectorizedInConstPredicate<LT>*>(root);
+    if (!pred->is_join_runtime_filter() || pred->is_not_in() || pred->null_in_set()) {
+        return false;
+    }
+    const auto& hash_set = pred->hash_set();
+    if (hash_set.empty() || hash_set.size() > max_in_values) {
+        return false;
+    }
+    for (const auto& v : hash_set) {
+        if constexpr (LT == TYPE_VARCHAR || LT == TYPE_CHAR) {
+            values->emplace_back(v.data, v.size);
+        } else if constexpr (LT == TYPE_DATE) {
+            values->push_back(v.to_string());
+        } else {
+            values->push_back(std::to_string(v));
+        }
+    }
+    return true;
+}
+
+bool extract_rf_in_values_dispatch(const Expr* root, LogicalType ltype, size_t max_in_values,
+                                   std::vector<std::string>* values) {
+    switch (ltype) {
+    case TYPE_TINYINT:
+        return extract_rf_in_values<TYPE_TINYINT>(root, max_in_values, values);
+    case TYPE_SMALLINT:
+        return extract_rf_in_values<TYPE_SMALLINT>(root, max_in_values, values);
+    case TYPE_INT:
+        return extract_rf_in_values<TYPE_INT>(root, max_in_values, values);
+    case TYPE_BIGINT:
+        return extract_rf_in_values<TYPE_BIGINT>(root, max_in_values, values);
+    case TYPE_VARCHAR:
+        return extract_rf_in_values<TYPE_VARCHAR>(root, max_in_values, values);
+    case TYPE_CHAR:
+        return extract_rf_in_values<TYPE_CHAR>(root, max_in_values, values);
+    case TYPE_DATE:
+        return extract_rf_in_values<TYPE_DATE>(root, max_in_values, values);
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+std::string JniScanner::_build_runtime_predicate_info() {
+    // Only the Paimon reader consumes this param; don't pay the serialization cost
+    // for other JNI scanners.
+    if (_jni_scanner_factory_class != kPaimonScannerFactoryClass) {
+        return {};
+    }
+    if (_scanner_ctx == nullptr) {
+        return {};
+    }
+    // Mirror the effective limit HashJoiner used when building the runtime in-filter:
+    // the query option (session variable) when set, else the BE config.
+    size_t max_in_values = config::max_pushdown_conditions_per_column;
+    if (runtime_state() != nullptr && runtime_state()->query_options().__isset.max_pushdown_conditions_per_column &&
+        runtime_state()->query_options().max_pushdown_conditions_per_column > 0) {
+        max_in_values = runtime_state()->query_options().max_pushdown_conditions_per_column;
+    }
+    std::unordered_map<SlotId, SlotDescriptor*> slot_by_id;
+    for (SlotDescriptor* slot : _scanner_ctx->materialize_slots) {
+        slot_by_id.emplace(slot->id(), slot);
+    }
+
+    std::string encoded;
+    ObjectPool pool;
+
+    // Min/max bounds of arrived join runtime filters. The same filters are re-applied
+    // row-wise after the scan, so the pushed range only has to be a superset.
+    if (_scanner_ctx->runtime_filter_collector != nullptr) {
+        for (const auto& [filter_id, rf_desc] : _scanner_ctx->runtime_filter_collector->descriptors()) {
+            if (rf_desc == nullptr || !rf_desc->can_push_down_runtime_filter()) {
+                continue;
+            }
+            const RuntimeFilter* filter = rf_desc->runtime_filter(-1);
+            SlotId slot_id;
+            if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&slot_id)) {
+                continue;
+            }
+            auto it = slot_by_id.find(slot_id);
+            if (it == slot_by_id.end()) {
+                continue;
+            }
+            const RuntimeFilter* minmax = filter->get_min_max_filter();
+            if (minmax == nullptr) {
+                continue;
+            }
+            std::vector<std::string> values;
+            if (extract_rf_minmax_values(minmax, it->second->type().type, &pool, &values)) {
+                append_runtime_pred_record(&encoded, std::string(it->second->col_name()), "minmax", values);
+            }
+        }
+    }
+
+    // Exact IN sets of broadcast-join runtime in-filters (bounded by
+    // max_pushdown_conditions_per_column). Static IN conjuncts are already pushed by
+    // the FE inside predicate_info, so only join runtime filters are considered.
+    for (const auto& [slot_id, expr_ctxs] : _scanner_ctx->format_scan_context.conjuncts.by_slot) {
+        auto it = slot_by_id.find(slot_id);
+        if (it == slot_by_id.end()) {
+            continue;
+        }
+        for (ExprContext* expr_ctx : expr_ctxs) {
+            const Expr* root = expr_ctx->root();
+            if (root->op() != TExprOpcode::FILTER_IN) {
+                continue;
+            }
+            const Expr* child = root->get_child(0);
+            if (!child->is_slotref() || child->type().type != it->second->type().type) {
+                continue;
+            }
+            std::vector<std::string> values;
+            if (extract_rf_in_values_dispatch(root, child->type().type, max_in_values, &values)) {
+                append_runtime_pred_record(&encoded, std::string(it->second->col_name()), "in", values);
+            }
+        }
+    }
+    return encoded;
+}
+
 Status JniScanner::update_jni_scanner_params() {
     // update materialized columns.
     {
@@ -490,6 +700,11 @@ Status JniScanner::update_jni_scanner_params() {
 
     _jni_scanner_params["required_fields"] = required_fields;
     _jni_scanner_params["nested_fields"] = nested_fields;
+
+    std::string runtime_predicates = _build_runtime_predicate_info();
+    if (!runtime_predicates.empty()) {
+        _jni_scanner_params["runtime_predicate_info"] = runtime_predicates;
+    }
     return Status::OK();
 }
 
@@ -573,8 +788,7 @@ std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOp
     jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
     jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
 
-    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
-    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+    return std::make_unique<JniScanner>(kPaimonScannerFactoryClass, jni_scanner_params);
 }
 
 // ---------------fluss jni scanner------------------
