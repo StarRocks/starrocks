@@ -165,6 +165,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
+    pipeline/nljoin/nljoin_runtime_filter.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
