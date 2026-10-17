@@ -125,7 +125,15 @@ public class MVVersionManager {
                 }
             }
         }
+<<<<<<< HEAD
         mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+=======
+        // A run that touches a base table without refreshing any of its partitions yields 0 here; keep the
+        // previous data timestamp rather than reporting the MV as never refreshed.
+        if (maxChangedTableRefreshTime > 0) {
+            copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        }
+>>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))
         // Freshness is confirmed as of the batch's first-run start (the pinned-snapshot moment), and only once
         // the batch's final run completes. Monotonic (>) so it can never move backwards.
         long freshnessBaseline = freshnessBaselineTime();
@@ -134,8 +142,13 @@ public class MVVersionManager {
         }
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
+<<<<<<< HEAD
                 mv.getName(), maxChangedTableRefreshTime);
         persistRefreshScheme(mvRefreshScheme);
+=======
+                mv.getName(), copiedScheme.getLastRefreshTime());
+        persistRefreshScheme(copiedScheme);
+>>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
