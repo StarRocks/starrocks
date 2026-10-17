@@ -135,6 +135,15 @@ public class AgentTaskQueue {
         --taskNum;
     }
 
+    // Removes the task only if it is still the one queued under its signature, so that a task another job queued under
+    // the same signature in the meantime stays queued.
+    public static synchronized void removeTaskIfSame(AgentTask task) {
+        Map<Long, AgentTask> signatureMap = tasks.get(task.getBackendId(), task.getTaskType());
+        if (signatureMap != null && signatureMap.get(task.getSignature()) == task) {
+            removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
     /*
      * we cannot define a push task with only 'backendId', 'signature' and 'TTaskType'
      * add version, and TPushType to help
