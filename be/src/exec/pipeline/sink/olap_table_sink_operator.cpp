@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
+#include "exec/pipeline/mc_trace.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
 #include "runtime/buffer_control_block.h"
@@ -112,7 +113,8 @@ void OlapTableSinkOperator::_submit_close() const {
     auto* state = _fragment_ctx->runtime_state();
     const int64_t submit_time_ns = MonotonicNanos();
     auto close_task = [this, state, submit_time_ns]() {
-        COUNTER_UPDATE(_close_queue_timer, MonotonicNanos() - submit_time_ns);
+        const int64_t begin_ns = MonotonicNanos();
+        COUNTER_UPDATE(_close_queue_timer, begin_ns - submit_time_ns);
         // A fragment cancelled while the close waited in the queue must not write its combined txn log:
         // set_cancelled() left the sink to this task, so pass the cancellation on as it would have.
         Status close_status = Status::OK();
@@ -125,12 +127,23 @@ void OlapTableSinkOperator::_submit_close() const {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             st = _sink->close(state, close_status);
         }
+        if (mctrace::enabled()) {
+            MCTRACE_LOG << "ev=sink_close qid=" << print_id(state->query_id())
+                        << " fid=" << print_id(state->fragment_instance_id())
+                        << " close_us=" << (MonotonicNanos() - begin_ns) / 1000
+                        << " queue_us=" << (begin_ns - submit_time_ns) / 1000
+                        << " inline=" << config::load_sink_close_test_inline << " status=" << st;
+        }
         _close_status = std::move(st);
         // The last access to this operator: once _close_done is set, the driver can finish and destroy it.
         _close_done.store(true, std::memory_order_release);
     };
 
     auto* pool = state->exec_env() != nullptr ? state->exec_env()->load_sink_close_thread_pool() : nullptr;
+    // Test-only baseline control: execute the same final close on the pending_finish caller.
+    if (config::load_sink_close_test_inline) {
+        pool = nullptr;
+    }
     if (pool != nullptr) {
         auto task = std::make_shared<CancellableRunnable>(
                 [close_task, query_id = state->query_id(), fragment_instance_id = state->fragment_instance_id()]() {

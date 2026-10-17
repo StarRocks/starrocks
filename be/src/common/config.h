@@ -2155,6 +2155,12 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // Keep it separate from pip_sink_io, where other sinks run multi-MB uploads. Must be greater than 0; changes at
 // runtime resize the pool without interrupting closes already running.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
+// Test build only. Never merge these controls into a release branch.
+CONF_mBool(load_sink_close_test_inline, "false");
+CONF_mBool(merge_commit_lifecycle_trace, "false");
+CONF_mInt64(merge_commit_lifecycle_trace_slow_us, "1000000");
+CONF_mInt32(merge_commit_lifecycle_inject_txn_log_delay_ms, "0");
+CONF_mInt32(merge_commit_lifecycle_inject_txn_log_every_n, "0");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
