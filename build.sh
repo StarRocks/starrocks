@@ -270,6 +270,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
+WITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE:-OFF}
 WITH_CLANG_TIDY=OFF
 WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
@@ -633,6 +634,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
                   -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
+                  -DWITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_GLIBC_COMPAT=${WITH_GLIBC_COMPAT}              \
@@ -718,6 +720,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
+    if [ "${WITH_CONNECTOR_LANCE}" = "ON" ] && [ ${BUILD_FE} -eq 1 ]; then
+        ${MVN_CMD} $addon_mvn_opts -f lance-metadata/pom.xml clean package -DskipTests
+    fi
     cd ${STARROCKS_HOME}
 fi
 
@@ -748,6 +753,12 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
+        if [ "${WITH_CONNECTOR_LANCE}" = "ON" ]; then
+            install -d "${STARROCKS_OUTPUT}/fe/lib/lance-metadata-lib"
+            cp -p ${STARROCKS_HOME}/java-extensions/lance-metadata/target/lib/*.jar \
+                  ${STARROCKS_HOME}/java-extensions/lance-metadata/target/starrocks-lance-metadata.jar \
+                  "${STARROCKS_OUTPUT}/fe/lib/lance-metadata-lib/"
+        fi
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
@@ -806,6 +817,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    # CMake install leaves artifacts from previous configurations in be/output.
+    # An incremental opt-out build must not repackage an old Lance shared library.
+    if [ "${WITH_CONNECTOR_LANCE}" = "OFF" ]; then
+        rm -f "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.so" \
+              "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.dylib"
+    fi
     shopt -s nullglob
     be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
     if starrocks_is_darwin; then

@@ -15,8 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TConnectorScanNode;
@@ -60,8 +63,14 @@ public class LanceScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
-        // Lance tables will use properties/credentials defined in catalog
-        // For Phase 1 & 2 mock catalog, we can safely allow empty config or resolve standard connectors if registered
+        String catalog = lanceTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Preconditions.checkState(connector != null, "Missing Lance catalog connector");
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null, "Missing Lance catalog cloud configuration");
     }
 
     @Override
