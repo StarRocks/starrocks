@@ -21,7 +21,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.util.SerializableSupplier;
@@ -31,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -197,6 +201,72 @@ public class IcebergCachingFileIOTest {
         Assertions.assertEquals("OAuth",
                 configuration.get("fs.azure.account.auth.type.account.dfs.core.windows.net"));
         Assertions.assertTrue(configuration.getBoolean("fs.abfss.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testGcsFileSystemSharedPerCredential() throws IOException {
+        Configuration base = new Configuration();
+        base.set("fs.gs.impl", FakeGcsFileSystem.class.getName());
+
+        // One catalog reuses one instance across files of a bucket instead of creating one per file.
+        IcebergCachingFileIO ambient = newFileIO(base, new HashMap<>());
+        FileSystem shared = fileSystemOf(ambient, "gs://bucket-a/t/metadata/v1.metadata.json");
+        Assertions.assertSame(shared, fileSystemOf(ambient, "gs://bucket-a/t/metadata/snap-1.avro"));
+        Assertions.assertSame(shared, fileSystemOf(newFileIO(base, new HashMap<>()), "gs://bucket-a/other"));
+        Assertions.assertNotSame(shared, fileSystemOf(ambient, "gs://bucket-b/t"));
+
+        // Another credential, endpoint or vended token on the same bucket gets its own instance.
+        Configuration keyFile = new Configuration(base);
+        keyFile.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY, "SERVICE_ACCOUNT_JSON_KEYFILE");
+        keyFile.set("fs.gs.auth.service.account.email", "sa@project.iam.gserviceaccount.com");
+        Assertions.assertNotSame(shared, fileSystemOf(newFileIO(keyFile, new HashMap<>()), "gs://bucket-a/t"));
+
+        Configuration endpoint = new Configuration(base);
+        endpoint.set("fs.gs.endpoint", "https://storage.example.com");
+        Assertions.assertNotSame(shared, fileSystemOf(newFileIO(endpoint, new HashMap<>()), "gs://bucket-a/t"));
+
+        Map<String, String> token1 = new HashMap<>();
+        token1.put(GCS_ACCESS_TOKEN, "token-1");
+        Map<String, String> token2 = new HashMap<>();
+        token2.put(GCS_ACCESS_TOKEN, "token-2");
+        FileSystem vended = fileSystemOf(newFileIO(base, token1), "gs://bucket-a/t");
+        Assertions.assertNotSame(shared, vended);
+        Assertions.assertSame(vended, fileSystemOf(newFileIO(base, token1), "gs://bucket-a/u"));
+        Assertions.assertNotSame(vended, fileSystemOf(newFileIO(base, token2), "gs://bucket-a/t"));
+
+        // A client that another code path left in Hadoop's own cache is never handed out here.
+        FileSystem hadoopCached = FileSystem.get(URI.create("gs://bucket-c/"), keyFile);
+        Assertions.assertNotSame(hadoopCached, fileSystemOf(ambient, "gs://bucket-c/t"));
+
+        // Other schemes keep going through the wrapped FileIO.
+        Assertions.assertNull(IcebergCachingFileIO.sharedGcsFileSystem("file:///tmp/t", base));
+    }
+
+    private static IcebergCachingFileIO newFileIO(Configuration conf, Map<String, String> properties) {
+        IcebergCachingFileIO fileIO = new IcebergCachingFileIO();
+        fileIO.setConf(conf);
+        fileIO.initialize(properties);
+        return fileIO;
+    }
+
+    private static FileSystem fileSystemOf(IcebergCachingFileIO fileIO, String path) {
+        return ((HadoopOutputFile) fileIO.newOutputFile(path)).getFileSystem();
+    }
+
+    public static class FakeGcsFileSystem extends RawLocalFileSystem {
+        private URI uri;
+
+        @Override
+        public void initialize(URI name, Configuration conf) throws IOException {
+            super.initialize(name, conf);
+            uri = URI.create(name.getScheme() + "://" + name.getAuthority());
+        }
+
+        @Override
+        public URI getUri() {
+            // RawLocalFileSystem's constructor asks for the URI before initialize() sets it.
+            return uri != null ? uri : super.getUri();
+        }
     }
 
     private static Configuration buildConf(Map<String, String> properties, String path) throws StarRocksException {
