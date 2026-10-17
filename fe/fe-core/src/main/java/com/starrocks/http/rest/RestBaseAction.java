@@ -309,13 +309,123 @@ public class RestBaseAction extends BaseAction {
 
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
+        // Default redirect: http scheme + the address's own port. Used by the FE leader
+        // redirect and any caller that does not need a custom scheme/port.
+        redirectTo(request, response, addr, "http", addr.getPort());
+    }
+
+    /**
+     * Immutable (scheme, port) pair for a Stream Load redirect.
+     */
+    public static final class RedirectTarget {
+        public final String scheme;
+        public final int port;
+
+        public RedirectTarget(String scheme, int port) {
+            this.scheme = scheme;
+            this.port = port;
+        }
+    }
+
+    /**
+     * Resolve the effective Stream Load redirect scheme and port from the configured
+     * {@code stream_load_redirect_scheme}/{@code stream_load_redirect_port} and the backend's real
+     * HTTP port. Rules (all backward-compatible; defaults reproduce {@code http} + backend port):
+     * <ul>
+     *   <li>Scheme: {@code https} if configured as such (case-insensitive), else {@code http}.</li>
+     *   <li>Port: the configured port if it is a valid TCP port (1..65535); {@code 0} means "unset"
+     *       and uses {@code backendHttpPort} (keeping the configured scheme, so https-on-backend-port
+     *       is allowed when a TLS listener is on the backend port itself).</li>
+     *   <li>If the configured port is INVALID (negative or &gt; 65535), fall back the scheme AND port
+     *       together to {@code http} + {@code backendHttpPort} — never emit {@code https} against the
+     *       backend's plaintext HTTP port, which would make every Stream Load fail.</li>
+     * </ul>
+     * Resolving here (before the address/URL is built) ensures callers never lose the real backend port.
+     */
+    public static RedirectTarget resolveRedirectTarget(int backendHttpPort) {
+        return resolveRedirectTarget(backendHttpPort, null);
+    }
+
+    /**
+     * Scheme-preserving variant. {@code forwardedProto} is the inbound request's
+     * {@code X-Forwarded-Proto} value (or null). When
+     * {@code stream_load_redirect_honor_forwarded_proto} is enabled and {@code forwardedProto} is a
+     * recognized scheme ({@code http}/{@code https}, case-insensitive), it overrides the configured
+     * {@code stream_load_redirect_scheme} for this request — making the redirect match the scheme the
+     * client actually used to reach a TLS-terminating proxy in front of the FE. Otherwise behavior is
+     * identical to {@link #resolveRedirectTarget(int)}. The port resolution is unchanged.
+     */
+    public static RedirectTarget resolveRedirectTarget(int backendHttpPort, String forwardedProto) {
+        // Determine the scheme and whether it was explicitly a recognized value. An unrecognized
+        // configured scheme (empty/typo) must NOT keep a custom TLS port — otherwise the FE would
+        // emit plaintext http against a TLS-only sidecar port and every Stream Load would fail.
+        String configuredScheme = Config.stream_load_redirect_scheme;
+        boolean schemeRecognized =
+                "https".equalsIgnoreCase(configuredScheme) || "http".equalsIgnoreCase(configuredScheme);
+        String scheme = "https".equalsIgnoreCase(configuredScheme) ? "https" : "http";
+
+        boolean schemeFromForwardedProto = false;
+        if (Config.stream_load_redirect_honor_forwarded_proto && forwardedProto != null) {
+            String fp = forwardedProto.trim();
+            // X-Forwarded-Proto may carry a comma-separated chain ("https, http"); the first (left-most)
+            // entry is the original client-facing scheme.
+            int comma = fp.indexOf(',');
+            if (comma >= 0) {
+                fp = fp.substring(0, comma).trim();
+            }
+            if ("https".equalsIgnoreCase(fp)) {
+                scheme = "https";
+                schemeFromForwardedProto = true;
+            } else if ("http".equalsIgnoreCase(fp)) {
+                scheme = "http";
+                schemeFromForwardedProto = true;
+            }
+        }
+
+        // If the configured scheme is unrecognized AND no valid X-Forwarded-Proto overrode it,
+        // degrade scheme AND port together to http + the backend's real port.
+        if (!schemeRecognized && !schemeFromForwardedProto) {
+            LOG.warn("Invalid stream_load_redirect_scheme '{}' (only 'http'/'https' accepted); "
+                    + "falling back to http + backend port '{}'", configuredScheme, backendHttpPort);
+            return new RedirectTarget("http", backendHttpPort);
+        }
+
+        int configured = Config.stream_load_redirect_port;
+        if (configured == 0) {
+            return new RedirectTarget(scheme, backendHttpPort);
+        }
+        if (configured > 0 && configured <= 65535) {
+            return new RedirectTarget(scheme, configured);
+        }
+        // Invalid port: degrade scheme + port together so the load still works over the backend port.
+        LOG.warn("Invalid stream_load_redirect_port '{}' (valid range 1..65535, or 0 to use the backend "
+                + "http port); falling back to http + backend port '{}'", configured, backendHttpPort);
+        return new RedirectTarget("http", backendHttpPort);
+    }
+
+    /**
+     * Scheme/port-aware redirect. Lets callers (e.g. Stream Load) emit an https:// Location
+     * and/or a different port (e.g. a TLS-terminating sidecar/proxy in front of the BE/CN),
+     * without changing the default behavior for other callers.
+     * The scheme is defensively sanitized (unknown scheme falls back to "http"). Callers are
+     * expected to pass a valid port (see {@link #effectiveRedirectPort(int)}).
+     */
+    public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr,
+                           String scheme, int port)
+            throws DdlException {
+        String effectiveScheme = scheme;
+        if (effectiveScheme == null
+                || !("http".equalsIgnoreCase(effectiveScheme) || "https".equalsIgnoreCase(effectiveScheme))) {
+            LOG.warn("Invalid redirect scheme '{}', falling back to 'http'", scheme);
+            effectiveScheme = "http";
+        }
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI("http", null, addr.getHostname(),
-                    addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
+            resultUriObj = new URI(effectiveScheme, null, addr.getHostname(),
+                    port, urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());

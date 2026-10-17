@@ -1572,6 +1572,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Retention window for finished or cancelled Stream Load tasks. After a task reaches a final state and its end timestamp is ealier than this threshold (`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`), it becomes eligible for removal by `StreamLoadMgr.cleanOldStreamLoadTasks` and is discarded when loading persisted state. Applies to both `StreamLoadTask` and `StreamLoadMultiStmtTask`. If total task count exceeds `stream_load_task_keep_max_num`, cleanup may be triggered earlier (synchronous tasks are prioritized by `cleanSyncStreamLoadTasks`). Set this to balance history/debugability against memory usage.
 - Introduced in: v3.2.0
 
+### `stream_load_redirect_scheme`
+
+- Default: http
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The URI scheme used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client, pointing it to the BE/CN node. The default `http` preserves the original behavior. Set it to `https` to redirect clients to a TLS endpoint (for example, a TLS-terminating sidecar or reverse proxy running in front of the BE/CN HTTP server), enabling an encrypted Stream Load data hop without the BE/CN HTTP server having to serve TLS itself. Only `http` and `https` are accepted (case-insensitive); any other or empty value is invalid and the FE falls back to `http` on the backend's real `be_http_port` (scheme and port degrade together, so a custom TLS port is never used with plaintext `http`). The setting is mutable and applied per redirect — no FE restart is required. This parameter affects only the Stream Load redirect; the FE leader redirect is not affected. Typically used together with `stream_load_redirect_port`.
+- Introduced in: -
+
+### `stream_load_redirect_port`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The port used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client. The default `0` means the FE uses the backend's real `be_http_port` (original behavior). Set it to a valid TCP port in the range `1`–`65535` to redirect clients to a sidecar/proxy port that terminates TLS and forwards to the BE/CN HTTP port. Any out-of-range value (negative or greater than `65535`) is treated as invalid; the FE then falls back to `http` on the backend's real `be_http_port` (scheme and port degrade together, so it never sends HTTPS to the plaintext backend port). Typically used together with `stream_load_redirect_scheme = https`.
+- Introduced in: -
+
+### `stream_load_redirect_honor_forwarded_proto`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, the FE derives the Stream Load redirect scheme from the inbound request's `X-Forwarded-Proto` header when present, overriding `stream_load_redirect_scheme` on a per-request basis. This makes the redirect scheme-preserving: a client that reached the FE over HTTPS through a TLS-terminating proxy (which sets `X-Forwarded-Proto: https`) is redirected to `https`, while a plaintext client is redirected to `http` — so both coexist without a cluster-wide setting. When `false` (default), or when the header is absent, `stream_load_redirect_scheme` is used as before (fully backward-compatible). Only the values `http`/`https` (case-insensitive) are honored; a comma-separated chain uses the left-most (original client) value. The port resolution is unchanged.
+- Introduced in: -
+
 ### `transaction_clean_interval_second`
 
 - Default: 30
