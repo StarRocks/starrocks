@@ -163,6 +163,7 @@ public:
             return _strategy.aggregate_type == TCounterAggregateType::AVG ||
                    _strategy.aggregate_type == TCounterAggregateType::AVG_SUM;
         }
+        bool is_max() const { return _strategy.aggregate_type == TCounterAggregateType::MAX; }
 
         bool skip_merge() const {
             return _strategy.merge_type == TCounterMergeType::SKIP_ALL ||

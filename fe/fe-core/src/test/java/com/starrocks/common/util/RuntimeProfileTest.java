@@ -249,6 +249,33 @@ public class RuntimeProfileTest {
         profile.prettyPrint(builder, "");
     }
 
+    // MAX keeps the largest instance value and still reports min/max; a strategy without an aggregate type
+    // keeps the historical SUM behaviour.
+    @Test
+    public void testMergeIsomorphicProfilesMax() {
+        TCounterStrategy maxStrategy = new TCounterStrategy();
+        maxStrategy.setAggregate_type(TCounterAggregateType.MAX);
+        maxStrategy.setMerge_type(TCounterMergeType.MERGE_ALL);
+        maxStrategy.setMin_max_type(TCounterMinMaxType.MIN_MAX_ALL);
+        TCounterStrategy unknownStrategy = new TCounterStrategy();
+        unknownStrategy.setMerge_type(TCounterMergeType.MERGE_ALL);
+        unknownStrategy.setMin_max_type(TCounterMinMaxType.MIN_MAX_ALL);
+
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        for (long value : new long[] {0L, 5L, 5L}) {
+            RuntimeProfile profile = new RuntimeProfile("profile");
+            profile.addCounter("max1", TUnit.UNIT, maxStrategy).setValue(value);
+            profile.addCounter("unknown1", TUnit.UNIT, unknownStrategy).setValue(value);
+            profiles.add(profile);
+        }
+
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assertions.assertEquals(5, mergedProfile.getCounter("max1").getValue());
+        Assertions.assertEquals(0, mergedProfile.getCounter("__MIN_OF_max1").getValue());
+        Assertions.assertEquals(5, mergedProfile.getCounter("__MAX_OF_max1").getValue());
+        Assertions.assertEquals(10, mergedProfile.getCounter("unknown1").getValue());
+    }
+
     @Test
     public void testMergeIsomorphicProfiles1() {
         List<RuntimeProfile> profiles = Lists.newArrayList();

@@ -134,6 +134,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (_olap_scan_node.__isset.partition_boundaries) {
+        const auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+        _runtime_filter_partition_pruner = std::make_unique<RuntimeFilterPartitionPruner>(
+                parse_partition_boundaries(tuple_desc, _olap_scan_node.partition_boundaries));
+    }
+
     if (_olap_scan_node.__isset.partition_conjuncts) {
         const auto& partition_conjuncts = _olap_scan_node.partition_conjuncts;
         _partition_exprs.resize(partition_conjuncts.size());
