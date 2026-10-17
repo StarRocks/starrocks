@@ -1545,6 +1545,61 @@ TEST_F(AggregateTest, test_histogram_none) {
             result_column->debug_string());
 }
 
+TEST_F(AggregateTest, test_histogram_multi_stage) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    const auto* func = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
+    ASSERT_NE(nullptr, func);
+
+    auto data_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    // Both partitions contain 1 and 3, so merging must add their frequencies.
+    for (const auto& value : {Datum(int64_t{1}), Datum(int64_t{3}), Datum(int64_t{2}), Datum(), Datum(int64_t{1}),
+                              Datum(int64_t{3}), Datum(), Datum(int64_t{4})}) {
+        data_column->append_datum(value);
+    }
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size()));
+    const_columns.emplace_back(ColumnHelper::create_const_column<TYPE_DOUBLE>(1.0, data_column->size()));
+    local_ctx->set_constant_columns(const_columns);
+    const Column* raw_columns[] = {data_column.get()};
+
+    auto single_state = ManagedAggrState::create(local_ctx.get(), func);
+    func->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns, single_state->state());
+
+    auto left_state = ManagedAggrState::create(local_ctx.get(), func);
+    auto right_state = ManagedAggrState::create(local_ctx.get(), func);
+    for (size_t i = 0; i < data_column->size(); ++i) {
+        auto partial_state = i < data_column->size() / 2 ? left_state->state() : right_state->state();
+        func->update(local_ctx.get(), raw_columns, partial_state, i);
+    }
+
+    auto serialized = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    func->serialize_to_column(local_ctx.get(), left_state->state(), serialized.get());
+    func->serialize_to_column(local_ctx.get(), right_state->state(), serialized.get());
+    ASSERT_EQ(2, serialized->size());
+    ASSERT_EQ(2, serialized->null_column()->size());
+    ASSERT_FALSE(serialized->has_null());
+
+    auto merged_state = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serialized.get(), merged_state->state(), 1);
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    func->merge(local_ctx.get(), serialized.get(), merged_state->state(), 0);
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+
+    auto single_result = BinaryColumn::create();
+    auto merged_result = BinaryColumn::create();
+    func->finalize_to_column(local_ctx.get(), single_state->state(), single_result.get());
+    func->finalize_to_column(local_ctx.get(), merged_state->state(), merged_result.get());
+    ASSERT_EQ(1, single_result->size());
+    ASSERT_EQ(1, merged_result->size());
+    ASSERT_EQ(R"([["1","3","5","2"],["4","4","6","1"]])", merged_result->get_slice(0).to_string());
+    ASSERT_EQ(single_result->get_slice(0).to_string(), merged_result->get_slice(0).to_string());
+}
+
 TEST_F(AggregateTest, test_histogram_sample) {
     std::vector<std::string> estimators = {"DUJ1", "LINEAR", "POLYNOMIAL", "GEE"};
     for (const std::string& estimator : estimators) {
