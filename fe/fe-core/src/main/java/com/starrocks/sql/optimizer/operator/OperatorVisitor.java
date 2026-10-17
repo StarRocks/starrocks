@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.starrocks.sql.optimizer.operator.logical.LogicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
@@ -197,6 +199,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalJDBCScan(LogicalJDBCScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalADBCScan(LogicalADBCScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -380,6 +386,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalADBCScan(PhysicalADBCScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
