@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.mv.MVMirrorRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
@@ -103,7 +104,7 @@ public class SyncPartitionUtils {
                 unique.add(entry);
             }
         }
-        return differ != null ? differ.diff(unique, mvRangeMap) :
+        return differ != null ? differ.diff(unique, mvRangeMap, false) :
                 RangePartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
@@ -122,13 +123,19 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         PCellSortedSet rollupRange = PCellSortedSet.of();
+        // Only the mirror mapper re-shapes base partitions into a different granularity, which is the
+        // only case where a bounded refresh must replace a partition set atomically. The default
+        // mappings are granularity-preserving and keep the previous (range-only) behavior.
+        boolean applyAtomicReplacement = false;
         if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
+            rollupRange = mapper.toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            applyAtomicReplacement = mapper == MVMirrorRangePartitionMapper.INSTANCE;
         } else if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
-        return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
+        return getRangePartitionDiff(mvRangeMap, rollupRange, differ, applyAtomicReplacement);
     }
 
     public static PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
@@ -155,9 +162,10 @@ public class SyncPartitionUtils {
     @NotNull
     private static PartitionDiff getRangePartitionDiff(PCellSortedSet mvRangeMap,
                                                        PCellSortedSet rollupRange,
-                                                       RangePartitionDiffer differ) {
+                                                       RangePartitionDiffer differ,
+                                                       boolean applyAtomicReplacement) {
         // TODO: Callers may use `List<PartitionRange>` directly.
-        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap, applyAtomicReplacement) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         return diff;
     }
