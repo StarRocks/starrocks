@@ -77,13 +77,11 @@ void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, b
                               bool need_headers, StreamMessageMeta* meta);
 
 #ifndef __APPLE__
-// Pulsar counterpart of build_kafka_message_meta, called only when the job declares a metadata column
-// (need_meta). topic is the configured logical topic (surfaced as TOPIC); message_topic is the
-// per-message topic name (the caller reads it via msg.getTopicName() -- passed in rather than read here
-// because getTopicName() dereferences a null impl on a locally-built pulsar::Message) and the PARTITION
-// index is parsed out of it. key/headers are gated by need_key/need_headers.
+// Pulsar counterpart of build_kafka_message_meta. partition/message_id are always set (the scanner stamps
+// them into rejected-row error logs even when the job selects no metadata column); topic/timestamp/key/headers
+// are attached only when need_meta is set, and key/headers are further gated by need_key/need_headers.
 void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
-                               bool need_key, bool need_headers, StreamMessageMeta* meta);
+                               bool need_meta, bool need_key, bool need_headers, StreamMessageMeta* meta);
 #endif
 
 // data consumer group saves a group of data consumers.

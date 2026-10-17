@@ -131,16 +131,18 @@ void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, b
 
 #ifndef __APPLE__
 void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
-                               bool need_key, bool need_headers, StreamMessageMeta* meta) {
-    // The TOPIC metadata exposes the configured logical topic; PARTITION surfaces the index parsed out
-    // of the per-message "<topic>-partition-N" name (message_topic). The full per-partition name stays
-    // the ack key.
-    meta->set_topic(topic);
+                               bool need_meta, bool need_key, bool need_headers, StreamMessageMeta* meta) {
+    // Always set: the scanner stamps partition/message_id into error logs so rejected rows stay locatable
+    // even when the job selects no metadata column.
     int32_t partition_index = parse_pulsar_partition_index(topic, message_topic);
     if (partition_index >= 0) {
         meta->set_partition(partition_index);
     }
     meta->set_message_id(pulsar_message_id_to_string(msg.getMessageId()));
+    if (!need_meta) {
+        return;
+    }
+    meta->set_topic(topic);
     meta->set_timestamp(static_cast<int64_t>(msg.getPublishTimestamp()));
     // Pulsar uses 0 for an unset event time; map it to -1 so the column renders as NULL.
     int64_t event_ts = static_cast<int64_t>(msg.getEventTimestamp());
@@ -234,8 +236,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     std::map<int32_t, int64_t> cmt_offset_timestamp;
 
     // JSON/Avro: one message per buffer (with source metadata). CSV: rows separated by row_delimiter.
-    const bool append_as_message =
-            ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO;
+    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON ||
+                                   ctx->format == TFileFormatType::FORMAT_AVRO ||
+                                   ctx->format == TFileFormatType::FORMAT_ARROW;
     char row_delimiter = '\n';
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
@@ -464,10 +467,10 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     // copy one
     std::map<std::string, pulsar::MessageId> ack_offset = ctx->pulsar_info->ack_offset;
 
-    // JSON: one message per buffer, carrying source metadata. CSV: rows separated by row_delimiter.
-    // The Pulsar path only ever sees JSON or CSV: PulsarTaskInfo maps every non-json format (including
-    // avro) to CSV_PLAIN, so the avro scanner never runs for Pulsar.
-    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON;
+    // JSON/Avro/Arrow: one message per buffer, carrying source metadata. CSV: rows separated by row_delimiter.
+    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON ||
+                                   ctx->format == TFileFormatType::FORMAT_AVRO ||
+                                   ctx->format == TFileFormatType::FORMAT_ARROW;
     char row_delimiter = '\n';
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
@@ -543,15 +546,12 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             Status st;
             if (append_as_message) {
                 StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
-                const StreamMessageMeta* meta_ptr = nullptr;
-                if (need_meta) {
-                    // `partition` is msg->getTopicName(), read once above (unsafe to re-read inside the
-                    // builder in tests); it carries the "<topic>-partition-N" name for the index parse.
-                    build_pulsar_message_meta(*msg, ctx->pulsar_info->topic, partition, need_key, need_headers, &meta);
-                    meta_ptr = &meta;
-                }
+                // `partition` is msg->getTopicName(), read once above (unsafe to re-read inside the
+                // builder in tests); it carries the "<topic>-partition-N" name for the index parse.
+                build_pulsar_message_meta(*msg, ctx->pulsar_info->topic, partition, need_meta, need_key, need_headers,
+                                          &meta);
                 st = pulsar_pipe->append_json(static_cast<const char*>(msg->getData()), static_cast<size_t>(len),
-                                              meta_ptr);
+                                              &meta);
             } else {
                 st = pulsar_pipe->append_with_row_delimiter(static_cast<const char*>(msg->getData()),
                                                             static_cast<size_t>(len), row_delimiter);
