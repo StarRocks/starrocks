@@ -50,6 +50,8 @@ import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
 import org.apache.arrow.flight.FlightInfo;
+import org.apache.arrow.flight.FlightRuntimeException;
+import org.apache.arrow.flight.FlightStatusCode;
 import org.apache.arrow.flight.FlightStream;
 import org.apache.arrow.flight.Location;
 import org.apache.arrow.flight.NoOpSessionOptionValueVisitor;
@@ -617,6 +619,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         } catch (Exception e) {
             LOG.warn("[ARROW] Error proxying result from {} {}:{}", targetType, host, port, e);
 
+            invalidateClientIfUnavailable(nodeKey, e);
+
             if (stream != null) {
                 try {
                     stream.cancel("Error during streaming", e);
@@ -636,6 +640,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             } catch (Exception e) {
                 LOG.warn("[ARROW] Error closing {} stream", targetType, e);
             }
+        }
+    }
+
+    // A client resolves the host once, when it is built. If the node came back on a new IP,
+    // the cached client keeps dialing the old one, so drop it and let the next request rebuild.
+    // Other errors keep the client, because closing it would also end other calls sharing it.
+    private void invalidateClientIfUnavailable(String key, Exception e) {
+        if (e instanceof FlightRuntimeException
+                && ((FlightRuntimeException) e).status().code() == FlightStatusCode.UNAVAILABLE) {
+            clientCache.invalidate(key);
         }
     }
 
@@ -712,6 +726,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward getFlightInfo to remote FE {}:{}", feHost, fePort, e);
+            invalidateClientIfUnavailable(nodeKey, e);
             throw CallStatus.UNAVAILABLE
                     .withDescription("Failed to forward request to FE " + feHost + ": " + e.getMessage())
                     .withCause(e)
@@ -760,6 +775,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward action to remote FE {}:{}", feHost, fePort, e);
+            invalidateClientIfUnavailable(nodeKey, e);
             listener.onError(CallStatus.UNAVAILABLE
                     .withDescription("Failed to forward action to FE " + feHost + ": " + e.getMessage())
                     .withCause(e)
@@ -795,6 +811,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward setSessionOptions to remote FE {}:{}", feHost, fePort, e);
+            invalidateClientIfUnavailable(nodeKey, e);
             listener.onError(CallStatus.UNAVAILABLE
                     .withDescription("Failed to forward setSessionOptions to FE " + feHost + ": " + e.getMessage())
                     .withCause(e)
@@ -829,6 +846,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward closeSession to remote FE {}:{}", feHost, fePort, e);
+            invalidateClientIfUnavailable(nodeKey, e);
             listener.onError(CallStatus.UNAVAILABLE
                     .withDescription("Failed to forward closeSession to FE " + feHost + ": " + e.getMessage())
                     .withCause(e)
