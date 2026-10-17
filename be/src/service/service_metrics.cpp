@@ -14,7 +14,10 @@
 
 #include "service/service_metrics.h"
 
+#include <google/protobuf/descriptor.h>
+
 #include "common/version.h"
+#include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -40,6 +43,29 @@ void ServiceMetrics::install(MetricRegistry* registry) {
 
     registry->register_metric("short_circuit_request_total", &short_circuit_request_total);
     registry->register_metric("short_circuit_request_duration_us", &short_circuit_request_duration_us);
+    _install_internal_service_rpc_metrics(registry);
+}
+
+void ServiceMetrics::_install_internal_service_rpc_metrics(MetricRegistry* registry) {
+    const auto* service = PInternalService::descriptor();
+    _internal_service_rpc_metrics = std::vector<RpcMethodMetrics>(service->method_count());
+    for (int i = 0; i < service->method_count(); ++i) {
+        MetricLabels labels;
+        labels.add("method", service->method(i)->name());
+
+        auto& metrics = _internal_service_rpc_metrics[i];
+        registry->register_metric("internal_service_rpc_request_bytes", labels, &metrics.request_bytes);
+        registry->register_metric("internal_service_rpc_response_bytes", labels, &metrics.response_bytes);
+    }
+    _internal_service_descriptor = service;
+}
+
+ServiceMetrics::RpcMethodMetrics* ServiceMetrics::internal_service_rpc_metrics(
+        const google::protobuf::MethodDescriptor* method) {
+    if (method == nullptr || method->service() != _internal_service_descriptor) {
+        return nullptr;
+    }
+    return &_internal_service_rpc_metrics[method->index()];
 }
 
 } // namespace starrocks

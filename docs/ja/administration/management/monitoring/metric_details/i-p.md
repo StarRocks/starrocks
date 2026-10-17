@@ -204,6 +204,20 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: INT8カラムプールによって使用されるメモリ。
 
+## `internal_service_rpc_request_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `method` (BE 内部サービスの bRPC メソッド名。例: `transmit_chunk`)
+- 説明: BE 内部サービスが受信したリクエストペイロードの合計サイズ。つまり、リクエストメッセージのサイズとそのアタッチメントのサイズの合計。
+
+## `internal_service_rpc_response_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `method` (BE 内部サービスの bRPC メソッド名。例: `transmit_chunk`)
+- 説明: BE 内部サービスが送信したレスポンスペイロードの合計サイズ。つまり、レスポンスメッセージのサイズとそのアタッチメントのサイズの合計。
+
 ## `jemalloc_active_bytes`
 
 - 単位: バイト
