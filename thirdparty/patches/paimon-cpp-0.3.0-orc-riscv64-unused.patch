@@ -1,0 +1,18 @@
+diff --git a/c++/src/CpuInfoUtil.cc b/c++/src/CpuInfoUtil.cc
+--- a/c++/src/CpuInfoUtil.cc
++++ b/c++/src/CpuInfoUtil.cc
+@@ -485,10 +485,14 @@
+ #else
+     //------------------------------ PPC, ... ------------------------------//
+     bool ArchParseUserSimdLevel(const std::string& simdLevel, int64_t* hardwareFlags) {
++      (void)simdLevel;
++      (void)hardwareFlags;
+       return true;
+     }
+
+-    void ArchVerifyCpuRequirements(const CpuInfo* ci) {}
++    void ArchVerifyCpuRequirements(const CpuInfo* ci) {
++      (void)ci;
++    }
+
+ #endif  // X86, ARM, PPC

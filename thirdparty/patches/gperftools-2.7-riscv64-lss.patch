@@ -1,0 +1,317 @@
+diff --git a/src/base/linux_syscall_support.h b/src/base/linux_syscall_support.h
+index 13aa415..efbd252 100644
+--- a/src/base/linux_syscall_support.h
++++ b/src/base/linux_syscall_support.h
+@@ -2909,5 +2909,311 @@ struct kernel_stat {
+ }
+ #endif
+ 
+-#endif
++#endif  /* end of the arch guard above: everything so far is a no-op on riscv64 */
++
++/* ------------------------------------------------------------------------
++ * riscv64 fallback for gperftools' bundled linux_syscall_support.h copy.
++ *
++ * The stock header above compiles away entirely on riscv64: its top-level
++ * #if lists only x86-32/64, ARM, MIPS, PPC, s390(x) and aarch64. Files that
++ * include it (profile-handler.cc, base/linuxthreads.cc,
++ * malloc_hook_mmap_linux.h) then fail with "sys_gettid was not declared"
++ * and friends. Re-define the subset they use, backed by glibc plus raw
++ * syscalls (__NR_gettid/__NR_getdents64/__NR_prctl/__NR_clone have no
++ * glibc wrapper). kernel_* type layouts follow LSS's own non-mips layouts
++ * so the callers compile unchanged; the glibc sigset_t (128 bytes) is
++ * bridged by copy, never by pointer cast. Other architectures are
++ * unaffected. Kept inside the include guard.
++ * ---------------------------------------------------------------------- */
++#if defined(__riscv) && __riscv_xlen == 64 && defined(__linux)
++
++#include <errno.h>
++#include <fcntl.h>
++#include <sched.h>
++#include <signal.h>
++#include <stdint.h>
++#include <string.h>
++#include <sys/ptrace.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/syscall.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <unistd.h>
++
++#define KERNEL_NSIG 64
++
++struct kernel_sigset_t {
++  unsigned long sig[(KERNEL_NSIG + 8*sizeof(unsigned long) - 1)/
++                    (8*sizeof(unsigned long))];
++};
++
++/* LSS non-mips field order (same as the stock definition above). */
++struct kernel_sigaction {
++  union {
++    void             (*sa_handler_)(int);
++    void             (*sa_sigaction_)(int, siginfo_t *, void *);
++  };
++  unsigned long      sa_flags;
++  void               (*sa_restorer)(void);
++  struct kernel_sigset_t sa_mask;
++};
++
++/* LSS kernel_stat (x86_64-style layout; only the fields linuxthreads.cc
++ * compares -- st_dev/st_ino and friends -- are filled in by the wrappers). */
++struct kernel_stat {
++  unsigned long              st_dev;
++  unsigned long              st_ino;
++  unsigned long              st_nlink;
++  unsigned int               st_mode;
++  unsigned int               st_uid;
++  unsigned int               st_gid;
++  unsigned int               __pad0;
++  unsigned long              st_rdev;
++  unsigned long              st_size;
++  unsigned long              st_blksize;
++  unsigned long              st_blocks;
++  unsigned long              st_atime_;
++  unsigned long              st_atime_nsec_;
++  unsigned long              st_mtime_;
++  unsigned long              st_mtime_nsec_;
++  unsigned long              st_ctime_;
++  unsigned long              st_ctime_nsec_;
++  unsigned long              __unused[3];
++};
++
++/* include/linux/dirent.h -- same as stock. */
++struct kernel_dirent64 {
++  unsigned long long d_ino;
++  long long          d_off;
++  unsigned short     d_reclen;
++  unsigned char      d_type;
++  char               d_name[256];
++};
++
++#define KERNEL_DIRENT kernel_dirent64
++#define GETDENTS      sys_getdents64
++
++static inline int sys_gettid(void) {
++  return (int)syscall(__NR_gettid);
++}
++
++static inline int sys__exit(int status) {
++  _exit(status);
++  return 0;
++}
++
++static inline int sys_getppid(void) {
++  return getppid();
++}
++
++static inline int sys_sched_yield(void) {
++  return sched_yield();
++}
++
++static inline int sys_socket(int domain, int type, int protocol) {
++  return socket(domain, type, protocol);
++}
++
++static inline int sys_fcntl(int fd, int cmd, long arg) {
++  return fcntl(fd, cmd, arg);
++}
++
++static inline int sys_open(const char *path, int flags, int mode) {
++  return open(path, flags, mode);
++}
++
++static inline int sys_close(int fd) {
++  return close(fd);
++}
++
++static inline ssize_t sys_read(int fd, void *buf, size_t count) {
++  return read(fd, buf, count);
++}
++
++static inline off_t sys_lseek(int fd, off_t offset, int whence) {
++  return lseek(fd, offset, whence);
++}
++
++static inline int sys_fstat(int fd, struct kernel_stat *st) {
++  struct stat glibc_st;
++  int rc = fstat(fd, &glibc_st);
++  if (rc == 0) {
++    st->st_dev     = glibc_st.st_dev;
++    st->st_ino     = glibc_st.st_ino;
++    st->st_nlink   = glibc_st.st_nlink;
++    st->st_mode    = glibc_st.st_mode;
++    st->st_uid     = glibc_st.st_uid;
++    st->st_gid     = glibc_st.st_gid;
++    st->st_rdev    = glibc_st.st_rdev;
++    st->st_size    = glibc_st.st_size;
++    st->st_blksize = glibc_st.st_blksize;
++    st->st_blocks  = glibc_st.st_blocks;
++  }
++  return rc;
++}
++
++static inline int sys_stat(const char *path, struct kernel_stat *st) {
++  struct stat glibc_st;
++  int rc = stat(path, &glibc_st);
++  if (rc == 0) {
++    st->st_dev     = glibc_st.st_dev;
++    st->st_ino     = glibc_st.st_ino;
++    st->st_nlink   = glibc_st.st_nlink;
++    st->st_mode    = glibc_st.st_mode;
++    st->st_uid     = glibc_st.st_uid;
++    st->st_gid     = glibc_st.st_gid;
++    st->st_rdev    = glibc_st.st_rdev;
++    st->st_size    = glibc_st.st_size;
++    st->st_blksize = glibc_st.st_blksize;
++    st->st_blocks  = glibc_st.st_blocks;
++  }
++  return rc;
++}
++
++static inline int sys_getdents64(int fd, struct kernel_dirent64 *dirp, size_t count) {
++  return (int)syscall(__NR_getdents64, fd, dirp, count);
++}
++
++static inline pid_t sys_waitpid(pid_t pid, int *status, int options) {
++  return waitpid(pid, status, options);
++}
++
++static inline int sys_prctl(int option, unsigned long arg2) {
++  return (int)syscall(__NR_prctl, option, arg2);
++}
++
++/* Raw syscall: glibc's ptrace() and its __ptrace_request enum are only
++ * declared under _GNU_SOURCE, which gperftools translation units do not
++ * guarantee. linuxthreads.cc passes PTRACE_* constants from <sys/ptrace.h>. */
++static inline long sys_ptrace(int request, pid_t pid, void *addr, void *data) {
++  return syscall(__NR_ptrace, request, pid, addr, data);
++}
++
++/* Mirrors the stock LSS ptrace_detach: yielding before PTRACE_DETACH reduces
++ * the risk of the tracee missing the detach and getting job-control signals
++ * sent to the real parent; SIGCONT right after wakes it up. */
++static inline int sys_ptrace_detach(pid_t pid) {
++  int rc, err;
++  sched_yield();
++  rc = (int)syscall(__NR_ptrace, PTRACE_DETACH, pid, (void *)0, (void *)0);
++  err = errno;
++  kill(pid, SIGCONT);
++  errno = err;
++  return rc;
++}
++
++static inline int sys_sigaltstack(const stack_t *ss, const stack_t *oss) {
++  return sigaltstack(ss, (stack_t *)oss);
++}
++
++static inline int sys_sigfillset(struct kernel_sigset_t *set) {
++  memset(&set->sig, -1, sizeof(set->sig));
++  return 0;
++}
++
++static inline int sys_sigemptyset(struct kernel_sigset_t *set) {
++  memset(&set->sig, 0, sizeof(set->sig));
++  return 0;
++}
++
++static inline int sys_sigdelset(struct kernel_sigset_t *set, int signum) {
++  if (signum < 1 || signum > (int)(8*sizeof(set->sig))) {
++    errno = EINVAL;
++    return -1;
++  }
++  set->sig[(signum - 1)/(8*sizeof(set->sig[0]))]
++      &= ~(1UL << ((signum - 1) % (8*sizeof(set->sig[0]))));
++  return 0;
++}
++
++static inline int sys_sigaction(int signum, const struct kernel_sigaction *act,
++                                struct kernel_sigaction *oldact) {
++  struct sigaction sa, sa_old;
++  struct sigaction *sa_ptr = act ? &sa : NULL;
++  struct sigaction *old_ptr = oldact ? &sa_old : NULL;
++  if (act) {
++    memset(&sa, 0, sizeof(sa));
++    sa.sa_handler = act->sa_handler_;
++    sa.sa_flags = (int)act->sa_flags;
++    /* glibc's sa_mask is a full 128-byte sigset_t; LSS's is 8 bytes. */
++    memcpy(&sa.sa_mask, &act->sa_mask, sizeof(act->sa_mask));
++  }
++  int rc = sigaction(signum, sa_ptr, old_ptr);
++  if (rc == 0 && oldact) {
++    memset(oldact, 0, sizeof(*oldact));
++    oldact->sa_handler_ = sa_old.sa_handler;
++    oldact->sa_flags = (unsigned long)sa_old.sa_flags;
++    memcpy(&oldact->sa_mask, &sa_old.sa_mask, sizeof(oldact->sa_mask));
++  }
++  return rc;
++}
++
++static inline int sys_sigprocmask(int how, const struct kernel_sigset_t *set,
++                                  struct kernel_sigset_t *oldset) {
++  /* LSS's kernel_sigset_t (8 bytes) is NOT layout-compatible with glibc's
++   * 128-byte sigset_t; bridge by copy, never by pointer cast. */
++  sigset_t s, s_old;
++  sigset_t *set_ptr = NULL;
++  sigset_t *old_ptr = oldset ? &s_old : NULL;
++  if (set) {
++    memset(&s, 0, sizeof(s));
++    memcpy(&s, set, sizeof(*set));
++    set_ptr = &s;
++  }
++  int rc = sigprocmask(how, set_ptr, old_ptr);
++  if (rc == 0 && oldset) {
++    memset(oldset, 0, sizeof(*oldset));
++    memcpy(oldset, &s_old, sizeof(*oldset));
++  }
++  return rc;
++}
++
++/* LSS clone() contract: the child (which shares the caller's address space;
++ * linuxthreads.cc always passes CLONE_VM) runs fn(arg) on child_stack and
++ * exits with its return value; the parent gets the child pid.
++ *
++ * Implemented as raw ecall with register-asm variables, same pattern as
++ * glibc's riscv64 syscall()/clone(): fn/arg ride in callee-saved s0/s1,
++ * which the kernel preserves across clone, and the whole child path stays
++ * inside the asm block so the compiler never reloads them relative to the
++ * (switched) stack pointer. Kernel argument order on riscv64 is
++ * a0=flags, a1=newsp, a2=parent_tidptr, a3=child_tidptr, a4=tls -- note
++ * child_tidptr before tls, same as glibc's riscv64 clone.S. child_stack is
++ * aligned down to 16 bytes for the psABI. glibc's clone() is avoided
++ * because its declaration needs _GNU_SOURCE and its variadic prototype
++ * could conflict with <sched.h>.
++ */
++static inline pid_t sys_clone(int (*fn)(void *), void *child_stack, int flags,
++                              void *arg, pid_t *parent_tidptr, void *newtls,
++                              pid_t *child_tidptr) {
++  register int (*fn_r)(void *) __asm__("s0") = fn;
++  register void *arg_r __asm__("s1") = arg;
++  register long a0 __asm__("a0") = flags;
++  register long a1 __asm__("a1") = (long)((uintptr_t)child_stack & ~(uintptr_t)15);
++  register long a2 __asm__("a2") = (long)parent_tidptr;
++  register long a3 __asm__("a3") = (long)child_tidptr;
++  register long a4 __asm__("a4") = (long)newtls;
++  register long a7 __asm__("a7") = __NR_clone;
++  __asm__ __volatile__(
++      "ecall\n"
++      "bnez a0, 1f\n"
++      "mv a0, %7\n"
++      "jalr %6\n"
++      "li a7, %8\n"
++      "ecall\n"
++      "1:\n"
++      : "+r"(a0), "+r"(a1), "+r"(a2), "+r"(a3), "+r"(a4), "+r"(a7)
++      : "r"(fn_r), "r"(arg_r), "i"(__NR_exit)
++      : "memory");
++  /* LSS_RETURN: kernel returns -errno in [-4095, -1]. */
++  if ((unsigned long)a0 < (unsigned long)-4095UL) {
++    return (pid_t)a0;
++  }
++  errno = (int)-a0;
++  return (pid_t)-1;
++}
++
++#endif /* __riscv && __riscv_xlen == 64 && __linux */
++
+ #endif

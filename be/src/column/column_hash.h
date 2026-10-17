@@ -93,6 +93,8 @@ inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
     return __crc32cd(seed, value);
 #elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
     return ~starrocks::crc32c::Extend(~seed, (const char*)&value, sizeof(uint64_t));
+#elif defined(__riscv)
+    return crc32c_sw_u64(static_cast<uint32_t>(seed), value);
 #else
 #error "Not supported architecture"
 #endif
@@ -111,6 +113,9 @@ inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed
 #elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
     uint64_t hash = ~starrocks::crc32c::Extend(~seed, (const char*)&value0, sizeof(uint64_t));
     hash = ~starrocks::crc32c::Extend(~hash, (const char*)&value1, sizeof(uint64_t));
+#elif defined(__riscv)
+    uint32_t hash = crc32c_sw_u64(static_cast<uint32_t>(seed), value0);
+    hash = crc32c_sw_u64(hash, value1);
 #else
 #error "Not supported architecture"
 #endif
