@@ -34,7 +34,210 @@ starrocks_detect_parallelism() {
     if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
         cpu_count=1
     fi
+
+    if ! starrocks_is_darwin; then
+        local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
+        local cgroup_cores=0
+
+        # 1. cgroup v2: cpu.max contains "quota period" (e.g. "200000 100000" or "max 100000")
+        local cpu_max_content
+        cpu_max_content="$(cat "${cgroup_root}/cpu.max" 2>/dev/null || true)"
+        if [[ -n "${cpu_max_content}" ]]; then
+            local cfs_quota="" cfs_period=""
+            read -r cfs_quota cfs_period <<< "${cpu_max_content}"
+            if [[ -n "${cfs_quota}" && "${cfs_quota}" =~ ^[0-9]+$ && "${cfs_quota}" -gt 0 && \
+                  -n "${cfs_period}" && "${cfs_period}" =~ ^[0-9]+$ && "${cfs_period}" -gt 0 ]]; then
+                cgroup_cores=$(( cfs_quota / cfs_period ))
+                [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
+            fi
+        fi
+
+        # 2. cgroup v1: cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct/...)
+        if [[ "${cgroup_cores}" -le 0 ]]; then
+            local v1_quota=""
+            v1_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || true)"
+            if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 ]]; then
+                local v1_period
+                v1_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                if [[ -n "${v1_period}" && "${v1_period}" =~ ^[0-9]+$ && "${v1_period}" -gt 0 ]]; then
+                    cgroup_cores=$(( v1_quota / v1_period ))
+                    [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
+                fi
+            fi
+        fi
+
+        if [[ "${cgroup_cores}" -gt 0 && "${cgroup_cores}" -lt "${cpu_count}" ]]; then
+            cpu_count="${cgroup_cores}"
+        fi
+    fi
+
     echo "${cpu_count}"
+}
+
+starrocks_detect_total_ram_gb() {
+    local ram_kb=""
+    if starrocks_is_darwin; then
+        local ram_bytes
+        ram_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+        if [[ -n "${ram_bytes}" && "${ram_bytes}" =~ ^[0-9]+$ && "${ram_bytes}" -gt 0 ]]; then
+            local ram_gb=$(( ram_bytes / 1024 / 1024 / 1024 ))
+            [[ "${ram_gb}" -lt 1 ]] && ram_gb=1
+            echo "${ram_gb}"
+            return 0
+        fi
+    else
+        local ram_gb_host=0
+        if [[ -r /proc/meminfo ]]; then
+            ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+            if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
+                ram_gb_host=$(( ram_kb / 1024 / 1024 ))
+            fi
+        fi
+
+        local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
+        local cgroup_bytes=""
+        cgroup_bytes="$(cat "${cgroup_root}/memory.max" 2>/dev/null || cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
+        if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+            local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+            # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
+            if [[ "${cgroup_gb}" -gt 1048576 ]]; then
+                cgroup_gb=0
+            elif [[ "${cgroup_gb}" -lt 1 ]]; then
+                cgroup_gb=1
+            fi
+
+            if [[ "${cgroup_gb}" -gt 0 ]]; then
+                if [[ "${ram_gb_host}" -eq 0 || "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
+                    echo "${cgroup_gb}"
+                    return 0
+                fi
+            fi
+        fi
+
+        if [[ "${ram_gb_host}" -gt 0 ]]; then
+            echo "${ram_gb_host}"
+            return 0
+        fi
+    fi
+    echo 0
+}
+
+starrocks_detect_linker_type() {
+    local explicit_linker="${STARROCKS_LINKER:-}"
+    if [[ -n "${explicit_linker}" ]]; then
+        case "${explicit_linker}" in
+            *lld*|*mold*|*gold*) echo "modern" ; return 0 ;;
+            *bfd*)               echo "legacy" ; return 0 ;;
+        esac
+    fi
+
+    if starrocks_is_darwin; then
+        echo "modern"
+        return 0
+    fi
+
+    if [[ "$(uname -m)" != "aarch64" ]]; then
+        local cxx_compiler=""
+        if [[ -n "${CXX:-}" ]]; then
+            cxx_compiler="${CXX}"
+        elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
+            cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
+        elif [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
+            cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+        else
+            cxx_compiler="g++"
+        fi
+        local cxx_version
+        cxx_version="$(${cxx_compiler} -dumpversion 2>/dev/null || echo 0)"
+        if [[ "${cxx_version%%.*}" -ge 14 ]]; then
+            local glibc_version
+            glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF; exit}' || true)"
+            if [[ -n "${glibc_version}" ]]; then
+                local major="${glibc_version%%.*}"
+                local minor="${glibc_version#*.}"
+                minor="${minor%%.*}"
+                if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 29 ]]; then
+                    echo "modern"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+
+    # Inspect the default system ld flavor
+    local ld_version_output
+    if command -v ld >/dev/null 2>&1; then
+        ld_version_output="$(ld -v 2>&1 || true)"
+        case "${ld_version_output}" in
+            *LLD*|*lld*|*mold*|*GNU\ gold*)
+                echo "modern"
+                return 0
+                ;;
+        esac
+    fi
+    
+    echo "legacy"
+}
+
+starrocks_detect_ut_parallelism() {
+    # 1. Caller-supplied environment variable takes precedence
+    if [[ -n "${PARALLEL:-}" && "${PARALLEL}" =~ ^[0-9]+$ && "${PARALLEL}" -gt 0 ]]; then
+        echo "${PARALLEL}"
+        return 0
+    fi
+
+    # 2. Darwin host defaults to 100% core parallelism
+    if starrocks_is_darwin; then
+        starrocks_detect_parallelism
+        return 0
+    fi
+
+    local cpus
+    cpus="$(starrocks_detect_parallelism)"
+    if [[ -z "${cpus}" || ! "${cpus}" =~ ^[0-9]+$ || "${cpus}" -lt 1 ]]; then
+        cpus=1
+    fi
+
+    local linker_type="${1:-}"
+    [[ -z "${linker_type}" ]] && linker_type="$(starrocks_detect_linker_type)"
+
+    # 3. Legacy GNU BFD: preserve conservative 25% CPU throttle to avoid linker OOM
+    if [[ "${linker_type}" == "legacy" ]]; then
+        local legacy_parallel=$(( cpus / 4 + 1 ))
+        echo "${legacy_parallel}"
+        return 0
+    fi
+
+    # 4. Modern linkers (LLD, mold, gold): scale up to CPU count, capped by RAM availability
+    # Peak template instantiation and LLD link uses ~1.5 - 2.0 GiB per concurrent job.
+    local ram_gb="${2:-}"
+    [[ -z "${ram_gb}" ]] && ram_gb="$(starrocks_detect_total_ram_gb)"
+    local target_parallel="${cpus}"
+
+    # If RAM is unreadable or unresolved, fall back to conservative legacy ratio
+    if [[ -z "${ram_gb}" || ! "${ram_gb}" =~ ^[0-9]+$ || "${ram_gb}" -le 0 ]]; then
+        local safe_parallel=$(( cpus / 4 + 1 ))
+        if [[ "${safe_parallel}" -lt 1 ]]; then
+            safe_parallel=1
+        fi
+        echo "${safe_parallel}"
+        return 0
+    fi
+
+    local ram_safe_jobs=$(( ram_gb / 2 ))
+    if [[ "${ram_safe_jobs}" -lt 1 ]]; then
+        ram_safe_jobs=1
+    fi
+    if [[ "${target_parallel}" -gt "${ram_safe_jobs}" ]]; then
+        target_parallel="${ram_safe_jobs}"
+    fi
+
+    if [[ "${target_parallel}" -lt 1 ]]; then
+        target_parallel=1
+    fi
+
+    echo "${target_parallel}"
 }
 
 starrocks_default_ut_thin_archive() {
