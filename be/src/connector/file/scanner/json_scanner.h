@@ -79,6 +79,11 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+    // Routine-load opt-in carried in TBrokerScanRangeParams.properties["skip_on_fatal_parse_error"].
+    // Only honoured for uncompressed FILE_STREAM sources, where one pipe buffer is exactly one
+    // Kafka/Pulsar message, so skipping "the rest of the buffer" skips exactly one message.
+    // Off by default; with it off every code path behaves as before.
+    bool _skip_on_fatal_parse_error = false;
 
     // An empty chunk that can be reused as the container for the result of get_next().
     // It's mainly for optimizing the performance where get_next() returns Status::Timeout
@@ -143,6 +148,16 @@ private:
 
     void _append_error_msg(const std::string&, const std::string& error_msg);
 
+    // Skip-specific bookkeeping for a structurally malformed message (rejected-record log, WARNING
+    // with the source meta, metric) and rearm the reader so the next loop iteration pulls the next
+    // message. Callers have already done the usual bookkeeping (num_rows_filtered++, _append_error_msg).
+    // row_already_rejected: the _construct_row failure that preceded this skip already wrote the
+    // row to the rejected-record file, so the payload is not written a second time.
+    // chunk: when given, every row this message already contributed to it (from
+    // _message_first_row on) is rolled back, so a skipped message is atomic — no row at all, even
+    // when its leading objects were complete (strip_outer_array / json_root with a truncated tail).
+    void _skip_malformed_message(const Status& st, bool row_already_rejected = false, Chunk* chunk = nullptr);
+
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
@@ -164,6 +179,11 @@ private:
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
+    // skip_on_fatal_parse_error: chunk row count at which the current message started, i.e. the
+    // rollback point when the message turns out to be malformed. Reset to 0 for every new chunk
+    // (rows of a message that spilled into an earlier, already returned chunk are not recoverable;
+    // that only happens for a message larger than a whole chunk).
+    size_t _message_first_row = 0;
 
     // record the chunk column position for previous parsed json object
     std::vector<PreviousParsedItem> _prev_parsed_position;
@@ -189,6 +209,9 @@ private:
     size_t _payload_capacity = 0;
 
     TBrokerRangeDesc _range_desc;
+
+    // Copied from JsonScanner::_skip_on_fatal_parse_error at construction.
+    bool _skip_on_fatal_parse_error = false;
 
     // CDC envelope type
     TEnvelopeType::type _envelope_type = TEnvelopeType::NONE;
