@@ -36,7 +36,9 @@
 
 #include <thrift/TProcessor.h>
 #include <thrift/server/TServer.h>
+#include <thrift/transport/TTransport.h>
 
+#include <memory>
 #include <thread>
 #include <unordered_map>
 
@@ -44,6 +46,36 @@
 #include "common/status.h"
 
 namespace starrocks {
+
+// A transport factory that wraps the source transport in a TBufferedTransport carrying a
+// TConfiguration built from create_thrift_configuration() (which honors
+// config::thrift_max_message_size).
+//
+// Since thrift 0.16, TTransport enforces a maxMessageSize limit (default
+// DEFAULT_MAX_MESSAGE_SIZE = 100MB) by counting consumed bytes per RPC message. When a
+// single RPC message (e.g. BackendService.submit_tasks with a large agent_tasks list
+// produced by a wide table with many buckets) exceeds that limit, the server throws
+// TTransportException("MaxMessageSize reached") and closes the connection, which surfaces
+// on the FE side as "Socket is closed by peer" / "Broken pipe". The default
+// TBufferedTransportFactory does not accept a TConfiguration, so we subclass it here to
+// make the server honor config::thrift_max_message_size.
+//
+// NOTE: thrift_max_message_size (and the other thrift limits) are mutable configs that can
+// be changed at runtime (e.g. via information_schema.be_configs). getTransport() is called
+// once per new connection, so we build a fresh TConfiguration from the current config value
+// on every connection instead of caching it at factory construction time. This way a
+// runtime change takes effect on subsequent connections without restarting the BE.
+// In-flight connections keep the limit they were created with, which is the desired behavior.
+//
+// The implementation lives in thrift_server.cpp so that this header only needs to see
+// TTransportFactory (the base class) and does not drag in thrift's TBufferTransports or
+// thrift_util.h transitively.
+class ConfigurableBufferedTransportFactory : public apache::thrift::transport::TTransportFactory {
+public:
+    std::shared_ptr<apache::thrift::transport::TTransport> getTransport(
+            std::shared_ptr<apache::thrift::transport::TTransport> transport) override;
+};
+
 // Utility class for all Thrift servers. Runs a TNonblockingServer(default) or a
 // TThreadPoolServer with, by default, 2 worker threads, that exposes the interface
 // described by a user-supplied TProcessor object.
