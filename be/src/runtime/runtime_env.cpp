@@ -305,8 +305,9 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
     _update_mem_tracker->set_level(2);
-    _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
-    _passthrough_mem_tracker->set_level(2);
+    // Buffered chunks leave the sender's tracker until the receiver pulls them. Keep that
+    // ownership transfer inside the process tree so the live allocations still count toward mem_limit.
+    _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, process_mem_tracker());
     _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);
     _brpc_iobuf_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
