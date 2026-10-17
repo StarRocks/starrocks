@@ -125,7 +125,11 @@ public class MVVersionManager {
                 }
             }
         }
-        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        // A run that touches a base table without refreshing any of its partitions yields 0 here; keep the
+        // previous data timestamp rather than reporting the MV as never refreshed.
+        if (maxChangedTableRefreshTime > 0) {
+            mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        }
         // Freshness is confirmed as of the batch's first-run start (the pinned-snapshot moment), and only once
         // the batch's final run completes. Monotonic (>) so it can never move backwards.
         long freshnessBaseline = freshnessBaselineTime();
@@ -134,7 +138,7 @@ public class MVVersionManager {
         }
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
-                mv.getName(), maxChangedTableRefreshTime);
+                mv.getName(), mvRefreshScheme.getLastRefreshTime());
         persistRefreshScheme(mvRefreshScheme);
 
         // trigger timeless info event since mv version changed
