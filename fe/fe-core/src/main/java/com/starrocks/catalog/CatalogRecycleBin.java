@@ -91,6 +91,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     // The first Long type is DdId, the second String is TableName
     private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private final Map<Long, RecyclePartitionInfo> idToPartition;
+    private final Map<Long, Long> physicalPartitionIdToPartitionId;
 
     private Map<RecyclePartitionInfo, CompletableFuture<Boolean>> asyncDeleteForPartitions;
     private Map<RecycleTableInfo, CompletableFuture<Boolean>> asyncDeleteForTables;
@@ -117,6 +118,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToTableInfo = HashBasedTable.create();
         nameToTableInfo = HashBasedTable.create();
         idToPartition = Maps.newHashMap();
+        physicalPartitionIdToPartitionId = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
         asyncDeleteForPartitions = Maps.newHashMap();
@@ -126,6 +128,42 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private void removeRecycleMarkers(Long id) {
         idToRecycleTime.remove(id);
         enableEraseLater.remove(id);
+    }
+
+    private void addPhysicalPartitionIndex(RecyclePartitionInfo recyclePartitionInfo) {
+        long partitionId = recyclePartitionInfo.getPartition().getId();
+        for (PhysicalPartition physicalPartition : recyclePartitionInfo.getPartition().getSubPartitions()) {
+            physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partitionId);
+        }
+    }
+
+    private void removePhysicalPartitionIndex(@Nullable RecyclePartitionInfo recyclePartitionInfo) {
+        if (recyclePartitionInfo == null) {
+            return;
+        }
+        for (PhysicalPartition physicalPartition : recyclePartitionInfo.getPartition().getSubPartitions()) {
+            physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+        }
+    }
+
+    private void putPartitionToRecycleBin(RecyclePartitionInfo recyclePartitionInfo) {
+        RecyclePartitionInfo oldPartitionInfo =
+                idToPartition.put(recyclePartitionInfo.getPartition().getId(), recyclePartitionInfo);
+        removePhysicalPartitionIndex(oldPartitionInfo);
+        addPhysicalPartitionIndex(recyclePartitionInfo);
+    }
+
+    @Nullable
+    private RecyclePartitionInfo removePartitionFromRecycleBinInternal(long partitionId) {
+        RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
+        removePhysicalPartitionIndex(partitionInfo);
+        return partitionInfo;
+    }
+
+    private void removePartitionFromRecycleBinInternal(Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator,
+                                                       RecyclePartitionInfo partitionInfo) {
+        removePhysicalPartitionIndex(partitionInfo);
+        iterator.remove();
     }
 
     public synchronized void recycleDatabase(Database db, Set<String> tableNames, boolean recoverable) {
@@ -222,7 +260,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
         idToRecycleTime.put(partitionId, System.currentTimeMillis());
-        idToPartition.put(partitionId, recyclePartitionInfo);
+        putPartitionToRecycleBin(recyclePartitionInfo);
         LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
     }
@@ -236,16 +274,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public synchronized PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
-        for (Partition partition : idToPartition.values().stream()
-                .map(RecyclePartitionInfo::getPartition)
-                .collect(Collectors.toList())) {
-            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                if (subPartition.getId() == physicalPartitionId) {
-                    return subPartition;
-                }
-            }
+        Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
+        if (partitionId == null) {
+            return null;
         }
-        return null;
+        RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
+        return partitionInfo != null ? partitionInfo.getPartition().getSubPartition(physicalPartitionId) : null;
     }
 
     public synchronized short getPartitionReplicationNum(long partitionId) {
@@ -677,7 +711,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
 
             if (finished) {
-                iterator.remove();
+                removePartitionFromRecycleBinInternal(iterator, partitionInfo);
                 asyncDeleteForPartitions.remove(partitionInfo);
                 removeRecycleMarkers(partitionId);
 
@@ -730,7 +764,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public synchronized void replayErasePartition(long partitionId) {
-        RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
+        RecyclePartitionInfo partitionInfo = removePartitionFromRecycleBinInternal(partitionId);
         idToRecycleTime.remove(partitionId);
 
         Partition partition = partitionInfo.getPartition();
@@ -890,7 +924,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         long partitionId = recoverPartitionInfo.getPartition().getId();
 
         // remove from recycle bin
-        idToPartition.remove(partitionId);
+        removePartitionFromRecycleBinInternal(partitionId);
         removeRecycleMarkers(partitionId);
 
         // log
@@ -924,7 +958,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                         ((RecyclePartitionInfoV2) partitionInfo).getDataCacheInfo());
             }
 
-            iterator.remove();
+            removePartitionFromRecycleBinInternal(iterator, partitionInfo);
             idToRecycleTime.remove(partitionId);
 
             LOG.info("replay recover partition[{}-{}] finished", partitionId, partitionInfo.getPartition().getName());
@@ -1287,6 +1321,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        physicalPartitionIdToPartitionId.clear();
         reader.readCollection(RecycleDatabaseInfo.class, recycleDatabaseInfo -> {
             idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
         });
@@ -1297,7 +1332,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         });
 
         reader.readCollection(RecyclePartitionInfoV2.class, recyclePartitionInfo -> {
-            idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
+            putPartitionToRecycleBin(recyclePartitionInfo);
         });
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
@@ -1332,6 +1367,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     // for test
+    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
+        Preconditions.checkState(partitionId == partitionInfo.getPartition().getId());
+        putPartitionToRecycleBin(partitionInfo);
+    }
+
+    // for test
     protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
         asyncDeleteForPartitions.put(partitionInfo, future);
     }
@@ -1339,5 +1380,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     // for test
     protected void setDeleteFutureForTable(RecycleTableInfo tableInfo, CompletableFuture<Boolean> future) {
         asyncDeleteForTables.put(tableInfo, future);
+    }
+
+    // for test
+    public void removePartitionFromRecycleBin(long partitionId) {
+        removePartitionFromRecycleBinInternal(partitionId);
+        idToRecycleTime.remove(partitionId);
+        enableEraseLater.remove(partitionId);
     }
 }
