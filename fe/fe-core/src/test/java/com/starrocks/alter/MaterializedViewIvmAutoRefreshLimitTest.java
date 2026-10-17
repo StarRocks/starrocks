@@ -14,18 +14,12 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
@@ -34,47 +28,21 @@ import org.junit.jupiter.api.function.Executable;
  * that; incremental maintenance cannot, because the truncated bootstrap becomes its baseline while
  * the bookmark still advances to the base table head. So the combination is refused at admission.
  */
-public class MaterializedViewIvmAutoRefreshLimitTest extends StarRocksTestBase {
-    private static final String DB = "db_ivm_arpl";
-
-    private static ConnectContext ctx;
-    private static StarRocksAssert starRocksAssert;
-
-    @BeforeAll
-    public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        ctx = UtFrameUtils.createDefaultCtx();
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(ctx);
-        starRocksAssert = new StarRocksAssert(ctx);
-        starRocksAssert.withDatabase(DB).useDatabase(DB);
-
-        starRocksAssert.withTable("CREATE TABLE base_tbl (\n"
-                + "  dt DATE NOT NULL, k INT NOT NULL, v BIGINT NOT NULL\n"
-                + ") DUPLICATE KEY(dt, k)\n"
-                + "PARTITION BY date_trunc('day', dt)\n"
-                + "DISTRIBUTED BY HASH(k) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1')");
-    }
+public class MaterializedViewIvmAutoRefreshLimitTest extends MVIVMIcebergTestBase {
 
     /** The property rejects MANUAL outright, so every case here has to be interval-scheduled. */
     private static String ddl(String name, String properties) {
         return "CREATE MATERIALIZED VIEW " + name + "\n"
-                + "PARTITION BY dt\n"
-                + "DISTRIBUTED BY HASH(k) BUCKETS 1\n"
-                + "REFRESH ASYNC EVERY(INTERVAL 1 DAY)\n"
+                + "PARTITION BY `date`\n"
+                + "REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)\n"
                 + "PROPERTIES (" + properties + ")\n"
-                + "AS SELECT dt, k, SUM(v) AS total FROM base_tbl GROUP BY dt, k";
-    }
-
-    private static MaterializedView getMv(String name) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        return (MaterializedView) db.getTable(name);
+                + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
     }
 
     private static void runAlter(String sql) throws Exception {
         AlterMaterializedViewStmt stmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(stmt, ctx);
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        DDLStmtExecutor.execute(stmt, connectContext);
     }
 
     private static final String GATE_MARKER = "auto_refresh_partitions_limit";
@@ -89,37 +57,19 @@ public class MaterializedViewIvmAutoRefreshLimitTest extends StarRocksTestBase {
                 "rejection must name the throttle that does not drop partitions, got: " + msg);
     }
 
-    /**
-     * Proves the shape really does materialize as incremental, so a rejection case built on the same
-     * DDL is testing the gate rather than an unrelated refusal.
-     */
-    private static void assertShapeIsGenuinelyIncremental(String mode) throws Exception {
-        String name = "mv_probe_" + mode;
-        starRocksAssert.withMaterializedView(ddl(name, "'refresh_mode' = '" + mode + "'"));
-        try {
-            Assertions.assertTrue(getMv(name).getCurrentRefreshMode().isIncrementalOrAuto(),
-                    "guard: without the limit this DDL must settle as " + mode
-                            + ", else the rejection case is vacuous");
-        } finally {
-            starRocksAssert.dropMaterializedView(name);
-        }
-    }
-
     @Test
     public void testCreateRejectsAutoRefreshLimitOnIncrementalMv() throws Exception {
-        assertShapeIsGenuinelyIncremental("incremental");
+        // The same DDL without the limit must settle as INCREMENTAL, else the rejection is vacuous.
+        starRocksAssert.withMaterializedView(ddl("mv_probe", "'refresh_mode' = 'incremental'"));
+        try {
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL,
+                    getMv("mv_probe").getCurrentRefreshMode());
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_probe");
+        }
         assertRejectedByLimitGate(
                 () -> starRocksAssert.withMaterializedView(ddl("mv_inc_limit",
                         "'refresh_mode' = 'incremental', 'auto_refresh_partitions_limit' = '2'")),
-                "CREATE with both properties must be refused");
-    }
-
-    @Test
-    public void testCreateRejectsAutoRefreshLimitOnAutoMv() throws Exception {
-        assertShapeIsGenuinelyIncremental("auto");
-        assertRejectedByLimitGate(
-                () -> starRocksAssert.withMaterializedView(ddl("mv_auto_limit",
-                        "'refresh_mode' = 'auto', 'auto_refresh_partitions_limit' = '2'")),
                 "CREATE with both properties must be refused");
     }
 
@@ -144,7 +94,7 @@ public class MaterializedViewIvmAutoRefreshLimitTest extends StarRocksTestBase {
                 "'refresh_mode' = 'incremental', 'partition_refresh_number' = '2'"));
         try {
             MaterializedView mv = getMv("mv_inc_batch");
-            Assertions.assertTrue(mv.getCurrentRefreshMode().isIncrementalOrAuto());
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
             Assertions.assertEquals(2, mv.getTableProperty().getPartitionRefreshNumber());
         } finally {
             starRocksAssert.dropMaterializedView("mv_inc_batch");
@@ -156,8 +106,7 @@ public class MaterializedViewIvmAutoRefreshLimitTest extends StarRocksTestBase {
         starRocksAssert.withMaterializedView(ddl("mv_inc_alter", "'refresh_mode' = 'incremental'"));
         try {
             MaterializedView mv = getMv("mv_inc_alter");
-            Assertions.assertTrue(mv.getCurrentRefreshMode().isIncrementalOrAuto(),
-                    "guard: must be a real IVM MV, else the case is vacuous");
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
             assertRejectedByLimitGate(
                     () -> runAlter("alter materialized view mv_inc_alter "
                             + "set ('auto_refresh_partitions_limit' = '2')"),
@@ -166,6 +115,24 @@ public class MaterializedViewIvmAutoRefreshLimitTest extends StarRocksTestBase {
                     "a refused ALTER must leave the property untouched");
         } finally {
             starRocksAssert.dropMaterializedView("mv_inc_alter");
+        }
+    }
+
+    @Test
+    public void testAlterRejectsAutoRefreshLimitOnAutoMv() throws Exception {
+        starRocksAssert.withMaterializedView(ddl("mv_auto_alter", "'refresh_mode' = 'incremental'"));
+        try {
+            MaterializedView mv = getMv("mv_auto_alter");
+            // DDL no longer accepts AUTO, so an AUTO MV can only be one created before that; promote directly.
+            mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            assertRejectedByLimitGate(
+                    () -> runAlter("alter materialized view mv_auto_alter "
+                            + "set ('auto_refresh_partitions_limit' = '2')"),
+                    "ALTER SET on an AUTO MV must be refused");
+            Assertions.assertEquals(-1, mv.getTableProperty().getAutoRefreshPartitionsLimit(),
+                    "a refused ALTER must leave the property untouched");
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_auto_alter");
         }
     }
 
