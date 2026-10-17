@@ -23,6 +23,8 @@ import logging
 from unittest.mock import Mock, patch
 
 from alembic.operations import Operations
+import pytest
+from sqlalchemy import exc
 
 from starrocks.alembic.ops import (
     AlterTableDistributionOp,
@@ -143,6 +145,14 @@ class TestSQLGeneration:
 
                 result = self.compiler.visit_alter_table_distribution(ddl)
                 assert result == expected_sql
+
+    @pytest.mark.parametrize("distribution_method", ["RANGE", "range"])
+    def test_alter_table_distribution_to_range_raises(self, distribution_method):
+        """StarRocks has no DISTRIBUTED BY RANGE syntax, so ALTER to RANGE cannot be compiled."""
+        ddl = AlterTableDistribution("users", distribution_method, None)
+        with patch('starrocks.dialect.format_table_name', return_value="`users`"):
+            with pytest.raises(exc.CompileError, match="no DISTRIBUTED BY RANGE syntax"):
+                self.compiler.visit_alter_table_distribution(ddl)
 
     def test_alter_table_order_sql(self):
         """Test SQL generation for ALTER TABLE ORDER BY."""
