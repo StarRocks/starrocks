@@ -403,9 +403,18 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
             break;
         }
 
+        Status st = SnapshotManager::restore_clucene_index_files(schema_hash_path);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to restore CLucene index files: " << st << ", tablet:" << _tablet_id
+                         << ", path=" << schema_hash_path;
+            need_remove_new_path = true;
+            res = st;
+            break;
+        }
+
         // it will change rowset id and its create time
         // rowset create time is useful when load tablet from meta to check which tablet is the tablet to load
-        Status st = SnapshotManager::instance()->convert_rowset_ids(schema_hash_path, _tablet_id, _schema_hash);
+        st = SnapshotManager::instance()->convert_rowset_ids(schema_hash_path, _tablet_id, _schema_hash);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to convert rowset id. path=" << schema_hash_path;
             need_remove_new_path = true;

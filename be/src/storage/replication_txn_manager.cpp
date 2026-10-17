@@ -541,12 +541,29 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, file_converters,
             tablet->data_dir()));
 
+    RETURN_IF_ERROR(SnapshotManager::restore_clucene_index_files(tablet_snapshot_dir_path));
+
     if (tablet->updates() == nullptr) {
         RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     } else {
-        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
+        RETURN_IF_ERROR(
+                convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request, source_schema));
     }
 
+    return Status::OK();
+}
+
+static Status convert_schema_column_unique_ids(TabletSchemaPB* schema,
+                                               std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+    ReplicationUtils::convert_column_unique_ids(schema->mutable_column(), column_unique_id_map);
+    // Active indexes and dropped-index tombstones must reference the converted column UIDs.
+    // Keep index IDs unchanged: downloaded standalone files still use the source index IDs.
+    for (auto* indexes : {schema->mutable_table_indices(), schema->mutable_dropped_table_indices()}) {
+        for (auto& index : *indexes) {
+            RETURN_IF_ERROR(
+                    ReplicationUtils::convert_column_unique_ids(index.mutable_col_unique_id(), *column_unique_id_map));
+        }
+    }
     return Status::OK();
 }
 
@@ -556,8 +573,8 @@ static Status convert_rowset_meta_pb(RowsetMetaPB* rowset_meta_pb,
     rowset_meta_pb->set_partition_id(request.partition_id);
     rowset_meta_pb->set_tablet_id(request.tablet_id);
     if (rowset_meta_pb->has_tablet_schema()) {
-        ReplicationUtils::convert_column_unique_ids(rowset_meta_pb->mutable_tablet_schema()->mutable_column(),
-                                                    column_unique_id_map);
+        RETURN_IF_ERROR(
+                convert_schema_column_unique_ids(rowset_meta_pb->mutable_tablet_schema(), column_unique_id_map));
     }
     if (rowset_meta_pb->has_txn_meta()) {
         RETURN_IF_ERROR(
@@ -583,8 +600,7 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
     tablet_meta_pb.set_tablet_id(request.tablet_id);
     tablet_meta_pb.set_schema_hash(request.schema_hash);
     // None-pk table must convert column unique ids in tablet schema before convert_rowset_ids
-    ReplicationUtils::convert_column_unique_ids(tablet_meta_pb.mutable_schema()->mutable_column(),
-                                                column_unique_id_map);
+    RETURN_IF_ERROR(convert_schema_column_unique_ids(tablet_meta_pb.mutable_schema(), column_unique_id_map));
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
         RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
@@ -636,7 +652,8 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
 
 Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
                                                            std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
-                                                           const TReplicateSnapshotRequest& request) {
+                                                           const TReplicateSnapshotRequest& request,
+                                                           const TabletSchemaCSPtr& tablet_schema) {
     std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
     ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
 
@@ -664,7 +681,8 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
         }
     }
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path, tablet_schema));
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
@@ -722,7 +740,7 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         }
 
         std::set<std::string> clone_files;
-        res = fs::list_dirs_files(snapshot_dir, nullptr, &clone_files);
+        res = SnapshotManager::list_snapshot_files(snapshot_dir, &clone_files);
         if (!res.ok()) {
             LOG(WARNING) << "Failed to list directory " << snapshot_dir << ", status: " << res;
             break;
@@ -735,7 +753,7 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
 
         std::set<string> local_files;
         std::string tablet_dir = tablet->schema_hash_path();
-        res = fs::list_dirs_files(tablet_dir, nullptr, &local_files);
+        res = SnapshotManager::list_snapshot_files(tablet_dir, &local_files);
         if (!res.ok()) {
             LOG(WARNING) << "Failed to list tablet directory " << tablet_dir << ", status: " << res;
             break;
@@ -751,6 +769,11 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
 
             std::string from = strings::Substitute("$0/$1", snapshot_dir, clone_file);
             std::string to = strings::Substitute("$0/$1", tablet_dir, clone_file);
+            res = fs::create_directories(std::filesystem::path(to).parent_path().string());
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to create index parent directory for " << to << ": " << res;
+                break;
+            }
             res = FileSystem::Default()->link_file(from, to);
             if (!res.ok()) {
                 LOG(WARNING) << "Failed to link " << from << " to " << to << ", status: " << res;
@@ -836,12 +859,12 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;
-    RETURN_IF_ERROR(fs::list_dirs_files(snapshot_dir, nullptr, &clone_files));
+    RETURN_IF_ERROR(SnapshotManager::list_snapshot_files(snapshot_dir, &clone_files));
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
     const std::string& tablet_dir = tablet->schema_hash_path();
-    RETURN_IF_ERROR(fs::list_dirs_files(tablet_dir, nullptr, &local_files));
+    RETURN_IF_ERROR(SnapshotManager::list_snapshot_files(tablet_dir, &local_files));
 
     // Files that are found in both |clone_files| and |local_files|.
     std::vector<std::string> duplicate_files;
@@ -860,25 +883,30 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
 
     auto fs = FileSystem::Default();
     std::set<std::string> tablet_files;
+    bool snapshot_loaded = false;
+    DeferOp rollback([&] {
+        if (!snapshot_loaded) {
+            for (const auto& filename : tablet_files) {
+                auto clear_st = fs::delete_file(filename);
+                LOG_IF(WARNING, !clear_st.ok())
+                        << "Failed to remove tablet file: " << filename << ", status: " << clear_st;
+            }
+        }
+    });
     for (const std::string& filename : clone_files) {
         std::string from = snapshot_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
-        tablet_files.insert(to);
+        RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(to).parent_path().string()));
         RETURN_IF_ERROR(fs->link_file(from, to));
+        tablet_files.insert(to);
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << snapshot_dir << " to " << tablet_dir;
 
     Status status = tablet->updates()->load_snapshot(snapshot_meta, false, true);
     if (!status.ok()) {
         LOG(WARNING) << "Failed to load snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
-        Status clear_st;
-        for (const std::string& filename : tablet_files) {
-            clear_st = fs::delete_file(filename);
-            if (!clear_st.ok()) {
-                LOG(WARNING) << "Failed to remove tablet file: " << filename << ", status: " << clear_st;
-            }
-        }
     } else {
+        snapshot_loaded = true;
         int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
         tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
         LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;

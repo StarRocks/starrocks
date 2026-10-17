@@ -16,12 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "base/testutil/assert.h"
 #include "base/uuid/uuid_generator.h"
 #include "column/chunk_factory.h"
 #include "common/config_storage_fwd.h"
 #include "common/storage_define.h"
 #include "common/system/master_info.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -31,6 +34,8 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment.h"
+#include "storage/snapshot_manager.h"
+#include "storage/snapshot_meta.h"
 #include "storage/tablet_manager.h"
 #include "testutil/local_snapshot_client.h"
 
@@ -182,6 +187,64 @@ public:
         return *writer->build();
     }
 
+    void check_nested_index_publish_failure(bool conflicting_duplicate, bool clone = false, bool fail_link = false) {
+        if (GetParam() != TKeysType::PRIMARY_KEYS) {
+            GTEST_SKIP() << "Primary-key snapshot publication only";
+        }
+        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
+        ASSERT_NE(nullptr, tablet);
+        const auto snapshot_dir = tablet->data_dir()->path() + "/nested_index_publish";
+        const auto tablet_dir = tablet->schema_hash_path();
+        const std::string duplicate = "duplicate_0_100.ivt/_0.tis";
+        const std::string added = "new_0_100.ivt/_0.tis";
+        auto write_file = [](const std::string& path, const std::string& contents) -> Status {
+            RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(path).parent_path().string()));
+            ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_writable_file(path));
+            RETURN_IF_ERROR(file->append(contents));
+            return file->close();
+        };
+        ASSERT_OK(write_file(snapshot_dir + "/" + duplicate, "snapshot index"));
+        ASSERT_OK(write_file(snapshot_dir + "/" + added, "new index"));
+        ASSERT_OK(write_file(tablet_dir + "/" + duplicate,
+                             conflicting_duplicate ? "different local index" : "snapshot index"));
+        ASSIGN_OR_ABORT(auto original_md5, fs::md5sum(tablet_dir + "/" + duplicate));
+        if (fail_link) {
+            // Sort after the new index to fail after at least one file has been linked.
+            ASSERT_OK(write_file(snapshot_dir + "/z_blocked.ivt/_0.tis", "blocked index"));
+            ASSERT_OK(write_file(tablet_dir + "/z_blocked.ivt", "existing regular file"));
+        }
+
+        SnapshotMeta meta;
+        meta.set_snapshot_type(SNAPSHOT_TYPE_FULL);
+        meta.set_snapshot_format(4);
+        meta.set_snapshot_version(_src_version);
+        meta.tablet_meta().mutable_updates()->add_versions()->mutable_version()->set_major_number(_src_version);
+        // Fail loading after linking files, without modifying the tablet's metadata.
+        meta.tablet_meta().set_tablet_id(_src_tablet_id);
+        meta.tablet_meta().set_schema_hash(_schema_hash);
+        ASSERT_OK(meta.serialize_to_file(snapshot_dir + "/meta"));
+        auto parsed = SnapshotManager::instance()->parse_snapshot_meta(snapshot_dir + "/meta");
+        ASSERT_OK(parsed.status());
+        TCloneReq request;
+        EngineCloneTask clone_task(nullptr, request, 0, nullptr, nullptr, nullptr);
+        auto status = clone ? clone_task._finish_clone_primary(tablet.get(), snapshot_dir)
+                            : StorageEngine::instance()->replication_txn_manager()->publish_snapshot_for_primary(
+                                      tablet.get(), snapshot_dir);
+        ASSERT_FALSE(status.ok());
+        if (conflicting_duplicate) {
+            ASSERT_NE(std::string::npos, status.to_string().find("duplicate file with different md5")) << status;
+        } else if (!fail_link) {
+            ASSERT_NE(std::string::npos, status.to_string().find("mismatched tablet id")) << status;
+        }
+        // Conflicts must not overwrite existing files; failed loads must remove only
+        // newly linked files, preserving identical pre-existing nested index files.
+        ASSIGN_OR_ABORT(auto retained_md5, fs::md5sum(tablet_dir + "/" + duplicate));
+        ASSERT_EQ(original_md5, retained_md5);
+        ASSERT_FALSE(fs::path_exist(tablet_dir + "/" + added));
+        ASSERT_TRUE(fs::path_exist(snapshot_dir + "/" + added));
+        ASSERT_EQ(_version, tablet->max_version().second);
+    }
+
 protected:
     int64_t _transaction_id = 200;
     int64_t _table_id = 20001;
@@ -193,6 +256,30 @@ protected:
     int64_t _src_version = 10;
     RemoteSnapshotClient* _previous_snapshot_client = nullptr;
 };
+
+TEST_P(ReplicationTxnManagerTest, publish_rejects_conflicting_nested_index_files) {
+    check_nested_index_publish_failure(true);
+}
+
+TEST_P(ReplicationTxnManagerTest, clone_rejects_conflicting_nested_index_files) {
+    check_nested_index_publish_failure(true, true);
+}
+
+TEST_P(ReplicationTxnManagerTest, clone_load_failure_preserves_error_and_existing_files) {
+    check_nested_index_publish_failure(false, true);
+}
+
+TEST_P(ReplicationTxnManagerTest, clone_link_failure_removes_new_nested_files) {
+    check_nested_index_publish_failure(false, true, true);
+}
+
+TEST_P(ReplicationTxnManagerTest, publish_link_failure_removes_new_nested_files) {
+    check_nested_index_publish_failure(false, false, true);
+}
+
+TEST_P(ReplicationTxnManagerTest, publish_failure_removes_new_nested_files_and_preserves_duplicates) {
+    check_nested_index_publish_failure(false);
+}
 
 TEST_P(ReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) {
     TRemoteSnapshotRequest remote_snapshot_request;
