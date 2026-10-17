@@ -774,6 +774,8 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：此进程使用的内存。
 
+此指标包含 `passthrough_mem_bytes` 统计的本机 pass-through 缓冲内存。pass-through 指标是进程总量的组成部分，而非额外内存；计算总用量时不要将两个指标相加。此记账指标不等同于容器 RSS。
+
 ## `process_thread_num`
 
 - 单位：计数
