@@ -472,6 +472,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
+### `lake_compaction_mode`
+
+- 默认值: `NORMAL`
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制新的存算分离 Compaction 作业是否可以调度。有效值为 `NORMAL` 和 `ALLOWLIST`（区分大小写）。`NORMAL` 忽略 `lake_compaction_allow_table_ids`，保持原有调度行为；`ALLOWLIST` 仅允许名单中的表。非法模式会阻止新作业并输出日志警告。配置刷新后生效，无需重启，不取消或等待已运行的作业。两种模式下，原有黑名单和任务数量限制均有效，手动 Compaction 也受此策略限制。
+- 引入版本: -
+
+### `lake_compaction_allow_table_ids`
+
+- 默认值: ""
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 分号分隔的正整数**表 ID**，例如 `12345;98765`。仅在 `ALLOWLIST` 模式下生效，空名单不放行任何表。不支持分区 ID 或 `*`。表 ID 放行该表所有物理分区，包括未来新增的分区。非法名单在 `ALLOWLIST` 模式下阻止新作业并输出警告，但不影响 `NORMAL` 模式。`lake_compaction_disable_ids` 的表级或分区级黑名单优先，`lake_compaction_max_tasks = 0` 仍禁止所有新作业。配置刷新后生效，无需重启。
+- 引入版本: -
+
+用于 replication 迁移时，先保持 `lake_compaction_max_tasks = 0`，清空白名单并切换到 `ALLOWLIST`；开始 replication 前等待已有 Compaction 作业结束。确认模式生效后，再恢复非零任务上限。名单由用户手动维护，无需修改迁移工具，也不自动维护。
+
+仅在整张表的**所有** replication 事务均达到 **VISIBLE**、数据校验完成且没有排队、重试或后续 replication 时加白。一旦交接给目标写入或 Compaction，不得再次对该表启动 replication；如需重新迁移，必须 drop 并重建目标表。移出白名单不能恢复迁移资格。这是使用流程约束：白名单不提供 replication 与 Compaction 的事务互斥，也不实现永久禁止 replication 的状态。
+
+使用 `ADMIN SET FRONTEND CONFIG` 动态更新即可生效，无需逐台修改在线 FE 的配置文件；SQL 修改会转发到在线 FE。为保证重启和 Leader 切换后仍有效，在支持的环境中使用 `WITH PERSISTENT` 持久化两个参数；容器部署则通过部署平台保存配置。离线或新增 FE 在具备成为 Leader 的条件前，也应配置相同的值。
+
 ### `lake_compaction_disable_ids`
 
 - 默认值: ""

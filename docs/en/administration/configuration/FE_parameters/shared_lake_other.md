@@ -471,6 +471,30 @@ This topic introduces the following types of FE configurations:
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
+### `lake_compaction_mode`
+
+- Default: `NORMAL`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls admission of new shared-data Compaction jobs. Valid values are `NORMAL` and `ALLOWLIST` (case-sensitive). `NORMAL` ignores `lake_compaction_allow_table_ids` and preserves existing scheduling. `ALLOWLIST` only permits tables listed in `lake_compaction_allow_table_ids`. An invalid mode blocks new jobs and logs a warning. Changes take effect on configuration refresh without a restart and do not cancel or drain running jobs. The existing denylist and task limits apply in both modes, including to manual Compaction.
+- Introduced in: -
+
+### `lake_compaction_allow_table_ids`
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Semicolon-separated positive **table IDs**, for example `12345;98765`. Used only in `ALLOWLIST` mode; an empty list permits no tables. Partition IDs and `*` are not supported. A table entry covers all its physical partitions, including future partitions. Invalid input blocks new jobs in `ALLOWLIST` mode and logs a warning; it does not affect `NORMAL` mode. `lake_compaction_disable_ids` takes precedence for both tables and partitions, and `lake_compaction_max_tasks = 0` still disables all new jobs. Changes take effect on configuration refresh without a restart.
+- Introduced in: -
+
+For a replication migration, keep `lake_compaction_max_tasks = 0` while setting an empty allowlist and switching to `ALLOWLIST`; wait for existing Compaction jobs to finish before starting replication. Restore a nonzero task limit only after the mode has taken effect. Users manage the list manually; no migration-tool changes or automatic list maintenance are required.
+
+Add a table only after **all** its replication transactions are **VISIBLE**, data validation is complete, and no queued, retrying, or future replication remains. Once the table is handed over to target writes or Compaction, do not start replication on it again; drop and recreate the target table if another migration is required. Removing its ID does not restore replication eligibility. This is an operational contract: the allowlist does not implement a replication/Compaction transaction fence or a permanent replication ban.
+
+Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit each live FE's configuration file for the change to take effect. SQL changes are forwarded to live FEs. To survive restarts and leader changes, persist both parameters with `WITH PERSISTENT` where supported, or through the deployment platform's configuration for containerized deployments. Ensure offline or newly added FEs receive the same settings before they can become leader.
+
 ### `lake_compaction_disable_ids`
 
 - Default: ""
@@ -1744,4 +1768,3 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
-
