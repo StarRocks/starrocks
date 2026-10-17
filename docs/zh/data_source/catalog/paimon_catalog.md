@@ -748,6 +748,8 @@ DROP Catalog paimon_catalog_fs;
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+对于符合条件的 `ORDER BY ... LIMIT` 查询，Paimon 扫描支持 [TopN Runtime Filter](../../sql-reference/System_variable.md#enable_topn_runtime_filter)。过滤器在执行期间使用当前 TopN 边界进行过滤，不会将规划范围限制为前 N 个文件。带有 `WHERE` 条件的查询仍然先应用这些条件，再确定最终的 TopN 结果。
+
 ## 从 Paimon 导入数据
 
 假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以按如下方式转换和导入数据：
