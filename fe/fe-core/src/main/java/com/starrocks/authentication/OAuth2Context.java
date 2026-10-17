@@ -20,7 +20,7 @@ public record OAuth2Context(String authServerUrl,
                             String clientId,
                             String clientSecret,
                             String jwksUrl,
-                            String principalFiled,
+                            String principalField,
                             String[] requiredIssuer,
                             String[] requiredAudience,
                             Long connectWaitTimeout) {
