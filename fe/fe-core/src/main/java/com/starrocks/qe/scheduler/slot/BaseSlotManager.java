@@ -19,6 +19,7 @@ import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -157,6 +158,18 @@ public abstract class BaseSlotManager {
     public abstract void collectWarehouseMetrics(MetricVisitor visitor);
 
     public abstract void onQueryFinished(LogicalSlot slot, ConnectContext context);
+
+    /**
+     * Notify that the leader FE of the cluster is changed.
+     *
+     * <p> The slots which are allocated before the change can never be released by their requesters, because the
+     * requesters always send the release-slot RPC to the current leader FE. The implementations should release these
+     * slots to avoid the ghost RUNNING queries, which keep occupying the query queue until they expire.
+     *
+     * @param leaderInfo The info of the new leader FE.
+     */
+    public void onLeaderChange(LeaderInfo leaderInfo) {
+    }
 
     /**
      * Whether to enable query queue by the slot manager for input JobSpec.

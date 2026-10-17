@@ -902,6 +902,10 @@ public class GlobalStateMgr {
         this.variableMgr = new VariableMgr();
 
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
+        // The slots allocated by a previous leader FE are never released by their requesters, which always send the
+        // release-slot RPC to the current leader FE. Reconcile them on every leader FE change to avoid the slots
+        // staying ALLOCATED (RUNNING in `SHOW RUNNING QUERIES`) without any alive coordinator.
+        nodeMgr.registerLeaderChangeListener(slotManager::onLeaderChange);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
