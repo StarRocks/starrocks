@@ -282,7 +282,10 @@ public class Tracers {
     }
 
     public static void count(Module module, String name, long count) {
-        Tracers tracers = THREAD_LOCAL.get();
+        count(THREAD_LOCAL.get(), module, name, count);
+    }
+
+    public static void count(Tracers tracers, Module module, String name, long count) {
         tracers.tracer(module, Mode.VARS).count(name, count);
     }
 
