@@ -27,11 +27,11 @@ JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_SOURCE="jdk-17.0.13+11"
 JDK_MD5SUM="2e942562e2ffa7378c4948041911c3bb"
 
-# HYPERSCAN for aarch64, provided by vectorscan.
-HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz"
-HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
-HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
-HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
+# HYPERSCAN provided by vectorscan
+HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.13.tar.gz"
+HYPERSCAN_NAME="vectorscan-5.4.13.tar.gz"
+HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.13"
+HYPERSCAN_MD5SUM="29bb5ad2756504d5299f106a156c6ac3"
 
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
