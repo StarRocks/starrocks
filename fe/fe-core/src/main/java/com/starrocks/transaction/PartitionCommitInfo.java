@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.PartialPublishProgress;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.TabletStatPB;
 
@@ -116,6 +117,11 @@ public class PartitionCommitInfo implements Writable {
     // over should attempt a publish immediately rather than inherit a stale back-off.
     private long lastPublishFailureTime = 0;
 
+    // What earlier attempts at publishing the version range this partition is part of already got
+    // done, so a retry sends only the tablets that are still pending. In-process state like the
+    // stamps above: not serialized, and a new leader starts over.
+    private PartialPublishProgress partialPublishProgress = null;
+
     public PartitionCommitInfo() {
 
     }
@@ -180,6 +186,14 @@ public class PartitionCommitInfo implements Writable {
     // 0 when the last attempt did not fail.
     public long getLastPublishFailureTime() {
         return lastPublishFailureTime;
+    }
+
+    public PartialPublishProgress getPartialPublishProgress() {
+        return partialPublishProgress;
+    }
+
+    public void setPartialPublishProgress(PartialPublishProgress progress) {
+        this.partialPublishProgress = progress;
     }
 
     // Returns true at most once per intervalMs. A partition that keeps failing to publish is
