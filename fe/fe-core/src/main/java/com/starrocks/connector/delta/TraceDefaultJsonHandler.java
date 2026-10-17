@@ -25,20 +25,17 @@ import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
-import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
 import io.delta.kernel.exceptions.KernelEngineException;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -55,13 +52,13 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
     private static final ObjectReader OBJECT_READER_READ_BIG_DECIMALS = MAPPER
             .reader(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
-    private final Configuration hadoopConf;
+    private final FileIO fileIO;
     private final int maxBatchSize;
-    public TraceDefaultJsonHandler(Configuration hadoopConf) {
-        super(new HadoopFileIO(hadoopConf));
-        this.hadoopConf = hadoopConf;
+    public TraceDefaultJsonHandler(FileIO fileIO) {
+        super(fileIO);
+        this.fileIO = fileIO;
         this.maxBatchSize =
-                hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);
+                fileIO.getConf("delta.kernel.default.json.reader.batch-size").map(Integer::parseInt).orElse(1024);
     }
 
     // This method copies the implementation from DefaultJsonHandler.java
@@ -134,11 +131,9 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
                 if (scanFileIter.hasNext()) {
                     try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "TraceDefaultJsonHandler.ReadJsonFile")) {
                         currentFile = scanFileIter.next();
-                        Path filePath = new Path(currentFile.getPath());
-                        FileSystem fs = filePath.getFileSystem(hadoopConf);
-                        FSDataInputStream stream = null;
+                        InputStream stream = null;
                         try {
-                            stream = fs.open(filePath);
+                            stream = fileIO.newInputFile(currentFile.getPath(), currentFile.getSize()).newStream();
                             currentFileReader = new BufferedReader(
                                     new InputStreamReader(stream, StandardCharsets.UTF_8));
                         } catch (Exception e) {
