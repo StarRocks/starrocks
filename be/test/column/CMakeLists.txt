@@ -41,6 +41,7 @@ set(COLUMN_TEST_FILES
     column_hash_core_test.cpp
     array_column_core_test.cpp
     array_view_column_core_test.cpp
+    arrow_memory_pool_test.cpp
     arrow_to_starrocks_converter_test.cpp
     arrow_to_json_converter_test.cpp
     type_to_arrow_converter_test.cpp
