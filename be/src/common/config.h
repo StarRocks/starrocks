@@ -1075,6 +1075,10 @@ CONF_Int32(routine_load_kafka_timeout_second, "10");
 // pulsar request timeout
 CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
+// Maximum decoded/decompressed bytes allowed for a single Routine Load Arrow IPC stream message (default 64MB).
+// Mutable at runtime via ADMIN SET BACKEND CONFIG.
+CONF_mInt64(routine_load_arrow_max_decoded_bytes_per_message, "67108864");
+
 // Is set to true, index loading failure will not cause BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
