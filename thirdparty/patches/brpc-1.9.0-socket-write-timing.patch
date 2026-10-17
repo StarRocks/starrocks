@@ -1,0 +1,188 @@
+diff --git a/src/brpc/socket.cpp b/src/brpc/socket.cpp
+index 447bac5f..9d0eeb1e 100644
+--- a/src/brpc/socket.cpp
++++ b/src/brpc/socket.cpp
+@@ -86,6 +86,12 @@ DEFINE_int64(socket_max_unwritten_bytes, 64 * 1024 * 1024,
+              "Max unwritten bytes in each socket, if the limit is reached,"
+              " Socket.Write fails with EOVERCROWDED");
+ 
++DEFINE_bool(socket_write_timing, true,
++            "Record how long each request waits in the write queue of its socket"
++            " until its first and last byte are written into the fd, exposed as"
++            " rpc_socket_write_{client,server}_*");
++BRPC_VALIDATE_GFLAG(socket_write_timing, PassValidate);
++
+ DEFINE_int64(socket_max_streams_unconsumed_bytes, 0,
+              "Max stream receivers' unconsumed bytes in one socket,"
+              " it used in stream for receiver buffer control.");
+@@ -281,9 +287,42 @@ void Socket::SharedPart::UpdateStatsEverySecond(int64_t now_ms) {
+ 
+ SocketVarsCollector* g_vars = NULL;
+ 
++struct SocketWriteTimingVars {
++    explicit SocketWriteTimingVars(const butil::StringPiece& prefix)
++        : first_byte(prefix, "first_byte")
++        , last_byte(prefix, "last_byte")
++        , bytes_ahead_window(prefix, "bytes_ahead", &bytes_ahead, -1)
++        , bytes_ahead_max_window(prefix, "bytes_ahead_max", &bytes_ahead_max, -1)
++    {}
++
++    // Latency from Socket::Write() until the first/last byte of the
++    // request is written into the fd.
++    bvar::LatencyRecorder first_byte;
++    bvar::LatencyRecorder last_byte;
++    // Unwritten bytes of the socket when a request is enqueued. Requests
++    // that are enqueued but not yet taken by the writing thread are not
++    // counted, so this is a lower bound.
++    bvar::IntRecorder bytes_ahead;
++    bvar::Window<bvar::IntRecorder> bytes_ahead_window;
++    bvar::Maxer<int64_t> bytes_ahead_max;
++    bvar::Window<bvar::Maxer<int64_t> > bytes_ahead_max_window;
++};
++
++static SocketWriteTimingVars* g_client_write_timing_vars = NULL;
++static SocketWriteTimingVars* g_server_write_timing_vars = NULL;
++
++static SocketWriteTimingVars* GetWriteTimingVars(const Socket* s) {
++    return s->CreatedByConnect() ? g_client_write_timing_vars
++                                 : g_server_write_timing_vars;
++}
++
+ static pthread_once_t s_create_vars_once = PTHREAD_ONCE_INIT;
+ static void CreateVars() {
+     g_vars = new SocketVarsCollector;
++    g_client_write_timing_vars =
++        new SocketWriteTimingVars("rpc_socket_write_client");
++    g_server_write_timing_vars =
++        new SocketWriteTimingVars("rpc_socket_write_server");
+ }
+ 
+ void Socket::CreateVarsOnce() {
+@@ -312,6 +351,14 @@ struct BAIDU_CACHELINE_ALIGNMENT Socket::WriteRequest {
+     WriteRequest* next;
+     bthread_id_t id_wait;
+ 
++    // Called before StartWrite()
++    void start_timing(Socket* s);
++    // Called after writing into the fd, records the first-byte latency if
++    // part of `data' has been written.
++    void check_first_byte_written(Socket* s);
++    // Called when all of `data' has been written.
++    void on_all_bytes_written(Socket* s);
++
+     void clear_and_set_control_bits(bool notify_on_success,
+                                     bool shutdown_write) {
+         _socket_and_control_bits.set_extra(
+@@ -382,6 +429,11 @@ private:
+     PackedPtr<Socket> _socket_and_control_bits;
+     // User message pointer, pipelined count auth flag.
+     PackedPtr<SocketMessage> _pc_and_udmsg;
++
++    int64_t enqueue_us;
++    // Size of `data' after Setup(), 0 if Setup() abandoned the request.
++    size_t setup_size;
++    bool first_byte_written;
+ };
+ 
+ void Socket::WriteRequest::Setup(Socket* s) {
+@@ -397,6 +449,7 @@ void Socket::WriteRequest::Setup(Socket* s) {
+                 return;
+             }
+         }
++        setup_size = data.size();
+         const int64_t before_write =
+             s->_unwritten_bytes.fetch_add(data.size(), butil::memory_order_relaxed);
+         if (before_write + (int64_t)data.size() >= FLAGS_socket_max_unwritten_bytes) {
+@@ -417,6 +470,41 @@ void Socket::WriteRequest::Setup(Socket* s) {
+     }
+ }
+ 
++void Socket::WriteRequest::start_timing(Socket* s) {
++    setup_size = 0;
++    first_byte_written = false;
++    if (!FLAGS_socket_write_timing) {
++        enqueue_us = 0;
++        return;
++    }
++    enqueue_us = butil::cpuwide_time_us();
++    const int64_t bytes_ahead =
++        s->_unwritten_bytes.load(butil::memory_order_relaxed);
++    SocketWriteTimingVars* vars = GetWriteTimingVars(s);
++    vars->bytes_ahead << bytes_ahead;
++    vars->bytes_ahead_max << bytes_ahead;
++}
++
++void Socket::WriteRequest::check_first_byte_written(Socket* s) {
++    if (enqueue_us == 0 || first_byte_written || data.size() >= setup_size) {
++        return;
++    }
++    first_byte_written = true;
++    GetWriteTimingVars(s)->first_byte << (butil::cpuwide_time_us() - enqueue_us);
++}
++
++void Socket::WriteRequest::on_all_bytes_written(Socket* s) {
++    if (enqueue_us == 0 || setup_size == 0) {
++        return;
++    }
++    const int64_t latency_us = butil::cpuwide_time_us() - enqueue_us;
++    SocketWriteTimingVars* vars = GetWriteTimingVars(s);
++    if (!first_byte_written) {
++        vars->first_byte << latency_us;
++    }
++    vars->last_byte << latency_us;
++}
++
+ Socket::WriteRequest* const Socket::WriteRequest::UNCONNECTED =
+     (Socket::WriteRequest*)(intptr_t)-1;
+ 
+@@ -509,6 +597,7 @@ Socket::~Socket() {
+ void Socket::ReturnSuccessfulWriteRequest(Socket::WriteRequest* p) {
+     DCHECK(p->data.empty());
+     AddOutputMessages(1);
++    p->on_all_bytes_written(this);
+     const bthread_id_t id_wait = p->id_wait;
+     butil::return_object(p);
+     if (id_wait != INVALID_BTHREAD_ID) {
+@@ -1657,6 +1746,7 @@ int Socket::Write(butil::IOBuf* data, const WriteOptions* options_in) {
+     req->clear_and_set_control_bits(opt.notify_on_success, opt.shutdown_write);
+     req->set_pipelined_count_and_user_message(
+         opt.pipelined_count, DUMMY_USER_MESSAGE, opt.auth_flags);
++    req->start_timing(this);
+     return StartWrite(req, opt);
+ }
+ 
+@@ -1694,6 +1784,7 @@ int Socket::Write(SocketMessagePtr<>& msg, const WriteOptions* options_in) {
+     req->clear_and_set_control_bits(opt.notify_on_success, opt.shutdown_write);
+     req->set_pipelined_count_and_user_message(
+         opt.pipelined_count, msg.release(), opt.auth_flags);
++    req->start_timing(this);
+     return StartWrite(req, opt);
+ }
+ 
+@@ -1779,6 +1870,7 @@ int Socket::StartWrite(WriteRequest* req, const WriteOptions& opt) {
+     } else {
+         AddOutputBytes(nw);
+     }
++    req->check_first_byte_written(this);
+     if (IsWriteComplete(req, true, NULL)) {
+         ReturnSuccessfulWriteRequest(req);
+         return 0;
+@@ -1854,6 +1946,9 @@ void* Socket::KeepWrite(void* void_arg) {
+             LOG(WARNING) << "Shutdown write of " << *s;
+             break;
+         }
++        // Requests before `req' are fully written, so `req' is the only one
++        // that may be partially written.
++        req->check_first_byte_written(s.get());
+         // TODO(gejun): wait for epollout when we actually have written
+         // all the data. This weird heuristic reduces 30us delay...
+         // Update(12/22/2015): seem not working. better switch to correct code.
+@@ -2946,7 +3041,7 @@ int Socket::PeekAgentSocket(SocketUniquePtr* out) const {
+ 
+ void Socket::GetStat(SocketStat* s) const {
+     BAIDU_CASSERT(offsetof(Socket, _preferred_index) >= 64, different_cacheline);
+-    BAIDU_CASSERT(sizeof(WriteRequest) == 64, sizeof_write_request_is_64);
++    BAIDU_CASSERT(sizeof(WriteRequest) == 128, sizeof_write_request_is_128);
+ 
+     SharedPart* sp = GetSharedPart();
+     if (sp != NULL && sp->extended_stat != NULL) {
