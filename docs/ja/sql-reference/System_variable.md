@@ -265,6 +265,21 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **有効な値**: `CIRCULAR`, `RANDOM`
 * **導入バージョン**: -
 
+### broadcast_mem_exceeded_penalty_factor
+
+* **説明**: 各 BE/CN のビルド側の推定サイズがブロードキャストのメモリしきい値を超えた場合に、CPU、メモリ、ネットワークコストへ適用する倍率。`1.0` に設定すると、このペナルティを無効にします。
+* **スコープ**: Session, Global
+* **デフォルト**: `1000.0`
+* **データ型**: Double
+* **有効な値**: `1.0` 以上の有限数値。`1.0` 未満の値、数値でない値、`NaN`、無限大は拒否されます。
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定できます。例：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
 ### catalog
 
 * **説明**: セッションが属するカタログを指定するために使用されます。

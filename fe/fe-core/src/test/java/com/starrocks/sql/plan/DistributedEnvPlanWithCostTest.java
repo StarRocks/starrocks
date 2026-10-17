@@ -375,6 +375,30 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testBroadcastCostMultiplierSelectionAndHint() throws Exception {
+        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        double multiplier = connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor();
+        String sql = "select l_orderkey from lineitem join nation on l_suppkey = n_nationkey";
+        try {
+            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1.0);
+            assertContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            String hintSql = "select /*+ SET_VAR(broadcast_mem_exceeded_penalty_factor=1.0) */ " +
+                    "l_orderkey from lineitem join nation on l_suppkey = n_nationkey";
+            assertContains(getFragmentPlan(hintSql), "join op: INNER JOIN (BROADCAST)");
+            Assertions.assertEquals(1000.0,
+                    connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
+        } finally {
+            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(multiplier);
+        }
+    }
+
+    @Test
     public void testProjectCardinality() throws Exception {
         String sql = "select\n" +
                 "    s_acctbal,\n" +

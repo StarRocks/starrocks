@@ -146,6 +146,21 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)) {
+            String value = resolvedExpression.getStringValue();
+            double multiplier;
+            try {
+                multiplier = Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
+            }
+            if (!Double.isFinite(multiplier) || multiplier < 1.0) {
+                throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
+            }
+        }
+
         // Check variable chunk_size value if valid
         if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
