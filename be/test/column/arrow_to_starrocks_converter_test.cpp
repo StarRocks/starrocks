@@ -2550,4 +2550,16 @@ TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) 
     EXPECT_TRUE(validate_arrow_column_type(nested_dict_list_type.get(), &array_slot).ok());
 }
 
+TEST_F(ArrowConverterTest, ClearCurrentColumnResetsNameAndTypeLength) {
+    ArrowConvertContext ctx;
+    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(64);
+    ctx.set_current_column("user_name", varchar_type);
+    EXPECT_EQ("user_name", ctx.current_column_name);
+    EXPECT_EQ(64, ctx.current_type_length);
+
+    ctx.clear_current_column();
+    EXPECT_TRUE(ctx.current_column_name.empty());
+    EXPECT_EQ(0, ctx.current_type_length);
+}
+
 } // namespace starrocks
