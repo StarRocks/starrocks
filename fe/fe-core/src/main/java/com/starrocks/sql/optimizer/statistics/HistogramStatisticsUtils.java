@@ -206,7 +206,7 @@ public class HistogramStatisticsUtils {
         List<Bucket> prunedBuckets = new ArrayList<>();
 
         if (originalBuckets.isEmpty()) {
-            return new Histogram(prunedBuckets, prunedMcv);
+            return new Histogram(prunedMcv);
         }
 
         long accumulatedCount = 0;
@@ -281,16 +281,16 @@ public class HistogramStatisticsUtils {
     private static Histogram createInHistogram(Histogram originalHistogram, MatchedConstantsInfo matchedInfo) {
         Map<String, Long> prunedMcv = new HashMap<>(matchedInfo.matchedMcv);
 
-        List<Bucket> prunedBuckets = new ArrayList<>();
 
         if (matchedInfo.matchedBucketValues.isEmpty()) {
-            return new Histogram(prunedBuckets, prunedMcv);
+            return new Histogram(prunedMcv);
         }
 
         List<Bucket> originalBuckets = originalHistogram.getBuckets();
 
         long cumulativeCount = 0;
 
+        List<Bucket> prunedBuckets = new ArrayList<>();
         for (int i = 0; i < originalBuckets.size(); i++) {
             if (!matchedInfo.matchedBucketValues.containsKey(i)) {
                 continue;
