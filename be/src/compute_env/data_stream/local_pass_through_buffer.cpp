@@ -29,9 +29,8 @@ public:
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
-            // Remove the old charge first: both trackers contribute to process memory.
-            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-            CurrentThread::current().mem_consume(_physical_bytes);
+            CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                       _physical_bytes);
         }
     }
 
@@ -53,23 +52,21 @@ public:
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
-        RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-        // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
+        CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                   _physical_bytes);
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
     // Drop everything buffered without handing it to a consumer. Used when the receiver is
     // cancelled/closed: nobody will ever pull these chunks, so free them now instead of
     // holding the memory until query teardown. The accounting mirrors the destructor:
-    // release the passthrough charge before charging the current MemTracker to avoid counting
-    // the bytes twice in their common process ancestor. The immediate _buffer.clear() then
+    // transfer ownership without changing common ancestors. The immediate _buffer.clear() then
     // frees net-zero on the current tracker.
     void clear() {
         std::unique_lock lock(_mutex);
         if (_physical_bytes > 0) {
-            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-            CurrentThread::current().mem_consume(_physical_bytes);
+            CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                       _physical_bytes);
             _total_bytes -= _physical_bytes;
             _physical_bytes = 0;
         }

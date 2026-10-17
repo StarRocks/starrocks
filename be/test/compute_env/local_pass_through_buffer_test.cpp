@@ -305,7 +305,7 @@ TEST_F(LocalPassThroughMemoryTest, pull_transfers_ownership_without_changing_pro
         ChunkUniquePtrVector chunks;
         std::vector<size_t> bytes;
         _source->pull_chunks(0, &chunks, &bytes);
-        flush();
+        // Ownership transfer must be visible without flushing the receiver TLS cache.
 
         EXPECT_EQ(1, chunks.size());
         EXPECT_EQ(0, _source->total_bytes());

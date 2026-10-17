@@ -103,7 +103,7 @@ TEST_F(CurrentThreadCoreTest, exported_offsets_match_tls_layout) {
     EXPECT_EQ(CurrentThread::module_type_offset(), static_cast<size_t>(module_type - base));
 }
 
-TEST_F(CurrentThreadCoreTest, transfer_commits_debit_before_credit) {
+TEST_F(CurrentThreadCoreTest, transfer_keeps_common_ancestor_unchanged) {
     constexpr int64_t kib = 1024;
     MemTracker process_tracker(2176 * kib, "process");
     MemTracker sender(-1, "sender", &process_tracker);
@@ -133,6 +133,33 @@ TEST_F(CurrentThreadCoreTest, transfer_commits_debit_before_credit) {
     thread.mem_tracker_ctx_shift();
     EXPECT_EQ(2112 * kib, process_tracker.consumption());
     EXPECT_EQ(2112 * kib, process_tracker.peak_consumption());
+}
+
+TEST_F(CurrentThreadCoreTest, transfer_from_does_not_spend_reservation) {
+    constexpr int64_t mib = 1024 * 1024;
+    MemTracker process(-1, "process");
+    MemTracker buffer(-1, "buffer", &process);
+    MemTracker receiver(-1, "receiver", &process);
+    g_env_initialized = true;
+    g_process_mem_tracker = &process;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+    CurrentThreadMemTrackerSetter scope(&receiver);
+    auto& thread = CurrentThread::current();
+    buffer.consume(128);
+    ASSERT_TRUE(thread.try_mem_reserve(2 * mib, 0));
+    const int64_t before = thread.get_consumed_bytes();
+    thread.mem_transfer_from(&buffer, 128);
+    EXPECT_EQ(before + 128, thread.get_consumed_bytes());
+    EXPECT_EQ(2 * mib + 128, receiver.consumption());
+    EXPECT_EQ(2 * mib + 128, process.consumption());
+    EXPECT_EQ(0, buffer.consumption());
+    thread.release_reserved();
+    thread.mem_tracker_ctx_shift();
+    EXPECT_EQ(128, receiver.consumption());
+    EXPECT_EQ(128, process.consumption());
+    thread.mem_release(128);
+    thread.mem_tracker_ctx_shift();
+    EXPECT_EQ(0, process.consumption());
 }
 
 TEST_F(CurrentThreadCoreTest, transfer_does_not_replenish_exhausted_reservation) {
