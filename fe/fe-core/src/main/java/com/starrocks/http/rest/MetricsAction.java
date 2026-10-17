@@ -49,6 +49,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -178,9 +183,30 @@ public class MetricsAction extends RestBaseAction {
         if (isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics) {
             UserIdentity currentUser = null;
             try {
+<<<<<<< HEAD
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
                 currentUser = checkPassword(authInfo);
                 checkUserOwnsAdminRole(currentUser);
+=======
+                // Basic or Bearer, same as every other FE HTTP endpoint. With enable_http_auth the
+                // base class already authenticated onto this request's context; otherwise do it
+                // here, onto a context of this request's own. Either way the admin check runs on
+                // the context authentication wrote to, so a user whose admin role comes from a
+                // security integration's group mapping is recognised.
+                ConnectContext ctx;
+                if (needAuth()) {
+                    ctx = request.getConnectContext();
+                } else {
+                    ctx = new ConnectContext(null);
+                    ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                    // The client address travels inside the credential; nothing here reads it off
+                    // the context, and a request with no Authorization header must be refused
+                    // before anything touches the channel.
+                    checkCredential(ctx, parseAuthCredentials(request));
+                }
+                currentUser = ctx.getCurrentUserIdentity();
+                checkAdminRole(ctx);
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             } catch (AccessDeniedException e) {
                 // disable Table related metrics collection due to AccessDenied
                 isCollectTableMetrics = false;

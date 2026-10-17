@@ -974,7 +974,16 @@ This topic introduces the following types of FE configurations:
 
   `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
 
+<<<<<<< HEAD
   Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+=======
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 
 ### `http_web_page_display_hardware`
 

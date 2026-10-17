@@ -197,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 在 ODBC 的 DSN 中添加 `default\_auth=mysql_clear_password` 和 `ENABLE_CLEARTEXT\_PLUGIN=1`，以及用户名和密码。
+
+### 使用 LDAP 通过 HTTP 或 Arrow Flight 连接
+
+HTTP API 与 Arrow Flight SQL 本来就是发送明文密码，所以 LDAP 用户在这两个入口上不需要任何额外设置：HTTP Basic 认证和 Arrow Flight 的用户名密码最终都走同一次 LDAP bind。用 `IDENTIFIED WITH authentication_ldap_simple` 创建的用户，以及 LDAP [安全集成](./security_integration.md)的用户，在这里的行为一致。参见[各认证方式在哪些入口可用](./authentication.mdx#各认证方式在哪些入口可用)。
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

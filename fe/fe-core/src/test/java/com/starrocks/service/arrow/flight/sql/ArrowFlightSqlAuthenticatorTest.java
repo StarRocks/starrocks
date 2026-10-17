@@ -29,12 +29,15 @@ import org.mockito.MockedStatic;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +59,48 @@ class ArrowFlightSqlAuthenticatorTest {
         CallHeaders outgoing = mock(CallHeaders.class);
         result.appendToOutgoingHeaders(outgoing);
         verify(outgoing).insert(Auth2Constants.AUTHORIZATION_HEADER, Auth2Constants.BEARER_PREFIX + "token-123");
+    }
+
+    @Test
+    void testASessionTokenFromATwoDotHostIsNotMistakenForAJwt() {
+        // With the proxy on the session token is "host|uuid". A host name with two dots has as
+        // many dots as a JWT, and used to be sent down the JWT path, where every user - Basic
+        // included - then failed on the request after the handshake.
+        String sessionToken = "fe1.example.com|9d2c4e6a-1b3f-4a5d-8e7c-0f1a2b3c4d5e";
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt(sessionToken));
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt("9d2c4e6a-1b3f-4a5d-8e7c-0f1a2b3c4d5e"));
+        assertTrue(ArrowFlightSqlAuthenticator.isJwt("eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJoYXJib3IifQ.c2ln-bmF0_dXJl"));
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt("a.b.c|9d2c4e6a"), "a \"|\" always means a session token");
+
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+        CallHeaders headers = mock(CallHeaders.class);
+        when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + sessionToken);
+
+        assertEquals(sessionToken, authenticator.authenticate(headers).getPeerIdentity());
+        verify(sessionManager).validateToken(sessionToken);
+        verify(sessionManager, never()).initializeSessionWithJwt(any(), any());
+    }
+
+    @Test
+    void testAuthenticate_withJwtBearer() {
+        // A JWT-format Bearer (header.payload.signature, two dots) is an IdP token: it is verified
+        // and exchanged for an internal session token via initializeSessionWithJwt; that minted
+        // token becomes the peer identity (so subsequent RPCs reuse the session, like the Basic
+        // path). A UUID token has no dots and takes the existing validateToken fast path instead.
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        String jwt = "header.payload.signature";
+        when(sessionManager.initializeSessionWithJwt(jwt, "0.0.0.0")).thenReturn("session-uuid-1");
+
+        CallHeaders headers = mock(CallHeaders.class);
+        when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + jwt);
+
+        CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
+
+        assertEquals("session-uuid-1", result.getPeerIdentity());
+        verify(sessionManager).initializeSessionWithJwt(jwt, "0.0.0.0");
     }
 
     @Test

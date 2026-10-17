@@ -14,6 +14,7 @@
 
 package com.starrocks.metric;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 import java.util.Collections;
@@ -21,13 +22,27 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public class MetricWithLabelGroup<E extends Metric<?>> {
+    /** Separates the label values in the map key; not a legal character in a label value. */
+    private static final char KEY_SEPARATOR = '\u0000';
+
     private final String labelKey;
+    private final String secondLabelKey;
     private final Supplier<E> metricCreator;
 
     private final Map<String, E> labelValueToMetric = Maps.newConcurrentMap();
 
     public MetricWithLabelGroup(String labelKey, Supplier<E> metricCreator) {
+        this(labelKey, null, metricCreator);
+    }
+
+    /**
+     * Two-label variant, for a metric whose values are naturally indexed by an independent pair -
+     * so each dimension stays aggregatable on its own instead of being flattened into one label
+     * value that queries then have to pattern-match apart.
+     */
+    public MetricWithLabelGroup(String labelKey, String secondLabelKey, Supplier<E> metricCreator) {
         this.labelKey = labelKey;
+        this.secondLabelKey = secondLabelKey;
         this.metricCreator = metricCreator;
     }
 
@@ -36,9 +51,23 @@ public class MetricWithLabelGroup<E extends Metric<?>> {
     }
 
     public E getMetric(String labelValue) {
+        Preconditions.checkState(secondLabelKey == null,
+                "metric declares two labels (%s, %s) but only one value was given", labelKey, secondLabelKey);
         return labelValueToMetric.computeIfAbsent(labelValue, k -> {
             E metric = metricCreator.get();
             metric.addLabel(new MetricLabel(labelKey, labelValue));
+            MetricRepo.addMetric(metric);
+            return metric;
+        });
+    }
+
+    public E getMetric(String labelValue, String secondLabelValue) {
+        Preconditions.checkState(secondLabelKey != null,
+                "metric declares one label (%s) but two values were given", labelKey);
+        return labelValueToMetric.computeIfAbsent(labelValue + KEY_SEPARATOR + secondLabelValue, k -> {
+            E metric = metricCreator.get();
+            metric.addLabel(new MetricLabel(labelKey, labelValue));
+            metric.addLabel(new MetricLabel(secondLabelKey, secondLabelValue));
             MetricRepo.addMetric(metric);
             return metric;
         });
