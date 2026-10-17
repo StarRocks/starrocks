@@ -213,6 +213,49 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsAllRows) {
     EXPECT_EQ(expected, rows);
 }
 
+TEST_F(IcebergDeleteBuilderTest, TestParquetBuilderWithSortedMultiFileDeleteFile) {
+    RuntimeProfile runtime_profile("IcebergDeleteBuilderTest");
+
+    // Real Iceberg position-delete files are written sorted by (file_path, pos) and commonly cover
+    // multiple data files. Exercise build()'s predicate pushdown against that realistic shape and
+    // check it still produces the correct bitmap for each data file.
+    write_parquet_delete_file(_fs, _parquet_delete_path,
+                              {{"data_file_1.parquet", 2},
+                               {"data_file_1.parquet", 5},
+                               {"data_file_2.parquet", 1},
+                               {"data_file_2.parquet", 3},
+                               {"data_file_2.parquet", 10},
+                               {"data_file_3.parquet", 7}});
+
+    FormatScanContext scan_context;
+    scan_context.timezone = "UTC";
+
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, _fs.get_file_size(_parquet_delete_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(_parquet_delete_path);
+    delete_file.__set_length(delete_file_size);
+
+    const std::vector<std::pair<std::string, std::vector<uint64_t>>> cases{
+            {"data_file_1.parquet", {2, 5}},
+            {"data_file_2.parquet", {1, 3, 10}},
+            {"data_file_3.parquet", {7}},
+    };
+    for (const auto& [data_file_path, expected_rowids] : cases) {
+        IcebergDeleteBuilder builder(IcebergDeleteBuilderContext{
+                .scan_context = &scan_context,
+                .fs = &_fs,
+                .data_file_path = data_file_path,
+                .runtime_profile = &runtime_profile,
+                .chunk_size = 4096,
+        });
+        ASSERT_OK(builder.build_parquet(delete_file));
+        auto deletion_bitmap = builder.deletion_bitmap();
+        std::vector<uint64_t> rowids(deletion_bitmap->get_cardinality());
+        deletion_bitmap->to_array(rowids);
+        EXPECT_EQ(expected_rowids, rowids);
+    }
+}
+
 TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
     write_parquet_delete_file(_fs, _parquet_delete_path, {{"dataA", 1}});
 
