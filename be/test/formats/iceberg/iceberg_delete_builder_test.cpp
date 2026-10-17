@@ -207,6 +207,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsAllRows) {
     std::vector<std::pair<std::string, int64_t>> rows;
     ASSERT_OK(IcebergPositionDeleteReader::read_rows(
             file.get(), _parquet_delete_path, delete_file_size, "parquet", 4096, "UTC", FormatScannerOptions{}, nullptr,
+            /*encryption_info=*/nullptr,
             [&](const Slice& file_path, int64_t pos) { rows.emplace_back(file_path.to_string(), pos); }));
 
     const std::vector<std::pair<std::string, int64_t>> expected{{"dataA", 1}, {"dataB", 2}, {"dataA", 3}};
@@ -221,7 +222,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
 
     auto status = IcebergPositionDeleteReader::read_rows(file.get(), _parquet_delete_path, delete_file_size, "avro",
                                                          4096, "UTC", FormatScannerOptions{}, nullptr,
-                                                         [](const Slice&, int64_t) {});
+                                                         /*encryption_info=*/nullptr, [](const Slice&, int64_t) {});
     EXPECT_FALSE(status.ok());
 }
 

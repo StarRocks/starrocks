@@ -2013,8 +2013,12 @@ public class IcebergMetadataTest extends TableTestBase {
                                 .setFieldNames(Lists.newArrayList())
                                 .setLimit(10)
                                 .build()));
-        assertTrue(ex.getMessage().contains("encryption is not supported"),
-                "Expected encryption error, got: " + ex.getMessage());
+        // Reading Parquet Modular Encryption is now supported, so this no longer fails because the table
+        // is encrypted. It fails because TestTable's catalog returns a plaintext EncryptionManager while
+        // the table declares encryption.key-id -- the unwired-catalog case, where no key can be
+        // recovered and serving the scan as plaintext would be the fail-open.
+        assertTrue(ex.getMessage().contains("cannot read"),
+                "Expected an unsupported-catalog error, got: " + ex.getMessage());
     }
 
     @Test
