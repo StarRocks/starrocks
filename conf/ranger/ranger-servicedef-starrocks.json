@@ -668,7 +668,10 @@
         },
         "lookupSupported": true,
         "mandatory": true,
-        "uiHint": "{ \"singleValue\":true }"
+        "uiHint": "{ \"singleValue\":true }",
+        "accessTypeRestrictions": [
+          "select"
+        ]
       }
     ]
   }
