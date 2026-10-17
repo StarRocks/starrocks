@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
@@ -77,6 +79,21 @@ public:
     Status erase(size_t n, const Slice* keys, IndexValue* old_values) override {
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
+
+    // Apply a large delete by ingesting the tombstone sstable |del_sst_meta| that was pre-built at import
+    // time (PkTabletWriter::flush_del_file), avoiding tombstone accumulation and additional memtable flushes.
+    // Flushes the existing memtable first (so the ingested sstable becomes the newest layer), reverse-looks-up
+    // each key's rss_rowid into |old_values| for the delete vector, then ingests the sstable stamped with
+    // |del_rssid| and |version| (the sstable was written with entry version 0). Cloud-native only.
+    //
+    // Precondition: |keys| holds no repeated primary key -- one del file is one memtable flush, and
+    // MemTable::_sort aggregates duplicate primary keys away before re-sorting by the sort key. Unlike
+    // erase(), which resolves a repeat against the tombstone its first occurrence just wrote and so
+    // reports it once, this reverse-looks-up every position independently and would report the same
+    // rss_rowid once per occurrence, overshooting the delete vector's cardinality at publish.
+    Status bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
+                      const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
+                      int64_t version);
 
     // batch insert delete operations, used when rebuild index.
     // |n|: size of key/value array
@@ -189,6 +206,13 @@ private:
 
     Status get_from_inactive_memtables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
                                        int64_t version) const;
+
+    // Reverse-look up |num_tasks| subsets of positions from the inactive memtables + sstables into
+    // |old_values|, fanning out on pk_index_execution_thread_pool when |parallel_worthwhile|, else serial.
+    // |make_subset(i)| yields task i's key indexes and is invoked inside the task, so a caller iterating a
+    // contiguous range never materializes one giant KeyIndexSet. Shared by erase() and bulk_erase().
+    Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
+                                   const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
