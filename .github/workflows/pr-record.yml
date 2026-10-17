@@ -31,13 +31,14 @@ jobs:
     concurrency:
       group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
       cancel-in-progress: true  # every run reads the live state, so the newest run suffices
-    # PRs someone watches while open: branch PRs, and sync / reverse-sync PRs.
+    # PRs someone watches while open: branch PRs, and sync / reverse-sync PRs. A retarget
+    # (edited with changes.base, e.g. main -> branch-4.1 or back) is recorded on any PR.
+    # No comments inside the expression below: in a folded scalar a '#' line is part of it.
     if: >-
       (github.event_name == 'pull_request_target' && (
         github.event.action == 'closed' ||
         (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
           endsWith(github.event.label.name, '-merged')) ||
-        # Retargeted (e.g. main -> branch-4.1 or back): base_ref changes, on any PR.
         (github.event.action == 'edited' && github.event.changes.base != null) ||
         ((github.event.pull_request.base.ref != 'main' ||
           contains(github.event.pull_request.head.ref, '-sync-pr-') ||
