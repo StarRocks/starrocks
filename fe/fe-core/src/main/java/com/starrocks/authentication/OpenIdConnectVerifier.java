@@ -29,12 +29,80 @@ import java.util.Date;
 
 public class OpenIdConnectVerifier {
 
+<<<<<<< HEAD
     public static void verify(String idToken,
                               String userName,
                               JWKSet jwkSet,
                               String principalFiled,
                               String[] requiredIssuer,
                               String[] requiredAudience) throws AuthenticationException {
+=======
+    /**
+     * Signature algorithms we accept. Anything outside this set (notably {@code none}, and HMAC
+     * algorithms that would let an attacker sign with the public key) is rejected up front to
+     * prevent algorithm-confusion attacks (threat T7).
+     */
+    private static final Set<JWSAlgorithm> ALLOWED_ALGORITHMS = Set.of(
+            JWSAlgorithm.RS256, JWSAlgorithm.RS384, JWSAlgorithm.RS512,
+            JWSAlgorithm.ES256, JWSAlgorithm.ES384, JWSAlgorithm.ES512);
+
+    /**
+     * Verify an OIDC id-token against a cached {@link JWKSource} (the path used by HTTP / Arrow
+     * Flight Bearer and the MySQL JWT provider, with key rotation and outage tolerance handled by
+     * the source).
+     */
+    public static JWTClaimsSet verify(String idToken,
+                                      String userName,
+                                      JWKSource<SecurityContext> jwkSource,
+                                      String principalFiled,
+                                      String[] requiredIssuer,
+                                      String[] requiredAudience) throws AuthenticationException {
+        try {
+            SignedJWT signedJWT = verifySignature(idToken, jwkSource);
+            checkClaims(signedJWT, userName, principalFiled, requiredIssuer, requiredAudience);
+            // Handed back so a caller that also reads a claim (group resolution) works on the set
+            // this method already parsed and verified, instead of parsing the token a second time.
+            return signedJWT.getJWTClaimsSet();
+        } catch (AuthenticationException e) {
+            throw e;
+        } catch (ParseException e) {
+            throw new AuthenticationException(e.getMessage()).withReason(AuthFailureReason.MALFORMED);
+        } catch (KeySourceException e) {
+            // The key set could not be obtained at all (IdP unreachable past the outage window,
+            // malformed JWKS document): nothing the token holder did. Transient, so the handler
+            // neither remembers the token as rejected nor refuses it again once the IdP is back.
+            throw new AuthenticationException(e.getMessage()).withReason(AuthFailureReason.INTERNAL).asTransient();
+        } catch (JOSEException e) {
+            throw new AuthenticationException(e.getMessage()).withReason(AuthFailureReason.SIGNATURE_FAIL);
+        } catch (Exception e) {
+            throw new AuthenticationException(e.getMessage()).withReason(AuthFailureReason.INTERNAL);
+        }
+    }
+
+    /**
+     * Overload kept for callers that already hold a {@link JWKSet} (the OAuth2 MySQL browser-flow
+     * callback in {@code OAuth2Action}). It wraps the set as an immutable source and shares the
+     * same verification core, so those callers also get RSA/EC support and the algorithm
+     * allow-list.
+     */
+    public static JWTClaimsSet verify(String idToken,
+                                      String userName,
+                                      JWKSet jwkSet,
+                                      String principalFiled,
+                                      String[] requiredIssuer,
+                                      String[] requiredAudience) throws AuthenticationException {
+        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalFiled, requiredIssuer,
+                requiredAudience);
+    }
+
+    /**
+     * Parse the principal claim out of a token <b>without</b> verifying its signature. Used only by
+     * the Bearer path to learn the declared user name before the issuer-based routing has picked a
+     * security integration; the real signature check still runs afterwards in {@link #verify}, so a
+     * forged token cannot benefit.
+     */
+    public static String extractPrincipal(String idToken, String principalFiled) throws AuthenticationException {
+>>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
         try {
             SignedJWT signedJWT = verifyJWT(idToken, jwkSet);
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();

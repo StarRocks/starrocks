@@ -945,6 +945,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
 - 引入版本: v4.2, v4.1.6
 
+<<<<<<< HEAD
+=======
+### `authentication_group_case_insensitive`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 登录得到的组名与 `GRANT ... TO EXTERNAL GROUP` 或 `permitted_groups` 中仅大小写不同的条目是否算匹配。默认开启，因为 LDAP 的 `cn` 在目录里本就不区分大小写，用另一种大小写写的 GRANT 不应该静默失效。如果组背后的身份系统把大小写不同的组当作不同的组（例如从 JWT claim 读到的组），请设为 `false`，这样 `Admins` 和 `admins` 仍是两个组。只影响比较：组名按到达时的原样存储和显示，交给 Apache Ranger 时也不改写。
+- 引入版本: v4.2
+
+>>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
 ### `authentication_ldap_case_insensitive`
 
 - 默认值: false

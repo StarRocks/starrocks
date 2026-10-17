@@ -99,8 +99,10 @@ public class ExecuteAsExecutor {
             // Drop the memberOf groups of the original user before anything else. They were read from
             // that user's own LDAP entry at login and say nothing about the target identity. The
             // replacement below would already hide them, but clearing keeps the guarantee from
-            // resting on "no one happens to read the field".
-            ctx.getAccessControlContext().setMemberOfGroups(Set.of());
+            // resting on "no one happens to read the field". The same field now also carries the
+            // groups a JWT claim resolved, and those must not survive the switch either - the
+            // target identity has no token of its own, so it can never have claim groups.
+            ctx.getAccessControlContext().setAuthenticatorGroups(Set.of());
 
             ResolvedTarget target = resolveTarget(ctx, userIdentity);
 
