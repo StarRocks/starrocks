@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.load.loadv2.IVMRefreshCommitInfo;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
@@ -25,6 +26,10 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
     @SerializedName("partitionVersion")
     private long partitionVersion;
+
+    // Set only by an IVM refresh; null for every other INSERT.
+    @SerializedName("ivmRefreshCommitInfo")
+    private IVMRefreshCommitInfo ivmRefreshCommitInfo;
 
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -55,4 +60,11 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
 
 
+    public void setIvmRefreshCommitInfo(IVMRefreshCommitInfo ivmRefreshCommitInfo) {
+        this.ivmRefreshCommitInfo = ivmRefreshCommitInfo;
+    }
+
+    public IVMRefreshCommitInfo getIvmRefreshCommitInfo() {
+        return ivmRefreshCommitInfo;
+    }
 }
