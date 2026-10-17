@@ -229,4 +229,26 @@ TEST_F(QueryStatisticsTest, AIStatisticsUsageRequiresValidTokenAndCoveragePair) 
     EXPECT_EQ(0, result.ai_statistics().total_tokens());
 }
 
+TEST(QueryMemoryUsageStatisticsTest, SumsWorkerDeltasWithoutDoubleCounting) {
+    QueryStatistics worker1;
+    PQueryStatistics update;
+    update.set_mem_usage_gib_hours(0.25);
+    worker1.merge_pb(update);
+
+    QueryStatistics total;
+    total.merge(1, worker1);
+    total.merge(1, worker1);
+    EXPECT_DOUBLE_EQ(0.25, total.get_mem_usage_gib_hours());
+
+    QueryStatistics worker2;
+    worker2.add_mem_usage_gib_hours(0.5);
+    total.merge(2, worker2);
+    PQueryStatistics pb;
+    total.to_pb(&pb);
+    EXPECT_DOUBLE_EQ(0.75, pb.mem_usage_gib_hours());
+    TAuditStatistics thrift;
+    total.to_params(&thrift);
+    EXPECT_DOUBLE_EQ(0.75, thrift.mem_usage_gib_hours);
+}
+
 } // namespace starrocks

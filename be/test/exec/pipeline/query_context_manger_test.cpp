@@ -15,9 +15,11 @@
 #include <chrono>
 #include <memory>
 #include <random>
+#include <thread>
 
 #include "base/testutil/assert.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/exec_env.h"
 #include "exec/runtime/query_context.h"
 #include "exec/runtime/query_context_manager.h"
 #include "gtest/gtest.h"
@@ -816,6 +818,202 @@ TEST_F(QueryContextReserveLimitTest, StaticQueryMemLimitTakesMinOfAllLimits) {
     // Computing the effective limit earlier must not change its value.
     EXPECT_EQ(kQueryMemLimit, _query_ctx->get_static_query_mem_limit());
     EXPECT_EQ(kQueryMemLimit, _query_ctx->query_runtime_state().static_query_mem_limit());
+}
+
+TEST(QueryContextMemoryUsageTest, TracksInstanceMemoryAcrossRetriesAndStatistics) {
+    using Clock = std::chrono::steady_clock;
+    constexpr int64_t gib = 1LL << 30;
+    MemTracker parent(MemTrackerType::QUERY_POOL, 4 * gib, "parent");
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 1;
+    query_id.lo = 2;
+    query_ctx.set_query_id(query_id);
+    query_ctx.init_mem_tracker(2 * gib, &parent, -1, 0.75);
+    auto query = query_ctx.mem_tracker();
+
+    RuntimeState first_state(ExecEnv::GetInstance());
+    RuntimeState second_state(ExecEnv::GetInstance());
+    first_state.init_mem_trackers(query);
+    second_state.init_mem_trackers(query);
+    MemTracker operator_tracker(-1, "operator", first_state.instance_mem_tracker());
+    auto* second_instance = second_state.instance_mem_tracker();
+
+    auto gib_hours = [](int64_t bytes, Clock::time_point start, Clock::time_point end) {
+        return static_cast<double>(bytes) / gib * std::chrono::duration<double, std::ratio<3600>>(end - start).count();
+    };
+    double reported_total = 0;
+    auto check_interval = [&](int64_t bytes, Clock::time_point before_consume, Clock::time_point after_consume,
+                              Clock::time_point before_release, Clock::time_point after_release) {
+        const double reported = query_ctx.intermediate_query_statistic(0)->get_mem_usage_gib_hours();
+        EXPECT_GE(reported + 1e-11, gib_hours(bytes, after_consume, before_release));
+        EXPECT_LE(reported, gib_hours(bytes, before_consume, after_release) + 1e-11);
+        reported_total += reported;
+    };
+
+    for (int i = 0; i < 8; ++i) {
+        auto* active = i % 2 == 0 ? &operator_tracker : second_instance;
+        auto* retry = i % 2 == 0 ? second_instance : &operator_tracker;
+
+        const auto before_consume = Clock::now();
+        ASSERT_EQ(nullptr, active->try_consume(gib));
+        const auto after_consume = Clock::now();
+        EXPECT_EQ(gib, query->consumption());
+        EXPECT_EQ(gib, parent.consumption());
+        EXPECT_EQ(gib, active->consumption());
+        EXPECT_EQ(query.get(), retry->try_consume(2 * gib));
+        EXPECT_EQ(query.get(), retry->try_consume_with_limited(gib, 0));
+        EXPECT_EQ(0, retry->consumption());
+        EXPECT_EQ(gib, query->consumption());
+        EXPECT_EQ(gib, parent.consumption());
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        const auto before_release = Clock::now();
+        active->release(gib);
+        const auto after_release = Clock::now();
+        EXPECT_EQ(0, query->consumption());
+        EXPECT_EQ(0, parent.consumption());
+        check_interval(gib, before_consume, after_consume, before_release, after_release);
+
+        const int64_t retry_bytes = i % 2 == 0 ? gib : 2 * gib;
+        const auto before_retry = Clock::now();
+        if (i % 2 == 0) {
+            ASSERT_EQ(nullptr, retry->try_consume_with_limited(retry_bytes, 0));
+        } else {
+            ASSERT_EQ(nullptr, retry->try_consume(retry_bytes));
+        }
+        const auto after_retry = Clock::now();
+        EXPECT_EQ(retry_bytes, query->consumption());
+        EXPECT_EQ(retry_bytes, parent.consumption());
+        EXPECT_EQ(retry_bytes, retry->consumption());
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        const auto before_retry_release = Clock::now();
+        retry->release(retry_bytes);
+        const auto after_retry_release = Clock::now();
+        EXPECT_EQ(0, query->consumption());
+        EXPECT_EQ(0, parent.consumption());
+        check_interval(retry_bytes, before_retry, after_retry, before_retry_release, after_retry_release);
+    }
+
+    const auto before_transfer = Clock::now();
+    Clock::time_point after_transfer;
+    Clock::time_point before_child_destruction;
+    {
+        MemTracker temporary(-1, "temporary", first_state.instance_mem_tracker());
+        temporary.consume_without_root(gib);
+        after_transfer = Clock::now();
+        EXPECT_EQ(gib, query->consumption());
+        EXPECT_EQ(0, parent.consumption());
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        before_child_destruction = Clock::now();
+    }
+    const auto after_child_destruction = Clock::now();
+    EXPECT_EQ(0, query->consumption());
+    EXPECT_EQ(0, parent.consumption());
+    check_interval(gib, before_transfer, after_transfer, before_child_destruction, after_child_destruction);
+
+    auto* connector_reservation = query_ctx.connector_scan_mem_tracker();
+    ASSERT_NE(nullptr, connector_reservation);
+    connector_reservation->consume(gib);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    connector_reservation->release(gib);
+    EXPECT_DOUBLE_EQ(0, query_ctx.intermediate_query_statistic(0)->get_mem_usage_gib_hours());
+
+    query_ctx.set_final_sink();
+    EXPECT_NEAR(reported_total, query_ctx.final_query_statistic()->get_mem_usage_gib_hours(), 1e-10);
+    EXPECT_EQ(2 * gib, query_ctx.mem_cost_bytes());
+}
+
+TEST(QueryContextMemoryUsageTest, FinalSinkCountsUpstreamStatisticsOnce) {
+    constexpr int64_t gib = 1LL << 30;
+    MemTracker parent(MemTrackerType::QUERY_POOL, 4 * gib, "parent");
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 3;
+    query_id.lo = 4;
+    query_ctx.set_query_id(query_id);
+    query_ctx.init_mem_tracker(2 * gib, &parent, -1, 0.75);
+    auto query = query_ctx.mem_tracker();
+
+    ASSERT_EQ(nullptr, query->try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    query->release(gib);
+
+    PQueryStatistics upstream;
+    upstream.set_mem_usage_gib_hours(0.25);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+
+    auto intermediate = query_ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate);
+    const double local_delta = intermediate->get_mem_usage_gib_hours() - 0.25;
+    EXPECT_GT(local_delta, 0);
+
+    upstream.set_mem_usage_gib_hours(0.5);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+    upstream.set_mem_usage_gib_hours(0.125);
+    query_ctx.maintained_query_recv()->insert(upstream, 2);
+
+    query_ctx.set_final_sink();
+    EXPECT_EQ(nullptr, query_ctx.intermediate_query_statistic(0));
+
+    const double local_total = query->memory_usage_gib_hours(false);
+    EXPECT_NEAR(local_delta, local_total, 1e-12);
+    EXPECT_NEAR(local_total + 0.5 + 0.125, query_ctx.final_query_statistic()->get_mem_usage_gib_hours(), 1e-12);
+    EXPECT_NEAR(local_total, query_ctx.final_query_statistic()->get_mem_usage_gib_hours(), 1e-12);
+}
+
+TEST(QueryContextMemoryUsageTest, SnapshotReportsCumulativeUsageAfterIntermediateReport) {
+    constexpr int64_t gib = 1LL << 30;
+    MemTracker parent(MemTrackerType::QUERY_POOL, 4 * gib, "parent");
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 5;
+    query_id.lo = 6;
+    query_ctx.set_query_id(query_id);
+    query_ctx.init_mem_tracker(2 * gib, &parent, -1, 0.75);
+    auto query = query_ctx.mem_tracker();
+
+    ASSERT_EQ(nullptr, query->try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    query->release(gib);
+
+    PQueryStatistics upstream;
+    upstream.set_mem_usage_gib_hours(0.25);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+
+    auto intermediate = query_ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate);
+    const double first_local = intermediate->get_mem_usage_gib_hours() - 0.25;
+    EXPECT_GT(first_local, 0);
+
+    ASSERT_EQ(nullptr, query->try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    query->release(gib);
+
+    upstream.set_mem_usage_gib_hours(0.125);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+
+    auto snapshot = query_ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot);
+    const double local_total = query->memory_usage_gib_hours(false);
+    EXPECT_GT(local_total, first_local);
+    EXPECT_NEAR(local_total + 0.125, snapshot->get_mem_usage_gib_hours(), 1e-12);
+
+    TAuditStatistics thrift;
+    snapshot->to_params(&thrift);
+    EXPECT_TRUE(thrift.__isset.mem_usage_gib_hours);
+    EXPECT_NEAR(local_total + 0.125, thrift.mem_usage_gib_hours, 1e-12);
+}
+
+TEST(QueryContextMemoryUsageTest, SnapshotWithoutMemTrackerKeepsUpstreamUsage) {
+    auto query_ctx = QueryContext::create();
+    PQueryStatistics upstream;
+    upstream.set_mem_usage_gib_hours(0.25);
+    query_ctx->maintained_query_recv()->insert(upstream, 1);
+
+    auto snapshot = query_ctx->snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot);
+    EXPECT_DOUBLE_EQ(0.25, snapshot->get_mem_usage_gib_hours());
+    EXPECT_EQ(0, snapshot->get_mem_bytes());
 }
 
 } // namespace starrocks::pipeline
