@@ -99,9 +99,10 @@ starrocks_detect_linker_type() {
     fi
 
     if [[ "$(uname -m)" != "aarch64" ]]; then
-        local gcc_version
-        gcc_version="$(${CC:-gcc} -dumpversion 2>/dev/null || echo 0)"
-        if [[ "${gcc_version%%.*}" -ge 14 ]]; then
+        local cxx_compiler="${CXX:-g++}"
+        local cxx_version
+        cxx_version="$(${cxx_compiler} -dumpversion 2>/dev/null || echo 0)"
+        if [[ "${cxx_version%%.*}" -ge 14 ]]; then
             local glibc_version
             glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF; exit}' || true)"
             if [[ -n "${glibc_version}" ]]; then
