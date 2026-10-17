@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <string>
 #include <utility>
@@ -55,6 +56,22 @@ void append_collection_header(uint32_t count, std::string* output) {
     output->push_back(1);
     append_uint32_little_endian(static_cast<uint32_t>(WkbGeometryType::GEOMETRYCOLLECTION), output);
     append_uint32_little_endian(count, output);
+}
+
+TEST(WkbCodecTest, ValidatesCrs84CoordinateBounds) {
+    for (double longitude : {-180.0, 180.0}) {
+        for (double latitude : {-90.0, 90.0}) {
+            EXPECT_TRUE(is_valid_crs84_coordinate(longitude, latitude));
+        }
+    }
+    EXPECT_TRUE(is_valid_crs84_coordinate(0, 0));
+    EXPECT_FALSE(is_valid_crs84_coordinate(180.0000001, 0));
+    EXPECT_FALSE(is_valid_crs84_coordinate(0, -90.0000001));
+    const double infinity = std::numeric_limits<double>::infinity();
+    for (double invalid : {std::numeric_limits<double>::quiet_NaN(), infinity, -infinity}) {
+        EXPECT_FALSE(is_valid_crs84_coordinate(invalid, 0));
+        EXPECT_FALSE(is_valid_crs84_coordinate(0, invalid));
+    }
 }
 
 TEST(WkbCodecTest, RoundTripsAllSupportedGeometryTypes) {

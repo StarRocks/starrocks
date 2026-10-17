@@ -171,7 +171,7 @@ StatusOr<H3Point> h3_decode_point(Slice wkb) {
     if (!std::isfinite(x) || !std::isfinite(y)) {
         return Status::InvalidArgument("Invalid WKB: POINT coordinates must be finite or both NaN for EMPTY");
     }
-    if (x < -180 || x > 180 || y < -90 || y > 90) {
+    if (!is_valid_crs84_coordinate(x, y)) {
         return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
     }
     return H3Point{{x, y}, false};
@@ -524,7 +524,7 @@ public:
         for (int i = 0; i < boundary.numVerts; ++i) {
             const double x = boundary.verts[i].lng * kDegreesPerRadian;
             const double y = boundary.verts[i].lat * kDegreesPerRadian;
-            if (!std::isfinite(x) || !std::isfinite(y) || x < -180 || x > 180 || y < -90 || y > 90) {
+            if (!is_valid_crs84_coordinate(x, y)) {
                 return Status::InternalError("H3_ToBoundary returned coordinates outside CRS84");
             }
             uint8_t* coordinate = vertex(i);
