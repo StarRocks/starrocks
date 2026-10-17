@@ -17,6 +17,7 @@
 #include <arrow/api.h>
 #include <arrow/ipc/api.h>
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -28,6 +29,7 @@ namespace starrocks {
 class StreamLoadPipeInputStream;
 }
 
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -58,7 +60,8 @@ private:
     Status open_next_reader();
     Status next_batch();
     Status validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch);
-    Status validate_discrete_message(int64_t* filtered_rows);
+    Status validate_ipc_schema(const std::shared_ptr<arrow::Schema>& schema);
+    Status decode_discrete_message(int64_t* filtered_rows);
     void reject_discrete_message(const std::string& reason, int64_t filtered_rows);
     void filter_current_discrete_message(const std::string& reason, int64_t pending_rows = 0);
     Status initialize_src_chunk(ChunkPtr* chunk);
@@ -77,9 +80,12 @@ private:
     // opening a new file (which would otherwise advance _next_file past the
     // current chunk's file).
     int _chunk_file_idx{0};
-    bool _message_boundary{false};
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
+    // MUST be declared before _discrete_batches and _batch so PoolBuffers inside
+    // RecordBatches free into a live ArrowBoundedMemoryPool during destruction.
+    std::unique_ptr<ArrowBoundedMemoryPool> _discrete_memory_pool;
+    std::deque<std::shared_ptr<arrow::RecordBatch>> _discrete_batches;
     std::shared_ptr<arrow::RecordBatch> _batch;
     const size_t _max_chunk_size;
     size_t _batch_start_idx{0};
@@ -93,8 +99,6 @@ private:
     int64_t _last_file_scan_rows{0};
     std::shared_ptr<SequentialFile> _file;
     ByteBufferPtr _parser_buf;
-    std::shared_ptr<arrow::io::InputStream> _arrow_stream;
-    std::shared_ptr<arrow::io::BufferReader> _arrow_buffer_reader;
 };
 
 } // namespace starrocks
