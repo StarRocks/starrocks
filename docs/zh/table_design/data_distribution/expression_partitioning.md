@@ -79,6 +79,7 @@ expression ::=
 - 在数据加载过程中，StarRocks 会根据加载的数据自动创建一些分区，但如果加载作业因某种原因失败，StarRocks 自动创建的分区无法自动删除。
 - StarRocks 将单次加载自动创建分区的默认最大数量设置为 4096，这可以通过 FE 参数 `auto_partition_max_creation_number_per_load` 进行配置。此参数可以防止您意外创建过多分区。
 - 分区的命名规则与动态分区的命名规则一致。
+- 除 `hour`、`day`、`month`、`year` 之外的分区粒度（如 `week`），通过将分区值物化到一个内部列来实现。因此在聚合表和更新表上，分区表达式只能引用 Key 列，因为非 Key 列的取值在聚合之后才能确定。
 
 ### 示例
 
@@ -252,13 +253,21 @@ LastConsistencyCheckTime: NULL
 
 从 v3.4.0 起，表达式分区支持返回 `DATE` 或 `DATETIME` 类型值的任何表达式，以适应更复杂的场景。有关支持的时间函数，请参阅[附录 - 支持的时间函数](#supported-time-functions)。
 
-例如，您可以定义一个 Unix 时间戳列，并在分区表达式中直接对该列使用 `from_unixtime()` 来定义分区键，而不是定义一个带有函数的生成 `DATE` 或 `DATETIME` 列。有关更多用法，请参阅[示例](#examples-2)。
+例如，您可以定义一个 Unix 时间戳列，并在分区表达式中直接对该列使用带显式时区的 `from_unixtime()` 来定义分区键，而不是定义一个带有函数的生成 `DATE` 或 `DATETIME` 列。有关更多用法，请参阅[示例](#examples-2)。
 
 从 v3.4.4 起，基于大多数 `DATETIME` 相关函数的分区支持分区裁剪。
 
+:::note
+
+对于 List 分区（包括自动创建分区的 List 表达式分区），分区表达式必须具有确定性：无论会话或导入任务使用什么时区，同一行数据都必须生成相同的分区值。分区表达式不得依赖会话信息或变量，也不得使用用户自定义函数。这些约束适用于所有表类型，以及用作 List 分区列的生成列。
+
+`from_unixtime()` 的单参和双参形式依赖会话时区，因此不能用于这些分区表达式。请使用指定固定时区的三参形式，例如 `from_unixtime(ts, '%Y%m%d', 'UTC')`。内置函数和用户自定义函数仍可用于普通 SQL 查询。
+
+:::
+
 ### 示例
 
-示例 1：假设您为每行数据分配一个 Unix 时间戳，并经常按天查询数据。您可以在创建表时，在表达式中使用 `from_unixtime()` 函数将时间戳定义为分区列，并将分区粒度设置为天。每天的数据存储在一个分区中，并且可以使用分区裁剪来提高查询效率。
+示例 1：假设您为每行数据分配一个 Unix 时间戳，并经常按天查询数据。您可以在创建表时，在表达式中使用带固定时区的 `from_unixtime()` 函数将时间戳定义为分区列，并将分区粒度设置为天。以下示例将每个 UTC 日的数据存储在一个分区中，并且可以使用分区裁剪来提高查询效率。
 
 ```SQL
 CREATE TABLE orders (
@@ -266,7 +275,7 @@ CREATE TABLE orders (
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY from_unixtime(ts,'%Y%m%d');
+PARTITION BY from_unixtime(ts, '%Y%m%d', 'UTC');
 ```
 
 示例 2：假设您为每行数据分配一个 `INT` 类型的时间戳，并按月存储数据。您可以在创建表时，在表达式中使用 `cast()` 和 `str_to_date()` 函数将时间戳转换为 `DATE` 类型，将其设置为分区列，并使用 `date_trunc()` 将分区粒度设置为月。每个月的数据存储在一个分区中，并且可以使用分区裁剪来提高查询效率。
@@ -284,7 +293,7 @@ PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 
 分区裁剪适用于基于复杂时间函数表达式的分区情况：
 
-- 如果分区子句是 `PARTITION BY from_unixtime(ts)`，则格式为 `ts>1727224687` 的带过滤条件的查询可以裁剪到相应的分区。
+- 如果分区子句是 `PARTITION BY from_unixtime(ts, '%Y-%m-%d %H:%i:%s', 'UTC')`，则格式为 `ts>1727224687` 的带过滤条件的查询可以裁剪到相应的分区。
 - 如果分区子句是 `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`，则格式为 `ts = "20240506"` 的带过滤条件的查询可以裁剪。
 - 上述情况也适用于[基于混合表达式的分区](#partitioning-based-on-the-mixed-expression-since-v34)。
 
@@ -294,7 +303,7 @@ PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 
 ### 示例
 
-示例 1：假设您为每行数据分配一个 Unix 时间戳，并经常按天和特定城市查询数据。您可以在创建表时，使用时间戳列（带 `from_unixtime()` 函数）和城市列作为分区列。每个城市每天的数据存储在一个分区中，并且可以使用分区裁剪来提高查询效率。
+示例 1：假设您为每行数据分配一个 Unix 时间戳，并经常按天和特定城市查询数据。您可以在创建表时，使用时间戳列（带指定固定时区的 `from_unixtime()` 函数）和城市列作为分区列。以下示例将每个城市每个 UTC 日的数据存储在一个分区中，并且可以使用分区裁剪来提高查询效率。
 
 ```SQL
 CREATE TABLE orders (
@@ -302,7 +311,7 @@ CREATE TABLE orders (
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
+PARTITION BY from_unixtime(ts, '%Y%m%d', 'UTC'), city;
 ```
 
 ## 管理分区
@@ -422,8 +431,8 @@ BETWEEN '2024-01-01' AND '2024-03-31';
 - `str_to_date(YmdHiSf/YmdHisf)`
 - `to_iso8601`
 - `to_date`
-- `unix_timestamp`
-- `from_unixtime(YmdHiSf/YmdHisf)`
+- `unix_timestamp`（不支持用于 List 分区表达式）
+- `from_unixtime`（使用 `YmdHiSf`/`YmdHisf` 格式和显式时区）
 - `time_slice`
 
 **其他函数**:
@@ -435,11 +444,11 @@ BETWEEN '2024-01-01' AND '2024-03-31';
 :::note
 
 - 支持组合使用多个时间函数。
-- 上述所有时间函数均使用系统默认时区。
+- 在 List 分区表达式中使用 `from_unixtime()` 转换 Unix 时间戳时，请显式指定固定时区。
 - 时间函数 `YmdHiSf` 的值格式必须以最粗的时间粒度 `%Y` 开头。不允许使用以更细的时间粒度（例如 `%m-%d`）开头的格式。
 
 **示例**
 
-`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d', 'UTC')`
 
 :::

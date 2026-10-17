@@ -1,0 +1,50 @@
+-- name: test_partition_session_timezone_rejected
+create database db_${uuid0};
+use db_${uuid0};
+create table agg_unix1(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts) distributed by hash(ts) properties('replication_num'='1');
+create table agg_unix2(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts, '%Y%m%d') distributed by hash(ts) properties('replication_num'='1');
+create table unique_unix2(ts bigint not null, pv bigint) unique key(ts) partition by from_unixtime(ts, '%Y%m%d') distributed by hash(ts) properties('replication_num'='1');
+create table agg_unix_ms(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime_ms(ts) distributed by hash(ts) properties('replication_num'='1');
+create table agg_fixed(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts, '%Y%m%d', 'UTC') distributed by hash(ts) properties('replication_num'='1');
+create table unique_fixed(ts bigint not null, pv bigint) unique key(ts) partition by from_unixtime(ts, '%Y%m%d', 'UTC') distributed by hash(ts) properties('replication_num'='1');
+set time_zone = '+00:00';
+insert into agg_fixed values(1704069000, 10);
+insert into unique_fixed values(1704069000, 10);
+set time_zone = '-08:00';
+insert into agg_fixed values(1704069000, 20);
+insert into unique_fixed values(1704069000, 20);
+select ts, pv from agg_fixed where ts=1704069000;
+select ts, pv from unique_fixed where ts=1704069000;
+set time_zone = '+00:00';
+select ts, pv from agg_fixed where ts=1704069000;
+select ts, pv from unique_fixed where ts=1704069000;
+drop database db_${uuid0};
+
+-- name: test_partition_generated_column_origin
+create database db_${uuid0};
+use db_${uuid0};
+create table agg_prefix(k bigint not null, v bigint sum, __generated_partition_column_x bigint as k+1) aggregate key(k) partition by (__generated_partition_column_x) distributed by hash(k) properties('replication_num'='1');
+create table agg_prefix_rand(k bigint not null, v bigint sum, __generated_partition_column_x bigint as k+cast(rand()*2 as bigint)) aggregate key(k) partition by (__generated_partition_column_x) distributed by hash(k) properties('replication_num'='1');
+create table dup_rand(k bigint not null, v bigint, g bigint as k+cast(rand()*2 as bigint)) duplicate key(k) partition by (g) distributed by hash(k) properties('replication_num'='1');
+create table dup_session(ts bigint not null, g varchar(32) as from_unixtime(ts, '%Y%m%d')) duplicate key(ts) partition by (g) distributed by hash(ts) properties('replication_num'='1');
+create table agg_internal(k bigint not null, v bigint sum) aggregate key(k) partition by abs(k) distributed by hash(k) properties('replication_num'='1');
+insert into agg_internal values(1, 10), (1, 20);
+select k, v from agg_internal;
+create table agg_internal_copy like agg_internal;
+insert into agg_internal_copy values(1, 10), (1, 20);
+select k, v from agg_internal_copy;
+drop database db_${uuid0};
+
+-- name: test_partition_negative_stream_load @native
+create database db_${uuid0};
+use db_${uuid0};
+create table agg_week(dt datetime not null, city varchar(16) not null, pv bigint sum) aggregate key(dt, city) partition by date_trunc('week', dt) distributed by hash(city) buckets 1 properties('replication_num'='1');
+insert into agg_week values('2026-07-13 01:00:00', 'sh', 10);
+shell: curl --silent --show-error --location-trusted -u root: -X PUT -H 'Expect:100-continue' -H 'columns:dt,city,pv' -H 'column_separator:,' -H 'negative:true' -H 'timezone:+00:00' -H 'strict_mode:true' -H 'max_filter_ratio:0' -H 'label:${uuid1}' --data-binary '2026-07-13 01:00:00,sh,5' ${url}/api/db_${uuid0}/agg_week/_stream_load | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["Status"], r["NumberLoadedRows"], r["NumberFilteredRows"])'
+select dt, city, pv from agg_week;
+select sum(pv) from agg_week where dt='2026-07-13 01:00:00' and city='sh';
+create table agg_replace(dt datetime not null, city varchar(16) not null, pv bigint replace) aggregate key(dt, city) partition by date_trunc('week', dt) distributed by hash(city) buckets 1 properties('replication_num'='1');
+insert into agg_replace values('2026-07-13 01:00:00', 'sh', 10);
+shell: curl --silent --show-error --location-trusted -u root: -X PUT -H 'Expect:100-continue' -H 'columns:dt,city,pv' -H 'column_separator:,' -H 'negative:true' -H 'timezone:+00:00' -H 'strict_mode:true' -H 'max_filter_ratio:0' -H 'label:${uuid2}' --data-binary '2026-07-13 01:00:00,sh,5' ${url}/api/db_${uuid0}/agg_replace/_stream_load | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["Status"], "column:pv" in r["Message"])'
+select dt, city, pv from agg_replace;
+drop database db_${uuid0};
