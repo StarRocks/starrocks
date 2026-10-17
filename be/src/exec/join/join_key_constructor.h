@@ -22,6 +22,7 @@
 #include <coroutine>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 
 #include "base/simd/simd.h"
 #include "column/chunk.h"
@@ -57,10 +58,12 @@ class ProbeKeyConstructorForOneKey {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+    // For string keys, read slices directly from the probe column instead of materializing a slice array per chunk.
+    using KeyData = std::conditional_t<lt_is_string<LT>, BinaryImmContainer, ImmBuffer<CppType>>;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
     static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
-    static const ImmBuffer<CppType> get_key_data(const HashTableProbeState& probe_state);
+    static const KeyData get_key_data(const HashTableProbeState& probe_state);
 };
 
 // ------------------------------------------------------------------------------------
@@ -95,6 +98,7 @@ class ProbeKeyConstructorForSerializedFixedSize {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+    using KeyData = ImmBuffer<CppType>;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
         probe_state->is_nulls.resize(state->chunk_size());
@@ -103,7 +107,7 @@ public:
 
     static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
-    static const ImmBuffer<CppType> get_key_data(const HashTableProbeState& probe_state) {
+    static const KeyData get_key_data(const HashTableProbeState& probe_state) {
         return ColumnHelper::as_raw_column<ColumnType>(probe_state.probe_key_column)->get_data();
     }
 };
@@ -133,6 +137,8 @@ public:
 
 class ProbeKeyConstructorForSerialized {
 public:
+    using KeyData = ImmBuffer<Slice>;
+
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
         probe_state->is_nulls.resize(state->chunk_size());
         probe_state->probe_pool = std::make_unique<MemPool>();
@@ -141,9 +147,7 @@ public:
 
     static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
-    static const ImmBuffer<Slice> get_key_data(const HashTableProbeState& probe_state) {
-        return probe_state.probe_slice;
-    }
+    static const KeyData get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
 
 private:
     static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
