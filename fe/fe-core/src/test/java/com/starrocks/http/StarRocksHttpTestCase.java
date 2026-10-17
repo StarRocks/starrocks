@@ -56,11 +56,8 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Config;
->>>>>>> 535f17f ([UT] Fix flaky HTTP tests by disabling the metric calculator in StarRocksHttpTestCase (#80935))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
