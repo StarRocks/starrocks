@@ -17,6 +17,7 @@
 #include <arrow/array.h>
 #include <arrow/buffer.h>
 #include <arrow/io/memory.h>
+#include <arrow/ipc/message.h>
 #include <arrow/ipc/reader.h>
 #include <arrow/status.h>
 #include <arrow/type.h>
@@ -101,6 +102,44 @@ private:
     int64_t _pos;
     bool _closed;
 };
+
+// Inspects all RECORD_BATCH message headers in an Arrow IPC stream buffer
+// without decompressing or allocating body buffers so rejected messages
+// report their true declared row count even when ReadNext() fails mid-stream.
+int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc_buffer) {
+    if (ipc_buffer == nullptr || ipc_buffer->size() == 0) {
+        return 0;
+    }
+    auto msg_reader = arrow::ipc::MessageReader::Open(std::make_shared<arrow::io::BufferReader>(ipc_buffer));
+    if (msg_reader == nullptr) {
+        return 1;
+    }
+    auto empty_schema = arrow::schema({});
+    arrow::io::BufferReader empty_body(std::make_shared<arrow::Buffer>(nullptr, 0));
+    arrow::ipc::IpcReadOptions header_opts = arrow::ipc::IpcReadOptions::Defaults();
+    int64_t declared_rows = 0;
+    while (true) {
+        auto msg_res = msg_reader->ReadNextMessage();
+        if (!msg_res.ok()) {
+            declared_rows += 1;
+            break;
+        }
+        auto msg = std::move(msg_res).MoveValueUnsafe();
+        if (msg == nullptr) {
+            break;
+        }
+        if (msg->type() == arrow::ipc::MessageType::RECORD_BATCH) {
+            auto batch_res =
+                    arrow::ipc::ReadRecordBatch(*msg->metadata(), empty_schema, nullptr, header_opts, &empty_body);
+            if (batch_res.ok() && batch_res.ValueUnsafe() != nullptr) {
+                declared_rows += batch_res.ValueUnsafe()->num_rows();
+            } else {
+                declared_rows += 1;
+            }
+        }
+    }
+    return declared_rows;
+}
 
 } // namespace
 
@@ -442,7 +481,7 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
     _discrete_memory_pool = std::make_unique<ArrowBoundedMemoryPool>(max_decoded_bytes);
 
     auto owning_buffer = make_owning_arrow_buffer(_parser_buf);
-    auto buffer_reader = std::make_shared<arrow::io::BufferReader>(std::move(owning_buffer));
+    auto buffer_reader = std::make_shared<arrow::io::BufferReader>(owning_buffer);
 
     arrow::ipc::IpcReadOptions read_options = arrow::ipc::IpcReadOptions::Defaults();
     read_options.memory_pool = _discrete_memory_pool.get();
@@ -468,7 +507,7 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
         if (!st.ok()) {
             valid_batches.clear();
             batch.reset();
-            *filtered_rows = rows + 1;
+            *filtered_rows = std::max<int64_t>({rows, count_ipc_stream_declared_rows(owning_buffer), int64_t{1}});
             _counter->arrow_messages_rejected++;
             std::string read_error = "Arrow IPC read batch error: " + st.ToString();
             if (!schema_error.empty()) {
@@ -486,7 +525,7 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
                                       batch_count * kBatchMetadataOverheadBytes > max_decoded_bytes)) {
             valid_batches.clear();
             batch.reset();
-            *filtered_rows = std::max<int64_t>(rows, 1);
+            *filtered_rows = std::max<int64_t>({rows, count_ipc_stream_declared_rows(owning_buffer), int64_t{1}});
             _counter->arrow_messages_rejected++;
             return Status::MemoryLimitExceeded(strings::Substitute(
                     "Arrow IPC message exceeds routine_load_arrow_max_decoded_bytes_per_message ($0 bytes)",
