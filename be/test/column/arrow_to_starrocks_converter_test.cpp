@@ -2495,4 +2495,59 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
 // (#73460/#73463) decoupled ArrowConvertContext from RuntimeState and the
 // rejected-records writer call site moved out of this translation unit.
 
+TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) {
+    struct SlotDescriptor {
+        SlotDescriptor(int /*id*/, std::string_view col_name, TypeDescriptor type)
+                : _col_name(col_name), _type(std::move(type)) {}
+        const TypeDescriptor& type() const { return _type; }
+        std::string_view col_name() const { return _col_name; }
+
+    private:
+        std::string _col_name;
+        TypeDescriptor _type;
+    };
+
+    auto struct_type = arrow::struct_({arrow::field("a", arrow::int32())});
+    auto dict_struct_type = arrow::dictionary(arrow::int8(), struct_type);
+    auto nested_dict_list_type =
+            arrow::dictionary(arrow::int16(), arrow::dictionary(arrow::int8(), arrow::list(arrow::int32())));
+
+    EXPECT_EQ(unwrap_arrow_dictionary_type(nullptr), nullptr);
+    EXPECT_EQ(unwrap_arrow_dictionary_type(dict_struct_type.get())->id(), arrow::Type::STRUCT);
+    EXPECT_EQ(unwrap_arrow_dictionary_type(nested_dict_list_type.get())->id(), arrow::Type::LIST);
+
+    SlotDescriptor int_slot(1, "col_int", TypeDescriptor(TYPE_INT));
+    Status st1 = validate_arrow_column_type(dict_struct_type.get(), &int_slot);
+    EXPECT_TRUE(st1.is_invalid_argument()) << st1.to_string();
+
+    Status st2 = validate_arrow_column_type(nested_dict_list_type.get(), &int_slot);
+    EXPECT_TRUE(st2.is_invalid_argument()) << st2.to_string();
+
+    Status st3 = validate_arrow_column_type(struct_type.get(), &int_slot);
+    EXPECT_TRUE(st3.is_invalid_argument()) << st3.to_string();
+
+    SlotDescriptor json_slot(2, "col_json", TypeDescriptor(TYPE_JSON));
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &json_slot).ok());
+
+    SlotDescriptor variant_slot(3, "col_variant", TypeDescriptor(TYPE_VARIANT));
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &variant_slot).ok());
+
+    SlotDescriptor varchar_slot(4, "col_varchar", TypeDescriptor::create_varchar_type(64));
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &varchar_slot).ok());
+
+    SlotDescriptor char_slot(5, "col_char", TypeDescriptor::create_char_type(64));
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &char_slot).ok());
+
+    TypeDescriptor struct_desc(TYPE_STRUCT);
+    struct_desc.field_names = {"a"};
+    struct_desc.children.emplace_back(TYPE_INT);
+    SlotDescriptor struct_slot(6, "col_struct", struct_desc);
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &struct_slot).ok());
+
+    TypeDescriptor array_desc(TYPE_ARRAY);
+    array_desc.children.emplace_back(TYPE_INT);
+    SlotDescriptor array_slot(7, "col_array", array_desc);
+    EXPECT_TRUE(validate_arrow_column_type(nested_dict_list_type.get(), &array_slot).ok());
+}
+
 } // namespace starrocks

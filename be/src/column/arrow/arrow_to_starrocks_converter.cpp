@@ -1428,4 +1428,31 @@ MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_des
     return ColumnHelper::create_column(need_cast ? raw_type_desc : type_desc, is_nullable);
 }
 
+const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type) {
+    const arrow::DataType* current = type;
+    while (current != nullptr && current->id() == arrow::Type::DICTIONARY) {
+        current = down_cast<const arrow::DictionaryType*>(current)->value_type().get();
+    }
+    return current;
+}
+
+Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
+                                  std::string_view col_name) {
+    if (arrow_type == nullptr) {
+        return Status::InvalidArgument("null Arrow type or slot descriptor");
+    }
+    const arrow::DataType* effective_type = unwrap_arrow_dictionary_type(arrow_type);
+    const auto arrow_id = effective_type->id();
+    const auto& lt = slot_type.type;
+    if ((arrow_id == arrow::Type::STRUCT || arrow_id == arrow::Type::MAP || arrow_id == arrow::Type::LIST ||
+         arrow_id == arrow::Type::LARGE_LIST || arrow_id == arrow::Type::FIXED_SIZE_LIST) &&
+        !slot_type.is_complex_type() && lt != TYPE_VARIANT && lt != TYPE_JSON && lt != TYPE_VARCHAR &&
+        lt != TYPE_CHAR) {
+        return Status::InvalidArgument(
+                strings::Substitute("column $0 of type $1 cannot be mapped from complex Arrow type $2", col_name,
+                                    type_to_string(lt), arrow_type->name()));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

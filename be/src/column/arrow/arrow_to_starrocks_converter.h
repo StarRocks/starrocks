@@ -133,4 +133,21 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
 MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_desc, const TypeDescriptor& raw_type_desc,
                                                   bool need_cast, bool is_nullable);
 
+const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type);
+
+Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
+                                  std::string_view col_name);
+
+template <typename SlotDesc>
+Status validate_arrow_column_type(const arrow::DataType* arrow_type, const SlotDesc* slot_desc) {
+    if (arrow_type == nullptr || slot_desc == nullptr) {
+        return Status::InvalidArgument("null Arrow type or slot descriptor");
+    }
+    return validate_arrow_column_type(arrow_type, slot_desc->type(), slot_desc->col_name());
+}
+
+inline Status validate_arrow_column_type(const arrow::DataType* /*arrow_type*/, std::nullptr_t) {
+    return Status::InvalidArgument("null Arrow type or slot descriptor");
+}
+
 } // namespace starrocks
