@@ -22,12 +22,14 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -111,17 +113,47 @@ public class AuthenticationHandler {
             throws AuthenticationException {
         context.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
         UserIdentity authenticatedUser = authenticate(context, user, remoteHost, password.getBytes(StandardCharsets.UTF_8));
+        checkLoginFinished(context);
+        return authenticatedUser;
+    }
 
-        // A provider may answer "OK" without having verified anything, expecting the protocol to finish the
-        // handshake later: OAuth2AuthenticationProvider returns immediately when the client did not declare the
-        // OAuth2 plugin, and the MySQL channel only closes that hole on the first command
-        // (ConnectProcessor#checkLoginSuccess). These channels have no later command -- the request is served
-        // right here -- so the same check has to happen before we hand the identity back.
+    /**
+     * Authenticate a user with an OpenID Connect ID token (a JWT) on a channel that has no MySQL plugin exchange,
+     * such as the Arrow Flight Basic handshake, where the token arrives in the password field.
+     *
+     * <p>The token is framed the way the MySQL {@code authentication_openid_connect_client} plugin sends it (one
+     * capability byte, then the length-encoded token), which is what the JWT providers read, and that client
+     * plugin is declared so the chain matches JWT security integrations, exactly as for a MySQL client.
+     *
+     * @param context    the context to authenticate onto, see {@link #authenticateWithClearPassword}
+     * @param user       username sent by the client
+     * @param remoteHost remote host address
+     * @param idToken    the serialized JWT sent by the client
+     * @return authenticated user identity
+     * @throws AuthenticationException when authentication fails
+     */
+    public static UserIdentity authenticateWithIdToken(ConnectContext context, String user, String remoteHost,
+                                                       String idToken)
+            throws AuthenticationException {
+        context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+        ByteArrayOutputStream authResponse = new ByteArrayOutputStream();
+        MysqlCodec.writeInt1(authResponse, 1);
+        MysqlCodec.writeLenEncodedString(authResponse, idToken);
+        UserIdentity authenticatedUser = authenticate(context, user, remoteHost, authResponse.toByteArray());
+        checkLoginFinished(context);
+        return authenticatedUser;
+    }
+
+    // A provider may answer "OK" without having verified anything, expecting the protocol to finish the
+    // handshake later: OAuth2AuthenticationProvider returns immediately when the client did not declare the
+    // OAuth2 plugin, and the MySQL channel only closes that hole on the first command
+    // (ConnectProcessor#checkLoginSuccess). Channels without a later command serve the request right after
+    // authentication, so the same check has to happen before we hand the identity back.
+    private static void checkLoginFinished(ConnectContext context) throws AuthenticationException {
         AuthenticationProvider provider = context.getAuthenticationProvider();
         if (provider != null) {
             provider.checkLoginSuccess(context.getConnectionId(), context.getAccessControlContext());
         }
-        return authenticatedUser;
     }
 
     /**

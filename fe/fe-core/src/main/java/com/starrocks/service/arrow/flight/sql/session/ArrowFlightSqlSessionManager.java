@@ -21,6 +21,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
+import com.nimbusds.jwt.SignedJWT;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.common.Config;
@@ -37,6 +38,7 @@ import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.text.ParseException;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlSessionManager {
@@ -65,14 +67,28 @@ public class ArrowFlightSqlSessionManager {
                 });
     }
 
+    static boolean isJwt(String password) {
+        try {
+            SignedJWT.parse(password);
+            return true;
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+
     public String initializeSession(String username, String remoteIP, String password) {
         String token = generateToken();
         ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(token);
         ctx.setRemoteIP(remoteIP);
 
         try {
-            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
-            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic. JWT users send their
+            // ID token there, which has to reach the JWT providers in OpenID Connect form.
+            if (isJwt(password)) {
+                AuthenticationHandler.authenticateWithIdToken(ctx, username, remoteIP, password);
+            } else {
+                AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            }
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)
