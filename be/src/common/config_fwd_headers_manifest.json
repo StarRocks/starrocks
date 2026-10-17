@@ -440,6 +440,7 @@
         "streaming_load_max_batch_size_mb",
         "streaming_load_rpc_max_alive_time_sec",
         "tablet_writer_open_rpc_timeout_sec",
+        "tablet_writer_add_segment_lock_timeout_ms",
         "enable_load_diagnose",
         "load_diagnose_send_rpc_timeout_ms",
         "load_diagnose_rpc_timeout_profile_threshold_ms",

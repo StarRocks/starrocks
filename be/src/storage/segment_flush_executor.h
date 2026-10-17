@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <ctime>
 #include <memory>
 #include <vector>
 
@@ -39,6 +40,10 @@ class PTabletWriterAddSegmentResult;
 class ThreadPoolToken;
 
 class DeltaWriter;
+
+// Compute once at the add_segment BRPC handler entry. This CLOCK_REALTIME deadline
+// applies to channel-lock waits before submission, not subsequent segment flush or commit work.
+timespec add_segment_lock_deadline();
 
 struct SegmentFlushStat {
     std::atomic_int32_t num_pending_tasks = 0;
