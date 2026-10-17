@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -26,6 +27,7 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
 import com.starrocks.thrift.TIcebergWriteMode;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -75,6 +77,10 @@ public class IcebergRowDeltaSink extends DataSink {
 
     protected final TupleDescriptor desc;
     private IcebergTable icebergTable;
+    // FE->BE encryption signal, or null when the table is not encrypted. Derived by
+    // IcebergEncryption.writeSignalOrNull so all three Iceberg write sinks behave identically:
+    // without it, row-delta data and position-delete files on an encrypted table were written as plaintext.
+    private TParquetEncryptionInfo encryptionInfo;
     private final long targetTableId;
     private final String fileFormat;
     private final String tableLocation;
@@ -104,6 +110,7 @@ public class IcebergRowDeltaSink extends DataSink {
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
+        this.encryptionInfo = IcebergEncryption.writeSignalOrNull(nativeTable, tableIdentifier);
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         // Row-delta writes both new data files and new position-delete files, so each
@@ -200,6 +207,10 @@ public class IcebergRowDeltaSink extends DataSink {
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
+
+        if (encryptionInfo != null) {
+            tIcebergTableSink.setParquet_encryption_info(encryptionInfo);
+        }
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;

@@ -52,7 +52,8 @@ struct ColumnReaderOptions;
 class ColumnChunkReader {
 public:
     ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                      const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts);
+                      const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts,
+                      int16_t column_ordinal = 0);
     ~ColumnChunkReader();
 
     Status init(int chunk_size);
@@ -140,6 +141,7 @@ private:
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
+    int16_t _column_ordinal = 0; // index of this column in the row group (for PME AAD)
     std::unique_ptr<PageReader> _page_reader;
     io::SeekableInputStream* _stream;
 

@@ -204,6 +204,7 @@ private:
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
+    int _row_group_number = 0;
     int64_t _row_group_first_row = 0;
     SkipRowsContextPtr _skip_rows_ctx;
 
