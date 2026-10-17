@@ -4376,7 +4376,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
             "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
-            "Combine values for multiple types.")
+            "Combine values for multiple types. Does not apply to a materialized view whose "
+            + "refresh_mode is INCREMENTAL, which is maintained from base table changes by definition.")
     public static int mv_refresh_force_partition_type = 0;
 
     /**
