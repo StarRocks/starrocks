@@ -1033,14 +1033,14 @@ public class PartitionPruneTest extends PlanTestBase {
                 " partition p4 values in ('4', '5')" +
                 ")" +
                 "properties('replication_num'='1')");
+        // A partition's values say what its rows may hold, not what they do: p1 may hold only 10, so MIN cannot be
+        // read off the definitions. The value ranges interleave, so no partition can be skipped either.
         starRocksAssert.query("select min(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select max(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         10\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select min(c1), max(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1 | 10\n");
-        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1 | 10\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select min(c1-1)+1, max(c1-1)-1 from t1_list_multi_values")
                 .explainContains("OlapScanNode");
 
@@ -1063,6 +1063,70 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("alter table t2_list add partition p1 values in (('1', '2'))");
         starRocksAssert.query("select min(c1)+1, max(c1)-1 from t2_list")
                 .explainContains("OlapScanNode");
+    }
+
+    @Test
+    public void testMinMaxPrune_ListValuesNotAllPresent() throws Exception {
+        UtFrameUtils.mockDML();
+        // Each partition holds several values and its rows only one of them, so MAX is 5, not p3's 6. The ranges do
+        // not interleave, so the extreme partition alone still decides it.
+        starRocksAssert.withTable("create table t_list_partial " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p1 values in ('1', '2'), " +
+                " partition p2 values in ('3', '4'), " +
+                " partition p3 values in ('5', '6')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_partial values(1, 1), (3, 3), (5, 5)");
+        starRocksAssert.query("select max(c1) from t_list_partial").explainContains("partitions=1/3");
+        starRocksAssert.query("select max(c1) from t_list_partial").explainWithout("constant exprs");
+        starRocksAssert.query("select min(c1) from t_list_partial").explainContains("partitions=1/3");
+        starRocksAssert.query("select min(c1) from t_list_partial").explainWithout("constant exprs");
+        starRocksAssert.query("select min(c1), max(c1) from t_list_partial")
+                .explainContains("partitions=2/3");
+
+        // p1 reaches the highest value but may hold only 1; p2 can still hold the maximum.
+        starRocksAssert.withTable("create table t_list_interleaved " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p1 values in ('1', '10'), " +
+                " partition p2 values in ('5', '6')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_interleaved values(1, 1), (5, 5)");
+        starRocksAssert.query("select max(c1) from t_list_interleaved").explainContains("partitions=2/2");
+
+        // A partition of NULL only never decides MIN or MAX; single-value partitions still fold to constants.
+        starRocksAssert.withTable("create table t_list_null_only " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition pn values in (NULL), " +
+                " partition p1 values in ('1'), " +
+                " partition p2 values in ('2')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_null_only values(NULL, 0), (1, 1), (2, 2)");
+        starRocksAssert.query("select min(c1), max(c1) from t_list_null_only")
+                .explainContains("     constant exprs: \n         1 | 2\n");
+
+        // p0 reaches 7 but may hold only NULL, so MAX cannot be 7 by definition and p1 must be read too.
+        starRocksAssert.withTable("create table t_list_null_mixed " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p0 values in (NULL, '7'), " +
+                " partition p1 values in ('1')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_null_mixed values(NULL, 0), (1, 1)");
+        starRocksAssert.query("select max(c1) from t_list_null_mixed").explainContains("partitions=2/2");
+        starRocksAssert.query("select min(c1) from t_list_null_mixed")
+                .explainContains("     constant exprs: \n         1\n");
+
+        starRocksAssert.dropTable("t_list_partial");
+        starRocksAssert.dropTable("t_list_interleaved");
+        starRocksAssert.dropTable("t_list_null_only");
+        starRocksAssert.dropTable("t_list_null_mixed");
     }
 
     @Test
