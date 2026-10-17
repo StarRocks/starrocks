@@ -37,6 +37,8 @@ jobs:
         github.event.action == 'closed' ||
         (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
           endsWith(github.event.label.name, '-merged')) ||
+        # Retargeted (e.g. main -> branch-4.1 or back): base_ref changes, on any PR.
+        (github.event.action == 'edited' && github.event.changes.base != null) ||
         ((github.event.pull_request.base.ref != 'main' ||
           contains(github.event.pull_request.head.ref, '-sync-pr-') ||
           contains(github.event.pull_request.head.ref, '-cd-contributed-pr-')) && (
