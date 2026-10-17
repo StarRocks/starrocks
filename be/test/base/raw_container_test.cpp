@@ -78,15 +78,15 @@ TEST(TestRawContainer, rawStringPageIsPageAligned) {
 }
 
 // Both tests force a real aligned_alloc failure. The mem_alloc_error fail point cannot serve --
-// mem_hook's tracker-refusal branch is compiled out under BE_TEST -- and ASAN will not model a
-// failed allocation at all: it aborts with allocation-size-too-big, and allocator_may_return_null
-// is only settable through ASAN_OPTIONS at startup, which run-be-ut.sh overwrites. CI runs BE UT
-// in the Release configuration, where both tests execute.
+// mem_hook's tracker-refusal branch is compiled out under BE_TEST -- and the ASAN/LSAN/TSAN
+// allocators abort with allocation-size-too-big instead of returning null, since run-be-ut.sh never
+// sets allocator_may_return_null. CI runs BE UT in the Release configuration, where both tests
+// execute.
 [[maybe_unused]] static constexpr size_t kUnsatisfiableSize = size_t{1} << 60; // 1 EiB, past the address space
 
 TEST(TestRawContainer, alignmentAllocatorThrowsWhenAllocationFails) {
-#if defined(ADDRESS_SANITIZER)
-    GTEST_SKIP() << "ASAN aborts on a refused aligned_alloc instead of returning null";
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    GTEST_SKIP() << "Sanitizer allocators abort on a refused aligned_alloc instead of returning null";
 #else
     raw::AlignmentAllocator<char, 4096> allocator;
     // Storing through a volatile keeps the compiler from eliding the allocation call outright,
@@ -98,8 +98,8 @@ TEST(TestRawContainer, alignmentAllocatorThrowsWhenAllocationFails) {
 }
 
 TEST(TestRawContainer, rawStringPageResizeThrowsInsteadOfAdoptingNullBuffer) {
-#if defined(ADDRESS_SANITIZER)
-    GTEST_SKIP() << "ASAN aborts on a refused aligned_alloc instead of returning null";
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+    GTEST_SKIP() << "Sanitizer allocators abort on a refused aligned_alloc instead of returning null";
 #else
     raw::RawStringPage s;
     EXPECT_THROW(s.resize(kUnsatisfiableSize), std::bad_alloc);
