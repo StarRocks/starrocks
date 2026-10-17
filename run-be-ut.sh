@@ -77,6 +77,10 @@ Usage: $0 <options>
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
      --without-paimon-cpp           build without paimon-cpp library; default is ON on Linux, not supported on macOS
+     --without-arm-crc32            build ARM64 Backend without CRC32 instructions
+     --with-arm-crc32               build ARM64 Backend with CRC32 instructions
+     --without-arm-pmull            build ARM64 Backend without PMULL instructions
+     --with-arm-pmull               build ARM64 Backend with PMULL instructions
      -j                             build parallel
 
   Eg.
@@ -136,6 +140,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-paimon-cpp' \
   -l 'without-arm-crc32' \
   -l 'with-arm-crc32' \
+  -l 'without-arm-pmull' \
+  -l 'with-arm-pmull' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -197,6 +203,9 @@ fi
 if [[ -z ${USE_ARM_CRC32} ]]; then
     USE_ARM_CRC32=ON
 fi
+if [[ -z ${USE_ARM_PMULL} ]]; then
+    USE_ARM_PMULL=ON
+fi
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
     if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
@@ -248,6 +257,8 @@ while true; do
         --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
         --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
         --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
+        --without-arm-pmull) USE_ARM_PMULL=OFF; shift ;;
+        --with-arm-pmull) USE_ARM_PMULL=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -340,6 +351,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
             -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2 \
             -DUSE_ARM_CRC32=$USE_ARM_CRC32 \
+            -DUSE_ARM_PMULL=$USE_ARM_PMULL \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
