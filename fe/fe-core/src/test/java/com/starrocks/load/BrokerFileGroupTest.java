@@ -27,6 +27,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -37,21 +38,8 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.BitmapType;
-import com.starrocks.type.IntegerType;
->>>>>>> ffc6d5d ([UT] Fix flaky BrokerFileGroupTest.testParseHiveTable caused by JMockit @Mocked on shared catalog types (#80966))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -162,7 +150,7 @@ public class BrokerFileGroupTest {
                 new SinglePartitionInfo(), new RandomDistributionInfo(1));
         olapTable.setIndexMeta(2, "olapTable", olapTable.getFullSchema(), 0, 0, (short) 1, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
-        olapTable.setBaseIndexMetaId(2);
+        olapTable.setBaseIndexId(2);
         HiveTable hiveTable = HiveTable.builder()
                 .setId(10)
                 .setTableName("hiveTable")
