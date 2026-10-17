@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.load.loadv2.IVMRefreshCommitInfo;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
@@ -26,6 +27,21 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersion")
     private long partitionVersion;
 
+<<<<<<< HEAD
+=======
+    // For a shadow-rewrite transaction: the watershed txn id the converted
+    // op_schema_change log must be keyed by, and the alter version it is anchored at.
+    @SerializedName("shadowRewriteWatershedTxnId")
+    private long shadowRewriteWatershedTxnId = 0;
+
+    @SerializedName("shadowRewriteAlterVersion")
+    private long shadowRewriteAlterVersion = 0;
+
+    // Set only by an IVM refresh; null for every other INSERT.
+    @SerializedName("ivmRefreshCommitInfo")
+    private IVMRefreshCommitInfo ivmRefreshCommitInfo;
+
+>>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
@@ -55,4 +71,22 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
 
 
+<<<<<<< HEAD
+=======
+    public void setShadowRewriteAlterVersion(long shadowRewriteAlterVersion) {
+        this.shadowRewriteAlterVersion = shadowRewriteAlterVersion;
+    }
+
+    public long getShadowRewriteAlterVersion() {
+        return shadowRewriteAlterVersion;
+    }
+
+    public void setIvmRefreshCommitInfo(IVMRefreshCommitInfo ivmRefreshCommitInfo) {
+        this.ivmRefreshCommitInfo = ivmRefreshCommitInfo;
+    }
+
+    public IVMRefreshCommitInfo getIvmRefreshCommitInfo() {
+        return ivmRefreshCommitInfo;
+    }
+>>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
 }
