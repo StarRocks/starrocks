@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TPaimonGlobalIndexScanRange;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -45,6 +47,12 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TProtocolFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +61,24 @@ import java.util.Map;
 import java.util.Optional;
 
 public class PaimonIndexScanNodeTest {
+    @Test
+    public void testIndexRequestDoesNotReuseEncryptionFieldId() throws TException {
+        Assertions.assertEquals(46, THdfsScanRange._Fields.PARQUET_ENCRYPTION_INFO.getThriftFieldId());
+        Assertions.assertEquals(47, THdfsScanRange._Fields.PAIMON_GLOBAL_INDEX_SCAN_RANGE.getThriftFieldId());
+
+        THdfsScanRange range = new THdfsScanRange();
+        range.setParquet_encryption_info(new TParquetEncryptionInfo().setEncryption_algorithm("AES_GCM_V1"));
+        range.setPaimon_global_index_scan_range(new TPaimonGlobalIndexScanRange()
+                .setProtocol_version(PaimonGlobalIndexRequest.CURRENT_VERSION).setSnapshot_id(42L));
+        for (TProtocolFactory protocol : List.of(new TBinaryProtocol.Factory(), new TCompactProtocol.Factory())) {
+            THdfsScanRange decoded = new THdfsScanRange();
+            new TDeserializer(protocol).deserialize(decoded, new TSerializer(protocol).serialize(range));
+            Assertions.assertEquals(range, decoded);
+            Assertions.assertEquals("AES_GCM_V1", decoded.getParquet_encryption_info().getEncryption_algorithm());
+            Assertions.assertEquals(42L, decoded.getPaimon_global_index_scan_range().getSnapshot_id());
+        }
+    }
+
     @Test
     public void testExtractRequestAcceptsOnlyStringEquality() {
         ColumnRefOperator args = new ColumnRefOperator(
