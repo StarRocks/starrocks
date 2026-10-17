@@ -666,6 +666,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### enable_delta_lake_scan_prefetch
+
+* **Description**: Overlaps Delta Lake file-task enumeration with scan-range consumption. Disabled by default. When enabled, each incremental file source retains at most one current batch and one prefetched batch. Each batch contains at most 256 file tasks and stops after its estimated task payload reaches 1 MiB. A single large task can exceed that estimate; the bound does not include Delta Kernel checkpoint or log-replay memory. This setting does not bypass optimizer statistics collection.
+* **Default**: false
+* **Data type**: Boolean
+
+Each catalog uses two prefetch workers with a queue of at most 128 batch jobs. Workers return after producing a batch instead of waiting for consumers. If submission is rejected, the consuming thread reads that batch synchronously. Reaching a scan LIMIT or closing the source cancels pending work and interrupts an active read; releasing resources may wait for the underlying I/O operation to return. Query retries create a fresh file source. Query traces include `DELTA_LAKE.prefetchRead`, `DELTA_LAKE.prefetchWait`, and `DELTA_LAKE.prefetchFallback`.
+
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.

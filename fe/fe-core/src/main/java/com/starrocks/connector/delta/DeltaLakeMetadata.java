@@ -66,6 +66,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -80,9 +81,17 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
     private final ConnectorProperties properties;
+    private final Executor prefetchExecutor;
 
     public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
                              DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties) {
+        this(hdfsEnvironment, catalogName, deltaOps, cacheUpdateProcessor, properties, null);
+    }
+
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
+                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties,
+                             Executor prefetchExecutor) {
+        this.prefetchExecutor = prefetchExecutor;
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
@@ -141,7 +150,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        return buildRemoteInfoSource(table, params);
+        RemoteFileInfoSource source = buildRemoteInfoSource(table, params);
+        ConnectContext context = ConnectContext.get();
+        if (prefetchExecutor != null && context != null
+                && context.getSessionVariable().isEnableDeltaLakeScanPrefetch()) {
+            Tracers.record(EXTERNAL, "DELTA_LAKE.scanPrefetch", "enabled");
+            return new DeltaLakePrefetchSource(source, prefetchExecutor);
+        }
+        return source;
     }
 
     @Override
