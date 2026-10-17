@@ -92,7 +92,7 @@ public class IVMWatermarkCommitGapTest extends MVIVMIcebergTestBase {
     @Test
     public void testBookmarkIsNotReconsumedWhenBookmarkWriteLands() throws Exception {
         TransactionState txnState = insertTxnState();
-        commitFirstWindow(txnState).afterCommitted(txnState);
+        commitFirstWindow(txnState).afterCommitted(txnState, true);
 
         Assertions.assertEquals(TvrTableSnapshot.of(1L), committedBookmark(),
                 "afterCommitted should advance the bookmark to the end of the applied window");
@@ -118,21 +118,6 @@ public class IVMWatermarkCommitGapTest extends MVIVMIcebergTestBase {
                 "the bookmark must come back as a TvrTableSnapshot; planning rejects any other subtype");
         Assertions.assertEquals(TvrTableSnapshot.of(1L), committedBookmark(),
                 "the window must survive the round trip the replaying node reads it from");
-    }
-
-    /**
-     * The commit path does not persist the state object the callback mutated, it persists a copy taken
-     * right after. The window has to be on that copy or it never reaches the journal at all.
-     */
-    @Test
-    public void testWindowSurvivesTheCopyTheCommitPathRecords() throws Exception {
-        TransactionState txnState = insertTxnState();
-        commitFirstWindow(txnState);
-
-        replayingNode().replayOnCommitted(new TransactionState(txnState));
-
-        Assertions.assertEquals(TvrTableSnapshot.of(1L), committedBookmark(),
-                "the copy the commit path records must carry the window beforeCommitted attached");
     }
 
     @Test
@@ -162,10 +147,10 @@ public class IVMWatermarkCommitGapTest extends MVIVMIcebergTestBase {
         EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
         EditLog spyEditLog = spy(originalEditLog);
         doThrow(new RuntimeException("leader WAL gate is closed"))
-                .when(spyEditLog).logMvChangeRefreshScheme(any(ChangeMaterializedViewRefreshSchemeLog.class), any());
+                .when(spyEditLog).logMvChangeRefreshScheme(any(ChangeMaterializedViewRefreshSchemeLog.class));
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
         try {
-            Assertions.assertThrows(RuntimeException.class, () -> callback.afterCommitted(txnState),
+            Assertions.assertThrows(RuntimeException.class, () -> callback.afterCommitted(txnState, true),
                     "the write failure must still reach the caller");
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
@@ -188,20 +173,19 @@ public class IVMWatermarkCommitGapTest extends MVIVMIcebergTestBase {
     }
 
     /**
-     * The window is dead weight once its record is durable -- replay reads it off the journal, not off this
-     * object -- and a committed attachment lingers in memory until its transaction state is evicted.
+     * This branch journals the transaction state after afterCommitted returns --
+     * DatabaseTransactionMgr calls persistTxnStateInTxnLevelLock below afterStateTransform, the reverse of
+     * main -- so the window has to outlive the callback or the record it rides would carry none.
      */
     @Test
-    public void testCommitInfoIsDroppedOnceItsRecordIsDurable() throws Exception {
+    public void testCommitInfoSurvivesUntilItsRecordIsWritten() throws Exception {
         TransactionState txnState = insertTxnState();
         IVMInsertLoadTxnCallback callback = commitFirstWindow(txnState);
+
+        callback.afterCommitted(txnState, true);
+
         Assertions.assertNotNull(attachmentOf(txnState).getIvmRefreshCommitInfo(),
-                "the window should still be on the attachment the commit path is about to record");
-
-        callback.afterCommitted(txnState);
-
-        Assertions.assertNull(attachmentOf(txnState).getIvmRefreshCommitInfo(),
-                "afterCommitted should let the window go once the COMMITTED record carries it");
+                "the window must still be on the attachment when the commit path records it");
     }
 
     /** A txn record written before this change, or by any non-IVM insert, carries no window. */

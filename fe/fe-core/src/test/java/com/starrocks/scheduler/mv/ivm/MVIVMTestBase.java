@@ -48,14 +48,9 @@ public abstract class MVIVMTestBase extends MVTestBase {
         MvId mvId = mv.getMvId();
         IVMInsertLoadTxnCallback callback =
                 new IVMInsertLoadTxnCallback(mvId.getDbId(), mv.getId());
-<<<<<<< HEAD
-        callback.beforeCommitted(null);
-        callback.afterCommitted(null, true);
-=======
         TransactionState txnState = insertTxnState();
         callback.beforeCommitted(txnState);
-        callback.afterCommitted(txnState);
->>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
+        callback.afterCommitted(txnState, true);
         return execPlan;
     }
 

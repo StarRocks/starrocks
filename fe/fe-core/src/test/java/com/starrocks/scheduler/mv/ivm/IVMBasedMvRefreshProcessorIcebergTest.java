@@ -1484,11 +1484,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // afterCommitted must detect the owner change and skip clearTempBaseTableInfoTvrDeltaState
         // so the newer job's pending state survives.
-<<<<<<< HEAD
-        callback.afterCommitted(null, true);
-=======
-        callback.afterCommitted(txnState);
->>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
+        callback.afterCommitted(txnState, true);
 
         MaterializedView afterMv = getMv("test_mv1");
         MaterializedView.AsyncRefreshContext ctxAfter = afterMv.getRefreshScheme().getAsyncRefreshContext();

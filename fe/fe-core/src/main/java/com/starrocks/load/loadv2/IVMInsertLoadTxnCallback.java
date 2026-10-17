@@ -123,15 +123,8 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
         }
         LOG.info("Materialized view {} has been committed, update the base table info tvr version range: {}",
                 mv.getName(), baseTableInfoTvrDeltaMap);
-<<<<<<< HEAD
         final MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-        Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
-                asyncRefreshContext.getBaseTableInfoTvrVersionRangeMap();
-=======
-        final MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
-        final MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
->>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
 
         promoteCommittedTvr(asyncRefreshContext, baseTableInfoTvrDeltaMap);
         // Only clear if we still own the slot — guard against takeover between the two callbacks.
@@ -143,29 +136,10 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
                     "captured owner={}, current owner={}", capturedOwner, currentOwner);
         }
 
-<<<<<<< HEAD
         long maxChangedTableRefreshTime = refreshScheme.getLastRefreshTime();
         mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog = new ChangeMaterializedViewRefreshSchemeLog(mv);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-=======
-        long maxChangedTableRefreshTime = mv.getRefreshScheme().getLastRefreshTime();
-        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
-        try {
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                    wal -> mv.setRefreshScheme(copiedScheme));
-        } catch (Throwable t) {
-            // Only for a node that demotes and keeps running: it advances its replay position past its own
-            // writes, so it alone never replays the txn record that already carries this window. A node that
-            // exits replays that record normally on restart and needs nothing here.
-            promoteCommittedTvr(mv.getRefreshScheme().getAsyncRefreshContext(), baseTableInfoTvrDeltaMap);
-            throw t;
-        }
-        // The COMMITTED record is durable by now, and replay reads the window off it, not off this object.
-        clearRefreshCommitInfo(txnState);
->>>>>>> 1052fa7 ([BugFix] Record the IVM refresh window on the transaction it commits with (#79315))
         LOG.info("Update materialized view {} refresh scheme, " +
                 "last refresh time: {}, version meta changed", mv.getName(), maxChangedTableRefreshTime);
     }
@@ -177,13 +151,6 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
     static void promoteCommittedTvr(MaterializedView.AsyncRefreshContext target,
                                     Map<BaseTableInfo, TvrVersionRange> committedTvrMap) {
         target.getBaseTableInfoTvrVersionRangeMap().putAll(committedTvrMap);
-    }
-
-    private static void clearRefreshCommitInfo(TransactionState txnState) {
-        TxnCommitAttachment attachment = txnState == null ? null : txnState.getTxnCommitAttachment();
-        if (attachment instanceof InsertTxnCommitAttachment) {
-            ((InsertTxnCommitAttachment) attachment).setIvmRefreshCommitInfo(null);
-        }
     }
 
     /** Only an IVM refresh ever fills this slot, so the record alone identifies one. */
