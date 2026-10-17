@@ -72,10 +72,14 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
@@ -83,6 +87,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -802,15 +807,77 @@ public class AnalyzerUtils {
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             if (!node.hasWithClause()) {
-                return super.visitSelect(node, context);
+                Void result = super.visitSelect(node, context);
+                visitParserOwnedExpressions(node, context);
+                return result;
             }
             cteNameScopes.push(new HashSet<>());
             recursiveCteScopes.push(node.isHasRecursiveCTE());
             try {
-                return super.visitSelect(node, context);
+                Void result = super.visitSelect(node, context);
+                visitParserOwnedExpressions(node, context);
+                return result;
             } finally {
                 recursiveCteScopes.pop();
                 cteNameScopes.pop();
+            }
+        }
+
+        protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
+        }
+
+        protected boolean shouldVisitParserOwnedFields() {
+            return false;
+        }
+
+        private void visitParserOwnedDmlClauses(List<CTERelation> cteRelations, Void context, Runnable clauses) {
+            if (!shouldVisitParserOwnedFields()) {
+                return;
+            }
+            if (cteRelations == null || cteRelations.isEmpty()) {
+                clauses.run();
+                return;
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(false);
+            try {
+                for (CTERelation cteRelation : cteRelations) {
+                    visit(cteRelation, context);
+                }
+                clauses.run();
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
+        }
+
+        private void visitRelations(List<Relation> relations, Void context) {
+            if (relations != null) {
+                for (Relation relation : relations) {
+                    visit(relation, context);
+                }
+            }
+        }
+
+        private void visitIfPresent(ParseNode node, Void context) {
+            if (node != null) {
+                visit(node, context);
+            }
+        }
+
+        private void visitMergeWhenClauses(List<MergeWhenClause> whenClauses, Void context) {
+            if (whenClauses == null) {
+                return;
+            }
+            for (MergeWhenClause whenClause : whenClauses) {
+                visitIfPresent(whenClause.getOptionalCondition(), context);
+                if (whenClause instanceof MergeWhenMatchedUpdateClause updateClause
+                        && updateClause.getAssignments() != null) {
+                    updateClause.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr(), context));
+                } else if (whenClause instanceof MergeWhenNotMatchedInsertClause insertClause
+                        && insertClause.getValues() != null) {
+                    insertClause.getValues().forEach(expr -> visitIfPresent(expr, context));
+                }
             }
         }
 
@@ -844,6 +911,15 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlClauses(node.getCommonTableExpressions(), context, () -> {
+                    visitRelations(node.getFromRelations(), context);
+                    visitIfPresent(node.getWherePredicate(), context);
+                    if (node.getAssignments() != null) {
+                        node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr(), context));
+                    }
+                });
+            }
             return super.visitUpdateStatement(node, context);
         }
 
@@ -852,6 +928,12 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlClauses(node.getCommonTableExpressions(), context, () -> {
+                    visitRelations(node.getUsingRelations(), context);
+                    visitIfPresent(node.getWherePredicate(), context);
+                });
+            }
             return super.visitDeleteStatement(node, context);
         }
 
@@ -860,6 +942,13 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlClauses(null, context, () -> {
+                    visitIfPresent(node.getSourceRelation(), context);
+                    visitIfPresent(node.getMergeCondition(), context);
+                    visitMergeWhenClauses(node.getWhenClauses(), context);
+                });
+            }
             return super.visitMergeIntoStatement(node, context);
         }
 
@@ -870,6 +959,12 @@ public class AnalyzerUtils {
             }
             Table table = node.getTable();
             tables.put(node.getName(), table);
+            return null;
+        }
+
+        @Override
+        public Void visitPivotRelation(PivotRelation node, Void context) {
+            visitIfPresent(node.getQuery(), context);
             return null;
         }
 
@@ -927,7 +1022,7 @@ public class AnalyzerUtils {
             }
         }
 
-        private boolean isUnresolvedCteReference(TableRelation node) {
+        protected boolean isUnresolvedCteReference(TableRelation node) {
             if (node.getTable() != null || cteNameScopes.isEmpty()) {
                 return false;
             }
@@ -973,6 +1068,12 @@ public class AnalyzerUtils {
     public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
         List<TableRelation> tableRelations = Lists.newArrayList();
         new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
+    public static List<TableRelation> collectNonCTETableRelations(StatementBase statementBase) {
+        List<TableRelation> tableRelations = Lists.newArrayList();
+        new AnalyzerUtils.TableRelationsCollector(tableRelations, true, true).visit(statementBase);
         return tableRelations;
     }
 
@@ -1574,14 +1675,58 @@ public class AnalyzerUtils {
     private static class TableRelationsCollector extends TableCollector {
 
         private final List<TableRelation> tableRelations;
+        private final boolean excludeUnresolvedCteReferences;
+        private final boolean collectParserOwnedExpressions;
 
         public TableRelationsCollector(List<TableRelation> tableRelations) {
-            super(null);
+            this(tableRelations, false, false);
+        }
+
+        public TableRelationsCollector(List<TableRelation> tableRelations, boolean excludeUnresolvedCteReferences) {
+            this(tableRelations, excludeUnresolvedCteReferences, false);
+        }
+
+        public TableRelationsCollector(List<TableRelation> tableRelations, boolean excludeUnresolvedCteReferences,
+                                       boolean collectParserOwnedExpressions) {
+            super();
             this.tableRelations = tableRelations;
+            this.excludeUnresolvedCteReferences = excludeUnresolvedCteReferences;
+            this.collectParserOwnedExpressions = collectParserOwnedExpressions;
+        }
+
+        @Override
+        protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
+            if (!collectParserOwnedExpressions) {
+                return;
+            }
+            if (node.getOutputExpression() == null && node.getSelectList() != null) {
+                for (SelectListItem item : node.getSelectList().getItems()) {
+                    if (!item.isStar()) {
+                        visit(item.getExpr(), context);
+                    }
+                }
+            }
+            if (node.getGroupBy() == null && node.getGroupByClause() != null) {
+                GroupByClause groupByClause = node.getGroupByClause();
+                if (groupByClause.getGroupingSetList() != null) {
+                    groupByClause.getGroupingSetList().forEach(groupingSet ->
+                            groupingSet.forEach(expr -> visit(expr, context)));
+                } else if (groupByClause.getOriGroupingExprs() != null) {
+                    groupByClause.getOriGroupingExprs().forEach(expr -> visit(expr, context));
+                }
+            }
+        }
+
+        @Override
+        protected boolean shouldVisitParserOwnedFields() {
+            return collectParserOwnedExpressions;
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (excludeUnresolvedCteReferences && isUnresolvedCteReference(node)) {
+                return null;
+            }
             tableRelations.add(node);
             return null;
         }
