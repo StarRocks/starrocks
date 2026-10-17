@@ -49,6 +49,9 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -122,6 +125,10 @@ public class PipeManagerTest {
 
         starRocksAssert.withTable(
                 "create table tbl1 (col_int int, col_string string) properties('replication_num'='1') ");
+
+        starRocksAssert.withTable("create table tbl_pk (col_int int not null, col_version decimal(38, 0) not null, " +
+                "col_string string) primary key(col_int) distributed by hash(col_int) " +
+                "properties('replication_num'='1')");
 
         // Disable global scheduler
         GlobalStateMgr.getCurrentState().getPipeListener().setStop();
@@ -1058,6 +1065,36 @@ public class PipeManagerTest {
                     "(`col_int`) SELECT `col_int`\n" +
                     "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             SqlParser.parse(sql, new SessionVariable());
+            dropPipe(pipeName);
+        }
+    }
+
+    @Test
+    public void testInsertSqlPreservesProperties() throws Exception {
+        mockRepoExecutor();
+        String pipeName = "p_insert_properties";
+        createPipe("create pipe p_insert_properties as insert into tbl_pk (col_int, col_version, col_string) " +
+                "properties('merge_condition'='col_version', 'strict_mode'='true', 'max_filter_ratio'='0', 'timeout'='60') " +
+                "select col_int, cast(col_int as decimal(38, 0)), col_string " +
+                "from files('path'='fake://pipe', 'format'='parquet') where col_int > 0");
+        try {
+            Pipe pipe = getPipe(pipeName);
+            InsertStmt original = (InsertStmt) SqlParser.parse(pipe.getOriginSql(), new SessionVariable()).get(0);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "new.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "old.parquet", "v1", 1));
+
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            InsertStmt task = (InsertStmt) SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertEquals(original.getProperties(), task.getProperties());
+            Assertions.assertEquals(original.getTargetColumnNames(), task.getTargetColumnNames());
+            Assertions.assertEquals("insert_label", task.getLabel());
+            SelectRelation select = (SelectRelation) task.getQueryStatement().getQueryRelation();
+            FileTableFunctionRelation files = (FileTableFunctionRelation) select.getRelation();
+            Assertions.assertEquals("new.parquet,old.parquet", files.getProperties().get("path"));
+            Assertions.assertEquals("parquet", files.getProperties().get("format"));
+            Assertions.assertNotNull(select.getWhereClause());
+        } finally {
             dropPipe(pipeName);
         }
     }
