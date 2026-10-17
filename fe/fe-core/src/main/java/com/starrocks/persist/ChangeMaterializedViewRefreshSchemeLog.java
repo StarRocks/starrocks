@@ -48,16 +48,10 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView) {
         this.id = materializedView.getId();
         this.dbId = materializedView.getDbId();
-<<<<<<< HEAD
         this.refreshType = materializedView.getRefreshScheme().getType();
         this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext().copy();
         this.lastFreshnessConfirmedAt = materializedView.getRefreshScheme().getLastFreshnessConfirmedAt();
-=======
-        this.refreshType = refreshScheme.getType();
-        this.asyncRefreshContext = refreshScheme.getAsyncRefreshContext().copy();
-        this.lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
-        this.lastRefreshTime = refreshScheme.getLastRefreshTime();
->>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))
+        this.lastRefreshTime = materializedView.getRefreshScheme().getLastRefreshTime();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {

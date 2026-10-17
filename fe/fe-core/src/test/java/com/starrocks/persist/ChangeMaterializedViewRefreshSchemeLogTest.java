@@ -21,11 +21,8 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-<<<<<<< HEAD
 import com.starrocks.catalog.AggregateType;
-=======
 import com.starrocks.catalog.BaseTableInfo;
->>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -38,6 +35,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
@@ -205,14 +203,11 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         Assertions.assertEquals(freshnessTime, materializedView.getRefreshScheme().getLastFreshnessConfirmedAt());
     }
 
-<<<<<<< HEAD
-}
-=======
 
 
     private static MaterializedView buildMv(MaterializedView.MvRefreshScheme refreshScheme) {
         List<Column> columns = new LinkedList<>();
-        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
@@ -423,4 +418,3 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
                 "replay of a pre-upgrade log with nothing to derive from must keep the in-memory value");
     }
 }
->>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))

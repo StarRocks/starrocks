@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
 
 import static org.mockito.Mockito.mock;
@@ -61,141 +62,6 @@ public class MVVersionManagerTest {
             public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
             }
         };
-<<<<<<< HEAD
-=======
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return new EditLog(null);
-            }
-
-            @Mock
-            public MaterializedViewMgr getMaterializedViewMgr() {
-                return new MaterializedViewMgr();
-            }
-        };
-        new MockUp<MaterializedViewMgr>() {
-            @Mock
-            public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
-            }
-        };
-    }
-
-    private static MaterializedView buildMv(long lastFreshnessConfirmedAt) {
-        List<Column> columns = new LinkedList<>();
-        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
-        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        PartitionInfo partitionInfo = new SinglePartitionInfo();
-        partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
-        partitionInfo.setReplicationNum(1, (short) 3);
-        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
-        refreshScheme.setLastFreshnessConfirmedAt(lastFreshnessConfirmedAt);
-        return new MaterializedView(1000, 100, "mv_version_manager_test", columns, KeysType.AGG_KEYS,
-                partitionInfo, distributionInfo, refreshScheme);
-    }
-
-    private static MvTaskRunContext buildContext(Map<String, String> properties, TaskRunStatus status) {
-        MvTaskRunContext context = new MvTaskRunContext(new TaskRunContext());
-        context.setProperties(properties);
-        context.setStatus(status);
-        return context;
-    }
-
-    private static TaskRunStatus statusWithProcessStartTime(long processStartTime) {
-        TaskRunStatus status = new TaskRunStatus();
-        status.setProcessStartTime(processStartTime);
-        return status;
-    }
-
-    @Test
-    public void confirmFreshnessAdvancesAndLogsOnce() {
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(1, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessIsNoopWhenAlreadyConfirmed() {
-        MaterializedView mv = buildMv(2000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(0, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessUsesBatchBaselineProperty() {
-        Map<String, String> properties = new HashMap<>();
-        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "1500");
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(1500L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(1, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessFallsBackOnMalformedBaseline() {
-        Map<String, String> properties = new HashMap<>();
-        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "not-a-number");
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(1, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessSkipsWhenLockTimedOut() {
-        new MockUp<Locker>() {
-            @Mock
-            public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
-                                                           long timeout, TimeUnit unit) {
-                return false;
-            }
-        };
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(0, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessIsNoopWhenBaselineMarksIneligible() {
-        Map<String, String> properties = new HashMap<>();
-        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "0");
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(0, editLogCount.get());
-    }
-
-    @Test
-    public void confirmFreshnessIsNoopWithoutRunStatus() {
-        MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, null));
-
-        manager.confirmFreshness();
-
-        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(0, editLogCount.get());
->>>>>>> 7e3ece0 ([BugFix] Log MV lastRefreshTime instead of recomputing it on replay (#78467))
     }
 
     // A base table can be processed by a run without any of its partitions being refreshed: the run is not
@@ -203,23 +69,32 @@ public class MVVersionManagerTest {
     @Test
     public void updateMVVersionInfoKeepsLastRefreshTimeWhenNoPartitionWasRefreshed() {
         long absorbedRefreshTime = 1767225600000L;
-        MaterializedView mv = buildMv(1000L);
+        MaterializedView mv = buildMv();
         mv.getRefreshScheme().setLastRefreshTime(absorbedRefreshTime);
+        AtomicLong journaledRefreshTime = new AtomicLong(-1L);
+        new MockUp<MVVersionManager>() {
+            @Mock
+            public void updateEditLogAfterVersionMetaChanged(MaterializedView ignored, long maxChangedTableRefreshTime) {
+                journaledRefreshTime.set(maxChangedTableRefreshTime);
+            }
+        };
 
         OlapTable baseTable = mock(OlapTable.class);
         when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
         when(baseTable.isOlapOrCloudNativeTable()).thenReturn(true);
         when(baseTable.getId()).thenReturn(2000L);
         when(baseTable.getVisiblePartitionNames()).thenReturn(Set.of());
-        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
+        TableSnapshotInfo snapshot = new TableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
         Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
 
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
-        manager.updateMVVersionInfo(Map.of(2000L, snapshot), PCellSortedSet.of(), Set.of(2000L),
-                Map.of(), null, Map.of(), true);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext());
+        manager.updateMVVersionInfo(Map.of(2000L, snapshot), Set.of(), Set.of(2000L),
+                Map.of(), Map.of(), true);
 
         Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
                 "a run that refreshed no partition must not report the MV as never refreshed");
+        Assertions.assertEquals(absorbedRefreshTime, journaledRefreshTime.get(),
+                "updateEditLogAfterVersionMetaChanged sets lastRefreshTime to the value it journals");
     }
 
     // PartitionUtil.getPartitionNames reaches a connector table's remote metadata, so it must not run under the
