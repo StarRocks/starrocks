@@ -1461,7 +1461,8 @@ public class PseudoBackend {
                         throw new Exception("tablet not found " + tabletWithPartition.tabletId);
                     }
                     if (tablet.getRowsetCount() >= Tablet.maxVersions) {
-                        throw new Exception(String.format("Too many versions. tablet_id: %d, version_count: %d, limit: %d",
+                        throw new Exception(String.format(
+                                "Failed to load data into tablet %d, because of too many versions, current/limit: %d/%d",
                                 tablet.id, tablet.getRowsetCount(), Tablet.maxVersions));
                     }
                 }

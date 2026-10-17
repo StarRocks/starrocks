@@ -57,7 +57,7 @@ public class TooManyVersionWriteFailTest {
             }
             Assertions.fail("should fail with too many versions");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Too many versions"));
+            Assertions.assertTrue(e.getMessage().contains("too many versions"));
         }
         Tablet.compactionIntervalMs = 500;
         PseudoBackend.tabletCheckIntervalMs = 1000;
