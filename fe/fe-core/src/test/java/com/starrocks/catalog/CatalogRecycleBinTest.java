@@ -220,6 +220,94 @@ public class CatalogRecycleBinTest {
         Assertions.assertNotNull(recycledPart);
         recycledPart = bin.getPhysicalPartition(4L);
         Assertions.assertEquals(4L, recycledPart.getId());
+
+        Partition replacementPartition = new Partition(1L, 5L, "pt", new MaterializedIndex(), null);
+        bin.setPartitionInfo(1L,
+                new RecycleRangePartitionInfo(11L, 22L, replacementPartition, range, dataProperty,
+                        (short) 1, false, null));
+
+        Assertions.assertNull(bin.getPhysicalPartition(3L));
+        recycledPart = bin.getPhysicalPartition(5L);
+        Assertions.assertNotNull(recycledPart);
+        Assertions.assertEquals(5L, recycledPart.getId());
+
+        bin.removePartitionFromRecycleBin(1L);
+        Assertions.assertNull(bin.getPhysicalPartition(5L));
+        Assertions.assertNotNull(bin.getPhysicalPartition(4L));
+    }
+
+    @Test
+    public void testLoadRebuildsPhysicalPartitionIndex() throws Exception {
+        CatalogRecycleBin originalBin = new CatalogRecycleBin();
+        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        Range<PartitionKey> range =
+                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
+                        BoundType.CLOSED,
+                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
+                        BoundType.CLOSED);
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        originalBin.recyclePartition(
+                new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty,
+                        (short) 1, false, null));
+        Partition partition2 = new Partition(2L, 4L, "pt2", new MaterializedIndex(), null);
+        originalBin.recyclePartition(
+                new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty,
+                        (short) 1, false, null));
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        originalBin.save(image.getImageWriter());
+
+        CatalogRecycleBin loadedBin = new CatalogRecycleBin();
+        loadedBin.load(image.getMetaBlockReader());
+
+        PhysicalPartition recycledPart = loadedBin.getPhysicalPartition(3L);
+        Assertions.assertNotNull(recycledPart);
+        Assertions.assertEquals(3L, recycledPart.getId());
+        recycledPart = loadedBin.getPhysicalPartition(4L);
+        Assertions.assertNotNull(recycledPart);
+        Assertions.assertEquals(4L, recycledPart.getId());
+        Assertions.assertNull(loadedBin.getPhysicalPartition(5L));
+    }
+
+    @Test
+    public void testEstimateMemoryTracksPhysicalPartitionIndex() throws Exception {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        Range<PartitionKey> range =
+                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
+                        BoundType.CLOSED,
+                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
+                        BoundType.CLOSED);
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition initialPartition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+
+        bin.recyclePartition(
+                new RecycleRangePartitionInfo(11L, 22L, initialPartition, range, dataProperty,
+                        (short) 1, false, null));
+
+        Partition partitionWithTwoPhysicalPartitions = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        PhysicalPartition extraPhysicalPartition =
+                new PhysicalPartition(4L, partitionWithTwoPhysicalPartitions.getId(), new MaterializedIndex());
+        partitionWithTwoPhysicalPartitions.addSubPartition(extraPhysicalPartition);
+        bin.setPartitionInfo(1L,
+                new RecycleRangePartitionInfo(11L, 22L, partitionWithTwoPhysicalPartitions,
+                        range, dataProperty, (short) 1, false, null));
+
+        Assertions.assertEquals(1L, bin.estimateCount().get("Partition"));
+        Assertions.assertEquals(2L, bin.estimateCount().get("PhysicalPartitionIndex"));
+        Assertions.assertNotNull(bin.getPhysicalPartition(4L));
+
+        long estimatedSizeWithTwoPhysicalPartitions = bin.estimateSize();
+
+        Partition partitionWithOnePhysicalPartition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.setPartitionInfo(1L,
+                new RecycleRangePartitionInfo(11L, 22L, partitionWithOnePhysicalPartition,
+                        range, dataProperty, (short) 1, false, null));
+
+        Assertions.assertEquals(1L, bin.estimateCount().get("PhysicalPartitionIndex"));
+        Assertions.assertNull(bin.getPhysicalPartition(4L));
+        Assertions.assertTrue(estimatedSizeWithTwoPhysicalPartitions > bin.estimateSize());
     }
 
     @Test
@@ -752,6 +840,8 @@ public class CatalogRecycleBinTest {
 
         Assertions.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assertions.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assertions.assertSame(p1.getDefaultPhysicalPartition(), recycleBin.getPhysicalPartition(112));
+        Assertions.assertSame(p2.getDefaultPhysicalPartition(), recycleBin.getPhysicalPartition(223));
         Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
         Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
 
@@ -764,7 +854,9 @@ public class CatalogRecycleBinTest {
         waitPartitionClearFinished(recycleBin, p1.getId(), now);
 
         Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+        Assertions.assertNull(recycleBin.getPhysicalPartition(112));
         Assertions.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assertions.assertSame(p2.getDefaultPhysicalPartition(), recycleBin.getPhysicalPartition(223));
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
@@ -789,6 +881,7 @@ public class CatalogRecycleBinTest {
         recycleBin.erasePartition(now);
         waitPartitionClearFinished(recycleBin, p2.getId(), now);
         Assertions.assertEquals(recycleBin.getPartition(p2.getId()), null);
+        Assertions.assertNull(recycleBin.getPhysicalPartition(223));
         Assertions.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
     }
