@@ -1062,4 +1062,397 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         probe.assertReachedOutsideTheLock("analyzeUniqueConstraint",
                 "constraint analysis resolves tables through MetadataMgr and must not run under the MV's lock");
     }
+<<<<<<< HEAD
+=======
+
+    private static List<AlterMaterializedViewStatusLog> captureMvStatusJournal() {
+        List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
+                                         WALApplier walApplier) {
+                journaled.add(log);
+                invocation.proceed();
+            }
+        };
+        return journaled;
+    }
+
+    private static AlterMaterializedViewStatusLog journaledInactivation(List<AlterMaterializedViewStatusLog> journaled,
+                                                                        MaterializedView mv) {
+        return journaled.stream()
+                .filter(log -> log.getTableId() == mv.getId()
+                        && AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(log.getStatus()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the inactivation of " + mv.getName() + " was not journaled"));
+    }
+
+    private static void putStaleVersion(MaterializedView mv, Table base) {
+        Map<String, MaterializedView.BasePartitionInfo> stale = Maps.newHashMap();
+        stale.put(base.getName(), new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(base.getId(), stale);
+    }
+
+    private static boolean hasVersionMap(MaterializedView mv) {
+        return !mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty();
+    }
+
+    /**
+     * Killing the running refresh of an MV needs the task run lock. The view change is journaled before its MVs are
+     * inactivated, so failing to take that lock must not stop the inactivation: every MV, the second one and the one
+     * above the first included, is still inactivated and journaled.
+     */
+    @Test
+    public void testInactivationGoesOnWhenTaskRunLockIsBusy() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE busy_lock_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withView("CREATE VIEW busy_lock_view AS SELECT k1, v1 FROM busy_lock_base");
+        String mvProps = "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW busy_lock_mv1\n" + mvProps +
+                "AS SELECT k1, v1 FROM busy_lock_view;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW busy_lock_mv2\n" + mvProps +
+                "AS SELECT k1, v1 FROM busy_lock_view;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW busy_lock_mv3\n" + mvProps +
+                "AS SELECT k1, v1 FROM busy_lock_mv1;");
+        try {
+            List<MaterializedView> mvs = Lists.newArrayList(starRocksAssert.getMv("test", "busy_lock_mv1"),
+                    starRocksAssert.getMv("test", "busy_lock_mv2"), starRocksAssert.getMv("test", "busy_lock_mv3"));
+            Table base = starRocksAssert.getTable("test", "busy_lock_base");
+            for (MaterializedView mv : mvs) {
+                Assertions.assertTrue(mv.isActive());
+                putStaleVersion(mv, base);
+            }
+            AtomicBoolean busyLock = new AtomicBoolean(true);
+            AtomicInteger lockAttempts = new AtomicInteger();
+            new MockUp<TaskRunManager>() {
+                @Mock
+                public boolean tryTaskRunLock(Invocation invocation) {
+                    if (busyLock.get()) {
+                        lockAttempts.incrementAndGet();
+                        return false;
+                    }
+                    return invocation.proceed();
+                }
+            };
+            List<AlterMaterializedViewStatusLog> journaled = captureMvStatusJournal();
+
+            starRocksAssert.ddl("ALTER VIEW busy_lock_view AS SELECT k1, v1 + 1 AS v1 FROM busy_lock_base");
+            busyLock.set(false);
+            // Each wait for the lock can take seconds, under the lock of the view or table that changed: one per MV.
+            Assertions.assertTrue(lockAttempts.get() <= mvs.size(), "task run lock attempts: " + lockAttempts.get());
+
+            for (MaterializedView mv : mvs) {
+                Assertions.assertFalse(mv.isActive(), mv.getName() + " is still active");
+                Assertions.assertFalse(hasVersionMap(mv), mv.getName() + " kept its version map");
+                Assertions.assertTrue(journaledInactivation(journaled, mv).isClearVersionMap());
+                Assertions.assertEquals(Constants.TaskState.PAUSE,
+                        GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv).getState());
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("busy_lock_mv3");
+            starRocksAssert.dropMaterializedView("busy_lock_mv2");
+            starRocksAssert.dropMaterializedView("busy_lock_mv1");
+            starRocksAssert.dropView("busy_lock_view");
+            starRocksAssert.dropTable("busy_lock_base");
+        }
+    }
+
+    /**
+     * The inactivation of the MVs on a base table runs after the base table change is journaled, possibly in the
+     * applier of its journal entry: one MV failing must neither stop the others nor reach the caller.
+     */
+    @Test
+    public void testOneFailedInactivationDoesNotStopTheOthers() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE one_fail_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        String mvProps = "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW one_fail_mv1\n" + mvProps +
+                "AS SELECT k1, v1 FROM one_fail_base;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW one_fail_mv2\n" + mvProps +
+                "AS SELECT k1, v1 FROM one_fail_base;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW one_fail_above\n" + mvProps +
+                "AS SELECT k1, v1 FROM one_fail_mv1;");
+        try {
+            MaterializedView mv1 = starRocksAssert.getMv("test", "one_fail_mv1");
+            MaterializedView mv2 = starRocksAssert.getMv("test", "one_fail_mv2");
+            MaterializedView above = starRocksAssert.getMv("test", "one_fail_above");
+            OlapTable base = (OlapTable) starRocksAssert.getTable("test", "one_fail_base");
+            AtomicBoolean failingMv1 = new AtomicBoolean(true);
+            new MockUp<AlterJobMgr>() {
+                @Mock
+                public AlterJobMgr.AlterMaterializedViewStatusContext prepareAlterMaterializedViewStatus(
+                        Invocation invocation, MaterializedView materializedView, String status, String reason,
+                        boolean isReplay) {
+                    if (failingMv1.get() && materializedView.getId() == mv1.getId()) {
+                        throw new SemanticException("injected failure");
+                    }
+                    return invocation.proceed(materializedView, status, reason, isReplay);
+                }
+            };
+            List<AlterMaterializedViewStatusLog> journaled = captureMvStatusJournal();
+
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(base, Set.of("v1"));
+            failingMv1.set(false);
+
+            Assertions.assertFalse(mv2.isActive());
+            Assertions.assertTrue(journaledInactivation(journaled, mv2).isClearVersionMap());
+            // The MV above the one that failed reads data derived from the changed base table too.
+            Assertions.assertFalse(above.isActive(), "the MV above the failed one is still active");
+            Assertions.assertTrue(journaledInactivation(journaled, above).isClearVersionMap());
+            Assertions.assertEquals(0, mv1.getVersionMapResetEpoch() % 2, "the reset epoch was left odd");
+        } finally {
+            starRocksAssert.dropMaterializedView("one_fail_above");
+            starRocksAssert.dropMaterializedView("one_fail_mv2");
+            starRocksAssert.dropMaterializedView("one_fail_mv1");
+            starRocksAssert.dropTable("one_fail_base");
+        }
+    }
+
+    /**
+     * Replaying an INACTIVE entry that clears the version map clears it before anything that can fail, and does not
+     * need the task run lock: a replaying FE runs no refresh to kill.
+     */
+    @Test
+    public void testReplayInactivationClearsEvenIfTheTransitionFails() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE replay_clear_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW replay_clear_mv\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n" +
+                "AS SELECT k1, v1 FROM replay_clear_base;");
+        try {
+            MaterializedView mv = starRocksAssert.getMv("test", "replay_clear_mv");
+            Table base = starRocksAssert.getTable("test", "replay_clear_base");
+            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(), mv.getId(),
+                    AlterMaterializedViewStatusClause.INACTIVE,
+                    MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v1")));
+            log.setClearVersionMap(true);
+
+            // The task run lock is never taken on replay.
+            AtomicBoolean noTaskRunLock = new AtomicBoolean(true);
+            new MockUp<TaskRunManager>() {
+                @Mock
+                public boolean tryTaskRunLock(Invocation invocation) {
+                    if (noTaskRunLock.get()) {
+                        throw new AssertionError("replay took the task run lock");
+                    }
+                    return invocation.proceed();
+                }
+            };
+            putStaleVersion(mv, base);
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+            noTaskRunLock.set(false);
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertFalse(hasVersionMap(mv));
+            Assertions.assertTrue(mv.isVersionMapResetPending());
+
+            // A transition that fails still leaves the version map cleared.
+            mv.setActive();
+            mv.setVersionMapResetPending(false);
+            putStaleVersion(mv, base);
+            AtomicBoolean failingPrepare = new AtomicBoolean(true);
+            new MockUp<AlterJobMgr>() {
+                @Mock
+                public AlterJobMgr.AlterMaterializedViewStatusContext prepareAlterMaterializedViewStatus(
+                        Invocation invocation, MaterializedView materializedView, String status, String reason,
+                        boolean isReplay) {
+                    if (failingPrepare.get()) {
+                        throw new SemanticException("injected failure");
+                    }
+                    return invocation.proceed(materializedView, status, reason, isReplay);
+                }
+            };
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+            failingPrepare.set(false);
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertFalse(hasVersionMap(mv));
+            Assertions.assertTrue(mv.isVersionMapResetPending());
+        } finally {
+            starRocksAssert.dropMaterializedView("replay_clear_mv");
+            starRocksAssert.dropTable("replay_clear_base");
+        }
+    }
+
+    private static <T> T roundTripWithout(Object obj, Class<T> clazz, String field, Map<String, ?> overrides) {
+        JsonObject json = GsonUtils.GSON.toJsonTree(obj).getAsJsonObject();
+        Assertions.assertTrue(json.has(field), "the current version must write " + field);
+        json.remove(field);
+        overrides.forEach((key, value) -> json.add(key, GsonUtils.GSON.toJsonTree(value)));
+        return GsonUtils.GSON.fromJson(json, clazz);
+    }
+
+    /**
+     * Images and journal entries written before the version map clear was persisted carry neither the pending mark
+     * nor the clear flag, although that leader had cleared the map in memory on every inactivation but a manual one.
+     */
+    @Test
+    public void testVersionMapClearOfOldImagesAndEntries() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE old_format_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW old_format_mv\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n" +
+                "AS SELECT k1, v1 FROM old_format_base;");
+        try {
+            MaterializedView mv = starRocksAssert.getMv("test", "old_format_mv");
+            Table base = starRocksAssert.getTable("test", "old_format_base");
+            String columnChanged = MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v1"));
+
+            // Image: an MV inactivated automatically still holds the version map the old leader cleared.
+            Assertions.assertTrue(roundTripWithout(mv, MaterializedView.class, "versionMapResetPending",
+                    Map.of("active", false, "inactiveReason", columnChanged)).isVersionMapResetPending());
+            for (String reason : List.of(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, "")) {
+                Assertions.assertFalse(roundTripWithout(mv, MaterializedView.class, "versionMapResetPending",
+                        Map.of("active", false, "inactiveReason", reason)).isVersionMapResetPending());
+            }
+            Assertions.assertFalse(roundTripWithout(mv, MaterializedView.class, "versionMapResetPending",
+                    Map.of()).isVersionMapResetPending());
+            mv.setVersionMapResetPending(true);
+            Assertions.assertTrue(GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(mv), MaterializedView.class)
+                    .isVersionMapResetPending());
+            mv.setVersionMapResetPending(false);
+
+            // Every entry written now carries the flag, false included.
+            AlterMaterializedViewStatusLog current = new AlterMaterializedViewStatusLog(mv.getDbId(), mv.getId(),
+                    AlterMaterializedViewStatusClause.INACTIVE, columnChanged);
+            Assertions.assertFalse(GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(current),
+                    AlterMaterializedViewStatusLog.class).isClearVersionMapUnset());
+
+            // Journal: an old automatic INACTIVE entry clears on replay, a manual one does not.
+            AlterMaterializedViewStatusLog oldAutomatic = roundTripWithout(current,
+                    AlterMaterializedViewStatusLog.class, "clearVersionMap", Map.of());
+            Assertions.assertTrue(oldAutomatic.isClearVersionMapUnset());
+            putStaleVersion(mv, base);
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(oldAutomatic);
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertFalse(hasVersionMap(mv));
+            Assertions.assertTrue(mv.isVersionMapResetPending());
+
+            // An old ACTIVE entry does the clear still pending: that leader had cleared the map when it inactivated.
+            AlterMaterializedViewStatusLog oldActive = roundTripWithout(
+                    new AlterMaterializedViewStatusLog(mv.getDbId(), mv.getId(),
+                            AlterMaterializedViewStatusClause.ACTIVE, ""),
+                    AlterMaterializedViewStatusLog.class, "clearVersionMap", Map.of());
+            oldActive.setBaseTableInfos(Lists.newArrayList(mv.getBaseTableInfos()));
+            putStaleVersion(mv, base);
+            // The replayed activation itself completes asynchronously.
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(oldActive);
+            Assertions.assertFalse(hasVersionMap(mv));
+            Assertions.assertFalse(mv.isVersionMapResetPending());
+
+            for (String reason : List.of(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, "")) {
+                mv.setActive();
+                putStaleVersion(mv, base);
+                AlterMaterializedViewStatusLog oldManual = roundTripWithout(
+                        new AlterMaterializedViewStatusLog(mv.getDbId(), mv.getId(),
+                                AlterMaterializedViewStatusClause.INACTIVE, reason),
+                        AlterMaterializedViewStatusLog.class, "clearVersionMap", Map.of());
+                currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(oldManual);
+                Assertions.assertFalse(mv.isActive());
+                Assertions.assertTrue(hasVersionMap(mv), "a manual inactivation kept the version map");
+                Assertions.assertFalse(mv.isVersionMapResetPending());
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("old_format_mv");
+            starRocksAssert.dropTable("old_format_base");
+        }
+    }
+
+    /**
+     * A refresh that finds a base table of an external catalog gone inactivates its MV: the inactivation is
+     * journaled, with the clear of the version map, so that followers and the next leader do not keep the MV active.
+     * But the task is not suspended, so that the next refresh tries to activate the MV again.
+     */
+    @Test
+    public void testRefreshPathInactivationIsJournaled() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE refresh_gone_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW refresh_gone_mv\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n" +
+                "AS SELECT k1, v1 FROM refresh_gone_base;");
+        try {
+            MaterializedView mv = starRocksAssert.getMv("test", "refresh_gone_mv");
+            Table base = starRocksAssert.getTable("test", "refresh_gone_base");
+            putStaleVersion(mv, base);
+            // Make the base table look like a dropped table of an external catalog.
+            AtomicBoolean tableGone = new AtomicBoolean(true);
+            new MockUp<MvUtils>() {
+                @Mock
+                public Optional<Table> getTable(Invocation invocation, BaseTableInfo baseTableInfo) {
+                    return tableGone.get() ? Optional.empty() : invocation.proceed(baseTableInfo);
+                }
+            };
+            new MockUp<CatalogMgr>() {
+                @Mock
+                public boolean isInternalCatalog(Invocation invocation, String name) {
+                    return !tableGone.get() && (boolean) invocation.proceed(name);
+                }
+            };
+            List<AlterMaterializedViewStatusLog> journaled = captureMvStatusJournal();
+
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            tableGone.set(false);
+
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertFalse(hasVersionMap(mv));
+            AlterMaterializedViewStatusLog log = journaledInactivation(journaled, mv);
+            Assertions.assertTrue(log.isClearVersionMap());
+            Assertions.assertEquals(mv.getInactiveReason(), log.getReason());
+            Assertions.assertEquals(0, mv.getVersionMapResetEpoch() % 2, "the reset epoch was left odd");
+            // The task stays scheduled, here and on every FE that replays the entry, so that the next refresh
+            // activates the MV again once the table is back: an ETL job dropping and creating it again is enough to
+            // get here.
+            Assertions.assertTrue(log.isKeepTaskScheduled());
+            Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+            Constants.TaskState state = task.getState();
+            Assertions.assertNotEquals(Constants.TaskState.PAUSE, state);
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+            Assertions.assertEquals(state, task.getState(), "replaying the inactivation suspended the task");
+            Assertions.assertFalse(mv.isActive());
+            MVActiveChecker.tryToActivate(mv);
+            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        } finally {
+            starRocksAssert.dropMaterializedView("refresh_gone_mv");
+            starRocksAssert.dropTable("refresh_gone_base");
+        }
+    }
+
+    /**
+     * A refresh that finds its base table gone may get there after its MV was dropped: it journals nothing then, and a
+     * replayed entry for an MV whose database is gone is skipped.
+     */
+    @Test
+    public void testRefreshPathInactivationOfADroppedMv() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE dropped_mv_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW dropped_mv\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\nREFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n" +
+                "AS SELECT k1, v1 FROM dropped_mv_base;");
+        try {
+            MaterializedView mv = starRocksAssert.getMv("test", "dropped_mv");
+            starRocksAssert.dropMaterializedView("dropped_mv");
+            List<AlterMaterializedViewStatusLog> journaled = captureMvStatusJournal();
+
+            AlterMVJobExecutor.inactiveMvFromRefresh(mv,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists("dropped_mv_base"));
+            Assertions.assertTrue(journaled.isEmpty(), journaled.toString());
+
+            AlterMaterializedViewStatusLog orphan = new AlterMaterializedViewStatusLog(Long.MAX_VALUE - 1, mv.getId(),
+                    AlterMaterializedViewStatusClause.INACTIVE, "base table dropped");
+            currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(orphan);
+        } finally {
+            starRocksAssert.dropTable("dropped_mv_base");
+        }
+    }
+>>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
 }
