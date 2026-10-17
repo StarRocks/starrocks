@@ -26,6 +26,7 @@ import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchArrowSchemaRequest;
 import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetCsvSplitsResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
@@ -77,6 +78,10 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PInternalService", methodName = "get_file_schema",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
     Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_csv_splits",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
+    Future<PGetCsvSplitsResult> getCsvSplits(PGetCsvSplitsRequest request);
 
     @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
