@@ -8,7 +8,7 @@ Run `python3 build-support/check_be_module_boundaries.py --mode full` to validat
 ### ExprTableFunction (`exprtablefunction`)
 Table-function expression extensions that need concrete storage integration.
 - Targets: `ExprTableFunction`
-- Allowed internal include prefixes: `exprs_ext/table_function/`, `exprs/`, `storage/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Expr`, `Storage`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `exprs_ext/table_function/`, `exprs/`, `storage/`, `fs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Expr`, `Storage`, `FileSystem`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep table-function extensions in ExprTableFunction; reusable table-function contracts belong in Expr.
 <!-- END GENERATED: BE MODULE HARNESSES -->
