@@ -34,6 +34,43 @@ starrocks_detect_parallelism() {
     if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
         cpu_count=1
     fi
+
+    if ! starrocks_is_darwin; then
+        local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
+        local cgroup_cores=0
+
+        # 1. cgroup v2: cpu.max contains "quota period" (e.g. "200000 100000" or "max 100000")
+        local cpu_max_content
+        cpu_max_content="$(cat "${cgroup_root}/cpu.max" 2>/dev/null || true)"
+        if [[ -n "${cpu_max_content}" ]]; then
+            local cfs_quota="" cfs_period=""
+            read -r cfs_quota cfs_period <<< "${cpu_max_content}"
+            if [[ -n "${cfs_quota}" && "${cfs_quota}" =~ ^[0-9]+$ && "${cfs_quota}" -gt 0 && \
+                  -n "${cfs_period}" && "${cfs_period}" =~ ^[0-9]+$ && "${cfs_period}" -gt 0 ]]; then
+                cgroup_cores=$(( cfs_quota / cfs_period ))
+                [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
+            fi
+        fi
+
+        # 2. cgroup v1: cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct/...)
+        if [[ "${cgroup_cores}" -le 0 ]]; then
+            local v1_quota=""
+            v1_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || true)"
+            if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 ]]; then
+                local v1_period
+                v1_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                if [[ -n "${v1_period}" && "${v1_period}" =~ ^[0-9]+$ && "${v1_period}" -gt 0 ]]; then
+                    cgroup_cores=$(( v1_quota / v1_period ))
+                    [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
+                fi
+            fi
+        fi
+
+        if [[ "${cgroup_cores}" -gt 0 && "${cgroup_cores}" -lt "${cpu_count}" ]]; then
+            cpu_count="${cgroup_cores}"
+        fi
+    fi
+
     echo "${cpu_count}"
 }
 
@@ -57,8 +94,9 @@ starrocks_detect_total_ram_gb() {
             fi
         fi
 
+        local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
         local cgroup_bytes=""
-        cgroup_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+        cgroup_bytes="$(cat "${cgroup_root}/memory.max" 2>/dev/null || cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
         if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
             local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
             # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
@@ -99,7 +137,16 @@ starrocks_detect_linker_type() {
     fi
 
     if [[ "$(uname -m)" != "aarch64" ]]; then
-        local cxx_compiler="${CXX:-g++}"
+        local cxx_compiler=""
+        if [[ -n "${CXX:-}" ]]; then
+            cxx_compiler="${CXX}"
+        elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
+            cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
+        elif [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
+            cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+        else
+            cxx_compiler="g++"
+        fi
         local cxx_version
         cxx_version="$(${cxx_compiler} -dumpversion 2>/dev/null || echo 0)"
         if [[ "${cxx_version%%.*}" -ge 14 ]]; then
