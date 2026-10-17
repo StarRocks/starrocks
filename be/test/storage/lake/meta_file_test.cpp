@@ -835,6 +835,85 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
 }
 
+// A compaction whose input segment was rewritten by a newer partial column update is published as a no-op,
+// after which the tablet metadata references none of the files it wrote. Each of them must become an orphan,
+// or only a full vacuum could reclaim it -- except an output sstable that reuses an input sstable's file,
+// which the primary index still holds.
+TEST_F(MetaFileTest, test_compaction_conflict_orphans_output_files) {
+    const int64_t tablet_id = 32021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    // Publishes |op_compaction| to a tablet whose input segment a partial column update rewrote at
+    // version 19, after the compaction read version 18, and returns the orphan files by name.
+    auto publish_with_conflict = [&](const TxnLogPB_OpCompaction& op_compaction) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(20);
+        metadata->set_next_rowset_id(300);
+        auto* input_rowset = metadata->add_rowsets();
+        input_rowset->set_id(210);
+        input_rowset->add_segment_metas()->set_filename("a.dat");
+        DeltaColumnGroupVerPB dcg;
+        dcg.add_versions(19);
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[210] = dcg;
+
+        MetaFileBuilder builder(*tablet, metadata);
+        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
+        std::map<std::string, FileMetaPB> orphans;
+        for (const auto& file : metadata->orphan_files()) {
+            EXPECT_EQ(20, file.version()) << file.name();
+            EXPECT_TRUE(orphans.emplace(file.name(), file).second) << "duplicate orphan " << file.name();
+        }
+        return orphans;
+    };
+    auto names = [](const std::map<std::string, FileMetaPB>& files) {
+        std::set<std::string> result;
+        for (const auto& [name, file] : files) {
+            result.insert(name);
+        }
+        return result;
+    };
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(210);
+    op_compaction.set_compact_version(18);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
+    op_compaction.mutable_lcrm_file()->set_name("out.lcrm");
+    op_compaction.mutable_lcrm_file()->set_size(80);
+    auto* sst = op_compaction.add_ssts();
+    sst->set_name("out.sst");
+    sst->set_size(100);
+    sst->set_shared(true);
+    // The primary index compaction merged "in.sst" into "merged.sst" and kept "moved.sst" as is.
+    op_compaction.add_input_sstables()->set_filename("in.sst");
+    op_compaction.add_input_sstables()->set_filename("moved.sst");
+    auto* merged = op_compaction.add_output_sstables();
+    merged->set_filename("merged.sst");
+    merged->set_filesize(200);
+    op_compaction.add_output_sstables()->set_filename("moved.sst");
+    auto orphans = publish_with_conflict(op_compaction);
+    EXPECT_EQ((std::set<std::string>{"out.dat", "out.lcrm", "out.sst", "merged.sst"}), names(orphans));
+    EXPECT_EQ(80, orphans["out.lcrm"].size());
+    EXPECT_EQ(100, orphans["out.sst"].size());
+    EXPECT_TRUE(orphans["out.sst"].shared());
+    EXPECT_EQ(200, orphans["merged.sst"].size());
+    EXPECT_FALSE(orphans["merged.sst"].shared());
+
+    // A log written by an older BE carries the primary index compaction output in output_sstable.
+    TxnLogPB_OpCompaction legacy_op_compaction;
+    legacy_op_compaction.add_input_rowsets(210);
+    legacy_op_compaction.set_compact_version(18);
+    legacy_op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("legacy.dat");
+    legacy_op_compaction.add_input_sstables()->set_filename("in.sst");
+    auto* legacy = legacy_op_compaction.mutable_output_sstable();
+    legacy->set_filename("legacy.sst");
+    legacy->set_filesize(300);
+    legacy->set_shared(true);
+    orphans = publish_with_conflict(legacy_op_compaction);
+    EXPECT_EQ((std::set<std::string>{"legacy.dat", "legacy.sst"}), names(orphans));
+    EXPECT_EQ(300, orphans["legacy.sst"].size());
+    EXPECT_TRUE(orphans["legacy.sst"].shared());
+}
+
 TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(9);
