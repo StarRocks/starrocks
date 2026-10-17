@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -37,6 +38,7 @@ import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlSessionManager {
@@ -66,13 +68,30 @@ public class ArrowFlightSqlSessionManager {
     }
 
     public String initializeSession(String username, String remoteIP, String password) {
+        // reject a missing credential up front instead of failing with an NPE in the password path
+        if (password == null) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .toRuntimeException();
+        }
         String token = generateToken();
         ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(token);
         ctx.setRemoteIP(remoteIP);
 
+        long jwtExpireTimeMs = 0L;
         try {
-            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
-            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            // no fallback for a real JWT: a rejected token must not be retried as an LDAP password
+            if (JWTAuthenticationProvider.isJwt(password)) {
+                AuthenticationHandler.authenticateWithToken(ctx, username, remoteIP, password);
+                // the auth token is set only after a successful verify; with enable_auth_check off it stays a password
+                if (password.equals(ctx.getAuthToken())) {
+                    Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
+                    jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
+                }
+            } else {
+                // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+                AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            }
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)
@@ -80,7 +99,8 @@ public class ArrowFlightSqlSessionManager {
                     .toRuntimeException();
         }
 
-        ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token);
+        ArrowFlightSqlTokenInfo tokenInfo =
+                new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token, jwtExpireTimeMs);
 
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setQueryId(UUIDUtil.genUUID());
@@ -123,6 +143,14 @@ public class ArrowFlightSqlSessionManager {
             throw new IllegalArgumentException(String.format("invalid bearer token [%s], please try to reconnect. " +
                     "Maybe the token is expired or evicted, could modify fe.conf " +
                     "[arrow_token_cache_expire_second] and [arrow_token_cache_size]", token));
+        }
+
+        // FlightRuntimeException (not IllegalArgumentException) so the proxy fallback cannot let it through
+        if (tokenInfo.isJwtExpired(System.currentTimeMillis())) {
+            tokenCache.invalidate(token);
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("JWT for this session has expired, please reconnect with a new token")
+                    .toRuntimeException();
         }
     }
 
