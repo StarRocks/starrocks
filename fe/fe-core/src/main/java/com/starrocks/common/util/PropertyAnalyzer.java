@@ -713,6 +713,17 @@ public class PropertyAnalyzer {
             if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
                 throw new SemanticException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
             }
+            // -1 stays legal on every mode: clearing the property is the only way out for a view that
+            // already carries it.
+            if (autoRefreshPartitionsLimit > 0 && mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
+                throw new SemanticException(
+                        "The auto_refresh_partitions_limit property does not support refresh_mode %s. "
+                                + "It leaves the oldest partitions unrefreshed, while incremental "
+                                + "maintenance requires a complete baseline. Use partition_refresh_number "
+                                + "to batch the initial full refresh instead; refreshes after that process "
+                                + "only the base table changes.",
+                        mv.getCurrentRefreshMode());
+            }
             properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         return autoRefreshPartitionsLimit;
