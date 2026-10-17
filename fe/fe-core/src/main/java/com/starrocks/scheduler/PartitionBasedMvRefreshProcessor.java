@@ -1286,7 +1286,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return insertStmt;
     }
 
-    private boolean checkBaseTablePartitionHasChanged(TableSnapshotInfo snapshotInfo) {
+    @VisibleForTesting
+    boolean checkBaseTablePartitionHasChanged(TableSnapshotInfo snapshotInfo) {
         try {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
             Table snapshotTable = snapshotInfo.getBaseTable();
@@ -1306,9 +1307,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         return true;
                     }
                 } else if (snapshotPartitionInfo.isListPartition()) {
-                    OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
-                    Map<String, PListCell> snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
-                    Map<String, PListCell> currentPartitionMap = snapshotOlapTable.getListPartitionItems();
+                    Map<String, PListCell> snapshotPartitionMap = snapShotOlapTable.getListPartitionItems();
+                    Map<String, PListCell> currentPartitionMap = ((OlapTable) table).getListPartitionItems();
                     if (ListPartitionDiffer.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
                         return true;
                     }
