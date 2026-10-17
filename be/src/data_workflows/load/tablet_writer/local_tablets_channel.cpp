@@ -806,6 +806,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             GlobalDictsWithVersion<GlobalDictMap> dict;
             dict.dict = std::move(global_dict);
             dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+            if (slot.has_global_dict_content_identity()) {
+                dict.content_identity = slot.global_dict_content_identity();
+            }
             _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
         }
     }
@@ -1062,6 +1065,10 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
                 rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
                 tablet_info.add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
+                const auto& identity = rowset_global_dicts->at(item.first).content_identity;
+                if (identity.has_value()) {
+                    tablet_info.add_valid_dict_content_identities(*identity);
+                }
             } else {
                 tablet_info.add_invalid_dict_cache_columns(item.first);
             }
