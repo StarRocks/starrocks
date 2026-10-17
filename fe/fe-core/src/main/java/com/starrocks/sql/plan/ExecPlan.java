@@ -102,6 +102,7 @@ public class ExecPlan {
     private SystemChatConfig systemChatConfig;
     private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
     private Map<String, String> aiProviderConfigIds;
+    private AIInputTokenEstimate aiInputTokenEstimate = AIInputTokenEstimate.none();
 
     @VisibleForTesting
     public ExecPlan() {
@@ -138,6 +139,14 @@ public class ExecPlan {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    void estimateAIInputTokens(OptExpression expression, boolean unpartitioned) {
+        aiInputTokenEstimate = aiInputTokenEstimate.add(AIInputTokenEstimator.estimate(expression, unpartitioned));
+    }
+
+    public AIInputTokenEstimate getAIInputTokenEstimate() {
+        return aiInputTokenEstimate;
     }
 
     SystemChatConfig getOrCreateSystemChatConfig() {
@@ -373,6 +382,9 @@ public class ExecPlan {
         StringBuilder str = new StringBuilder();
 
         if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {
+            if (aiInputTokenEstimate.getStatus() != AIInputTokenEstimate.Status.NONE) {
+                str.append("AI INPUT TOKENS: ").append(aiInputTokenEstimate).append("\n\n");
+            }
             if (FeConstants.showFragmentCost) {
                 final String prefix = "  ";
                 AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
