@@ -133,6 +133,43 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
                         maxOutputOfRightChild, dop, candidateSize));
     }
 
+    /**
+     * A fragment always runs on at least one node. Zero nodes means zero instances, and deployment
+     * asserts on that, so the query dies with a bare IllegalStateException instead of running.
+     * <p>
+     * Zero is what the formula produced whenever the right child's cardinality was not positive -
+     * including the -1 that PlanNode carries for "unknown", which is what information_schema scans
+     * report because they never estimate a row count. That is why joining two information_schema
+     * tables could fail outright under an instance-decreasing mode.
+     */
+    @ParameterizedTest
+    @MethodSource("getNonPositiveRightCardinalityCases")
+    public void testNeverChoosesZeroNodes(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop,
+                                          int candidateSize) {
+        long nodeNums = RemoteFragmentAssignmentStrategy.getOptimalNodeNums(outputOfMostLeftChild,
+                maxOutputOfRightChild, dop, candidateSize);
+        Assertions.assertTrue(nodeNums >= 1,
+                "a fragment must run on at least one node, got " + nodeNums + " for right cardinality "
+                        + maxOutputOfRightChild);
+    }
+
+    private static Stream<Arguments> getNonPositiveRightCardinalityCases() {
+        List<Arguments> cases = Lists.newArrayList();
+
+        // Unknown cardinality: what an information_schema scan reports. -1 / 50000 / dop lands in
+        // (-1, 0), and Math.ceil of that is -0.0, which narrows to 0.
+        cases.add(Arguments.of(1000L, -1L, 1, 16));
+        cases.add(Arguments.of(1000000L, -1L, 16, 128));
+
+        // Both children unknown - the shape of the reported information_schema join.
+        cases.add(Arguments.of(-1L, -1L, 8, 32));
+
+        // An empty right child: a genuine zero, not an unknown.
+        cases.add(Arguments.of(1000000L, 0L, 16, 16));
+
+        return cases.stream();
+    }
+
     private static Stream<Arguments> getCases() {
         List<Arguments> cases = Lists.newArrayList();
 
