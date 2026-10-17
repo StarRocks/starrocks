@@ -393,7 +393,15 @@ TEST_F(JsonDocumentStreamParserTest, test_truncated_bytes) {
 }
 
 TEST_F(JsonDocumentStreamParserTest, with_dynamic_batch_size_6) {
-    config::json_parse_many_batch_size = 1;
+    // JsonDocumentStreamParser copies config::json_parse_many_batch_size in its constructor, so
+    // the parser built by SetUp() (default batch size) has to be rebuilt after the config changes.
+    // The constructor also falls back to DEFAULT_BATCH_SIZE unless the value exceeds
+    // simdjson::dom::MINIMAL_BATCH_SIZE (32), so the previous `1` never took effect: this test only
+    // exercised the dynamic batch growth by accident, through the 40 leaked by earlier tests before
+    // the fixtures restored the config. 40 is what the sibling tests use and is shorter than the
+    // second document below, which is what forces the batch to grow.
+    config::json_parse_many_batch_size = 40;
+    _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
     // ndjson with ' ', '/t', '\n'
     std::string input = R"(   {"key1": 1}
     {"keyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2": 2}
