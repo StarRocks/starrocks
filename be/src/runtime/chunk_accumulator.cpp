@@ -77,15 +77,25 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
                 // Schema mismatch, output current chunk and create a new one
                 _output.emplace_back(std::move(_tmp_chunk));
                 _tmp_chunk = chunk->clone_empty(_desired_size);
-                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
-            } else {
-                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            } else if (_pre_append_byte_limit != 0 && _tmp_chunk->num_rows() > 0 && need_rows > 0) {
+                // Merging these rows would grow the buffered chunk past the byte limit. Emit what is
+                // buffered and refill from scratch instead of appending across the limit. bytes_usage()
+                // over-estimates against a single column's limit, so this errs toward flushing early.
+                // The comparison is arranged to avoid unsigned underflow.
+                const uint64_t tmp_bytes = _tmp_chunk->bytes_usage();
+                const uint64_t input_bytes = chunk->bytes_usage(start, need_rows);
+                if (input_bytes >= _pre_append_byte_limit || tmp_bytes >= _pre_append_byte_limit - input_bytes) {
+                    _output.emplace_back(std::move(_tmp_chunk));
+                    continue;
+                }
             }
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
             RETURN_IF_ERROR(_tmp_chunk->capacity_limit_reached());
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
             TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            RETURN_IF_ERROR(_tmp_chunk->capacity_limit_reached());
         }
 
         if (_tmp_chunk->num_rows() >= _desired_size) {

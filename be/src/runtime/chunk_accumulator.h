@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 
 #include "column/vectorized_fwd.h"
@@ -35,6 +36,9 @@ public:
     ChunkAccumulator() = default;
     ChunkAccumulator(size_t desired_size);
     void set_desired_size(size_t desired_size);
+    // A nonzero limit emits the buffered chunk before a compatible append reaches the limit.
+    // Enable this only for materialized inputs that are already physically safe to append on their own.
+    void set_pre_append_byte_limit(uint64_t byte_limit) { _pre_append_byte_limit = byte_limit; }
     void reset();
     void finalize();
     bool empty() const;
@@ -44,6 +48,7 @@ public:
 
 private:
     size_t _desired_size;
+    uint64_t _pre_append_byte_limit = 0;
     ChunkPtr _tmp_chunk;
     std::deque<ChunkPtr> _output;
     size_t _accumulate_count = 0;
