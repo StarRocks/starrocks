@@ -2762,4 +2762,48 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_null_and_const_v
     EXPECT_NE(result->get(0).get_slice(), result->get(1).get_slice());
 }
 
+// A complex-typed argument reaches no case of type_dispatch_filter, so before the guard every value --
+// NULL included -- fingerprinted to SHA-256("").
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_rejects_complex_types) {
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    std::vector<TypeDescriptor> complex_types = {
+            TypeDescriptor::create_array_type(int_type),
+            TypeDescriptor::create_map_type(int_type, int_type),
+            TypeDescriptor::create_struct_type({"a"}, {int_type}),
+            TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type({"a"}, {int_type})),
+    };
+
+    for (const auto& complex_type : complex_types) {
+        std::vector<FunctionContext::TypeDesc> arg_types = {complex_type};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+        MutableColumnPtr col = ColumnHelper::create_column(complex_type, true);
+        col->append_default(2);
+        Columns columns;
+        columns.emplace_back(std::move(col));
+
+        auto result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns);
+        EXPECT_FALSE(result.ok()) << "type " << complex_type.debug_string() << " must be rejected, not hashed to "
+                                  << "a digest that cannot tell its inputs apart";
+    }
+}
+
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_still_accepts_scalars) {
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    for (auto logical_type :
+         {TYPE_BOOLEAN, TYPE_INT, TYPE_BIGINT, TYPE_DOUBLE, TYPE_VARCHAR, TYPE_DATE, TYPE_DATETIME, TYPE_JSON}) {
+        auto type_desc = TypeDescriptor::from_logical_type(logical_type);
+        std::vector<FunctionContext::TypeDesc> arg_types = {type_desc};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+        MutableColumnPtr col = ColumnHelper::create_column(type_desc, true);
+        col->append_default(2);
+        Columns columns;
+        columns.emplace_back(std::move(col));
+
+        auto result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << "scalar type " << type_to_string(logical_type) << " must still encode";
+        EXPECT_EQ(2, result.value()->size());
+    }
+}
+
 } // namespace starrocks
