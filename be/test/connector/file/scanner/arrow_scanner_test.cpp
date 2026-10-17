@@ -31,6 +31,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_ingest_fwd.h"
@@ -3373,6 +3374,272 @@ TEST_F(ArrowScannerTest, TestStreamMessageErrorDoesNotInheritPreviousColumnConte
     EXPECT_NE(std::string::npos, rejected_json.find("\"_raw\"")) << rejected_json;
     EXPECT_NE(std::string::npos, rejected_json.find("\"error_column\":\"\"")) << rejected_json;
     EXPECT_EQ(std::string::npos, rejected_json.find("c1_str")) << rejected_json;
+}
+
+TEST_F(ArrowScannerTest, TestStreamZeroBatchSchemaValidationFailure) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), false);
+
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+    auto* counter = ctx->counter;
+
+    auto append_zero_batch_stream = [&](const std::shared_ptr<arrow::Schema>& schema) {
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    };
+
+    // Message 1: 0-batch Arrow IPC stream (Schema + EOS only) missing non-nullable c0_int.
+    append_zero_batch_stream(arrow::schema({arrow::field("c1_str", arrow::utf8())}));
+
+    // Message 2: 0-batch Arrow IPC stream whose c0_int column has incompatible complex type struct<a: int32>.
+    append_zero_batch_stream(
+            arrow::schema({arrow::field("c0_int", arrow::struct_({arrow::field("a", arrow::int32())}))}));
+
+    // Message 3: 0-batch Arrow IPC stream with valid schema (verifies 0-batch valid stream succeeds and is skipped).
+    auto valid_schema = arrow::schema({arrow::field("c1_str", arrow::utf8()), arrow::field("c0_int", arrow::int32())});
+    append_zero_batch_stream(valid_schema);
+
+    // Message 4: Valid 2-row Arrow IPC stream.
+    {
+        arrow::StringBuilder str_builder;
+        ASSERT_ARROW_OK(str_builder.AppendValues({"row0", "row1"}));
+        std::shared_ptr<arrow::Array> str_array;
+        ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+        arrow::Int32Builder int_builder;
+        ASSERT_ARROW_OK(int_builder.AppendValues({11, 22}));
+        std::shared_ptr<arrow::Array> int_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+
+        auto batch = arrow::RecordBatch::Make(valid_schema, 2, {str_array, int_array});
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, valid_schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ("row0", chunk->columns()[0]->get(0).get_slice());
+    EXPECT_EQ("row1", chunk->columns()[0]->get(1).get_slice());
+    EXPECT_EQ(11, chunk->columns()[1]->get(0).get_int32());
+    EXPECT_EQ(22, chunk->columns()[1]->get(1).get_int32());
+
+    auto eof_res = scanner.get_next();
+    EXPECT_TRUE(eof_res.status().is_end_of_file());
+
+    EXPECT_EQ(2, counter->arrow_messages_rejected);
+    EXPECT_EQ(2, counter->num_rows_filtered);
+
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamMultiBatchRuntimeAppendFailureCountsRemainingBatches) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+    auto* counter = ctx->counter;
+
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::int32());
+    auto dict_schema = arrow::schema({arrow::field("c0_int", dict_type)});
+
+    arrow::Int32Builder dict_builder;
+    ASSERT_ARROW_OK(dict_builder.AppendValues({10, 20}));
+    std::shared_ptr<arrow::Array> dict_values;
+    ASSERT_ARROW_OK(dict_builder.Finish(&dict_values));
+
+    auto make_dict_batch = [&](const std::vector<int8_t>& indices) {
+        arrow::Int8Builder idx_builder;
+        EXPECT_TRUE(idx_builder.AppendValues(indices).ok());
+        std::shared_ptr<arrow::Array> idx_array;
+        EXPECT_TRUE(idx_builder.Finish(&idx_array).ok());
+        auto dict_array = std::make_shared<arrow::DictionaryArray>(dict_type, idx_array, dict_values);
+        return arrow::RecordBatch::Make(dict_schema, static_cast<int64_t>(indices.size()), {dict_array});
+    };
+
+    // Message 1: 2-batch discrete Arrow IPC stream.
+    // Batch 1 (2 rows) and Batch 2 (3 rows) both pass decode_discrete_message() and validate_batch_schema().
+    // Batch 1 has an out-of-bounds dictionary index (5 >= 2) that fails during append_batch_to_src_chunk()
+    // while Batch 2 (3 rows) is still queued in _discrete_batches, exercising filter_current_discrete_message().
+    {
+        auto batch1 = make_dict_batch({0, 5});
+        auto batch2 = make_dict_batch({0, 1, 0});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, dict_schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch1));
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch2));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Message 2: Valid 2-row message.
+    {
+        auto good_schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({77, 88}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto valid_batch = arrow::RecordBatch::Make(good_schema, 2, {array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, good_schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*valid_batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(77, chunk->columns()[0]->get(0).get_int32());
+    EXPECT_EQ(88, chunk->columns()[0]->get(1).get_int32());
+
+    auto eof_res = scanner.get_next();
+    EXPECT_TRUE(eof_res.status().is_end_of_file());
+
+    EXPECT_EQ(5, counter->num_rows_filtered);
+    EXPECT_EQ(1, counter->arrow_messages_rejected);
+
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestArrowBoundedMemoryPoolOperationsInScannerSuite) {
+    ArrowBoundedMemoryPool pool(1024);
+    EXPECT_EQ("starrocks_bounded_arrow_pool", pool.backend_name());
+    EXPECT_EQ(0, pool.bytes_allocated());
+    EXPECT_EQ(0, pool.max_memory());
+    EXPECT_EQ(0, pool.total_bytes_allocated());
+    EXPECT_EQ(0, pool.num_allocations());
+
+    uint8_t* buf = nullptr;
+    EXPECT_TRUE(pool.Allocate(-1, &buf).IsInvalid());
+
+    ASSERT_ARROW_OK(pool.Allocate(256, &buf));
+    ASSERT_NE(nullptr, buf);
+    EXPECT_EQ(256, pool.bytes_allocated());
+    EXPECT_EQ(256, pool.max_memory());
+    EXPECT_EQ(256, pool.total_bytes_allocated());
+    EXPECT_EQ(1, pool.num_allocations());
+
+    uint8_t* over_buf = nullptr;
+    EXPECT_TRUE(pool.Allocate(1024, &over_buf).IsOutOfMemory());
+    EXPECT_EQ(256, pool.bytes_allocated());
+
+    EXPECT_TRUE(pool.Reallocate(256, -1, &buf).IsInvalid());
+    ASSERT_ARROW_OK(pool.Reallocate(256, 512, &buf));
+    EXPECT_EQ(512, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    ASSERT_ARROW_OK(pool.Reallocate(512, 128, &buf));
+    EXPECT_EQ(128, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    EXPECT_TRUE(pool.Reallocate(128, 2048, &buf).IsOutOfMemory());
+    EXPECT_EQ(128, pool.bytes_allocated());
+
+    pool.Free(buf, 128);
+    EXPECT_EQ(0, pool.bytes_allocated());
+
+    ArrowBoundedMemoryPool inner_pool(16);
+    ArrowBoundedMemoryPool delegate_fail_pool(1024, &inner_pool);
+    uint8_t* fail_buf = nullptr;
+    EXPECT_TRUE(delegate_fail_pool.Allocate(64, &fail_buf).IsOutOfMemory());
+    EXPECT_EQ(0, delegate_fail_pool.bytes_allocated());
+    EXPECT_TRUE(delegate_fail_pool.Reallocate(0, 64, &fail_buf).IsOutOfMemory());
+    EXPECT_EQ(0, delegate_fail_pool.bytes_allocated());
+
+    // Also exercise batch_count metadata overhead cap in decode_discrete_message() when uncompressed batches
+    // exceed routine_load_arrow_max_decoded_bytes_per_message via batch_count * 1024.
+    const int64_t old_limit = config::routine_load_arrow_max_decoded_bytes_per_message;
+    config::routine_load_arrow_max_decoded_bytes_per_message = 2048;
+    DeferOp restore_limit([&]() { config::routine_load_arrow_max_decoded_bytes_per_message = old_limit; });
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    {
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+        for (int b = 0; b < 3; ++b) {
+            arrow::Int32Builder builder;
+            ASSERT_ARROW_OK(builder.Append(b + 1));
+            std::shared_ptr<arrow::Array> array;
+            ASSERT_ARROW_OK(builder.Finish(&array));
+            auto batch = arrow::RecordBatch::Make(schema, 1, {array});
+            ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        }
+        ASSERT_ARROW_OK(writer->Close());
+        auto ipc_buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(ipc_buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(ipc_buf->data()), ipc_buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    auto eof_res = scanner.get_next();
+    EXPECT_TRUE(eof_res.status().is_end_of_file());
+    EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(3, ctx->counter->num_rows_filtered);
+    scanner.close();
 }
 
 } // namespace starrocks
