@@ -167,15 +167,51 @@ public class SimpleExecutor {
      * column masking policies of an external access controller (e.g. Ranger) apply to it. Must be
      * used by internal queries that read user data on behalf of a user (e.g. {@code lookup_string}),
      * otherwise any user could read tables it has no privilege on.
+     * The child inherits a copy of the caller's resource policy and follows its cancellation and
+     * remaining timeout. It has its own query ID: inheriting a memory limit does not share a memory budget.
      */
     public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
         Preconditions.checkNotNull(caller, "caller context is required");
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, caller.getSessionVariable().getSqlSelectLimit());
+    }
+
+    /**
+     * Overrides only the child's implicit SELECT limit. Callers consuming complete internal results
+     * must explicitly request {@link SessionVariable#DEFAULT_SELECT_LIMIT}; SQL LIMIT clauses still apply.
+     */
+    public List<TResultBatch> executeDQLAsCaller(
+            String sql, int queryTimeoutSeconds, ConnectContext caller, long sqlSelectLimit) {
+        Preconditions.checkNotNull(caller, "caller context is required");
         ConnectContext prev = ConnectContext.get();
         try {
+            if (caller.isStatementCancelled()) {
+                throw new SemanticException(name + " query was cancelled");
+            }
+            int timeout = Math.min(queryTimeoutSeconds, remainingQueryTimeoutS(caller));
+            if (timeout <= 0) {
+                throw new SemanticException(name + " query timed out before execution");
+            }
             ConnectContext context = createConnectContext();
             inheritIdentity(context, caller);
-            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
-            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            // Warehouse initialization in createConnectContext replaces session variables, so clone
+            // afterwards. Never mutate the caller or inherit its transient authorization bypass.
+            SessionVariable variables = (SessionVariable) caller.getSessionVariable().clone();
+            context.setSessionVariable(variables);
+            context.setStatisticsContext(false);
+            context.setDatabase(caller.getDatabase());
+            context.setParentConnectContext(caller);
+            if (caller.getResourceGroup() != null) {
+                variables.setResourceGroup(caller.getResourceGroup().getName());
+            }
+            variables.setSqlSelectLimit(sqlSelectLimit);
+            variables.setQueryTimeoutS(timeout);
+            variables.setInsertTimeoutS(timeout);
+            // Preserve internal-query rewrite/profile behavior while inheriting resource limits.
+            variables.setEnableMaterializedViewRewrite(false);
+            variables.setEnableSPMRewrite(false);
+            variables.setEnableProfile(false);
+            variables.setEnableLoadProfile(false);
+            variables.setBigQueryProfileThreshold("0s");
             return executeDQL(sql, context);
         } finally {
             ConnectContext.remove();
@@ -217,17 +253,29 @@ public class SimpleExecutor {
         if (outer == null || outer.getStartTime() <= 0) {
             return (int) Config.statistic_collect_query_timeout;
         }
-        long elapsedSeconds = (System.currentTimeMillis() - outer.getStartTime()) / 1000;
-        return (int) (outer.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+        return remainingQueryTimeoutS(outer);
+    }
+
+    private static int remainingQueryTimeoutS(ConnectContext context) {
+        long elapsedSeconds = context.getStartTime() > 0
+                ? Math.max(0, (System.currentTimeMillis() - context.getStartTime()) / 1000) : 0;
+        return (int) Math.max(Integer.MIN_VALUE, context.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
     }
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
         try {
+            if (context.isStatementCancelled()) {
+                throw new SemanticException(name + " query was cancelled");
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             sql = formatSQL(sql, parsedStmt);
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
+            ConnectContext parent = context.getParent();
+            if (parent != null && parent.getExecutor() != null) {
+                parent.getExecutor().registerSubStmtExecutor(executor);
+            }
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()

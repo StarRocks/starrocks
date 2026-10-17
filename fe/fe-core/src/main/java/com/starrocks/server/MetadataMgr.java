@@ -67,6 +67,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.Partition;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
@@ -543,6 +544,12 @@ public class MetadataMgr {
             }
         }
         return connectorTable;
+    }
+
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.getIndexMetadata(table, versionRange))
+                .orElseGet(ConnectorIndexMetadata::empty);
     }
 
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {

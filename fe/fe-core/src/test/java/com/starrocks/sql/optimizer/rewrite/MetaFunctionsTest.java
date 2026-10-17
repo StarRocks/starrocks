@@ -24,8 +24,12 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -278,12 +282,18 @@ public class MetaFunctionsTest extends MVTestBase {
         Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         Set<String> currentGroups = connectContext.getGroups();
         String currentRemoteIP = connectContext.getRemoteIP();
+        SessionVariable currentVariables = connectContext.getSessionVariable();
         UserIdentity[] innerUser = new UserIdentity[1];
         Set<String>[] innerGroups = new Set[1];
         String[] innerRemoteIP = new String[1];
         new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                Assertions.assertSame(connectContext, context.getParent());
+                Assertions.assertNotSame(connectContext.getSessionVariable(), context.getSessionVariable());
+                Assertions.assertEquals("lookup_group", context.getSessionVariable().getResourceGroup());
+                Assertions.assertEquals(123456789L, context.getSessionVariable().toThrift().getQuery_mem_limit());
+                Assertions.assertEquals(7, context.getSessionVariable().getSqlSelectLimit());
                 innerUser[0] = context.getCurrentUserIdentity();
                 innerGroups[0] = context.getGroups();
                 innerRemoteIP[0] = context.getRemoteIP();
@@ -293,6 +303,11 @@ public class MetaFunctionsTest extends MVTestBase {
         Set<String> callerGroups = Set.of("g_ranger");
         String callerRemoteIP = "10.1.2.3";
         try {
+            connectContext.setSessionVariable((SessionVariable) currentVariables.clone());
+            connectContext.getSessionVariable().setResourceGroup("lookup_group");
+            connectContext.getSessionVariable().setSqlSelectLimit(7);
+            GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(connectContext.getSessionVariable(),
+                    new SystemVariable(SessionVariable.QUERY_MEM_LIMIT, new IntLiteral(123456789L)), false);
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setGroups(callerGroups);
@@ -313,6 +328,7 @@ public class MetaFunctionsTest extends MVTestBase {
             connectContext.setCurrentRoleIds(currentRoleIds);
             connectContext.setGroups(currentGroups);
             connectContext.setRemoteIP(currentRemoteIP);
+            connectContext.setSessionVariable(currentVariables);
             starRocksAssert.dropTable("t_lookup_caller");
         }
     }
