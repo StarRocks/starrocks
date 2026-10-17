@@ -41,6 +41,41 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 共有データ
 
+### lake_pk_index_partial_eviction
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データ主キーインデックスの実験的な部分退避を有効にします。メモリ逼迫時は減衰するアクセス頻度に応じて SST のインデックスブロックとフィルターの読み取り状態を解放し、MemTable とメタデータを優先して保持します。期限切れのエントリや予算を超える骨格は全体を退避できます。update 予算の 4 分の 1 を実行用に確保し、他の update メモリ使用量をキャッシュ予算から差し引きます。大きな SST ワーキングセットは一時読み取りを使用します。Publish は FIFO で受け付け、有効時の同時実行数は 1 です。有効化前から実行中の Publish も完了を待ちます。SST ブロック割り当て前に圧縮入力、解凍出力、読み取り状態オブジェクトのメモリを実際の update tracker で予約します。任意のフィルターが収まらない場合は省略します。既存のメモリ検査は維持されます。`false` にするとエントリ全体の LRU 退避に戻ります。 必須の SST オープン用メモリが不足する場合、tablet ロックの所有者は待機前に自身の未使用の SST 読み取り状態も解放できます。読み取り中の状態は pin により保持されます。 MemTable の変更では割り当て前にバッチのメモリを予約し、実際の増加分をキャッシュに計上し、SST IO 前にルックアップ用の領域だけを残して未使用分を返却します。遅延ルックアップを完了してからスロットを解放し、MemTable をフラッシュします。メモリ不足時にはアクティブな tablet 自身の MemTable もバッチでフラッシュして進行します。
+圧縮入力と展開出力の全体を直ちに予約できる場合は、従来の一括読み取りを維持します。メモリ逼迫時、大きなSnappyブロックは64KiBの入力窓を使い、展開出力全体のメモリは引き続き予約します。各窓の間で終了を確認します。実行中の単一IOには既存のファイルシステムのタイムアウトが適用され、メモリ待機のタイムアウトでは中断できません。PK入力のロード前に通常の復号リーダーで必須インデックスのサイズを調べます。インデックスがupdate予算全体に近い場合、残りのワークスペースから遅延segment出力、PKエンコードとlookupのバッチ、MemTableの許容量を縮小し、readerのjoin後にのみフラッシュします。任意のデータブロックを回収し、大きなインデックスのlookupでは再キャッシュを避けます。実際のSSTとツリーの割り当てにはバイト予約が必要です。展開済みインデックスと最小の作業領域が収まらない場合は引き続き明示的な境界です。サイズ情報はCRC検証や割り当て予約を省略する根拠にはなりません。
+
+- 導入バージョン: -
+
+上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。物理的な `shared` フラグが false でも、読み取り時の version または rssid 投影があるファイルは通常のパスで扱われます。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
+
+このマージ用作業領域を予約する前に、保留中の MemTable を引き渡して再計上します。データブロックの読み取りも事前予約した作業領域内に収めます。大きすぎるデータブロックでは、この任意の連結をスキップして元の fileset を保持します。`pindex_pressure_coalesce_memory_fallback_count` がその判断を、`pindex_pressure_coalesce_data_block_read_bytes` がデータブロック IO を記録します。
+
+圧力下の連結には、同じ update tracker の子 `lake_pk_index_pressure_merge` を使用します。作業領域、一時入力読み取り状態、出力メタデータは、入力 `Table::Open` と解凍の予約も含め、単一の絶対メモリ待機期限とキャンセルを共有します。インストール済み出力は通常の読み取り状態コンテキストを使用します。現在の出力上限でファイル数やメタデータが減らない fileset は、入力または上限が変わるまで再連結しません。 マージ trace は `pindex_pressure_coalesce_workspace_bytes`、呼び出し回数、`pindex_pressure_coalesce_peak_bytes_sum` を記録します。最後の値は各呼び出しの子 tracker 計上ピークの合計で、グローバルな同時ピークやプロセスピークではありません。 `pindex_pressure_coalesce_unproductive_skip_count` は、その再書き込みのスキップを記録します。 `pindex_pressure_coalesce_total_us` は作業と待機の合計で、`pindex_pressure_coalesce_memory_wait_us` は条件変数でのメモリ待機を別に測定します。ここでは同期ファイルシステム IO は引き続き中断できません。
+
+各 MemTable 変更の前に、上限付きの増加分と次の SST オープン用の再利用可能な読み取り枠を実際の update root tracker で予約します。共存できない場合は、reader の join を完了した tablet 所有者が新しい値の書き込み前に保留中の MemTable を引き渡せます。読み取り枠はバッチの old-value lookup が join するまで計上されます。ネイティブオブジェクト、圧縮入力窓、展開ブロックの予約はこの枠から借用して返却し、解放後の再取得や root の二重計上は行いません。この枠で新しく開く reader は一時的に保持し、既存の resident reader は維持します。枠を保持する間は任意のデータブロックのキャッシュ格納を停止します。`pindex_memtable_growth_sst_headroom_bytes` はサイズ情報、`pindex_sst_read_credit_reserved_bytes` はオブジェクト分を含む発行済みバイト、`pindex_sst_read_credit_borrowed_bytes` は借用バイトの累積値です。常駐メモリや同時ピークではありません。インデックスが update 予算の半分未満でも適用します。増加分の受付で逼迫した場合、その publish の所有者は新しくフラッシュした SST を含め任意のブロック格納を停止します。`pindex_memtable_growth_block_cache_bypass_count` が切り替えを記録し、次の prepare で再評価します。任意の legacy compaction preload は publish と受付枠を共有し、使用中の場合は直ちにスキップして publish 時に必要な状態をロードします。有効化前に開始した preload が完了するまで新しい publisher は待機します。
+
+update メモリ逼迫時には、キャッシュエントリーの課金がゼロでも未使用の legacy compaction 事前ロード状態を破棄します。列は引き続き compaction-state tracker に直接計上し、使用中の状態は所有者が保持します。publish trace の `pindex_compaction_preload_reclaimed_bytes` が解放した列のバイト数を示します。
+
+### lake_pk_index_publish_wait_timeout_ms
+
+- デフォルト: 30000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: Yes
+- 説明: `lake_pk_index_partial_eviction` が有効な場合の Publish 受付または SST 読み取り状態のメモリ許可の最大待機時間。Publish の受付は tablet と shard のロック取得前に待機します。許可の解放で待機処理を起こし、プロセス終了時にはキャンセルします。タイムアウトはエラーを返し、update メモリ上限エラーとは区別されます。内部 Publish trace は受付時間、待機、タイムアウト、キャンセル、SST 一時読み取りバイト数、部分退避と骨格退避のフォールバックを記録します。 MemTable 増加分の予約待機にも適用され、非アクティブな MemTable のフラッシュ待機は残りの時間を共有します。終了時は待機をキャンセルします。実際のフラッシュ IO は固有の IO タイムアウトに従うため、予約呼び出し全体の経過時間をこの値で制限することはできません。trace に予約、バッチ、フラッシュ待機、実行中のフラッシュ IO、タイムアウトを個別に記録します。両モードで実際の process/update 上限と index/block cache 容量、および予算のサンプル数も記録します。 インデックスのプローブは通常の復号ファイルリーダーを使い、ブロック割り当て前に圧縮後のバイト数、展開後のバイト数、オープン時に重なるピークを個別に記録します。`sst_index_probe_*` はプローブ回数を伴う累計値であり、個々の展開済みブロック自体が予算を超えることを意味しません。予約拒否時には要求済み・予約済みバイト数、制限に達した tracker の上限と使用量、および既存キャッシュの内訳のスナップショットも記録します。これらの内訳は tracker の原子的な統計ではありません。
+
+`sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, and `pindex_optional_block_cache_reclaim_bytes` はpublish traceでこの経路を識別します。 `sst_probe_io_*` and `sst_open_io_*` はサイズ調査とオープン時のローカル・リモートのバイト数と要求数をlookup IOと分けて記録します。サイズ値は累計であり、ファイル単位の検証には単一probeのtraceまたは別のメタデータが必要です。
+
+prepare 時の MemTable 引き渡しも inactive flush の有限な待機期限と終了確認を共有し、SST を再オープンする前に解放済みキャッシュの計上を戻し、新たに flush された SST を読み取り状態の選択に含めます。`pindex_prepare_memtable_flush_us`、`pindex_prepare_memtable_flush_timeout`、`pindex_prepare_memtable_flush_cancelled` がこの段階を示します。active flush IO は元のエラー原因と独立した IO 計時を保持します。
+
+- 導入バージョン: -
+
 ### cloud_native_pk_index_rebuild_files_threshold
 
 - デフォルト: 50

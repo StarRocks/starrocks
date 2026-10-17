@@ -287,6 +287,7 @@ SET(DW_TEST_FILES
     ./storage/lake/vector_index_build_task_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
+    ./storage/lake/pk_index_cache_policy_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
@@ -404,6 +405,7 @@ SET(DW_TEST_FILES
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sort_key_sampler_test.cpp
+    ./storage/sstable/format_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
     ./storage/storage_env_test.cpp

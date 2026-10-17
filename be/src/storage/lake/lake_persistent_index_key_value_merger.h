@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 
 #include "storage/lake/tablet_metadata.h"
@@ -36,13 +37,17 @@ class TabletManager;
 class KeyValueMerger {
 public:
     explicit KeyValueMerger(std::string key, uint64_t max_rss_rowid, bool merge_base_level, TabletManager* tablet_mgr,
-                            int64_t tablet_id, bool enable_multiple_output_files)
+                            int64_t tablet_id, bool enable_multiple_output_files, size_t max_output_keys = 0,
+                            size_t max_output_bytes = 0, std::function<Status(size_t)> reserve_output_metadata = {})
             : _key(std::move(key)),
               _max_rss_rowid(max_rss_rowid),
               _merge_base_level(merge_base_level),
               _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
-              _enable_multiple_output_files(enable_multiple_output_files) {}
+              _enable_multiple_output_files(enable_multiple_output_files),
+              _max_output_keys(max_output_keys),
+              _max_output_bytes(max_output_bytes),
+              _reserve_output_metadata(std::move(reserve_output_metadata)) {}
 
     ~KeyValueMerger() = default;
 
@@ -65,6 +70,9 @@ public:
 
     Status merge(const sstable::Iterator* iter_ptr);
 
+    // Concatenate disjoint ranges without discarding older serialized versions.
+    Status append_encoded(const Slice& key, const Slice& value);
+
     // return list<filename, filesize, encryption_meta, start_key, end_key>
     StatusOr<std::vector<KeyValueMergerOutput>> finish();
 
@@ -72,6 +80,7 @@ public:
 
 private:
     Status flush();
+    Status finish_bounded_builder();
 
 private:
     std::string _key;
@@ -88,7 +97,15 @@ private:
     // Enable multiple output files. We will generate multiple output files when
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
+    // Pressure compaction bounds each live builder independently of compression ratio. Zero
+    // retains the ordinary compaction behavior. Completed bounded builders are destroyed at
+    // rotation, leaving only their output metadata alive.
+    size_t _max_output_keys = 0;
+    size_t _max_output_bytes = 0;
+    size_t _builder_input_bytes = 0;
+    std::function<Status(size_t)> _reserve_output_metadata;
     std::vector<TableBuilderWrapper> _output_builders;
+    std::vector<KeyValueMergerOutput> _finished_outputs;
     // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
     // allocator churn. Cleared between calls so internal capacity is retained.
     IndexValuesWithVerPB _merge_pb_scratch;

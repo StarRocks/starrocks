@@ -52,6 +52,7 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
+class SstReadStateReadCredit;
 
 // Resident memory of a LakePersistentIndex, by component.
 struct LakePersistentIndexMemoryStats {
@@ -59,8 +60,9 @@ struct LakePersistentIndexMemoryStats {
     size_t index_block_bytes = 0; // sstable index blocks
     size_t filter_bytes = 0;      // sstable bloom filters
     // Delete vectors held by ingested sstables, compaction output for example. memory_usage() leaves them
-    // out, so the index cache does not charge them either.
+    // out; partial eviction includes them in the cache charge.
     size_t delvec_bytes = 0;
+    size_t overhead_bytes = 0; // estimated object, protobuf, path and fileset overhead
 
     // What LakePersistentIndex::memory_usage() reports.
     size_t charged_bytes() const { return memtable_bytes + index_block_bytes + filter_bytes; }
@@ -242,10 +244,49 @@ public:
     // memory_usage() split by component, plus the sstable delete vectors it leaves out.
     LakePersistentIndexMemoryStats memory_stats() const;
 
+    // Try to free bytes_to_free of SST index/filter blocks, rounded up to whole SST read states.
+    // Preserve memtables, metadata, versions and delete vectors. Caller holds the tablet index lock
+    // and must refresh the cache entry's charge after eviction (and after reads reopen SST state).
+    // This is a mechanism only: the index cache's eviction policy decides when/how much to release.
+    size_t evict_sstable_read_state(size_t bytes_to_free);
+
     // Publish this index's current memory_stats() to the lake_pk_index_cache_* gauges and return
     // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
     // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
     size_t refresh_cache_memory_metrics();
+    // Owner-side reclaim can run in a parallel lookup worker. Preserve the last MemTable charge
+    // rather than reading a concurrently changing tree; refresh only immutable SST read state.
+    size_t refresh_sstable_cache_memory_metrics();
+    void set_read_state_reclaimer(std::function<void(size_t)> reclaimer);
+    void set_growth_reservation_callbacks(std::function<Status(size_t)> reserve, std::function<void(size_t)> finish) {
+        _reserve_growth = std::move(reserve);
+        _finish_growth = std::move(finish);
+    }
+
+    // Lock-free snapshots for eviction: no index lock is acquired while inspecting active tablets.
+    size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
+    size_t cached_legacy_charge() const { return _cached_legacy_charge.load(); }
+    size_t sst_memory_demand() const { return _sst_memory_demand.load(); }
+    // Includes read-state object reservations; caller holds the tablet index lock.
+    size_t sst_read_state_reservation_demand() const;
+    // Immutable-file sizing hint for the next lookup. Caller has joined all lookup workers
+    // and holds the tablet lock; newly flushed SSTs must be included before admitting growth.
+    StatusOr<size_t> minimum_sst_read_memory() const;
+    // A pressured mutation must not refill optional data blocks after its headroom check.
+    // Caller holds the tablet lock and has joined old-value lookups.
+    void disable_optional_data_block_cache();
+    void set_publish_read_credit(std::shared_ptr<SstReadStateReadCredit> credit);
+    size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
+    size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
+    // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
+    Status prepare_sstable_read_state(size_t budget, bool partial, const std::function<void()>& refresh_memory = {},
+                                      const std::function<bool()>& cancelled = {});
+    // Zero preserves the ordinary chunking path. Only a mandatory old-file index close to the
+    // whole update budget requires a smaller live input/mutation working set.
+    size_t publish_input_chunk_rows(const TabletSchema& schema) const;
+    size_t publish_workspace_budget() const { return _publish_workspace_budget; }
+    void record_cache_access();
+    double cache_access_frequency(int64_t now_ms) const;
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -285,7 +326,9 @@ public:
 
     Status flush_memtable(bool force = false);
 
-    Status sync_flush_all_memtables(int64_t wait_timeout_us);
+    // A cancellation predicate opts pressure recovery into one shared inactive-flush wait budget.
+    // Active flush IO is not interruptible here and has its own trace duration.
+    Status sync_flush_all_memtables(int64_t wait_timeout_us, const std::function<bool()>& cancelled = {});
 
     // Publish-phase SST flush stats tracking
     void reset_publish_sst_stats() {
@@ -375,15 +418,21 @@ private:
 
     void _unload_without_lock();
 
+    Status _coalesce_pressure_filesets(size_t workspace, const std::function<void()>& refresh_memory,
+                                       const std::function<bool()>& cancelled);
     Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder);
 
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
     static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
             const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id,
-            Cache* cache, const TabletMetadataPtr& metadata);
+            Cache* cache, const TabletMetadataPtr& metadata, const std::function<void(size_t)>& reclaim_self);
 
     bool is_memtable_full() const;
+    bool _uses_growth_reservation() const;
+    Status _mutate_in_reserved_batches(size_t n, const Slice* keys,
+                                       const std::function<Status(size_t, size_t)>& mutate);
+    Status _replace_selected(const Slice* keys, const IndexValue* values, const std::vector<size_t>& indexes);
 
     bool too_many_rebuild_files() const;
 
@@ -446,6 +495,23 @@ private:
     int64_t _publish_version{0};
     // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
     LakePersistentIndexMemoryStats _reported_memory_stats;
+    size_t _reported_sst_object_bytes = 0;
+    std::function<void(size_t)> _reclaim_read_state;
+    std::function<Status(size_t)> _reserve_growth;
+    std::function<void(size_t)> _finish_growth;
+    bool _growth_mutation_active = false;
+    bool _partial_read_state = false;
+    size_t _publish_workspace_budget = 0;
+    bool _publish_skip_optional_block_cache = false;
+    std::shared_ptr<SstReadStateReadCredit> _publish_read_credit;
+    std::atomic<size_t> _cached_metadata_bytes{0};
+    std::atomic<size_t> _cached_sst_bytes{0};
+    std::atomic<size_t> _cached_legacy_charge{0};
+    std::atomic<size_t> _directly_accounted_sst_bytes{0};
+    std::atomic<size_t> _sst_memory_demand{0};
+    mutable std::mutex _frequency_mutex;
+    double _access_frequency = 0;
+    int64_t _frequency_time_ms = 0;
 
     // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
     mutable std::mutex _load_lock;

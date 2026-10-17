@@ -15,6 +15,9 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
 #include <numeric>
 #include <unordered_map>
 
@@ -36,6 +39,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_persistent_index_size_tiered_compaction_strategy.h"
 #include "storage/lake/meta_file.h"
@@ -51,6 +55,7 @@
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
+#include "storage/sstable/iterator.h"
 #include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -76,6 +81,7 @@ static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from
     metrics->lake_pk_index_cache_index_block_bytes.increment(delta(from.index_block_bytes, to.index_block_bytes));
     metrics->lake_pk_index_cache_filter_bytes.increment(delta(from.filter_bytes, to.filter_bytes));
     metrics->lake_pk_index_cache_delvec_bytes.increment(delta(from.delvec_bytes, to.delvec_bytes));
+    metrics->lake_pk_index_cache_overhead_bytes.increment(delta(from.overhead_bytes, to.overhead_bytes));
 }
 
 // unload() used to be free: LakePrimaryIndex held this class behind a shared_ptr and reset it, so the
@@ -85,6 +91,16 @@ static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from
 void LakePersistentIndex::_reset_index_state() {
     move_cache_memory_metrics(_reported_memory_stats, {});
     _reported_memory_stats = {};
+    _reported_sst_object_bytes = 0;
+    _cached_sst_bytes.store(0);
+    _cached_legacy_charge.store(0);
+    _directly_accounted_sst_bytes.store(0);
+    _sst_memory_demand.store(0);
+    _cached_metadata_bytes.store(0);
+    _partial_read_state = false;
+    _publish_workspace_budget = 0;
+    _publish_skip_optional_block_cache = false;
+    _publish_read_credit.reset();
     if (_memtable) {
         _memtable->clear();
     }
@@ -110,7 +126,7 @@ void LakePersistentIndex::_reset_index_state() {
 
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
         const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
-        const TabletMetadataPtr& metadata) {
+        const TabletMetadataPtr& metadata, const std::function<void(size_t)>& reclaim_self) {
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
 
@@ -119,7 +135,11 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         auto& pb = sstable_meta.sstables(idx);
         ASSIGN_OR_RETURN(sstables[idx], PersistentIndexSstable::new_sstable(
                                                 pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
-                                                true /* need filter */, nullptr, metadata, tablet_mgr));
+                                                true /* need filter */, nullptr, metadata, tablet_mgr,
+                                                config::lake_pk_index_partial_eviction
+                                                        ? tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                                        : nullptr,
+                                                config::lake_pk_index_partial_eviction, reclaim_self));
         return Status::OK();
     };
 
@@ -139,6 +159,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
+    _partial_read_state = config::lake_pk_index_partial_eviction;
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
     const int num_sstables = sstable_meta.sstables_size();
     TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
@@ -148,7 +169,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     {
         int64_t t_open = GetCurrentTimeMicros();
         ASSIGN_OR_RETURN(sstables, _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(),
-                                                           metadata));
+                                                           metadata, _reclaim_read_state));
         sst_open_us = GetCurrentTimeMicros() - t_open;
     }
 
@@ -204,7 +225,12 @@ bool LakePersistentIndex::is_memtable_full() const {
     const bool mem_tracker_exceed =
             _tablet_mgr->primary_key_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
-    return mem_size_exceed || mem_tracker_exceed;
+    const auto limit = _tablet_mgr ? _tablet_mgr->primary_key_mgr()->mem_tracker()->limit() : -1;
+    const size_t bounded_limit =
+            _publish_workspace_budget > 0 ? _publish_workspace_budget : std::max<int64_t>(1, limit / 4);
+    const bool bounded_full = _reserve_growth && config::lake_pk_index_partial_eviction && limit > 0 &&
+                              memtable_mem_size >= bounded_limit;
+    return mem_size_exceed || mem_tracker_exceed || bounded_full;
 }
 
 bool LakePersistentIndex::too_many_rebuild_files() const {
@@ -218,6 +244,8 @@ bool LakePersistentIndex::too_many_rebuild_rows() const {
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    sstable->set_read_state_reclaimer(_reclaim_read_state);
+    sstable->set_skip_data_block_cache(_publish_workspace_budget > 0 || _publish_skip_optional_block_cache);
     // Track SST flush stats for publish phase monitoring
     _publish_sst_flush_count++;
     _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
@@ -291,8 +319,12 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     // We don't use UINT32_MAX as max rowid because it is reserved for delete rows.
     sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | (UINT32_MAX - 1));
     sstable_pb.mutable_range()->CopyFrom(sst_range);
-    RETURN_IF_ERROR(
-            sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */,
+                                  std::move(delvec), nullptr, _tablet_mgr,
+                                  config::lake_pk_index_partial_eviction
+                                          ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                          : nullptr,
+                                  config::lake_pk_index_partial_eviction));
     const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
@@ -301,23 +333,45 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
+Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us, const std::function<bool()>& cancelled) {
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
     }
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
+    // Pressure recovery shares the remaining deadline, rather than restarting a full wait for
+    // each inactive MemTable. Keep successful handoffs retired even if a later wait fails.
+    const int64_t deadline_us = MonotonicMicros() + std::max<int64_t>(0, wait_timeout_us);
+    size_t retired = 0;
+    DeferOp retire_completed([&] {
+        if (cancelled) _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + retired);
+    });
     // 1. flush inactive memtables
     for (auto& memtable : _inactive_memtables) {
-        RETURN_IF_ERROR(memtable->wait_for_flush(wait_timeout_us));
+        Status wait_status;
+        if (cancelled) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_growth_flush_wait_us");
+            wait_status = memtable->wait_for_flush(std::max<int64_t>(0, deadline_us - MonotonicMicros()), cancelled);
+        } else {
+            wait_status = memtable->wait_for_flush(wait_timeout_us);
+        }
+        // Only an exhausted wait budget carries a pressure prefix. An asynchronous flush's
+        // original IO error (including TimedOut) must remain distinguishable and unchanged.
+        RETURN_IF_ERROR(wait_status);
         auto sstable = memtable->release_sstable();
         if (sstable == nullptr) {
             return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
         }
         RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+        ++retired;
     }
     _inactive_memtables.clear();
+    retired = 0;
+    if (cancelled && cancelled()) return Status::Cancelled("PK MemTable growth flush cancelled");
     // 2. flush current memtable
     if (_memtable && !_memtable->empty()) {
+        // This is active work, not a CV/memory wait. Preserve its original IO status; callers
+        // must not describe the reservation's wall time as bounded by the wait configuration.
+        TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_active_flush_io_us");
         RETURN_IF_ERROR(_memtable->flush());
         auto sstable = _memtable->release_sstable();
         DCHECK(sstable != nullptr);
@@ -374,7 +428,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         // 3. flush current memtable
         bool flush_async = false;
-        if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+        if (_publish_workspace_budget == 0 && _inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -492,13 +546,67 @@ Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, c
     return Status::OK();
 }
 
+bool LakePersistentIndex::_uses_growth_reservation() const {
+    return _reserve_growth && config::lake_pk_index_partial_eviction && !_growth_mutation_active;
+}
+
+Status LakePersistentIndex::_mutate_in_reserved_batches(size_t n, const Slice* keys,
+                                                        const std::function<Status(size_t, size_t)>& mutate) {
+    _growth_mutation_active = true;
+    DeferOp restore([&] { _growth_mutation_active = false; });
+    const auto limit = _tablet_mgr->primary_key_mgr()->mem_tracker()->limit();
+    // A btree value contains a string and version/rowid pair. Budget 256 bytes per inserted
+    // key for sparsely occupied nodes and lookup sets, twice its key bytes, and 64KiB for
+    // splits along the tree height. Keep both row count and bytes bounded; long keys must
+    // not turn a small row batch into an unbounded reservation.
+    const size_t batch_budget = _publish_workspace_budget > 0
+                                        ? std::max<size_t>(65536, _publish_workspace_budget)
+                                        : (limit > 0 ? std::max<int64_t>(65536, limit / 8) : 1024 * 1024);
+    for (size_t offset = 0; offset < n;) {
+        size_t count = 0;
+        size_t bytes = 65536;
+        while (offset + count < n && count < static_cast<size_t>(std::max(1, config::vector_chunk_size))) {
+            const size_t length = keys[offset + count].size;
+            if (bytes > std::numeric_limits<size_t>::max() - 256 ||
+                length > (std::numeric_limits<size_t>::max() - bytes - 256) / 2) {
+                return Status::MemoryLimitExceeded("PK MemTable mutation size overflows");
+            }
+            const size_t next = bytes + 256 + length * 2;
+            if (count > 0 && next > batch_budget) break;
+            bytes = next;
+            ++count;
+        }
+        RETURN_IF_ERROR(_reserve_growth(bytes));
+        {
+            // The cache takes over only the actual growth, then refunds the unused reservation.
+            // This also accounts a partially applied operation on every error exit.
+            DeferOp finish([&] { _finish_growth(0); });
+            RETURN_IF_ERROR(mutate(offset, count));
+        }
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_batches", 1);
+        offset += count;
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                    IOStat* stat, ParallelUpsertContext* ctx) {
+    if (_uses_growth_reservation()) {
+        // A reservation may flush this owner's MemTables. Finish every prior reverse lookup
+        // before that can change the filesets or retire a slot referenced by a worker.
+        if (ctx && ctx->defers_lookup()) RETURN_IF_ERROR(ctx->runner()->join());
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return upsert(count, keys + offset, values + offset, old_values + offset, stat, ctx);
+        });
+    }
     // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
     // writes, and this is also what fixes the order of an upsert against the deletes around it.
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
+    // Commit the tree before remote IO. Retain only lookup-set workspace: otherwise this
+    // batch could wait for headroom held by its own unused insertion reservation.
+    if (_growth_mutation_active) _finish_growth(65536 + 128 * n);
 
     // Resolving what those keys previously mapped to is the expensive remote-IO half, and it is
     // read-only, so it is the part that can be deferred.
@@ -525,12 +633,22 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
         ctx->add_replaced(old_values, n);
         return Status::OK();
     });
+    if (_growth_mutation_active) {
+        RETURN_IF_ERROR(ctx->runner()->join());
+        RETURN_IF_ERROR(flush_memtable());
+    }
     return Status::OK();
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_us");
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return insert(count, keys + offset, values + offset, version);
+        });
+    }
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
+    if (_growth_mutation_active) _finish_growth(0);
     RETURN_IF_ERROR(flush_memtable());
     // TODO: check whether keys exist in immutable_memtable and ssts
     return Status::OK();
@@ -540,7 +658,14 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
                                          uint32_t del_rssid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            std::vector<bool> batch_filter(filter.begin() + offset, filter.begin() + offset + count);
+            return replay_erase(count, keys + offset, batch_filter, version, del_rssid);
+        });
+    }
     RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, del_rssid));
+    if (_growth_mutation_active) _finish_growth(0);
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -577,7 +702,13 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
     // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
     // still has to be read back from the inactive memtables and sstables to build the delete vector.
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return erase(count, keys + offset, old_values + offset, del_rssid);
+        });
+    }
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _publish_version, del_rssid));
+    if (_growth_mutation_active) _finish_growth(65536 + 128 * n);
 
     // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
     // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
@@ -689,7 +820,11 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     sstable_pb.set_shared(del_sst_meta.shared());
     sstable_pb.mutable_range()->CopyFrom(del_sst_range);
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true, nullptr, nullptr, _tablet_mgr,
+                                  config::lake_pk_index_partial_eviction
+                                          ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                          : nullptr,
+                                  config::lake_pk_index_partial_eviction));
     const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
     _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
@@ -711,6 +846,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
+    if (_uses_growth_reservation()) return _replace_selected(keys, values, replace_idxes);
     RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
@@ -719,8 +855,31 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
+    if (_uses_growth_reservation()) return _replace_selected(keys, values, tmp_replace_idxes);
     RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
+    return Status::OK();
+}
+
+Status LakePersistentIndex::_replace_selected(const Slice* keys, const IndexValue* values,
+                                              const std::vector<size_t>& indexes) {
+    std::array<Slice, 256> batch_keys;
+    std::array<IndexValue, 256> batch_values;
+    for (size_t begin = 0; begin < indexes.size(); begin += batch_keys.size()) {
+        const size_t count = std::min(batch_keys.size(), indexes.size() - begin);
+        for (size_t i = 0; i < count; ++i) {
+            batch_keys[i] = keys[indexes[begin + i]];
+            batch_values[i] = values[indexes[begin + i]];
+        }
+        RETURN_IF_ERROR(_mutate_in_reserved_batches(count, batch_keys.data(), [&](size_t offset, size_t size) {
+            std::vector<size_t> positions(size);
+            std::iota(positions.begin(), positions.end(), 0);
+            RETURN_IF_ERROR(_memtable->replace(batch_keys.data() + offset, batch_values.data() + offset, positions,
+                                               _publish_version));
+            _finish_growth(0);
+            return flush_memtable();
+        }));
+    }
     return Status::OK();
 }
 
@@ -830,7 +989,10 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
     auto open_output_sstable = [&](const PersistentIndexSstablePB& sstable_pb) {
         return PersistentIndexSstable::new_sstable(
                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()), block_cache->cache(),
-                /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr);
+                /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr,
+                config::lake_pk_index_partial_eviction ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                                       : nullptr,
+                config::lake_pk_index_partial_eviction, _reclaim_read_state);
     };
 
     // Handle multiple output sstables (from parallel compaction).
@@ -1747,6 +1909,10 @@ size_t LakePersistentIndex::memory_usage() const {
 
 LakePersistentIndexMemoryStats LakePersistentIndex::memory_stats() const {
     LakePersistentIndexMemoryStats stats;
+    stats.overhead_bytes = sizeof(*this);
+    stats.overhead_bytes += _sstable_filesets.capacity() * sizeof(std::unique_ptr<PersistentIndexSstableFileset>);
+    stats.overhead_bytes += _inactive_memtables.capacity() * sizeof(std::shared_ptr<PersistentIndexMemtable>);
+    stats.overhead_bytes += (_inactive_memtables.size() + (_memtable ? 1 : 0)) * sizeof(PersistentIndexMemtable);
     if (_memtable != nullptr) {
         stats.memtable_bytes += _memtable->memory_usage();
     }
@@ -1757,10 +1923,12 @@ LakePersistentIndexMemoryStats LakePersistentIndex::memory_stats() const {
         if (fileset_ptr == nullptr) {
             continue;
         }
+        stats.overhead_bytes += fileset_ptr->metadata_memory_usage();
         fileset_ptr->for_each_sstable([&](const PersistentIndexSstable& sstable) {
             stats.index_block_bytes += sstable.index_block_memory_usage();
             stats.filter_bytes += sstable.filter_memory_usage();
             stats.delvec_bytes += sstable.delvec_memory_usage();
+            stats.overhead_bytes += sstable.metadata_memory_usage() - sstable.delvec_memory_usage();
         });
     }
     return stats;
@@ -1770,7 +1938,429 @@ size_t LakePersistentIndex::refresh_cache_memory_metrics() {
     const auto stats = memory_stats();
     move_cache_memory_metrics(_reported_memory_stats, stats);
     _reported_memory_stats = stats;
+    _cached_legacy_charge.store(stats.charged_bytes());
+    _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
+    size_t demand = 0;
+    size_t directly_accounted = 0;
+    size_t object_bytes = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+                demand += sst.read_state_memory_demand();
+                directly_accounted += sst.directly_accounted_memory_usage();
+                object_bytes += sst.reserved_read_state_overhead();
+            });
+        }
+    }
+    _sst_memory_demand.store(demand);
+    _directly_accounted_sst_bytes.store(directly_accounted);
+    _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
+    _reported_sst_object_bytes = object_bytes;
     return stats.charged_bytes();
+}
+
+size_t LakePersistentIndex::refresh_sstable_cache_memory_metrics() {
+    auto stats = _reported_memory_stats;
+    stats.index_block_bytes = 0;
+    stats.filter_bytes = 0;
+    stats.overhead_bytes -= std::min(stats.overhead_bytes, _reported_sst_object_bytes);
+    size_t direct = 0, demand = 0, object_bytes = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (!fileset) continue;
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+            const auto usage = sst.read_state_memory_usage();
+            stats.index_block_bytes += usage.index;
+            stats.filter_bytes += usage.filter;
+            direct += usage.direct;
+            demand += sst.read_state_memory_demand();
+            object_bytes += usage.objects;
+        });
+    }
+    stats.overhead_bytes += object_bytes;
+    move_cache_memory_metrics(_reported_memory_stats, stats);
+    _reported_memory_stats = stats;
+    _reported_sst_object_bytes = object_bytes;
+    _cached_legacy_charge.store(stats.charged_bytes());
+    _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
+    _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
+    _directly_accounted_sst_bytes.store(direct);
+    _sst_memory_demand.store(demand);
+    return stats.charged_bytes();
+}
+
+void LakePersistentIndex::set_read_state_reclaimer(std::function<void(size_t)> reclaimer) {
+    _reclaim_read_state = std::move(reclaimer);
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset)
+            fileset->for_each_sstable(
+                    [&](const PersistentIndexSstable& sst) { sst.set_read_state_reclaimer(_reclaim_read_state); });
+    }
+}
+
+size_t LakePersistentIndex::sst_read_state_reservation_demand() const {
+    size_t demand = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable(
+                    [&](const PersistentIndexSstable& sst) { demand += sst.read_state_reservation_demand(); });
+        }
+    }
+    return demand;
+}
+
+// Called only at the joined prepare boundary. A fileset's ranges do not overlap, so
+// concatenating it needs one input iterator at a time. In particular, do not open or
+// rewrite the large mandatory SST to consolidate newly flushed tail fragments.
+Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const std::function<void()>& refresh_memory,
+                                                        const std::function<bool()>& cancelled) {
+    auto global_context = _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context();
+    auto wait_scope = std::make_shared<SstReadStateMemoryContext::WaitScope>();
+    wait_scope->deadline_ms = MonotonicMillis() + std::max(0, config::lake_pk_index_publish_wait_timeout_ms);
+    wait_scope->cancelled = cancelled;
+    // This local context also carries the same deadline/cancellation through native input
+    // objects, Table::Open, window decode and corruption retries. It never escapes to outputs.
+    auto context = std::make_shared<SstReadStateMemoryContext>(global_context->tracker.parent(), wait_scope);
+    context->reclaim = global_context->reclaim;
+    context->refresh_usage = global_context->refresh_usage;
+    TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_count", 1);
+    DeferOp report_peak([&] {
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_peak_bytes_sum", context->tracker.peak_consumption());
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_memory_wait_us", wait_scope->memory_wait_us.load());
+    });
+    SstReadStateMemoryContext::Reservation reservation(context, _reclaim_read_state);
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_pressure_coalesce_total_us");
+    auto reserve = [](SstReadStateMemoryContext::Reservation& memory, size_t bytes) { return memory.add(bytes, true); };
+    const size_t output_bytes = std::max<size_t>(4096, workspace / 4);
+    const int64_t target_file_size = config::pk_index_target_file_size;
+    for (auto& fileset : _sstable_filesets) {
+        if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+        if (fileset->pressure_coalesce_unproductive(output_bytes, target_file_size)) {
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_unproductive_skip_count", 1);
+            continue;
+        }
+        size_t count = 0;
+        bool eligible = !fileset->is_standalone_sstable();
+        Status probe_status;
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+            ++count;
+            // Shared projections and delvec-bearing files stay on the ordinary compaction
+            // path. This recovery only concatenates native, unshared flush fragments.
+            const auto& pb = sst.sstable_pb();
+            if (pb.shared() || pb.has_delvec() || pb.has_shared_rssid() || pb.has_shared_version() ||
+                pb.rssid_offset() != 0) {
+                eligible = false;
+            }
+            if (eligible && probe_status.ok()) {
+                auto minimum = sst.probe_minimum_read_memory();
+                if (!minimum.ok())
+                    probe_status = minimum.status();
+                else if (*minimum > workspace / 2)
+                    eligible = false;
+            }
+        });
+        RETURN_IF_ERROR(probe_status);
+        if (!eligible || count < 8) continue;
+        if (reservation.bytes() == 0) {
+            RETURN_IF_ERROR(reserve(reservation, workspace));
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_workspace_bytes", workspace);
+        }
+        // Input PBs remain owned by the unchanged fileset until the replacement is complete.
+        // Reserve pointer storage before collecting them, rather than copying every hierarchy.
+        SstReadStateMemoryContext::Reservation metadata_reservation(context, _reclaim_read_state);
+        RETURN_IF_ERROR(reserve(metadata_reservation, count * sizeof(const PersistentIndexSstable*)));
+        std::vector<const PersistentIndexSstable*> inputs;
+        inputs.reserve(count);
+        fileset->for_each_sstable([&](const auto& sst) { inputs.push_back(&sst); });
+        auto merger =
+                std::make_unique<KeyValueMerger>("", 0, false, _tablet_mgr, _tablet_id, true, 4096, output_bytes,
+                                                 [&](size_t bytes) { return reserve(metadata_reservation, bytes); });
+        uint64_t max_rss_rowid = 0;
+        auto copy_inputs = [&]() -> Status {
+            for (const auto* original : inputs) {
+                const auto& pb = original->sstable_pb();
+                if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+                max_rss_rowid = std::max(max_rss_rowid, pb.max_rss_rowid());
+                // A temporary resident state does not acquire the transient single-reader permit
+                // already held by prepare. Its allocations still reserve against the update root.
+                ASSIGN_OR_RETURN(auto input, PersistentIndexSstable::new_sstable(
+                                                     pb, _tablet_mgr->sst_location(_tablet_id, pb.filename()), nullptr,
+                                                     false, nullptr, nullptr, _tablet_mgr, context));
+                sstable::ReadIOStat io;
+                DeferOp report_io([&] {
+                    TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_data_block_read_bytes", io.bytes_from_file);
+                });
+                sstable::ReadOptions options;
+                options.stat = &io;
+                options.fill_cache = false;
+                options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+                options.max_rss_rowid = pb.max_rss_rowid();
+                // The root reservation above prepays writer plus iterator scratch. Bound each
+                // data-block input/output request too; two-level iteration may briefly retain
+                // the previous decoded block while opening its successor. A giant data value
+                // is left to the normal reader rather than making this optional merge fail publish.
+                const size_t block_allowance = std::max<size_t>(1, workspace / 32);
+                options.reserve_memory = [block_allowance](size_t bytes) {
+                    return bytes <= block_allowance
+                                   ? Status::OK()
+                                   : Status::MemoryLimitExceeded(
+                                             "PK pressure coalesce data block exceeds prepaid scratch");
+                };
+                options.try_reserve_memory = [block_allowance](size_t bytes) { return bytes <= block_allowance; };
+                options.check_read_cancelled = [&] {
+                    return cancelled && cancelled() ? Status::Cancelled("PK pressure coalesce cancelled")
+                                                    : Status::OK();
+                };
+                std::unique_ptr<sstable::Iterator> iter(input->new_iterator(options));
+                for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+                    if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+                    // Bound the builder by actual bytes, independently of compression. A single
+                    // entry also has to fit the prepaid merge workspace.
+                    if (iter->key().size > output_bytes || iter->value().size > output_bytes) {
+                        return Status::MemoryLimitExceeded("PK pressure coalesce entry exceeds its workspace");
+                    }
+                    RETURN_IF_ERROR(merger->append_encoded(iter->key(), iter->value()));
+                }
+                const auto read_status = iter->status();
+                if (read_status.is_corruption()) {
+                    StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+                    LOG(WARNING) << "PK pressure coalesce hit corruption, tablet_id=" << _tablet_id
+                                 << ", file=" << pb.filename() << ", error: " << read_status;
+                    (void)drop_corrupted_sstable_cache(_tablet_mgr->sst_location(_tablet_id, pb.filename()));
+                }
+                RETURN_IF_ERROR(read_status);
+                TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_input_files", 1);
+            }
+            return Status::OK();
+        };
+        const auto copy_status = copy_inputs();
+        if (copy_status.is_mem_limit_exceeded()) {
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_memory_fallback_count", 1);
+            continue;
+        }
+        RETURN_IF_ERROR(copy_status);
+        ASSIGN_OR_RETURN(auto outputs, merger->finish());
+        if (outputs.size() >= count) {
+            fileset->mark_pressure_coalesce_unproductive(output_bytes, target_file_size);
+            continue;
+        }
+        std::vector<std::unique_ptr<PersistentIndexSstable>> new_ssts;
+        for (const auto& output : outputs) {
+            PersistentIndexSstablePB pb;
+            pb.set_filename(output.filename);
+            pb.set_filesize(output.filesize);
+            pb.set_encryption_meta(output.encryption_meta);
+            pb.set_max_rss_rowid(max_rss_rowid);
+            pb.mutable_fileset_id()->CopyFrom(fileset->fileset_id().to_proto());
+            pb.mutable_range()->set_start_key(output.start_key);
+            pb.mutable_range()->set_end_key(output.end_key);
+            ASSIGN_OR_RETURN(auto sst, PersistentIndexSstable::new_sstable(
+                                               pb, _tablet_mgr->sst_location(_tablet_id, pb.filename()),
+                                               _tablet_mgr->primary_key_mgr()->block_cache()->cache(), true, nullptr,
+                                               nullptr, _tablet_mgr, global_context, true, _reclaim_read_state));
+            sst->set_skip_data_block_cache(true);
+            new_ssts.push_back(std::move(sst));
+        }
+        auto replacement = std::make_unique<PersistentIndexSstableFileset>();
+        RETURN_IF_ERROR(replacement->init(new_ssts));
+        size_t old_bytes = fileset->metadata_memory_usage(), new_bytes = replacement->metadata_memory_usage();
+        fileset->for_each_sstable([&](const auto& sst) { old_bytes += sst.metadata_memory_usage(); });
+        replacement->for_each_sstable([&](const auto& sst) { new_bytes += sst.metadata_memory_usage(); });
+        if (new_bytes >= old_bytes) {
+            fileset->mark_pressure_coalesce_unproductive(output_bytes, target_file_size);
+            continue;
+        }
+        if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+        fileset = std::move(replacement);
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_metadata_freed_bytes", old_bytes - new_bytes);
+        // The old entry charge backs the temporary replacement until here; workspace covers
+        // protobuf/builders. Install only a smaller skeleton, then refund before further IO.
+        if (refresh_memory) refresh_memory();
+    }
+    return Status::OK();
+}
+
+StatusOr<size_t> LakePersistentIndex::minimum_sst_read_memory() const {
+    size_t minimum = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (!fileset) continue;
+        Status status;
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+            if (!status.ok()) return;
+            const auto probed = sst.probe_minimum_read_memory();
+            if (!probed.ok()) {
+                status = probed.status();
+            } else {
+                minimum = std::max(minimum, *probed);
+            }
+        });
+        RETURN_IF_ERROR(status);
+    }
+    return minimum;
+}
+
+void LakePersistentIndex::disable_optional_data_block_cache() {
+    if (!_publish_skip_optional_block_cache) {
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_block_cache_bypass_count", 1);
+        _publish_skip_optional_block_cache = true;
+        for (const auto& fileset : _sstable_filesets) {
+            if (fileset) {
+                fileset->for_each_sstable([](const auto& sst) { sst.set_skip_data_block_cache(true); });
+            }
+        }
+    }
+}
+
+void LakePersistentIndex::set_publish_read_credit(std::shared_ptr<SstReadStateReadCredit> credit) {
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable([&](const auto& sst) { sst.set_read_credit(credit); });
+        }
+    }
+    _publish_read_credit = std::move(credit);
+}
+
+Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial,
+                                                       const std::function<void()>& refresh_memory,
+                                                       const std::function<bool()>& cancelled) {
+    if (!partial && !_partial_read_state) {
+        return Status::OK();
+    }
+    _partial_read_state = partial;
+    const auto context = partial ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context() : nullptr;
+    std::vector<const PersistentIndexSstable*> ssts;
+    auto collect_ssts = [&] {
+        ssts.clear();
+        for (const auto& fileset : _sstable_filesets) {
+            if (fileset) {
+                fileset->for_each_sstable([&](const PersistentIndexSstable& sst) { ssts.push_back(&sst); });
+            }
+        }
+    };
+    collect_ssts();
+    _publish_workspace_budget = 0;
+    _publish_skip_optional_block_cache = false;
+    if (partial) {
+        ASSIGN_OR_RETURN(auto minimum_read, minimum_sst_read_memory());
+        const auto limit = _tablet_mgr->primary_key_mgr()->mem_tracker()->limit();
+        if (limit > 0 && minimum_read > static_cast<size_t>(limit / 2)) {
+            // Keep the immutable decoded index plus encoded window, metadata and 64KiB of
+            // block/iterator scratch out of the input, mutation and live MemTable allowances.
+            // ReadState objects are reconstructable cache too. Refund them BEFORE choosing
+            // the next input quota, otherwise cached tail readers can shrink it to one byte
+            // and create one SST per row on every subsequent attempt.
+            evict_sstable_read_state(std::numeric_limits<size_t>::max());
+            if (refresh_memory) refresh_memory();
+            const size_t room = static_cast<size_t>(limit) - std::min(static_cast<size_t>(limit), minimum_read);
+            auto choose_workspace = [&] {
+                const auto stats = memory_stats();
+                const size_t fixed = stats.overhead_bytes + stats.delvec_bytes + 65536;
+                return std::max<size_t>(1, (room - std::min(room, fixed)) / 4);
+            };
+            _publish_workspace_budget = choose_workspace();
+            // Flush only at this joined owner boundary, before the next mutations/old-rowid
+            // lookups start. A reservation inside an upsert must never flush its new values.
+            if (!_inactive_memtables.empty() || (_memtable && _memtable->memory_usage() > _publish_workspace_budget)) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("pindex_prepare_memtable_flush_us");
+                const auto status = sync_flush_all_memtables(
+                        std::max<int64_t>(0, std::min<int64_t>(config::lake_pk_index_publish_wait_timeout_ms,
+                                                               config::pk_index_memtable_max_wait_flush_timeout_ms)) *
+                                1000,
+                        cancelled ? cancelled : std::function<bool()>([] { return false; }));
+                // Successful handoffs retire memory even when a later wait fails. Refresh before
+                // opening any SST, so a reservation cannot wait for this owner's stale charge.
+                if (refresh_memory) refresh_memory();
+                if (status.is_time_out()) TRACE_COUNTER_INCREMENT("pindex_prepare_memtable_flush_timeout", 1);
+                if (status.is_cancelled()) TRACE_COUNTER_INCREMENT("pindex_prepare_memtable_flush_cancelled", 1);
+                RETURN_IF_ERROR(status);
+                // Flush may append another SST/fileset. Include it in context and cache selection.
+                collect_ssts();
+            }
+            const size_t merge_workspace = std::min<size_t>(8 * 1024 * 1024, limit / 2);
+            RETURN_IF_ERROR(_coalesce_pressure_filesets(merge_workspace, refresh_memory, cancelled));
+            collect_ssts();
+            _publish_workspace_budget = choose_workspace();
+            TRACE_COUNTER_INCREMENT("pindex_minimum_sst_open_bytes", minimum_read);
+            TRACE_COUNTER_INCREMENT("pindex_publish_workspace_budget_bytes", _publish_workspace_budget);
+        }
+    }
+    // Keep already resident SSTs first, then use the remaining reservation to reopen missing SSTs.
+    std::stable_partition(ssts.begin(), ssts.end(), [](const auto* sst) { return sst->memory_usage() != 0; });
+    std::vector<const PersistentIndexSstable*> reopen;
+    for (const auto* sst : ssts) {
+        const size_t demand = sst->read_state_memory_demand();
+        const size_t cost = sst->read_state_reservation_demand();
+        const bool cacheable =
+                !partial || (_publish_workspace_budget == 0 && demand > 0 && cost >= demand && cost <= budget);
+        sst->set_skip_data_block_cache(_publish_workspace_budget > 0);
+        sst->set_read_state_cacheable(cacheable, context);
+        if (cacheable) {
+            budget -= std::min(budget, partial ? cost : demand);
+            if (sst->memory_usage() == 0) {
+                reopen.push_back(sst);
+            }
+        }
+    }
+    // Non-cacheable transitions above can release legacy resident state. Refund that charge
+    // before parallel opens as well; no cache/accounting lock is held during SST IO.
+    if (refresh_memory) refresh_memory();
+    TEST_SYNC_POINT("LakePersistentIndex::prepare_sstable_read_state:before_reopen");
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
+    ParallelTaskRunner runner(token.get());
+    for (auto* sst : reopen) {
+        runner.run([sst] { return sst->reopen_read_state(); });
+    }
+    return runner.join();
+}
+
+size_t LakePersistentIndex::publish_input_chunk_rows(const TabletSchema& schema) const {
+    if (!config::lake_pk_index_partial_eviction || _publish_workspace_budget == 0) return 0;
+    // Declared key widths bound original columns, their read buffer and encoded copies; reserve
+    // per-row room for offsets, value arrays and lookup-set nodes as well. Actual SST and tree
+    // allocations still require their own hard byte reservations.
+    size_t per_row = 512;
+    for (size_t i = 0; i < schema.num_key_columns(); ++i) {
+        const size_t width = schema.column(i).length();
+        if (width > (std::numeric_limits<size_t>::max() - per_row) / 4) return 1;
+        per_row += width * 4;
+    }
+    return std::clamp<size_t>(_publish_workspace_budget / per_row, 1, std::max(1, config::vector_chunk_size));
+}
+
+void LakePersistentIndex::record_cache_access() {
+    const int64_t now = MonotonicMillis();
+    std::lock_guard<std::mutex> lock(_frequency_mutex);
+    // One-minute half-life, measured in elapsed time rather than eviction rounds.
+    _access_frequency = _access_frequency * std::exp2(-(now - _frequency_time_ms) / 60000.0) + 1;
+    _frequency_time_ms = now;
+}
+
+double LakePersistentIndex::cache_access_frequency(int64_t now_ms) const {
+    std::lock_guard<std::mutex> lock(_frequency_mutex);
+    return std::max(0.001, _access_frequency * std::exp2(-(now_ms - _frequency_time_ms) / 60000.0));
+}
+
+size_t LakePersistentIndex::evict_sstable_read_state(size_t bytes_to_free) {
+    size_t freed_bytes = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (freed_bytes >= bytes_to_free) {
+            break;
+        }
+        if (fileset == nullptr) {
+            continue;
+        }
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sstable) {
+            if (freed_bytes < bytes_to_free) {
+                if (config::lake_pk_index_partial_eviction && _tablet_mgr) {
+                    sstable.set_read_state_memory_context(
+                            _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context());
+                    _partial_read_state = true;
+                }
+                freed_bytes += sstable.evict_read_state();
+            }
+        });
+    }
+    return freed_bytes;
 }
 
 // ---- Row-oriented publish API ------------------------------------------------------------------
@@ -2159,6 +2749,12 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
         }
         if (token != nullptr) {
             TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+        }
+        if (_reserve_growth && config::lake_pk_index_partial_eviction && context.defers_lookup()) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
+            RETURN_IF_ERROR(runner.join());
+            slots.clear();
+            RETURN_IF_ERROR(flush_memtable());
         }
     }
 

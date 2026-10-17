@@ -38,6 +38,41 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 存算分离
 
+### lake_pk_index_partial_eviction
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。 必需的 SST 打开内存不足时，tablet 锁持有者也可在等待前释放自身没有 reader pin 的 SST 读状态；正在读取的状态继续保留。 MemTable 修改在分配前预留有字节上限的批次，记账时接管实际增长，在 SST IO 前归还多余预留，仅保留反查工作区。延迟查找完成后才释放槽位或刷新 MemTable。压力下可分批刷新待处理的 MemTable（包括活跃 tablet 自身的 MemTable），避免等待本次 publish 持有且能够释放的内存。
+完整压缩输入与解码输出的预留能够立即满足时，SST 打开继续整块读取。内存紧张时，大 Snappy 块使用64KiB压缩输入窗口，并继续为完整解码输出预留内存。每个窗口之间检查进程退出；单次IO仍遵循原有文件系统超时，内存等待超时不能中断已执行的IO。在加载PK输入前，通过正常解密读文件路径探测必需索引的大小。当索引接近整个update预算时，根据剩余工作区收紧惰性segment输出、PK编码/lookup批次和活跃MemTable；只有reader已join后才刷新。可选数据block可回收，大索引查找避免重新填充其缓存。实际SST和树分配仍需字节预留；若解码索引加最小活跃工作区仍放不下，仍是明确边界。大小探测不绕过CRC校验，也不授权分配。
+
+- 引入版本：-
+
+计算接近内存上限的工作配额前，tablet 持锁方会先归还可回收读状态对象的记账。它可以按顺序合并键范围不重叠的尾部 SST 碎片，预留合并内存，并在输出文件轮换时销毁已完成的 builder；保留原大 SST。即使物理 `shared` 标志为 false，带有读取时 version 或 rssid 投影的文件仍走原有路径。此路径的尾部查找不填充可选的数据块缓存。Trace 计数器 `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files` 和 `pindex_pressure_coalesce_metadata_freed_bytes` 记录该回收工作。在文件和 key 之间检查取消；同步 IO 仍遵循文件系统超时。
+
+先完成 pending MemTable 的交接和重新记账，再预留该合并工作区。数据块读取必须符合已预付的工作内存额度；数据块过大时跳过这次可选连接并保留原 fileset。`pindex_pressure_coalesce_memory_fallback_count` 记录该回退，`pindex_pressure_coalesce_data_block_read_bytes` 记录数据块 IO。
+
+压力连接使用同一 update tracker 下的 `lake_pk_index_pressure_merge` 子 tracker。工作区、临时输入读状态和输出元数据共用一个绝对内存等待截止时间及取消信号，包括输入 `Table::Open` 和解压预留；安装后的输出使用普通读状态上下文。在当前输出额度下无文件数或元数据收益的 fileset，会跳过后续重复连接，直到输入或额度改变。 合并 trace 记录 `pindex_pressure_coalesce_workspace_bytes`、调用次数和 `pindex_pressure_coalesce_peak_bytes_sum`；后者累加每次调用的子 tracker 记账峰值，不代表全局并发峰值或进程峰值。 `pindex_pressure_coalesce_unproductive_skip_count` 记录这些已跳过的重复写入。 `pindex_pressure_coalesce_total_us` 包含实际工作和等待；`pindex_pressure_coalesce_memory_wait_us` 单独记录条件变量上的内存等待。同步文件系统 IO 在此仍不可抢占。
+
+每批 MemTable 修改前，会把有界增长及下一次 SST 打开所需的可复用读额度向实际 update 根 tracker 预留。两者无法共存时，已 join reader 的 tablet 持锁方可先退休 pending MemTable，再写入新值。读额度持续记账，直到本批 old-value lookup 全部 join；原生对象、压缩输入窗口及解码块的预留从中借还字节，不释放后重抢，也不重复计入 root。使用额度新打开的 reader 保持临时状态，已有 resident reader 继续保留。持有额度期间暂停填充可选数据块缓存。`pindex_memtable_growth_sst_headroom_bytes` 累加大小提示，`pindex_sst_read_credit_reserved_bytes` 累加包含对象额度的已发放字节，`pindex_sst_read_credit_borrowed_bytes` 累加借用字节；它们均不代表常驻内存或并发峰值。单个索引小于 update 预算一半时也执行。增长准入遇到压力后，本次 publish 的持锁方停止填充可选数据块缓存，包括新刷出的 SST；`pindex_memtable_growth_block_cache_bypass_count` 记录该切换，下次 prepare 重新评估。可选 legacy compaction preload 共用 publish 准入通道，繁忙时立即跳过，发布时仍可按需加载。开关启用前已运行的 preload 会先完成，再准入新 publisher。
+
+update 内存紧张时，即使 cache entry 的计费为零，也会回收空闲的 legacy compaction 预加载状态；这些列仍直接计入 compaction-state tracker。被使用的状态继续由其 owner 持有。publish trace 的 `pindex_compaction_preload_reclaimed_bytes` 记录释放的列字节数。
+
+### lake_pk_index_publish_wait_timeout_ms
+
+- 默认值：30000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。 同时限制 MemTable 增长预留的等待，多个 inactive MemTable 刷新共用剩余等待预算，进程退出会取消等待。主动刷新 IO 属于实际工作，使用自身的 IO 超时；该参数不保证整个预留调用的墙钟上限。trace 分别记录预留、批次、刷新等待、主动刷新 IO 和超时。两种模式都记录实际 process/update 上限及 index/block cache 容量，并提供预算采样次数。 索引块探测通过正常的解密文件读取路径，在块分配前分别记录编码字节数、解码字节数和打开时的重叠峰值。`sst_index_probe_*` 是包含探测次数的累计值，不能据此认定每个解码块本身都超过预算。预留被拒绝时还记录请求/已预留字节数、触发限制的 tracker 上限及占用，以及现有缓存分项快照；这些快照不是 tracker 的原子分项统计。
+
+`sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, 以及 `pindex_optional_block_cache_reclaim_bytes` 在publish trace中标识该路径。 `sst_probe_io_*` and `sst_open_io_*` 分别记录探测和打开阶段的本地/远端字节与请求数，与lookup IO分开。大小计数仍是累计值；单个文件需用单次probe的trace或单独元数据核对。
+
+prepare 阶段的 MemTable 交接同样共享有界的 inactive flush 等待并检查退出，在 SST 重开前退还已释放的 cache 记账，并把新刷出的 SST 纳入读状态选择。`pindex_prepare_memtable_flush_us`、`pindex_prepare_memtable_flush_timeout` 和 `pindex_prepare_memtable_flush_cancelled` 标识该阶段；active flush IO 保留原始错误原因和独立 IO 计时。
+
+- 引入版本：-
+
 ### cloud_native_pk_index_rebuild_files_threshold
 
 - 默认值：50

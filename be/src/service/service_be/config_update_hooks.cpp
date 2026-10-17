@@ -330,6 +330,12 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
+    registry->register_callback("lake_pk_index_partial_eviction", [=]() -> Status {
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        StorageEnv::GetInstance()->lake_primary_key_manager()->refresh_index_cache_eviction_policy();
+#endif
+        return Status::OK();
+    });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
         Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                 config::update_memory_limit_percent);

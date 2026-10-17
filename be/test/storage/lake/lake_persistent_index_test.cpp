@@ -23,11 +23,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <future>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
+#include <random>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -59,7 +62,10 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/persistent_index_sstable_fileset.h"
+#include "storage/lake/pk_index_pressure_test_util.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -111,6 +117,25 @@ private:
 
 class LakePersistentIndexTest : public TestBase {
 public:
+    void check_read_state_reclaim_progress(bool same_tablet);
+    void check_read_state_reservation_demand(bool deferred_initial_load);
+    void check_manager_prepare_pressure_flush(int outcome);
+    PersistentIndexSstablePB make_pressure_sstable(const std::string& filename) {
+        phmap::btree_map<std::string, IndexValueWithVer, std::less<>> data;
+        for (uint64_t i = 0; i < 20000; ++i) {
+            data.emplace(fmt::format("{:016x}-{:08d}", i * uint64_t{0x9e3779b97f4a7c15}, i),
+                         std::make_pair(int64_t{1}, IndexValue(i)));
+        }
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), filename)));
+        uint64_t filesize = 0;
+        CHECK_OK(PersistentIndexSstable::build_sstable(data, wf.get(), &filesize, nullptr));
+        CHECK_OK(wf->close());
+        PersistentIndexSstablePB pb;
+        pb.set_filename(filename);
+        pb.set_filesize(filesize);
+        pb.set_max_rss_rowid(uint64_t{100} << 32);
+        return pb;
+    }
     LakePersistentIndexTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -276,7 +301,7 @@ protected:
     // base; keep it >=1 so no row lands on value 0 (which the rebuild treats as <= rebuild point). The
     // written keys are appended to `out_keys`.
     void append_cold_rowset(TabletMetadata* md, int start, int n, uint32_t rowset_id,
-                            std::vector<std::string>* out_keys) {
+                            std::vector<std::string>* out_keys, size_t key_padding = 0) {
         auto tablet_schema = std::make_shared<TabletSchema>(md->schema());
         auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(md->id()));
@@ -289,7 +314,7 @@ protected:
         for (int i = 0; i < n; i++) {
             char buf[16];
             snprintf(buf, sizeof(buf), "k%08d", start + i);
-            keys.emplace_back(buf);
+            keys.emplace_back(std::string(buf) + std::string(key_padding, 'p'));
         }
         auto kc = BinaryColumn::create();
         auto vc = Int32Column::create();
@@ -989,6 +1014,1473 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_lower_tail_watermark) 
     EXPECT_EQ(IndexValue(kTailValue), values[1]);
 }
 
+void LakePersistentIndexTest::check_read_state_reclaim_progress(bool same_tablet) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    const auto old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = false;
+    config::lake_pk_index_publish_wait_timeout_ms = 1000;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::lake_pk_index_publish_wait_timeout_ms = old_timeout;
+        _mem_tracker->set_limit(old_limit);
+    });
+    auto active = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto idle = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    idle->set_id(next_id());
+    for (int i = 0; i < 4; ++i) {
+        auto pb = make_pressure_sstable(fmt::format("reclaim-old-{}.sst", i));
+        (same_tablet ? active : idle)->mutable_sstable_meta()->add_sstables()->CopyFrom(pb);
+    }
+    const auto fresh = make_pressure_sstable("reclaim-new.sst");
+    if (!same_tablet) {
+        Tablet tablet(_tablet_mgr.get(), idle->id());
+        MetaFileBuilder builder(tablet, idle);
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+        ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(idle, &builder, 1, 2, guard));
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    Tablet tablet(_tablet_mgr.get(), active->id());
+    MetaFileBuilder builder(tablet, active);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(active, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    Slice tail("memtable-tail");
+    IndexValue tail_value(12345);
+    ASSERT_OK(index.insert(1, &tail, &tail_value, 2));
+    const size_t memtable_bytes = index.memory_stats().memtable_bytes;
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    ASSIGN_OR_ABORT(auto cold,
+                    PersistentIndexSstable::new_sstable(
+                            fresh, _tablet_mgr->sst_location(active->id(), fresh.filename()), nullptr, true, nullptr,
+                            nullptr, nullptr, _primary_key_mgr->sst_read_state_memory_context(), true));
+    ASSERT_OK(index.merge_sstable_into_fileset(cold));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const size_t cache_before = _primary_key_mgr->index_cache().size();
+    const auto loads = StorageMetrics::instance()->lake_pk_index_load_total.value();
+    // Measure the mandatory index open peak, not a disk-file ratio or just its resident bytes.
+    MemTracker probe_tracker(16 * 1024 * 1024);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&probe_tracker);
+    ASSIGN_OR_ABORT(auto probe, PersistentIndexSstable::new_sstable(
+                                        fresh, _tablet_mgr->sst_location(active->id(), fresh.filename()), nullptr,
+                                        false, nullptr, nullptr, nullptr, context, true));
+    ASSERT_OK(probe->reopen_read_state());
+    const int64_t peak = probe_tracker.peak_consumption();
+    ASSERT_GT(peak, 4096);
+    const int64_t limit = _mem_tracker->consumption() + 4096 + (peak - 4096) / 2;
+    ASSERT_LT(peak, limit); // solvable: the mandatory unit is smaller than the entire budget
+    ASSERT_LE(_mem_tracker->peak_consumption(), limit);
+    _mem_tracker->set_limit(limit);
+    // The active entry and tablet guard remain pinned: global idle eviction must skip it.
+    const auto start = std::chrono::steady_clock::now();
+    const auto key_string = fmt::format("{:016x}-{:08d}", uint64_t{3} * uint64_t{0x9e3779b97f4a7c15}, 3);
+    Slice key(key_string);
+    IndexValue value;
+    ASSERT_OK(index.get(1, &key, &value));
+    EXPECT_EQ(IndexValue(3), value);
+    EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(1));
+    EXPECT_LT(_primary_key_mgr->index_cache().size(), cache_before);
+    EXPECT_EQ(memtable_bytes, index.memory_stats().memtable_bytes);
+    ASSERT_OK(index.get(1, &tail, &value));
+    EXPECT_EQ(tail_value, value);
+    EXPECT_EQ(loads, StorageMetrics::instance()->lake_pk_index_load_total.value());
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+    EXPECT_LE(_mem_tracker->peak_consumption(), limit);
+    EXPECT_LE(_mem_tracker->consumption(), limit);
+    EXPECT_TRUE(index.is_load(1));
+    EXPECT_EQ(same_tablet ? 1 : 2, _primary_key_mgr->index_cache().object_size());
+}
+
+TEST_F(LakePersistentIndexTest, test_growth_reservation_uses_short_flush_wait_and_preserves_state) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 50);
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const auto old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = false;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        _mem_tracker->set_limit(old_limit);
+    });
+    Tablet tablet(_tablet_mgr.get(), _tablet_metadata->id());
+    MetaFileBuilder builder(tablet, _tablet_metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(_tablet_metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    std::vector<int32_t> raw_keys(2000);
+    std::iota(raw_keys.begin(), raw_keys.end(), 0);
+    std::vector<Slice> keys;
+    std::vector<IndexValue> values;
+    for (auto& key : raw_keys) {
+        keys.emplace_back(reinterpret_cast<const char*>(&key), sizeof(key));
+        values.emplace_back(uint64_t{1} << 32 | uint32_t(key));
+    }
+    ASSERT_OK(index.insert(keys.size(), keys.data(), values.data(), 1));
+    std::atomic<bool> hold{true};
+    std::atomic<bool> started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        started.store(true);
+        while (hold.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp drain([&] {
+        hold.store(false);
+        _mem_tracker->set_limit(old_limit);
+        (void)index.sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index.flush_memtable(true));
+    const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!started.load() && std::chrono::steady_clock::now() < start_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_TRUE(started.load());
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = _mem_tracker->consumption();
+    _mem_tracker->set_limit(before + 32768);
+    const Slice fresh("not-inserted-before-flush");
+    const IndexValue fresh_value(uint64_t{2} << 32);
+    const auto begin = std::chrono::steady_clock::now();
+    auto status = index.insert(1, &fresh, &fresh_value, 2);
+    EXPECT_TRUE(status.is_time_out()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("PK MemTable growth flush wait"));
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(1));
+    EXPECT_EQ(before, _mem_tracker->consumption()); // no mutation or leaked growth credit
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    std::vector<IndexValue> found(keys.size());
+    ASSERT_OK(index.get(keys.size(), keys.data(), found.data()));
+    EXPECT_EQ(values, found);
+    IndexValue absent;
+    ASSERT_OK(index.get(1, &fresh, &absent));
+    EXPECT_EQ(IndexValue(NullIndexValue), absent);
+    hold.store(false);
+    ASSERT_OK(index.sync_flush_all_memtables(10'000'000));
+    _primary_key_mgr->update_index_cache_size(entry);
+    ASSERT_OK(index.insert(1, &fresh, &fresh_value, 2));
+    ASSERT_OK(index.get(1, &fresh, &absent));
+    EXPECT_EQ(fresh_value, absent);
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, test_active_tablet_reclaims_own_unpinned_ssts_before_waiting) {
+    check_read_state_reclaim_progress(true);
+}
+
+TEST_F(LakePersistentIndexTest, test_mandatory_sst_reclaims_idle_tablet_before_waiting) {
+    check_read_state_reclaim_progress(false);
+}
+
+TEST_F(LakePersistentIndexTest, test_mode_transition_serializes_with_delayed_resize) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(_tablet_metadata->id());
+    auto guard = entry->value().fetch_guard();
+    ASSERT_OK(entry->value().lake_load(_tablet_mgr.get(), _tablet_metadata, 1, nullptr));
+    Slice key("tail");
+    IndexValue value(42);
+    ASSERT_OK(entry->value().insert(1, &key, &value, 2));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto legacy = entry->size();
+    const auto metadata = entry->value().cached_metadata_bytes();
+    auto* sync = SyncPoint::GetInstance();
+    for (bool mode : {true, false}) {
+        std::promise<void> paused, resume;
+        auto continuing = resume.get_future().share();
+        sync->SetCallBack("PrimaryKeyManager::update_index_cache_size:before_accounting_lock", [&](void*) {
+            paused.set_value();
+            continuing.wait();
+        });
+        sync->EnableProcessing();
+        auto resize = std::async(std::launch::async, [&] { _primary_key_mgr->update_index_cache_size(entry); });
+        EXPECT_EQ(std::future_status::ready, paused.get_future().wait_for(std::chrono::seconds(2)));
+        config::lake_pk_index_partial_eviction = mode;
+        _primary_key_mgr->refresh_index_cache_eviction_policy();
+        resume.set_value();
+        resize.get();
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+        EXPECT_EQ(legacy + (mode ? metadata : 0), entry->size());
+        EXPECT_EQ(entry->size(), _mem_tracker->consumption());
+    }
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+}
+
+TEST_F(LakePersistentIndexTest, test_off_transition_prevents_delayed_sweep_recharging_on_bytes) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = false;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    auto meta = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    meta->mutable_sstable_meta()->add_sstables()->CopyFrom(make_pressure_sstable("mode-sweep.sst"));
+    Tablet tablet(_tablet_mgr.get(), meta->id());
+    MetaFileBuilder builder(tablet, meta);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(meta, &builder, 1, 2, guard));
+    const size_t legacy = entry->size();
+    const size_t resident = entry->value().cached_sst_bytes();
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    _primary_key_mgr->index_cache().set_capacity(entry->size(), false);
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    std::promise<void> paused, resume;
+    auto continuing = resume.get_future().share();
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PrimaryKeyManager::evict_index_cache:before_accounting_lock", [&](void*) {
+        paused.set_value();
+        continuing.wait();
+    });
+    sync->EnableProcessing();
+    auto sweep = std::async(std::launch::async,
+                            [&] { _primary_key_mgr->_evict_index_cache(_primary_key_mgr->index_cache().capacity()); });
+    EXPECT_EQ(std::future_status::ready, paused.get_future().wait_for(std::chrono::seconds(2)));
+    config::lake_pk_index_partial_eviction = false;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    resume.set_value();
+    sweep.get();
+    sync->DisableProcessing();
+    sync->ClearAllCallBacks();
+    EXPECT_EQ(legacy, _primary_key_mgr->get_index_memory_size(meta->id()));
+    auto* actual = _primary_key_mgr->index_cache().get(meta->id());
+    ASSERT_NE(nullptr, actual);
+    EXPECT_EQ(resident, actual->value().cached_sst_bytes());
+    EXPECT_EQ(legacy, _mem_tracker->consumption());
+    _primary_key_mgr->release_primary_index_cache(actual);
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_mode_change_reaccounts_untouched_memtable_only_entries) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = false;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    std::vector<uint64_t> ids;
+    std::vector<size_t> legacy;
+    std::vector<size_t> metadata_bytes;
+    for (int i = 0; i < 2; ++i) {
+        auto meta = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        meta->set_id(next_id());
+        ids.push_back(meta->id());
+        auto* entry = _primary_key_mgr->index_cache().get_or_create(meta->id());
+        auto guard = entry->value().fetch_guard();
+        ASSERT_OK(entry->value().lake_load(_tablet_mgr.get(), meta, 1, nullptr));
+        Slice key("tail");
+        IndexValue value(i);
+        ASSERT_OK(entry->value().insert(1, &key, &value, 2));
+        _primary_key_mgr->update_index_cache_size(entry);
+        legacy.push_back(entry->size());
+        metadata_bytes.push_back(entry->value().cached_metadata_bytes());
+        ASSERT_GT(metadata_bytes.back(), 0);
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    const auto order_before = _primary_key_mgr->index_cache().get_entry_sizes();
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    for (size_t i = 0; i < ids.size(); ++i) {
+        EXPECT_EQ(legacy[i] + metadata_bytes[i], _primary_key_mgr->get_index_memory_size(ids[i]));
+    }
+    // No entry freed SST bytes, and neither was accessed through prepare/lookup after the flip.
+    EXPECT_EQ(2, _primary_key_mgr->index_cache().object_size());
+    config::lake_pk_index_partial_eviction = false;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    EXPECT_EQ(order_before, _primary_key_mgr->index_cache().get_entry_sizes());
+    for (size_t i = 0; i < ids.size(); ++i) EXPECT_EQ(legacy[i], _primary_key_mgr->get_index_memory_size(ids[i]));
+}
+
+TEST_F(LakePersistentIndexTest, bounded_merge_rotates_builders_and_preserves_winners) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, false);
+    ensure_kek_in_key_cache();
+    constexpr size_t kKeysPerFile = 4;
+    constexpr size_t kKeys = 17;
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true, kKeysPerFile);
+    for (size_t i = 0; i < kKeys; ++i) {
+        const auto key = "key_" + std::to_string(1000 + i);
+        KeyValueMergerTestIterator original(key, 11, IndexValue((uint64_t{1} << 32) | i), i);
+        ASSERT_OK(merger.merge(&original));
+        if (i % 3 == 0) {
+            KeyValueMergerTestIterator tombstone(key, 12, IndexValue(NullIndexValue), i);
+            ASSERT_OK(merger.merge(&tombstone));
+        }
+    }
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+    ASSERT_EQ(5, outputs.size());
+    size_t next = 0;
+    for (const auto& output : outputs) {
+        PersistentIndexSstablePB pb;
+        pb.set_filename(output.filename);
+        pb.set_filesize(output.filesize);
+        pb.set_encryption_meta(output.encryption_meta);
+        RandomAccessFileOptions file_options;
+        if (!pb.encryption_meta().empty()) {
+            ASSIGN_OR_ABORT(file_options.encryption_info,
+                            KeyCache::instance().unwrap_encryption_meta(pb.encryption_meta()));
+        }
+        ASSIGN_OR_ABORT(auto rf,
+                        fs::new_random_access_file(file_options,
+                                                   _tablet_mgr->sst_location(_tablet_metadata->id(), pb.filename())));
+        PersistentIndexSstable sst;
+        ASSERT_OK(sst.init(std::move(rf), pb, nullptr, false, nullptr, _tablet_metadata, _tablet_mgr.get()));
+        sstable::ReadOptions options;
+        options.verify_checksums = true;
+        std::unique_ptr<sstable::Iterator> iter(sst.new_iterator(options));
+        size_t count = 0;
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ASSERT_LT(next, kKeys);
+            ASSERT_EQ("key_" + std::to_string(1000 + next), iter->key().to_string());
+            IndexValuesWithVerPB value;
+            ASSERT_TRUE(value.ParseFromArray(iter->value().data, iter->value().size));
+            ASSERT_EQ(1, value.values_size());
+            const bool tombstone = next % 3 == 0;
+            EXPECT_EQ(tombstone ? 12 : 11, value.values(0).version());
+            EXPECT_EQ(tombstone ? NullIndexValue : (uint64_t{1} << 32) | next,
+                      (uint64_t{value.values(0).rssid()} << 32) | value.values(0).rowid());
+            ++next;
+            ++count;
+        }
+        ASSERT_OK(iter->status());
+        EXPECT_LE(count, kKeysPerFile);
+    }
+    EXPECT_EQ(kKeys, next);
+}
+
+void LakePersistentIndexTest::check_read_state_reservation_demand(bool deferred_initial_load) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, deferred_initial_load);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(make_pressure_sstable("one-resident.sst"));
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        if (entry) _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    const auto key_string = fmt::format("{:016x}-{:08d}", uint64_t{3} * uint64_t{0x9e3779b97f4a7c15}, 3);
+    Slice sst_key(key_string);
+    IndexValue sst_value;
+    ASSERT_OK(index.get(1, &sst_key, &sst_value));
+    ASSERT_EQ(IndexValue(3), sst_value);
+    _primary_key_mgr->update_index_cache_size(entry);
+    const size_t resident = index.sst_memory_demand();
+    ASSERT_GT(resident, 0);
+    EXPECT_EQ(deferred_initial_load ? 0 : resident, index.cached_sst_bytes());
+    Slice tail("memtable-tail");
+    IndexValue tail_value(12345);
+    ASSERT_OK(index.insert(1, &tail, &tail_value, 2));
+    const size_t memtable_bytes = index.memory_stats().memtable_bytes;
+    ASSERT_EQ(deferred_initial_load ? 0 : resident, index.evict_sstable_read_state(resident));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto loads = StorageMetrics::instance()->lake_pk_index_load_total.value();
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    entry = nullptr;
+
+    config::lake_pk_index_partial_eviction = true;
+    std::atomic<int> opens{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    // The manager must budget the same object bytes as prepare_sstable_read_state. With table
+    // bytes alone, a tablet containing just this SST can never select its only known read state.
+    ASSIGN_OR_ABORT(entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    EXPECT_GT(index.sst_read_state_reservation_demand(), resident);
+    EXPECT_EQ(resident, index.cached_sst_bytes());
+    EXPECT_EQ(1, opens.load());
+    std::array<Slice, 2> keys{sst_key, tail};
+    std::array<IndexValue, 2> values;
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+        EXPECT_EQ(IndexValue(3), values[0]);
+        EXPECT_EQ(tail_value, values[1]);
+    }
+    EXPECT_EQ(1, opens.load());
+    EXPECT_EQ(memtable_bytes, index.memory_stats().memtable_bytes);
+    EXPECT_EQ(loads, StorageMetrics::instance()->lake_pk_index_load_total.value());
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+
+    const size_t exact_budget = index.sst_read_state_reservation_demand();
+    ASSERT_OK(index.prepare_sstable_read_state(exact_budget - 1, true));
+    EXPECT_EQ(0, index.memory_stats().index_block_bytes);
+    EXPECT_EQ(1, opens.load());
+    ASSERT_OK(index.prepare_sstable_read_state(exact_budget, true));
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(resident, index.cached_sst_bytes());
+    EXPECT_EQ(2, opens.load());
+    EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+}
+
+TEST_F(LakePersistentIndexTest, bounded_concatenation_preserves_all_encoded_versions) {
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, true);
+    ensure_kek_in_key_cache();
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true, 4, 512);
+    std::map<std::string, std::string> expected;
+    for (size_t i = 0; i < 19; ++i) {
+        IndexValuesWithVerPB versions;
+        for (int v : {12, 11}) {
+            auto* entry = versions.add_values();
+            entry->set_version(v);
+            entry->set_rssid(v == 12 ? UINT32_MAX : 1);
+            entry->set_rowid(v == 12 ? UINT32_MAX : i);
+        }
+        auto key = fmt::format("key_{:04d}", i);
+        auto value = versions.SerializeAsString();
+        ASSERT_OK(merger.append_encoded(key, value));
+        expected.emplace(key, value);
+    }
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+    ASSERT_GT(outputs.size(), 1);
+    size_t seen = 0;
+    for (const auto& output : outputs) {
+        PersistentIndexSstablePB pb;
+        pb.set_filename(output.filename);
+        pb.set_filesize(output.filesize);
+        pb.set_encryption_meta(output.encryption_meta);
+        ASSIGN_OR_ABORT(auto sst,
+                        PersistentIndexSstable::new_sstable(
+                                pb, _tablet_mgr->sst_location(_tablet_metadata->id(), pb.filename()), nullptr, false));
+        sstable::ReadOptions options;
+        options.verify_checksums = true;
+        std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(options));
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ASSERT_TRUE(expected.contains(iter->key().to_string()));
+            EXPECT_EQ(expected.at(iter->key().to_string()), iter->value().to_string());
+            ++seen;
+        }
+        ASSERT_OK(iter->status());
+    }
+    EXPECT_EQ(expected.size(), seen);
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_is_bounded_cancel_safe_and_preserves_base_sst) {
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, true);
+    ensure_kek_in_key_cache();
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* base = append_all_key_sstable(metadata.get(), {{"base", 1, IndexValue(7)}}, 7);
+    ASSERT_NE(nullptr, base);
+    const std::string base_filename = base->filename();
+    const auto tail_fileset = UniqueId::gen_uid().to_proto();
+    std::vector<std::string> keys;
+    std::vector<IndexValue> expected;
+    for (int i = 0; i < 32; ++i) {
+        auto key = i == 0 ? std::string("base") : fmt::format("tail_{:04d}_{}", i, std::string(180, 'x'));
+        auto value = i % 3 == 0 ? IndexValue(NullIndexValue) : IndexValue((uint64_t{2} << 32) | i);
+        auto* pb = append_all_key_sstable(metadata.get(), {{key, 2, value}}, (uint64_t{2} << 32) | 31);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(tail_fileset);
+        keys.push_back(std::move(key));
+        expected.push_back(value);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = tracker->consumption();
+    auto refresh = [&] { _primary_key_mgr->update_index_cache_size(entry); };
+    int checks = 0;
+    auto cancelled = index._coalesce_pressure_filesets(1024 * 1024, refresh, [&] { return ++checks == 17; });
+    ASSERT_TRUE(cancelled.is_cancelled()) << cancelled;
+    EXPECT_EQ(2, index._sstable_filesets.size());
+    EXPECT_EQ(before, tracker->consumption());
+    std::atomic<bool> scope_cancelled{false};
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [&] { return scope_cancelled.load(); }));
+    scope_cancelled.store(true); // installed outputs must use the ordinary, unscoped context
+
+    EXPECT_LT(tracker->consumption(), before);
+    std::vector<Slice> slices;
+    for (const auto& key : keys) slices.emplace_back(key);
+    std::vector<IndexValue> found(keys.size());
+    ASSERT_OK(index.get(slices.size(), slices.data(), found.data()));
+    EXPECT_EQ(expected, found);
+    Slice base_key("base");
+    IndexValue base_value;
+    ASSERT_OK(index.get(1, &base_key, &base_value));
+    EXPECT_EQ(IndexValue(NullIndexValue), base_value);
+    PersistentIndexSstableMetaPB committed;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&committed);
+    ASSERT_EQ(2, committed.sstables_size());
+    EXPECT_EQ(base_filename, committed.sstables(0).filename());
+    EXPECT_EQ((uint64_t{2} << 32) | 31, committed.sstables(1).max_rss_rowid());
+    auto reload_metadata = std::make_shared<TabletMetadata>(*metadata);
+    reload_metadata->mutable_sstable_meta()->CopyFrom(committed);
+    reload_metadata->set_version(2);
+    {
+        LakePersistentIndex reloaded(_tablet_mgr.get(), metadata->id());
+        ASSERT_OK(reloaded.init(reload_metadata));
+        ASSERT_OK(reloaded.get(1, &base_key, &base_value));
+        EXPECT_EQ(IndexValue(NullIndexValue), base_value); // base live value must not resurrect
+    }
+    const IndexValue replacement((uint64_t{3} << 32) | 7);
+    IndexValue old;
+    index.set_publish_version(3);
+    ASSERT_OK(index.upsert(1, &base_key, &replacement, &old));
+    EXPECT_EQ(IndexValue(NullIndexValue), old);
+    ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    reload_metadata->clear_sstable_meta();
+    for (const auto& fileset : index._sstable_filesets)
+        fileset->get_all_sstable_pbs(reload_metadata->mutable_sstable_meta());
+    reload_metadata->set_version(3);
+    LakePersistentIndex reinserted(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(reinserted.init(reload_metadata));
+    ASSERT_OK(reinserted.get(1, &base_key, &base_value));
+    EXPECT_EQ(replacement, base_value);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_no_gain_group_refunds_before_next_group) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    const auto first_id = UniqueId::gen_uid().to_proto();
+    std::vector<std::string> unchanged;
+    for (int file = 0; file < 8; ++file) {
+        std::vector<std::tuple<std::string, int64_t, IndexValue>> entries;
+        for (int i = 0; i < 1500; ++i) {
+            const int row = file * 1500 + i;
+            entries.emplace_back(fmt::format("a_{:06d}", row), 1, IndexValue((uint64_t{1} << 32) | row));
+        }
+        auto* pb = append_all_key_sstable(metadata.get(), entries, (uint64_t{1} << 32) | 11999);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(first_id);
+        unchanged.push_back(pb->filename());
+    }
+    const auto second_id = UniqueId::gen_uid().to_proto();
+    for (int i = 0; i < 32; ++i) {
+        auto* pb = append_all_key_sstable(metadata.get(), {{fmt::format("b_{:04d}", i), 2, IndexValue(i)}},
+                                          (uint64_t{2} << 32) | 31);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(second_id);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = tracker->consumption();
+    auto refresh = [&] { _primary_key_mgr->update_index_cache_size(entry); };
+    const auto begin = std::chrono::steady_clock::now();
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(5));
+    ASSERT_EQ(2, index._sstable_filesets.size());
+    EXPECT_TRUE(
+            index._sstable_filesets[0]->pressure_coalesce_unproductive(256 * 1024, config::pk_index_target_file_size));
+    PersistentIndexSstableMetaPB after;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&after);
+    ASSERT_EQ(9, after.sstables_size());
+    for (size_t i = 0; i < unchanged.size(); ++i) EXPECT_EQ(unchanged[i], after.sstables(i).filename());
+    EXPECT_LT(tracker->consumption(), before);
+    const auto charge = tracker->consumption();
+    const auto inventory = sst_inventory(metadata->id());
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    EXPECT_EQ(inventory, sst_inventory(metadata->id())); // no repeat rewrite of the unchanged group
+    EXPECT_EQ(charge, tracker->consumption());
+    std::array<Slice, 2> keys{Slice("a_011999"), Slice("b_0031")};
+    std::array<IndexValue, 2> values;
+    ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+    EXPECT_EQ(IndexValue((uint64_t{1} << 32) | 11999), values[0]);
+    EXPECT_EQ(IndexValue(31), values[1]);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_retains_unshared_pb_projections) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    for (int group = 0; group < 2; ++group) {
+        const auto fileset_id = UniqueId::gen_uid().to_proto();
+        for (int i = 0; i < 8; ++i) {
+            const auto key = fmt::format("projected_{}_{:04d}", group, i);
+            const auto rssid = group == 0 ? 5 : 11;
+            auto* pb = append_all_key_sstable(metadata.get(), {{key, 1, IndexValue((uint64_t{1} << 32) | i)}},
+                                              (static_cast<uint64_t>(rssid) << 32) | 7);
+            ASSERT_NE(nullptr, pb);
+            pb->mutable_fileset_id()->CopyFrom(fileset_id);
+            pb->set_shared(false); // Physical sharing does not determine read-time projection.
+            pb->set_generation_version(1);
+            if (group == 0) {
+                pb->set_shared_rssid(5);
+                pb->set_shared_version(7);
+            } else {
+                pb->set_rssid_offset(10);
+            }
+        }
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto charge = tracker->consumption();
+    const auto inventory = sst_inventory(metadata->id());
+    ASSERT_OK(index._coalesce_pressure_filesets(
+            1024 * 1024, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; }));
+    EXPECT_EQ(charge, tracker->consumption());
+    EXPECT_EQ(inventory, sst_inventory(metadata->id()));
+    PersistentIndexSstableMetaPB unchanged;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
+    EXPECT_EQ(metadata->sstable_meta().SerializeAsString(), unchanged.SerializeAsString());
+    std::array<Slice, 2> keys{Slice("projected_0_0007"), Slice("projected_1_0007")};
+    std::array<IndexValue, 2> values;
+    ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+    EXPECT_EQ(IndexValue((uint64_t{5} << 32) | 7), values[0]);
+    EXPECT_EQ(IndexValue((uint64_t{11} << 32) | 7), values[1]);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_preserves_crc_cause_on_compressed_data_budget_decline) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, false);
+    ConfigResetGuard<bool> checksum(&config::lake_pk_index_sst_verify_checksum, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    const auto fileset_id = UniqueId::gen_uid().to_proto();
+    IndexValuesWithVerPB versions;
+    std::mt19937 rng(290448);
+    for (int i = 60000; i > 0; --i) {
+        auto* value = versions.add_values();
+        value->set_version(i);
+        value->set_rssid(7);
+        value->set_rowid((rng() & 0xffff) << 8);
+    }
+    const auto encoded = versions.SerializeAsString();
+    ASSERT_GT(encoded.size(), 256 * 1024);
+    std::string first_file;
+    for (int i = 0; i < 8; ++i) {
+        KeyValueMerger writer("", 0, false, _tablet_mgr.get(), metadata->id(), false);
+        const auto key = fmt::format("crc_{:04d}", i);
+        ASSERT_OK(writer.append_encoded(key, encoded));
+        ASSIGN_OR_ABORT(auto outputs, writer.finish());
+        ASSERT_EQ(1, outputs.size());
+        auto* pb = metadata->mutable_sstable_meta()->add_sstables();
+        pb->set_filename(outputs[0].filename);
+        pb->set_filesize(outputs[0].filesize);
+        pb->set_max_rss_rowid((uint64_t{7} << 32) | UINT32_MAX);
+        pb->mutable_fileset_id()->CopyFrom(fileset_id);
+        pb->mutable_range()->set_start_key(key);
+        pb->mutable_range()->set_end_key(key);
+        if (i == 0) first_file = _tablet_mgr->sst_location(metadata->id(), pb->filename());
+    }
+    // Corrupt only the CRC trailer of the large, otherwise legal Snappy data block.
+    // Its valid index remains readable, and budget decline must still drain/check the CRC.
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(first_file));
+    char footer_bytes[sstable::Footer::kEncodedLength];
+    const auto filesize = metadata->sstable_meta().sstables(0).filesize();
+    ASSERT_OK(rf->read_at_fully(filesize - sizeof(footer_bytes), footer_bytes, sizeof(footer_bytes)));
+    Slice footer_input(footer_bytes, sizeof(footer_bytes));
+    sstable::Footer footer;
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    sstable::BlockContents contents;
+    ASSERT_OK(sstable::ReadBlock(rf.get(), {}, footer.index_handle(), &contents));
+    sstable::Block index_block(contents);
+    std::unique_ptr<sstable::Iterator> index_iter(index_block.NewIterator(sstable::BytewiseComparator()));
+    index_iter->SeekToFirst();
+    ASSERT_TRUE(index_iter->Valid());
+    sstable::BlockHandle data_handle;
+    auto handle_input = index_iter->value();
+    ASSERT_OK(data_handle.DecodeFrom(&handle_input));
+    sstable::BlockReadMemory memory;
+    ASSERT_OK(sstable::ProbeBlockMemory(rf.get(), data_handle, &memory));
+    ASSERT_EQ(sstable::kSnappyCompression, memory.compression);
+    ASSERT_GT(memory.encoded, 65536);
+    ASSERT_GT(memory.decoded, 256 * 1024);
+    rf.reset();
+    std::fstream corrupt(first_file, std::ios::in | std::ios::out | std::ios::binary);
+    ASSERT_TRUE(corrupt.good());
+    const auto crc_offset = static_cast<std::streamoff>(data_handle.offset() + data_handle.size() + 1);
+    corrupt.seekg(crc_offset);
+    char byte;
+    corrupt.read(&byte, 1);
+    ASSERT_TRUE(corrupt.good());
+    byte ^= 1;
+    corrupt.seekp(crc_offset);
+    corrupt.write(&byte, 1);
+    corrupt.close();
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(32 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto cached = tracker->consumption();
+    MemTracker inflight(-1, "retained-inflight-work", tracker);
+    inflight.consume(tracker->limit() - cached - 8 * 1024 * 1024 - 128 * 1024);
+    DeferOp release_inflight([&] { inflight.release(inflight.consumption()); });
+    const auto before = tracker->consumption();
+    EXPECT_LT(tracker->limit() - before - 8 * 1024 * 1024, memory.decoded);
+    const auto errors = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const auto status = index._coalesce_pressure_filesets(
+            8 * 1024 * 1024, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; });
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(errors + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_EQ(before, tracker->consumption());
+    PersistentIndexSstableMetaPB unchanged;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
+    EXPECT_EQ(metadata->sstable_meta().SerializeAsString(), unchanged.SerializeAsString());
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_scratch_decline_keeps_the_original_fileset) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    const auto fileset_id = UniqueId::gen_uid().to_proto();
+    IndexValuesWithVerPB versions;
+    for (int i = 6000; i > 0; --i) {
+        auto* value = versions.add_values();
+        value->set_version(i);
+        value->set_rssid(2);
+        value->set_rowid(i);
+    }
+    const auto encoded = versions.SerializeAsString();
+    ASSERT_GT(encoded.size(), 32768);
+    std::vector<std::string> names;
+    for (int i = 0; i < 8; ++i) {
+        KeyValueMerger writer("", 0, false, _tablet_mgr.get(), metadata->id(), false);
+        const auto key = fmt::format("key_{:04d}", i);
+        ASSERT_OK(writer.append_encoded(key, encoded));
+        ASSIGN_OR_ABORT(auto outputs, writer.finish());
+        ASSERT_EQ(1, outputs.size());
+        auto* pb = metadata->mutable_sstable_meta()->add_sstables();
+        pb->set_filename(outputs[0].filename);
+        pb->set_filesize(outputs[0].filesize);
+        pb->set_encryption_meta(outputs[0].encryption_meta);
+        pb->set_max_rss_rowid((uint64_t{2} << 32) | 6000);
+        pb->mutable_fileset_id()->CopyFrom(fileset_id);
+        pb->mutable_range()->set_start_key(key);
+        pb->mutable_range()->set_end_key(key);
+        names.push_back(pb->filename());
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    MemTracker inflight(-1, "retained-inflight-work", tracker);
+    inflight.consume(tracker->limit() - tracker->consumption() - 1024 * 1024 - 128 * 1024);
+    DeferOp release_inflight([&] { inflight.release(inflight.consumption()); });
+    const auto before = tracker->consumption();
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, {}, [] { return false; }));
+    EXPECT_EQ(before, tracker->consumption());
+    PersistentIndexSstableMetaPB unchanged;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
+    ASSERT_EQ(names.size(), unchanged.sstables_size());
+    for (size_t i = 0; i < names.size(); ++i) EXPECT_EQ(names[i], unchanged.sstables(i).filename());
+    Slice key("key_0000");
+    IndexValue found;
+    ASSERT_OK(index.get(1, &key, &found));
+    EXPECT_EQ(IndexValue((uint64_t{2} << 32) | 6000), found);
+    _primary_key_mgr->block_cache()->update_memory_usage();
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, manager_prepare_refunds_tail_readers_before_quota_and_repeated_mutations) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    const std::string filename = "large-unchanged-prepare.sst";
+    auto fixture = make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    const auto tail_id = UniqueId::gen_uid().to_proto();
+    for (int i = 0; i < 48; ++i) {
+        auto key = fmt::format("z_tail_{:04d}_{}", i, std::string(180, 'x'));
+        auto* pb = append_all_key_sstable(metadata.get(), {{key, 1, IndexValue(i)}}, uint64_t{101} << 32);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(tail_id);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes + 384 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    auto& index = entry->value();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    const auto context = _primary_key_mgr->sst_read_state_memory_context();
+    for (size_t i = 1; i < index._sstable_filesets.size(); ++i) {
+        Status status;
+        index._sstable_filesets[i]->for_each_sstable([&](const auto& sst) {
+            sst.set_read_state_cacheable(true, context);
+            if (status.ok()) status = sst.reopen_read_state();
+        });
+        ASSERT_OK(status);
+    }
+    // Simulate an existing MemTable from before enabling bounded mutation callbacks.
+    // It fits update, but retaining it while prepaying the merge workspace does not.
+    size_t pending_count = 0;
+    while (index.memory_stats().memtable_bytes < static_cast<size_t>(tracker->limit() / 2)) {
+        std::vector<std::string> strings;
+        std::vector<Slice> pending_keys;
+        std::vector<IndexValue> pending_values;
+        for (int i = 0; i < 128; ++i) {
+            strings.push_back(fmt::format("p_pending_{:06d}_{}", pending_count + i, std::string(180, 'p')));
+            pending_values.emplace_back((uint64_t{200} << 32) | (pending_count + i));
+        }
+        for (const auto& key : strings) pending_keys.emplace_back(key);
+        ASSERT_OK(index.insert(pending_keys.size(), pending_keys.data(), pending_values.data(), 2));
+        pending_count += pending_keys.size();
+    }
+    _primary_key_mgr->update_index_cache_size(entry);
+    ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+    EXPECT_GT(index.memory_stats().overhead_bytes, 48 * 4096);
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    ASSIGN_OR_ABORT(entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    ASSERT_GT(index.publish_workspace_budget(), 32768);
+    PersistentIndexSstableMetaPB after;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&after);
+    ASSERT_EQ(3, after.sstables_size());
+    EXPECT_EQ(filename, after.sstables(0).filename());
+    const auto pending_string = fmt::format("p_pending_{:06d}_{}", 0, std::string(180, 'p'));
+    Slice pending_key(pending_string);
+    IndexValue pending_value;
+    ASSERT_OK(index.get(1, &pending_key, &pending_value));
+    EXPECT_EQ(IndexValue(uint64_t{200} << 32), pending_value);
+    std::array<Slice, 8> keys;
+    std::array<IndexValue, 8> expected, values, old;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keys[i] = fixture.keys[i];
+        expected[i] = IndexValue(i);
+    }
+    for (int epoch = 0; epoch < 24; ++epoch) {
+        index.set_publish_version(epoch + 2);
+        for (size_t i = 0; i < keys.size(); ++i) values[i] = IndexValue((uint64_t{102} << 32) | (epoch * 8 + i));
+        ASSERT_OK(index.upsert(keys.size(), keys.data(), values.data(), old.data()));
+        EXPECT_EQ(expected, old);
+        expected = values;
+        if (epoch % 3 == 0) {
+            ASSERT_OK(index.erase(keys.size(), keys.data(), old.data(), epoch + 2));
+            EXPECT_EQ(expected, old);
+            expected.fill(IndexValue(NullIndexValue));
+        }
+        ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+        _primary_key_mgr->update_index_cache_size(entry);
+        ASSERT_OK(index.prepare_sstable_read_state(
+                0, true, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; }));
+        EXPECT_GT(index.publish_workspace_budget(), 4096);
+        ASSERT_OK(index.get(keys.size(), keys.data(), old.data()));
+        EXPECT_EQ(expected, old);
+        ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+    }
+}
+
+TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_with_preloaded_input) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 2000);
+    const std::string filename = "mid-sized-old-index.sst";
+    const auto fixture =
+            make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes * 2 + 256 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    DeferOp finish_flushes([&] {
+        EXPECT_TRUE(
+                RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+        EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+    });
+    ASSERT_LT(fixture.minimum_bytes, tracker->limit() / 2);
+    // Retain a real eagerly loaded PK column through the manager's update-state cache,
+    // rather than treating the rowset input as free space when admitting a different owner.
+    auto input_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    input_metadata->set_id(next_id());
+    auto input_schema = make_varchar_pk_schema();
+    // to_schema_pb appends repeated columns; replacing the cloned INT schema
+    // must not leave its original columns ahead of the long VARCHAR key.
+    input_metadata->clear_schema();
+    input_schema->to_schema_pb(input_metadata->mutable_schema());
+    input_metadata->mutable_schema()->mutable_column(0)->set_length(512);
+    input_metadata->mutable_schema()->set_id(next_id());
+    input_schema = std::make_shared<TabletSchema>(input_metadata->schema());
+    ASSERT_EQ(2, input_schema->num_columns());
+    ASSERT_EQ(1, input_schema->num_key_columns());
+    ASSERT_EQ(TYPE_VARCHAR, input_schema->column(0).type());
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*input_metadata));
+    std::vector<std::string> input_keys;
+    constexpr int kInputRows = 1024;
+    append_cold_rowset(input_metadata.get(), 0, kInputRows, 3, &input_keys, 256);
+    TxnLogPB_OpWrite input_op;
+    input_op.mutable_rowset()->CopyFrom(input_metadata->rowsets(0));
+    // An explicit empty txn_meta selects eager loading. Measure both the raw
+    // chunk and its standalone encoded column instead of inferring their
+    // allocation from the padded key length.
+    input_op.mutable_txn_meta();
+    Tablet input_tablet(_tablet_mgr.get(), input_metadata->id());
+    RssidFileInfoContainer input_container;
+    RowsetUpdateStateParams input_params{.op_write = input_op,
+                                         .tablet_schema = input_schema,
+                                         .metadata = input_metadata,
+                                         .tablet = &input_tablet,
+                                         .container = input_container};
+    auto* input_entry = _primary_key_mgr->_update_state_cache.get_or_create("mid-sized-sst-preload");
+    DeferOp release_input([&] { _primary_key_mgr->_update_state_cache.remove(input_entry); });
+    auto& input = input_entry->value();
+    input.init(input_params);
+    ASSERT_OK(input.prepare(input_params));
+    ASSERT_OK(input.load_segment(0, input_params, 1, false, false));
+    ASSERT_NE(nullptr, input.upserts(0));
+    // current() transfers ownership. Keep the returned chunk live throughout
+    // the test, alongside the cached encoded column and its original charge.
+    auto input_ref = input.upserts(0)->current();
+    ASSERT_NE(nullptr, input_ref.chunk);
+    ASSERT_EQ(kInputRows, input_ref.chunk->num_rows());
+    const auto& input_column = input_ref.chunk->get_column_by_index(0);
+    ASSERT_TRUE(input_column->is_binary());
+    ASSERT_EQ(input_keys.front(), input_column->get(0).get_slice().to_string());
+    ASSERT_EQ(input_keys.back(), input_column->get(kInputRows - 1).get_slice().to_string());
+    const auto input_first_row = input_ref.chunk->debug_row(0);
+    const size_t input_bytes = input.memory_usage();
+    ASSERT_NE(nullptr, input.upserts(0)->standalone_pk_column());
+    LOG(INFO) << "four-tablet preloaded PK bytes=" << input_bytes
+              << " raw_chunk_bytes=" << input_ref.chunk->memory_usage()
+              << " encoded_column_bytes=" << input.upserts(0)->standalone_pk_column()->memory_usage();
+    ASSERT_GT(input_bytes, 256 * 1024);
+    const int64_t read_and_workspace_bytes = fixture.minimum_bytes + 65536;
+    ASSERT_GT(tracker->limit(), read_and_workspace_bytes);
+    ASSERT_LT(input_bytes, tracker->limit() - read_and_workspace_bytes);
+    const auto pending_target =
+            static_cast<size_t>(tracker->limit() - read_and_workspace_bytes - static_cast<int64_t>(input_bytes));
+    ASSERT_GT(pending_target, 65536);
+    LOG(INFO) << "four-tablet growth fixture root=" << tracker->limit() << " mandatory_read=" << fixture.minimum_bytes
+              << " input=" << input_bytes << " owner_memtable_target=" << pending_target;
+    _primary_key_mgr->_update_state_cache.update_object_size(input_entry, input_bytes);
+    // Three other cached tablets each retain a live MemTable. Their cache pins are idle,
+    // allowing the pressure sweep to reclaim them, while the input above stays pinned.
+    for (int tablet_no = 0; tablet_no < 3; ++tablet_no) {
+        auto idle_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        idle_metadata->set_id(next_id());
+        auto* idle = _primary_key_mgr->index_cache().get_or_create(idle_metadata->id());
+        auto idle_guard = idle->value().fetch_guard();
+        ASSERT_OK(idle->value().lake_load(_tablet_mgr.get(), idle_metadata, 1, nullptr));
+        for (int row = 0; row < 768; ++row) {
+            const std::string bytes = fmt::format("idle_{:08d}_{}", row, std::string(256, 'i'));
+            Slice key(bytes);
+            IndexValue value(row + 1);
+            ASSERT_OK(idle->value().insert(1, &key, &value, 1));
+        }
+        _primary_key_mgr->update_index_cache_size(idle);
+        idle_guard.reset();
+        _primary_key_mgr->release_primary_index_cache(idle);
+    }
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    auto& index = entry->value();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    // Reproduce a warm owner with both inactive and active trees. A mutation alone fits;
+    // the same mutation followed by opening this (less than half-budget) SST does not.
+    size_t pending_rows = 0;
+    // Each distinct key retains at least its 256-byte padding. A broken fixture
+    // must fail a bounded assertion rather than keep allocating indefinitely.
+    const size_t max_pending_rows = (pending_target + 255) / 256 + 128;
+    bool handed_off = false;
+    while (index.memory_stats().memtable_bytes < pending_target) {
+        ASSERT_LT(pending_rows, max_pending_rows);
+        std::vector<std::string> strings;
+        std::vector<Slice> keys;
+        std::vector<IndexValue> values;
+        for (int i = 0; i < 128; ++i) {
+            strings.push_back(fmt::format("z_pending_{:08d}_{}", pending_rows + i, std::string(256, 'p')));
+            values.emplace_back((uint64_t{200} << 32) | (pending_rows + i));
+        }
+        for (const auto& key : strings) keys.emplace_back(key);
+        ASSERT_OK(index.insert(keys.size(), keys.data(), values.data(), 2));
+        pending_rows += keys.size();
+        if (!handed_off && index.memory_stats().memtable_bytes >= pending_target / 2) {
+            ASSERT_OK(index.flush_memtable(true));
+            handed_off = true;
+        }
+    }
+    ASSERT_TRUE(handed_off);
+    ASSERT_FALSE(index._inactive_memtables.empty());
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(4, _primary_key_mgr->index_cache().object_size());
+    ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    ASSIGN_OR_ABORT(entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    EXPECT_EQ(0, index.publish_workspace_budget());
+    const auto pending_before = index.memory_stats().memtable_bytes;
+    auto* sync = SyncPoint::GetInstance();
+    size_t owner_flushes = 0;
+    sync->SetCallBack("PrimaryKeyManager::_reserve_index_growth:after_flush", [&](void*) { ++owner_flushes; });
+    std::promise<void> release_sibling, sibling_ready;
+    auto release_signal = release_sibling.get_future().share();
+    auto ready_signal = sibling_ready.get_future();
+    std::future<void> competitor;
+    bool released_sibling = false;
+    auto drain_sibling = [&] {
+        if (!released_sibling) {
+            release_sibling.set_value();
+            released_sibling = true;
+        }
+        if (competitor.valid()) competitor.get();
+    };
+    DeferOp drain_competitor(drain_sibling);
+    size_t credit_checks = 0;
+    sync->SetCallBack("PrimaryKeyManager::_reserve_index_growth:after_read_credit_reserved", [&](void*) {
+        if (++credit_checks != 1) return;
+        EXPECT_NE(nullptr, index._publish_read_credit);
+        competitor = std::async(std::launch::async, [&] {
+            auto* sibling = _primary_key_mgr->compaction_state_mem_tracker();
+            const auto headroom = tracker->limit() - tracker->consumption();
+            EXPECT_GT(headroom, 0);
+            const auto remaining = std::max<int64_t>(0, headroom);
+            auto* denied = sibling->try_consume(remaining);
+            EXPECT_EQ(nullptr, denied);
+            sibling_ready.set_value();
+            release_signal.wait();
+            if (!denied) sibling->release(remaining);
+        });
+        EXPECT_EQ(std::future_status::ready, ready_signal.wait_for(std::chrono::seconds(2)));
+    });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::array<Slice, 128> keys;
+    std::array<IndexValue, 128> values, old, expected;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keys[i] = fixture.keys[i];
+        expected[i] = IndexValue(i);
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (int epoch = 0; epoch < 8; ++epoch) {
+        index.set_publish_version(epoch + 2);
+        for (size_t i = 0; i < keys.size(); ++i) values[i] = IndexValue((uint64_t{201} << 32) | (epoch * 128 + i));
+        ASSERT_OK(index.upsert(keys.size(), keys.data(), values.data(), old.data()));
+        if (epoch == 0) drain_sibling();
+        EXPECT_EQ(expected, old);
+        expected = values;
+        if (epoch % 3 == 0) {
+            ASSERT_OK(index.erase(keys.size(), keys.data(), old.data(), epoch + 2));
+            EXPECT_EQ(expected, old);
+            expected.fill(IndexValue(NullIndexValue));
+        }
+        ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+        ASSERT_LT(std::chrono::steady_clock::now(), deadline);
+    }
+    EXPECT_GT(owner_flushes, 0);
+    EXPECT_LT(owner_flushes, 8);
+    EXPECT_TRUE(index._publish_skip_optional_block_cache);
+    EXPECT_LT(index.memory_stats().memtable_bytes, pending_before);
+    ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    _primary_key_mgr->update_index_cache_size(entry);
+    ASSERT_OK(index.get(keys.size(), keys.data(), old.data()));
+    EXPECT_EQ(expected, old);
+    const std::string pending_string = fmt::format("z_pending_{:08d}_{}", 0, std::string(256, 'p'));
+    Slice pending_key(pending_string);
+    IndexValue pending_value;
+    ASSERT_OK(index.get(1, &pending_key, &pending_value));
+    EXPECT_EQ(IndexValue(uint64_t{200} << 32), pending_value);
+    PersistentIndexSstableMetaPB after;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&after);
+    ASSERT_GT(after.sstables_size(), 0);
+    EXPECT_EQ(filename, after.sstables(0).filename());
+    EXPECT_NE(nullptr, input.upserts(0));
+    EXPECT_EQ(input_bytes, input.memory_usage());
+    EXPECT_EQ(kInputRows, input_ref.chunk->num_rows());
+    EXPECT_EQ(input_first_row, input_ref.chunk->debug_row(0));
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->active_read_credits.load());
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, manager_growth_keeps_resident_sst_when_read_headroom_fits) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    const std::string filename = "resident-growth-headroom.sst";
+    const auto fixture =
+            make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes * 8);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    Slice key(fixture.keys[0]);
+    IndexValue value, old, expected(0);
+    ASSERT_OK(index.get(1, &key, &old));
+    ASSERT_EQ(expected, old);
+    ASSERT_OK(index.prepare_sstable_read_state(tracker->limit(), true,
+                                               [&] { _primary_key_mgr->update_index_cache_size(entry); }));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto resident_bytes = index.cached_sst_bytes();
+    ASSERT_GT(resident_bytes, 0);
+    ASSERT_EQ(0, index.publish_workspace_budget());
+    const auto flushes = index._publish_sst_flush_count;
+    for (int epoch = 0; epoch < 8; ++epoch) {
+        value = IndexValue(10000 + epoch);
+        ASSERT_OK(index.upsert(1, &key, &value, &old));
+        EXPECT_EQ(expected, old);
+        expected = value;
+    }
+    EXPECT_EQ(flushes, index._publish_sst_flush_count);
+    EXPECT_FALSE(index._publish_skip_optional_block_cache);
+    EXPECT_EQ(resident_bytes, index.cached_sst_bytes());
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, test_large_old_index_keeps_mutations_bounded_and_reclaims_idle_data_blocks) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    const std::string filename = "large-old-index.sst";
+    auto fixture = make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes + 256 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    ASSERT_GT(fixture.bulk_bytes, tracker->limit());
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_GT(index.publish_workspace_budget(), 0);
+    EXPECT_LT(index.publish_input_chunk_rows(TabletSchema(metadata->schema())), config::vector_chunk_size);
+    auto* cache = _primary_key_mgr->block_cache();
+    auto handle = cache->cache()->insert("idle-pressure", new char[256 * 1024], 256 * 1024,
+                                         [](const CacheKey&, void* value) { delete[] static_cast<char*>(value); });
+    cache->cache()->release(handle);
+    cache->update_memory_usage();
+    MemTracker input(-1, "bounded-pk-input", tracker);
+    input.consume(index.publish_workspace_budget());
+    DeferOp release_input([&] { input.release(input.consumption()); });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    for (size_t i = 0; i < 400; ++i) {
+        Slice key(fixture.keys[i]);
+        IndexValue value(10000 + i), old;
+        ASSERT_OK(index.upsert(1, &key, &value, &old));
+        ASSERT_EQ(IndexValue(i), old);
+        ASSERT_LE(std::chrono::steady_clock::now(), deadline);
+        ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+    }
+    // Later input batches revisit keys written by earlier batches, then DELETE and reinsert
+    // across forced flushes. Check old rowids and the selector's untouched positions each time.
+    std::array<Slice, 3> repeated{Slice(fixture.keys[0]), Slice(fixture.keys[17]), Slice(fixture.keys[31])};
+    std::array<IndexValue, 3> old;
+    ASSERT_OK(index.erase(repeated.size(), repeated.data(), old.data(), 100));
+    EXPECT_EQ((std::array<IndexValue, 3>{IndexValue(10000), IndexValue(10017), IndexValue(10031)}), old);
+    ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    std::array<IndexValue, 3> replacements{IndexValue(20000), IndexValue(20017), IndexValue(20031)};
+    ASSERT_OK(index.upsert(repeated.size(), repeated.data(), replacements.data(), old.data()));
+    for (const auto& value : old) EXPECT_EQ(IndexValue(NullIndexValue), value);
+    std::array<IndexValue, 3> selected{IndexValue(30000), IndexValue(30017), IndexValue(30031)};
+    ASSERT_OK(index.replace(repeated.size(), repeated.data(), selected.data(), std::vector<uint32_t>{0, 2}));
+    ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    ASSERT_OK(index.get(repeated.size(), repeated.data(), old.data()));
+    EXPECT_EQ((std::array<IndexValue, 3>{selected[0], replacements[1], selected[2]}), old);
+    Slice tail(fixture.keys.back());
+    IndexValue value;
+    ASSERT_OK(index.get(1, &tail, &value));
+    EXPECT_EQ(IndexValue(8191), value);
+    auto idle = cache->cache()->lookup("idle-pressure");
+    EXPECT_EQ(nullptr, idle);
+    if (idle) cache->cache()->release(idle);
+    EXPECT_LE(index.memory_stats().memtable_bytes, index.publish_workspace_budget() + 4096);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+// outcome: 0 = successful handoff; 1 = bounded wait timeout; 2 = shutdown while waiting.
+void LakePersistentIndexTest::check_manager_prepare_pressure_flush(int outcome) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, outcome == 1 ? 50 : 2000);
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 3);
+    const std::string filename = "prepare-existing-large.sst";
+    auto fixture = make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes + 512 * 1024);
+    DeferOp restore_limit([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    DeferOp release([&] { _primary_key_mgr->release_primary_index_cache(entry); });
+    auto guard = entry->value().fetch_guard();
+    auto& index = entry->value();
+    // Load without the manager's prepare phase, representing a cached index from before the
+    // mandatory old SST's working-set requirement was known. Its MemTables are still live.
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    const auto empty_memtable_bytes = index.memory_stats().memtable_bytes;
+    std::atomic<bool> hold{true}, started{false};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        started.store(true);
+        while (hold.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    sync->EnableProcessing();
+    DeferOp drain([&] {
+        hold.store(false);
+        (void)index.sync_flush_all_memtables(10'000'000, [] { return false; });
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<Slice> keys;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < 1000; ++i) {
+        keys.emplace_back(fixture.keys[i]);
+        values.emplace_back(10000 + i);
+    }
+    ASSERT_OK(index.insert(keys.size(), keys.data(), values.data(), 2));
+    ASSERT_OK(index.flush_memtable(true));
+    const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!started.load() && std::chrono::steady_clock::now() < start_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_TRUE(started.load());
+    // A second active tree must also be handed off; both sets of old values must survive.
+    Slice active_key(fixture.keys[2000]);
+    IndexValue active_value(12000);
+    ASSERT_OK(index.insert(1, &active_key, &active_value, 2));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto old_charge = entry->size();
+    ASSERT_GT(index.memory_stats().memtable_bytes, 256 * 1024);
+    guard.reset();
+
+    std::atomic<bool> cancel{false};
+    sync->SetCallBack("PrimaryKeyManager::prepare_primary_index:cancelled",
+                      [&](void* arg) { *static_cast<bool*>(arg) = cancel.load(); });
+    int checked_charge = 0;
+    sync->SetCallBack("LakePersistentIndex::prepare_sstable_read_state:before_reopen", [&](void*) {
+        ++checked_charge;
+        EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+        EXPECT_LT(entry->size(), old_charge);
+        EXPECT_EQ(empty_memtable_bytes, index.memory_stats().memtable_bytes);
+    });
+    std::thread unblock([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        if (outcome == 0) hold.store(false);
+        if (outcome == 2) cancel.store(true);
+    });
+    DeferOp join([&] { unblock.join(); });
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    const auto begin = std::chrono::steady_clock::now();
+    auto prepared = _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard);
+    const auto elapsed = std::chrono::steady_clock::now() - begin;
+    if (outcome != 0) {
+        ASSERT_FALSE(prepared.ok());
+        EXPECT_TRUE(outcome == 1 ? prepared.status().is_time_out() : prepared.status().is_cancelled())
+                << prepared.status();
+        EXPECT_LT(elapsed, std::chrono::milliseconds(500));
+        EXPECT_EQ(0, checked_charge);
+        // The retained test pin permits safe draining after manager failure removes its cache pin.
+        hold.store(false);
+        ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    } else {
+        ASSERT_OK(prepared.status());
+        EXPECT_EQ(entry, prepared.value());
+        EXPECT_EQ(1, checked_charge);
+        // Includes both the inactive and active handoffs appended during prepare.
+        auto committed = std::make_shared<TabletMetadata>(*metadata);
+        MetaFileBuilder commit_builder(tablet, committed);
+        ASSERT_OK(index.commit(&commit_builder));
+        EXPECT_EQ(3, committed->sstable_meta().sstables_size());
+        _primary_key_mgr->release_primary_index_cache(prepared.value());
+    }
+    cancel.store(false);
+    sync->ClearCallBack("LakePersistentIndex::prepare_sstable_read_state:before_reopen");
+    for (size_t i : {size_t{0}, size_t{999}, size_t{2000}, size_t{8191}}) {
+        Slice key(fixture.keys[i]);
+        IndexValue found;
+        ASSERT_OK(index.get(1, &key, &found));
+        EXPECT_EQ(IndexValue(i < 1000 ? 10000 + i : i == 2000 ? 12000 : i), found);
+    }
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, test_manager_prepare_flush_refreshes_charge_and_includes_new_ssts) {
+    check_manager_prepare_pressure_flush(0);
+}
+
+TEST_F(LakePersistentIndexTest, test_manager_prepare_flush_honors_short_wait_timeout) {
+    check_manager_prepare_pressure_flush(1);
+}
+
+TEST_F(LakePersistentIndexTest, test_manager_prepare_flush_cancels_pending_inactive) {
+    check_manager_prepare_pressure_flush(2);
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_reserves_objects_when_reopening_one_sstable) {
+    check_read_state_reservation_demand(false);
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_caches_one_previously_deferred_sstable) {
+    check_read_state_reservation_demand(true);
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_sync_resize_pressure_and_rollback) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
+    std::vector<PersistentIndexSstablePB> ssts;
+    for (int file = 0; file < 4; ++file) {
+        const std::string filename = fmt::format("fair-share-{}.sst", file);
+        phmap::btree_map<std::string, IndexValueWithVer, std::less<>> data;
+        for (int i = 0; i < 10000; ++i) {
+            data.emplace(fmt::format("sst-key-{:05d}", i), std::make_pair(int64_t{1}, IndexValue(i)));
+        }
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), filename)));
+        uint64_t filesize = 0;
+        PersistentIndexSstableRangePB range;
+        ASSERT_OK(PersistentIndexSstable::build_sstable(data, wf.get(), &filesize, &range));
+        ASSERT_OK(wf->close());
+        PersistentIndexSstablePB pb;
+        pb.set_filename(filename);
+        pb.set_filesize(filesize);
+        pb.set_max_rss_rowid((uint64_t{100} + file) << 32);
+        ssts.push_back(pb);
+    }
+    std::vector<TabletMetadataPtr> metadata;
+    std::vector<size_t> memtable_bytes;
+    for (int i = 0; i < 6; ++i) {
+        auto meta = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        meta->set_id(next_id());
+        for (const auto& pb : ssts) meta->mutable_sstable_meta()->add_sstables()->CopyFrom(pb);
+        metadata.push_back(meta);
+        auto* entry = _primary_key_mgr->index_cache().get_or_create(meta->id());
+        auto guard = entry->value().fetch_guard();
+        ASSERT_OK(entry->value().lake_load(_tablet_mgr.get(), meta, 1, nullptr));
+        Slice key("memtable-tail");
+        IndexValue value(12345);
+        ASSERT_OK(entry->value().insert(1, &key, &value, 2));
+        _primary_key_mgr->update_index_cache_size(entry);
+        memtable_bytes.push_back(entry->value().memory_stats().memtable_bytes);
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    config::lake_pk_index_partial_eviction = true;
+    size_t resident = 0;
+    size_t fixed = 0;
+    for (const auto& meta : metadata) {
+        auto* entry = _primary_key_mgr->index_cache().get(meta->id());
+        auto guard = entry->value().fetch_guard();
+        entry->value().record_cache_access();
+        _primary_key_mgr->update_index_cache_size(entry);
+        resident += entry->value().cached_sst_bytes();
+        fixed += entry->size() - entry->value().cached_sst_bytes();
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    auto& cache = _primary_key_mgr->index_cache();
+    const size_t target = fixed + resident * 3 / 4;
+    // Set the soft capacity without automatic LRU, then exercise the owner's synchronous resize.
+    cache.set_capacity(target * 4 / 3, false);
+    auto* pinned = cache.get(metadata[0]->id());
+    auto held_guard = pinned->value().fetch_guard();
+    _primary_key_mgr->update_index_cache_size(pinned);
+    EXPECT_EQ(6, cache.object_size());
+    EXPECT_LT(cache.size(), fixed + resident);
+    EXPECT_EQ(resident / 6, pinned->value().cached_sst_bytes());
+    held_guard.reset();
+    _primary_key_mgr->release_primary_index_cache(pinned);
+    _primary_key_mgr->evict_cache(85, 75);
+    EXPECT_EQ(6, cache.object_size());
+    EXPECT_LE(cache.size(), target);
+    for (size_t i = 0; i < metadata.size(); ++i) {
+        Tablet tablet(_tablet_mgr.get(), metadata[i]->id());
+        auto mutable_meta = std::make_shared<TabletMetadata>(*metadata[i]);
+        MetaFileBuilder builder(tablet, mutable_meta);
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+        ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata[i], &builder, 1, 2, guard));
+        EXPECT_EQ(memtable_bytes[i], entry->value().memory_stats().memtable_bytes);
+        std::array<Slice, 2> keys{Slice("memtable-tail"), Slice("sst-key-00003")};
+        std::array<IndexValue, 2> values;
+        ASSERT_OK(entry->value().get(2, keys.data(), values.data()));
+        EXPECT_EQ(IndexValue(12345), values[0]);
+        EXPECT_EQ(IndexValue(3), values[1]);
+        _primary_key_mgr->update_index_cache_size(entry);
+        EXPECT_EQ(entry->value().memory_usage() + entry->value().cached_metadata_bytes(), entry->size());
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    config::lake_pk_index_partial_eviction = false;
+    auto* entry = cache.get(metadata[0]->id());
+    auto guard = entry->value().fetch_guard();
+    ASSERT_OK(entry->value().prepare_sstable_read_state(std::numeric_limits<size_t>::max(), false));
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(entry->value().memory_usage(), entry->size());
+    EXPECT_EQ(resident / 6, entry->value().cached_sst_bytes());
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+}
+
 // memory_stats() splits memory_usage() into memtables, sstable index blocks and bloom filters, and also reports
 // the sstable delete vectors that memory_usage() leaves out. refresh_cache_memory_metrics() adds that split to the
 // lake_pk_index_cache_* gauges, and destroying the index takes it back out.
@@ -1057,6 +2549,37 @@ TEST_F(LakePersistentIndexTest, test_memory_stats_add_up_to_memory_usage) {
     EXPECT_EQ(before[3] + static_cast<int64_t>(stats.delvec_bytes), after[3]);
     // A second refresh with nothing changed must not count the index twice.
     index->refresh_cache_memory_metrics();
+    EXPECT_EQ(after, gauges());
+
+    // Partial eviction frees only the SST read state. The tail must stay usable without a tablet
+    // reload, and ingested delete vectors must still filter the SST after it reopens.
+    EXPECT_EQ(0, index->evict_sstable_read_state(0));
+    const auto freed = index->evict_sstable_read_state(1);
+    EXPECT_EQ(stats.index_block_bytes + stats.filter_bytes, freed);
+    EXPECT_EQ(0, index->evict_sstable_read_state(1));
+    const auto evicted = index->memory_stats();
+    EXPECT_EQ(stats.memtable_bytes, evicted.memtable_bytes);
+    EXPECT_EQ(stats.delvec_bytes, evicted.delvec_bytes);
+    EXPECT_EQ(0, evicted.index_block_bytes);
+    EXPECT_EQ(0, evicted.filter_bytes);
+    EXPECT_EQ(stats.charged_bytes() - freed, index->refresh_cache_memory_metrics());
+    const auto evicted_gauges = gauges();
+    EXPECT_EQ(after[0], evicted_gauges[0]);
+    EXPECT_EQ(before[1], evicted_gauges[1]);
+    EXPECT_EQ(before[2], evicted_gauges[2]);
+    EXPECT_EQ(after[3], evicted_gauges[3]);
+
+    // A memtable-only lookup must not reopen the SST.
+    IndexValue value(NullIndexValue);
+    ASSERT_OK(index->get(1, &mem_key_slices[0], &value));
+    EXPECT_EQ(mem_values[0], value);
+    EXPECT_EQ(0, index->memory_stats().index_block_bytes);
+    std::array<Slice, 2> sst_keys{Slice("sst-key-0001"), Slice("sst-key-0002")};
+    std::array<IndexValue, 2> sst_values{IndexValue(NullIndexValue), IndexValue(NullIndexValue)};
+    ASSERT_OK(index->get(sst_keys.size(), sst_keys.data(), sst_values.data()));
+    EXPECT_EQ(NullIndexValue, sst_values[0].get_value());
+    EXPECT_EQ(IndexValue((uint64_t{100} << 32) | 2), sst_values[1]);
+    EXPECT_EQ(stats.charged_bytes(), index->refresh_cache_memory_metrics());
     EXPECT_EQ(after, gauges());
 
     index.reset();
@@ -1322,6 +2845,82 @@ TEST_F(LakePersistentIndexTest, test_sync_flush_times_out_without_1s_poll) {
     EXPECT_LT(wait_ms, 800) << "timeout should honor remaining wait budget, not usleep(1s); took " << wait_ms << "ms";
 }
 
+TEST_F(LakePersistentIndexTest, test_pressure_flush_preserves_async_io_timeout_cause) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    const Slice key("async-io-timeout");
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key, &value, 1));
+    const auto original = Status::TimedOut("injected asynchronous flush IO timeout");
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void* arg) {
+        *static_cast<std::pair<const std::string*, Status*>*>(arg)->second = original;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&] {
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index->flush_memtable(true));
+    const auto result = index->sync_flush_all_memtables(1'000'000, [] { return false; });
+    // RETURN_IF_ERROR adds propagation context; the IO code and cause must stay unchanged.
+    EXPECT_EQ(original.code(), result.code());
+    EXPECT_EQ(original.message(), result.message());
+}
+
+TEST_F(LakePersistentIndexTest, test_pressure_flush_shares_deadline_and_retires_successful_handoffs) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 3);
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    std::array<std::string, 2> strings = {"first-flush", "second-flush"};
+    std::array<Slice, 2> keys = {Slice(strings[0]), Slice(strings[1])};
+    std::array<IndexValue, 2> values = {IndexValue(uint64_t{1} << 32), IndexValue(uint64_t{2} << 32)};
+    std::atomic<int> started{0};
+    std::array<std::atomic<bool>, 2> hold = {true, true};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        const auto id = started.fetch_add(1);
+        while (id < hold.size() && hold[id].load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp drain([&] {
+        for (auto& flag : hold) flag.store(false);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index->insert(1, &keys[0], &values[0], 1));
+    ASSERT_OK(index->flush_memtable(true));
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (started.load() == 0 && std::chrono::steady_clock::now() < started_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_GT(started.load(), 0);
+    ASSERT_OK(index->insert(1, &keys[1], &values[1], 1));
+    ASSERT_OK(index->flush_memtable(true));
+    std::thread finish_first([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(220));
+        hold[0].store(false);
+    });
+    DeferOp join([&] {
+        if (finish_first.joinable()) finish_first.join();
+    });
+    const auto begin = std::chrono::steady_clock::now();
+    const auto status = index->sync_flush_all_memtables(300'000, [] { return false; });
+    EXPECT_TRUE(status.is_time_out()) << status;
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::milliseconds(420));
+    hold[1].store(false);
+    // The first SST was handed off before the second timed out. It must have been retired:
+    // waiting for its already-consumed _sstable again would time out on this retry.
+    ASSERT_OK(index->sync_flush_all_memtables(2'000'000, [] { return false; }));
+    std::array<IndexValue, 2> found;
+    ASSERT_OK(index->get(keys.size(), keys.data(), found.data()));
+    EXPECT_EQ(values, found);
+}
+
 TEST_F(LakePersistentIndexTest, test_sync_flush_wakes_when_async_flush_finishes) {
     ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
     ASSERT_NE(RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool(), nullptr);
@@ -1422,6 +3021,9 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 }
 
 TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delvec) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10; // force a flush so the upsert produces an on-disk sstable
     DeferOp restore_config([&]() { config::l0_max_mem_usage = saved_l0_max_mem_usage; });
@@ -1459,7 +3061,7 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
     DelVector delete_vector;
     delete_vector.set_empty();
     std::shared_ptr<DelVector> new_delete_vector;
-    std::vector<uint32_t> deleted_row_ids = {1, 3, 5};
+    std::vector<uint32_t> deleted_row_ids = {2, 6, 10};
     delete_vector.add_dels_as_new_version(deleted_row_ids, kVersion, &new_delete_vector);
     builder.append_delvec(new_delete_vector, kSegmentId);
     ASSERT_OK(builder.finalize(next_id()));
@@ -1486,7 +3088,18 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
 
     // Before the fix this returned InvalidArgument:
     //   "metadata is null when loading delvec from file".
+    config::lake_pk_index_partial_eviction = true;
+    EXPECT_GT(reloaded_index->evict_sstable_read_state(std::numeric_limits<size_t>::max()), 0);
     ASSERT_OK(reloaded_index->apply_opcompaction(committed_metadata, txn_log.op_compaction()));
+    ASSERT_OK(reloaded_index->prepare_sstable_read_state(0, true));
+    std::vector<IndexValue> after(kNumKeys, IndexValue(NullIndexValue));
+    ASSERT_OK(reloaded_index->get(kNumKeys, key_slices.data(), after.data()));
+    for (int i = 0; i < kNumKeys; ++i) {
+        EXPECT_EQ(i == 1 || i == 3 || i == 5 ? IndexValue(NullIndexValue) : values[i], after[i]);
+    }
+    EXPECT_GT(reloaded_index->memory_stats().delvec_bytes, 0);
+    EXPECT_EQ(0, reloaded_index->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 }
 
 TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
@@ -1946,6 +3559,9 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
 // (loaded by init from metadata). This prevents duplicate ingest during tablet split
 // where the SST was already loaded from shared metadata with correct shared/fileset_id.
 TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
     using Key = uint64_t;
@@ -2000,6 +3616,9 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
     auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index2->init(tablet_metadata_ptr));
 
+    config::lake_pk_index_partial_eviction = true;
+    EXPECT_GT(index2->evict_sstable_read_state(std::numeric_limits<size_t>::max()), 0);
+
     // Now try to ingest the same SST again
     FileMetaPB sst_meta;
     sst_meta.set_name(sst_filename);
@@ -2010,6 +3629,14 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
     DelvecPagePB delvec_page;
     // ingest_sst should skip because the SST already exists in _sstable_filesets
     ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+    ASSERT_OK(index2->prepare_sstable_read_state(0, true));
+    Key lookup_key = 3;
+    Slice lookup_slice(reinterpret_cast<const uint8_t*>(&lookup_key), sizeof(Key));
+    IndexValue lookup_value(NullIndexValue);
+    ASSERT_OK(index2->get(1, &lookup_slice, &lookup_value));
+    EXPECT_EQ(IndexValue(6), lookup_value);
+    EXPECT_EQ(0, index2->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 
     // Commit and verify: the sstable_meta should have exactly the same SSTs as before,
     // with shared=true preserved (not overwritten by the duplicate ingest)
@@ -2037,6 +3664,9 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
 // the downstream tablet must persist it into sstable_meta so that remove_compacted_sst
 // and vacuum continue to see the file as shared.
 TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_sst) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
     using Key = uint64_t;
@@ -2048,6 +3678,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     // Phase 1: create an SST on disk by writing and flushing on a temporary index.
     std::string sst_filename;
     int64_t sst_filesize = 0;
+    PersistentIndexSstableRangePB sst_range;
     {
         auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
         ASSERT_OK(index->init(_tablet_metadata));
@@ -2077,7 +3708,10 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
         ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
         sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
         sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+        sst_range.CopyFrom(tablet_metadata_ptr->sstable_meta().sstables(0).range());
     }
+
+    config::lake_pk_index_partial_eviction = true;
 
     // Phase 2: build a fresh index backed by the empty _tablet_metadata (no SSTs loaded).
     // Now ingest the SST from phase 1 with shared=true (as cross-publish would do after
@@ -2090,9 +3724,16 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     sst_meta.set_size(sst_filesize);
     sst_meta.set_shared(true); // cross-publish marks this true
 
-    PersistentIndexSstableRangePB sst_range;
     DelvecPagePB delvec_page;
     ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+    ASSERT_OK(index2->prepare_sstable_read_state(0, true));
+    Key lookup_key = 3;
+    Slice lookup_slice(reinterpret_cast<const uint8_t*>(&lookup_key), sizeof(Key));
+    IndexValue lookup_value(NullIndexValue);
+    ASSERT_OK(index2->get(1, &lookup_slice, &lookup_value));
+    EXPECT_EQ(IndexValue(6), lookup_value);
+    EXPECT_EQ(0, index2->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 
     // Commit and verify the shared flag made it into sstable_meta.
     Tablet tablet(_tablet_mgr.get(), tablet_id);
