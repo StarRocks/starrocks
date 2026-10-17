@@ -21,6 +21,7 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "exprs/function_context.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -177,6 +178,20 @@ Status LocalPartitionTopnContext::compute_agg_state(Chunk* chunk, size_t partiti
         _pre_agg->_agg_functions[i]->update_batch_single_state(
                 _pre_agg->_agg_fn_ctxs[i], chunk->num_rows(), _pre_agg->_agg_input_raw_columns[i].data(),
                 _pre_agg->_managed_fn_states[partition_idx]->mutable_data() + _pre_agg->_agg_states_offsets[i]);
+    }
+
+    // update_batch_single_state() is one of the entry points that now report a decimal SUM()
+    // overflow through FunctionContext::set_error() instead of throwing, and the functions used
+    // here are resolved by get_window_function() above, so a decimal SUM() lands on
+    // DecimalSumAggregateFunction. PreAggState is a plain struct owning its own _agg_fn_ctxs; it
+    // does not derive from Aggregator, so Aggregator::check_has_error() never sees these contexts
+    // and the flag has to be polled here. Both callers of compute_agg_state()
+    // (push_one_chunk_to_partitioner() and transfer_all_chunks_from_partitioner_to_sorters())
+    // already wrap it in RETURN_IF_ERROR, so the status propagates without new plumbing.
+    for (const auto* agg_fn_ctx : _pre_agg->_agg_fn_ctxs) {
+        if (agg_fn_ctx->has_error()) {
+            return Status::RuntimeError(agg_fn_ctx->error_msg());
+        }
     }
 
     return Status::OK();
