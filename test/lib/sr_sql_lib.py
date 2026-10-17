@@ -786,6 +786,44 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
+    def assert_paimon_reader(self, query, table, expected):
+        """Assert FE scan routing using existing per-table EXTERNAL trace counters."""
+        counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
+                    "starrocks": "starRocksNativeReaderReadNum"}
+        if expected not in counters:
+            raise ValueError("expected reader must be native, jni, or starrocks")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        for reader, counter in counters.items():
+            key = "Paimon.metadata.reader.%s.%s" % (table, counter)
+            values = re.findall(re.escape(key) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader == expected) for value in values):
+                raise AssertionError("expected %s reader for %s; trace:\n%s" % (expected, table, trace))
+
+    def assert_paimon_native_profile(self, query):
+        """Verify an executed paimon-cpp scan, using the existing BE profile section."""
+        settings = self.execute_sql("SELECT @@enable_profile, @@enable_async_profile", True)
+        if not settings["status"]:
+            raise AssertionError("cannot read profile settings")
+        enabled, asynchronous = settings["result"][0]
+        try:
+            for sql in ("SET enable_profile = true", "SET enable_async_profile = false", query):
+                result = self.execute_sql(sql, True)
+                if not result["status"]:
+                    raise AssertionError("Paimon profile query failed: %s" % result.get("msg"))
+            query_id = self.execute_sql("SELECT last_query_id()", True)["result"][0][0]
+            result = self.execute_sql("SELECT get_query_profile('%s')" % query_id, True)
+            if not result["status"]:
+                raise AssertionError("cannot read Paimon query profile")
+            profile = "\n".join(str(value) for row in result["result"] for value in row)
+            if not re.search(r"^\s*-\s*PaimonNativeReader:", profile, re.MULTILINE):
+                raise AssertionError("executed query has no PaimonNativeReader profile section")
+        finally:
+            self.execute_sql("SET enable_profile = %s" % str(enabled).lower(), True)
+            self.execute_sql("SET enable_async_profile = %s" % str(asynchronous).lower(), True)
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """

@@ -1030,6 +1030,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
         for (auto i = 0; i < 2; ++i) {
+            if (conv_func->children[i] == nullptr) {
+                // A pruned MAP child still needs one placeholder per entry.
+                kv_columns[i]->append_default(col_offsets->get_data().back() - kv_size[i]);
+                continue;
+            }
             size_t child_array_start_idx;
             size_t child_array_num_elements;
             const auto* child_array = get_list_map_array_child<arrow::MapType>(
@@ -1294,6 +1299,11 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
 
         raw_type_desc->type = TYPE_MAP;
         for (auto i = 0; i < 2; i++) {
+            if (type_desc->children[i].is_unknown_type()) {
+                raw_type_desc->children.emplace_back(TYPE_UNKNOWN);
+                conv_func->children.emplace_back(nullptr);
+                continue;
+            }
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
             auto sub_at = i == 0 ? down_cast<const arrow::MapType*>(arrow_type)->key_type()
@@ -1312,7 +1322,7 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
                                 arrow_type->name(), type_to_string(lt)));
         }
         auto field_size = type_desc->children.size();
-        auto arrow_field_size = arrow_type->num_fields();
+        const auto* struct_type = down_cast<const arrow::StructType*>(arrow_type);
 
         raw_type_desc->type = TYPE_STRUCT;
         raw_type_desc->field_names = type_desc->field_names;
@@ -1320,7 +1330,9 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
         for (auto i = 0; i < field_size; i++) {
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
-            auto sub_at = i >= arrow_field_size ? arrow::null() : arrow_type->field(i)->type();
+            // Match the name used by the converter, not the position in a pruned slot.
+            auto field = struct_type->GetFieldByName(type_desc->field_names[i]);
+            auto sub_at = field == nullptr ? arrow::null() : field->type();
             RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
                                                             cf.get(), need_cast, strict_mode));
             raw_type_desc->children.emplace_back(std::move(type));
