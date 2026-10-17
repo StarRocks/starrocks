@@ -1462,3 +1462,12 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：Routine Load Kafka 操作的默认超时时长（未显式指定时使用）。
 - 引入版本：-
+
+### routine_load_arrow_max_decoded_bytes_per_message
+
+- 默认值：67108864
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：是
+- 描述：单条 Routine Load Apache Arrow IPC 流消息允许解码或解压的最大字节数（默认 64 MB）。当单条离散 Arrow IPC 消息在解压或批次解码期间超过该上限时，该消息会被拒绝并计入 `num_rows_filtered`，以保护 BE 内存。
+- 引入版本：-

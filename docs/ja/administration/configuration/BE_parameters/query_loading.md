@@ -1382,6 +1382,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: リクエストが明示的なタイムアウトを提供しない場合に、BEがPulsar関連のルーチンロード操作に使用するデフォルトのタイムアウト（秒）。具体的には、`PInternalServiceImplBase::get_pulsar_info`はこの値を1000倍して、Pulsarパーティションメタデータとバックログを取得するルーチンロードタスクエグゼキュータメソッドに渡されるミリ秒単位のタイムアウトを形成します。Pulsarの応答が遅いことを許容する代わりに障害検出が長くなる場合は値を増やし、遅いブローカーでより早く失敗させる場合は値を減らしてください。Kafkaに使用される`routine_load_kafka_timeout_second`に類似しています。
 - 導入バージョン: v3.2.0
 
+### routine_load_arrow_max_decoded_bytes_per_message
+
+- デフォルト: 67108864
+- 型: Int64
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 単一のRoutine Load Apache Arrow IPCストリームメッセージに対して許可されるデコードまたは解凍後の最大バイト数（デフォルトは64 MB）。個別のArrow IPCメッセージが解凍またはバッチデコード中にこの制限を超えた場合、BEメモリを保護するためにそのメッセージは拒否され、`num_rows_filtered`にカウントされます。
+- 導入バージョン: -
+
 ### streaming_load_thread_pool_idle_time_ms
 
 - デフォルト: 2000
