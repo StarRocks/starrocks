@@ -75,6 +75,7 @@ static bvar::LatencyRecorder g_put_tablet_metadata_latency("lake", "put_tablet_m
 static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
+static bvar::Adder<uint64_t> g_segment_cache_schema_reject_total("lake", "segment_cache_schema_reject_total");
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bundle_tablet_meta_cnt");
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
@@ -1964,14 +1965,31 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, tablet_schema, this);
         if (fill_meta_cache) {
+            TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_insert", &segment);
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
             if (auto cached_segment = _metacache->cache_segment_if_absent(cache_key, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
+        }
+    }
+    if (tablet_schema != nullptr) {
+        const auto cached_schema = segment->tablet_schema_share_ptr();
+        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
+            cached_schema->schema_version() != tablet_schema->schema_version() ||
+            cached_schema->num_columns() != tablet_schema->num_columns()) {
+            // A physical lookup hit can still be unusable for this request's schema.
+            // Count the final cache winner, including an insert-if-absent race.
+            g_segment_cache_schema_reject_total << 1;
+            // Check the final cache winner, including an insert_if_absent race. A logical schema
+            // used by another reader can omit columns this request still needs, even if the footer
+            // physically contains them. Do not replace that reader's entry or share its Segment.
+            auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
+            segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema),
+                                                /*tablet_manager=*/nullptr);
         }
     }
     // segment->open will read the footer, and it is time-consuming.

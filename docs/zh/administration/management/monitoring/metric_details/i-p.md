@@ -333,6 +333,24 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
+## `lake_segment_cache_hit_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找命中的次数。命中表示找到一个缓存候选对象，该对象仍可能因 schema 与请求不兼容而被拒绝复用。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_miss_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找未找到缓存条目的次数。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，缓存 segment 候选对象因 schema 缺失或与请求指定的 schema 不兼容而被拒绝复用的累积次数。每次拒绝都会打开私有 segment，保留共享缓存条目。也包括查找未命中后，并发缓存插入返回不兼容候选对象的情况，因此不能直接从查找命中数中扣除此值。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
 ## `lake_tablet_location_handoff_entries`
 
 - 单位：计数
