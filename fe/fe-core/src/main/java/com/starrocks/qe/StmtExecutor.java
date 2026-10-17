@@ -350,7 +350,7 @@ public class StmtExecutor {
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
-    private Coordinator coord = null;
+    private volatile Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     /**
@@ -362,7 +362,7 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     // Authoritative result-batch or forwarded statistics; coordinator snapshots are read on demand.
     private PQueryStatistics statisticsForAuditLog;
-    private List<StmtExecutor> subStmtExecutors;
+    private volatile List<StmtExecutor> subStmtExecutors;
     // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
     // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
     // moved past execution -- committing, for instance -- this flag is the only thing that keeps the
@@ -1835,11 +1835,16 @@ public class StmtExecutor {
         }
     }
 
-    public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
+    public synchronized void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
         if (subStmtExecutors == null) {
-            subStmtExecutors = Lists.newArrayList();
+            // Registration can overlap KILL QUERY on another thread.
+            subStmtExecutors = Lists.newCopyOnWriteArrayList();
         }
         subStmtExecutors.add(subStmtExecutor);
+        // cancel() may have traversed the old snapshot before this child was registered.
+        if (cancelled) {
+            subStmtExecutor.cancel("Parent query was cancelled");
+        }
     }
 
     public List<StmtExecutor> getSubStmtExecutors() {
@@ -4136,6 +4141,11 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                     new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
+            // Cancellation may arrive before this internal query has a coordinator to cancel.
+            if (context.isStatementCancelled()) {
+                coord.cancel("User cancelled");
+                return Pair.create(sqlResult, Status.CANCELLED);
+            }
             coord.exec();
             RowBatch batch;
             do {

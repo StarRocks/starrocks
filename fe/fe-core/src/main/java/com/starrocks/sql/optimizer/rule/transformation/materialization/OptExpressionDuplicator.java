@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -230,6 +231,13 @@ public class OptExpressionDuplicator {
             }
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
+            if (scanOperator instanceof LogicalPaimonScanOperator) {
+                LogicalPaimonScanOperator paimonScan = (LogicalPaimonScanOperator) scanOperator;
+                if (paimonScan.getIndexCondition() != null) {
+                    ((LogicalPaimonScanOperator.Builder) scanBuilder).setIndexCondition(
+                            paimonScan.getIndexCondition().rewriteColumnRefs(rewriter));
+                }
+            }
 
             // process HashDistributionSpec / RangeDistributionSpec
             if (scanOperator instanceof LogicalOlapScanOperator) {

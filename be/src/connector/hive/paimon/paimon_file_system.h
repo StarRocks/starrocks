@@ -18,13 +18,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cache/cache_options.h"
 #include "cache/scan/cache_input_stream.h"
+#include "connector/hive/paimon/paimon_query_allocator.h"
 
 namespace starrocks {
 
@@ -100,12 +103,21 @@ private:
 // scheme-specific behavior in StarRocks instead of configuring a second client.
 class PaimonFileSystem final : public paimon::FileSystem {
 public:
+    // Invoked on SDK worker threads too; the callback must be thread-safe and remain
+    // valid until this adapter and its input streams have been closed.
+    using QueryStateCheck = std::function<paimon::Status()>;
+
     // `FileSystem` must be qualified inside this class: the injected-class-name of the
     // base paimon::FileSystem shadows the starrocks::FileSystem forward declaration.
-    PaimonFileSystem(starrocks::FileSystem* file_system, const DataCacheOptions& datacache_options)
-            : _file_system(file_system),
+    PaimonFileSystem(starrocks::FileSystem* file_system, const DataCacheOptions& datacache_options,
+                     const QueryStateCheck& query_state_check = {},
+                     std::shared_ptr<MemTracker> query_mem_tracker = nullptr)
+            : _query_mem_tracker(std::move(query_mem_tracker)),
+              _file_system(file_system),
               _datacache_options(datacache_options),
-              _stats(std::make_shared<PaimonFileSystemStats>()) {}
+              _stats(std::allocate_shared<PaimonFileSystemStats>(
+                      PaimonQueryAllocator<PaimonFileSystemStats>(_query_mem_tracker))),
+              _query_state_check(query_state_check) {}
     ~PaimonFileSystem() override = default;
 
     paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path) const override;
@@ -125,9 +137,13 @@ public:
     PaimonFileSystemStats::Snapshot get_stats() const { return _stats->snapshot(); }
 
 private:
+    // Keep this first so it outlives retained streams/statistics during destruction.
+    // Production scanners also allocate this adapter with PaimonQueryAllocator.
+    std::shared_ptr<MemTracker> _query_mem_tracker;
     starrocks::FileSystem* _file_system;
     DataCacheOptions _datacache_options;
     std::shared_ptr<PaimonFileSystemStats> _stats;
+    QueryStateCheck _query_state_check;
 };
 
 } // namespace starrocks

@@ -100,6 +100,7 @@ import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.NoopSink;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonIndexScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
@@ -195,6 +196,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
@@ -1826,7 +1828,8 @@ public class PlanFragmentBuilder {
                     paimonScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
-                paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
+                paimonScanNode.setupScanRangeLocations(
+                        tupleDescriptor, node.getPredicate(), node.getLimit(), node.getIndexCondition());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
@@ -1843,6 +1846,46 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalIndexScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalIndexScanOperator node = (PhysicalIndexScanOperator) optExpression.getOp();
+            com.starrocks.connector.index.IndexTable indexTable =
+                    (com.starrocks.connector.index.IndexTable) node.getTable();
+
+            context.getDescTbl().addReferencedTable(indexTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(indexTable);
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            PaimonIndexScanNode scanNode =
+                    new PaimonIndexScanNode(context.getNextNodeId(), tupleDescriptor, indexTable);
+            scanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(scanNode, true);
+            List<ScalarOperator> residualPredicates = scanNode.setupScanRangeLocations(node.getPredicate());
+            scanNode.setDataCacheOptions(node.getDataCacheOptions());
+
+            tupleDescriptor.computeMemLayout();
+            registerScanNode(node, scanNode, context);
+
+            PlanNode planRoot = scanNode;
+            if (!residualPredicates.isEmpty()) {
+                List<Expr> predicates = residualPredicates.stream()
+                        .map(predicate -> ScalarOperatorToExpr.buildExecExpression(predicate,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                SelectNode selectNode = new SelectNode(context.getNextNodeId(), scanNode, predicates);
+                selectNode.computeStatistics(optExpression.getStatistics());
+                currentExecGroup.add(selectNode);
+                planRoot = selectNode;
+            }
+            // Result predicates run outside the specialized scanner, so its limit cannot run first.
+            planRoot.setLimit(node.getLimit());
+            PlanFragment fragment = new PlanFragment(
+                    context.getNextFragmentId(), planRoot, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

@@ -518,8 +518,18 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         paimon_avro_file_format
         paimon_blob_file_format
         paimon_file_index
-        paimon_global_index
-        paimon_local_file_system)
+        paimon_global_index)
+    # Lumina 0.3.1 is distributed as a Linux x86-64 binary. The paimon-cpp
+    # build does not configure an install $ORIGIN RUNPATH for its plugin, while
+    # a shim DT_RUNPATH is not inherited by indirect dependencies. Keep the runtime as a direct shim
+    # dependency so the shim's own $ORIGIN resolves the colocated liblumina.
+    # IMPORTED_NO_SONAME below forces a basename DT_NEEDED instead of embedding
+    # the absolute thirdparty build path.
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+            CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        list(APPEND PAIMON_CPP_PLUGINS paimon_lumina_index lumina)
+    endif()
+    list(APPEND PAIMON_CPP_PLUGINS paimon_local_file_system)
     foreach(PAIMON_PLUGIN ${PAIMON_CPP_PLUGINS})
         find_library(${PAIMON_PLUGIN}_SHARED_LIBRARY NAMES ${PAIMON_PLUGIN}
                      PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
@@ -530,6 +540,9 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         add_library(${PAIMON_PLUGIN} SHARED IMPORTED GLOBAL)
         set_target_properties(${PAIMON_PLUGIN} PROPERTIES
             IMPORTED_LOCATION ${${PAIMON_PLUGIN}_SHARED_LIBRARY})
+        if ("${PAIMON_PLUGIN}" STREQUAL "lumina")
+            set_target_properties(lumina PROPERTIES IMPORTED_NO_SONAME TRUE)
+        endif()
     endforeach()
     add_library(paimon SHARED IMPORTED GLOBAL)
     # Headers install under <prefix>/include/paimon/..., so consumers write

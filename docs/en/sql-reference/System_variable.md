@@ -1593,6 +1593,19 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.2
 
+### paimon_global_index_scan_stage
+
+Distributed scalar evaluation requires BTree to be the only global-index provider on each participating field. Unfiltered vector TopN requires Lumina to be the only provider on its vector field. Fields with mixed providers use SDK planning.
+
+Stage `2` runs internal queries as the caller and checks privileges on the `<table>$global_index` virtual table separately from the base table. Under native RBAC, `SELECT` on the base table alone does not authorize the virtual table; privileges must cover both objects (for example, `SELECT` on all tables in the database). If the caller can query the base table but the internal query is denied, planning falls back to the SDK without executing the distributed index scan. A caller without base-table access is still denied by the outer query. Direct virtual-table queries keep their normal authorization checks.
+
+Distributed evaluation also requires an unchanged key encoding throughout each field's schema history. Fields whose type changes alter key encoding, or whose schema history is missing, use SDK planning, even if their indexes have been rebuilt. Renames and nullability-only changes remain eligible. A schema change detected when a BE opens the index also causes SDK fallback; fallback does not guarantee that the SDK supports the schema evolution. Stage `0` disables SDK index evaluation during statistics planning as well, and stage `2` defers index evaluation until execution planning. Cancelling the outer query cancels its internal index query without starting fallback work.
+
+* **Description**: Controls Paimon Global Index evaluation. `0` disables both index discovery and SDK global-index evaluation for this query. `1` (default) uses Paimon Java SDK split planning. `2` enables distributed scalar BTree evaluation on BEs for data-evolution tables on the main branch, only when every required index completely covers the pinned snapshot. Primary-key tables, incremental scans, partially covered snapshots, unsupported predicates, and evaluation failures use SDK split planning instead. The original SQL filter is always retained. Stage `2` also enables unfiltered ANN candidate pruning for a single `ORDER BY ... LIMIT` expression using `approx_l2_distance` (ascending), `approx_cosine_similarity` or `approx_inner_product` (descending), with a finite constant vector matching a Lumina index's metric and dimension. The vector column and its elements must be non-nullable. The original score expression, TopN, limit and offset remain in the plan; ANN uses `LIMIT + OFFSET` candidates. Filtered ANN, additional sort keys, unsupported shapes and non-Lumina providers retain ordinary scan and TopN evaluation. Eligible scalar `WHERE` predicates can still use scalar indexes independently. Native Lumina execution requires a supported Linux x86-64 Paimon C++ runtime. Change the value with `SET`; no restart is required.
+* **Default**: 1
+* **Data type**: Integer
+* **Introduced in**: v4.2
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.
