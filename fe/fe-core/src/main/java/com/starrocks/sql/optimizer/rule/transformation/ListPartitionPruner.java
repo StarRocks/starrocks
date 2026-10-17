@@ -230,6 +230,9 @@ public class ListPartitionPruner implements PartitionPruner {
      * Only some simple conjuncts can be pruned
      */
     public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
+        if (!(conjunct instanceof CompoundPredicateOperator) && containsTruncatingCharCast(conjunct)) {
+            return false;
+        }
         if (conjunct instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator bop = conjunct.cast();
             return bop.getBinaryType().isEqualOrRange() && evaluateConstant(bop.getChild(1)) != null;
@@ -463,6 +466,12 @@ public class ListPartitionPruner implements PartitionPruner {
 
 
     private Pair<Set<Long>, Boolean> evalPartitionPruneFilter(ScalarOperator operator) {
+        // LiteralExprFactory does not implement explicit CHAR(N) truncation. Keep these predicates
+        // for execution instead of pruning with different values. Compound predicates recurse so
+        // an independent AND branch can still prune; an unevaluable OR branch retains all partitions.
+        if (!(operator instanceof CompoundPredicateOperator) && containsTruncatingCharCast(operator)) {
+            return Pair.create(null, true);
+        }
         Set<Long> matches = null;
         Boolean existNoEval = false;
         if (operator instanceof BinaryPredicateOperator) {
@@ -477,6 +486,13 @@ public class ListPartitionPruner implements PartitionPruner {
             existNoEval = matchesPair.second;
         }
         return matches == null ? Pair.create(null, true) : Pair.create(matches, existNoEval);
+    }
+
+    private static boolean containsTruncatingCharCast(ScalarOperator operator) {
+        if (operator instanceof CastOperator && ((CastOperator) operator).isTruncatingCharCast()) {
+            return true;
+        }
+        return operator.getChildren().stream().anyMatch(ListPartitionPruner::containsTruncatingCharCast);
     }
 
     private boolean isSinglePartitionColumn(ScalarOperator predicate) {
