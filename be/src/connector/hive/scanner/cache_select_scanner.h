@@ -24,6 +24,7 @@ namespace starrocks {
 // For textfile file, it will download files directly
 // For orc/parquet file, it will read and parse it's footer first, then according the column's offset and length, fetch it's data directly.
 // For iceberg v2 delete file, it will fetch entire file directly
+// For iceberg v3 deletion vectors, it fetches only the referenced blob ranges.
 class CacheSelectScanner final : public HdfsScanner {
 public:
     CacheSelectScanner() = default;
@@ -40,7 +41,7 @@ private:
     Status _fetch_textfile();
     Status _fetch_iceberg_delete_files();
     Status _create_input_stream();
-    Status _write_entire_file(const std::string& file_path, size_t file_size);
+    Status _write_file_range(const std::string& file_path, int64_t file_size, int64_t offset, int64_t length);
     static Status _write_disk_ranges(std::shared_ptr<SharedBufferedInputStream>& shared_input_stream,
                                      std::shared_ptr<CacheInputStream>& cache_input_stream,
                                      const std::vector<DiskRange>& disk_ranges);

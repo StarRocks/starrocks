@@ -401,6 +401,11 @@ struct TIcebergDeleteFile {
     // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
     // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
     5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Blob range for Iceberg v3 deletion vectors (file_format = PUFFIN, file_content = POSITION_DELETES).
+    // Byte offset of the deletion-vector-v1 blob within its container.
+    6: optional i64 content_offset
+    // Byte length of the deletion-vector-v1 blob, including its length prefix and checksum.
+    7: optional i64 content_size_in_bytes
 }
 
 struct TPaimonDeletionFile {

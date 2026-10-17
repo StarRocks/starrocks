@@ -16,16 +16,20 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/hive/scanner/hdfs_scanner_orc.h"
 #include "connector/hive/scanner/hdfs_scanner_parquet.h"
+#include "fs/fs_memory.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
@@ -153,5 +157,139 @@ TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
+}
+
+class CacheSelectScannerCacheTest : public CacheSelectScannerTest {
+public:
+    void SetUp() override {
+        CacheSelectScannerTest::SetUp();
+#ifdef WITH_STARCACHE
+        auto options = TestCacheUtils::create_simple_options(kBlockSize, 10 * MB);
+        DataCache::GetInstance()->set_block_cache(TestCacheUtils::create_cache(options));
+#else
+        GTEST_SKIP() << "Data cache requires StarCache";
+#endif
+    }
+
+    void TearDown() override {
+        DataCache::GetInstance()->set_block_cache(nullptr);
+        CacheSelectScannerTest::TearDown();
+    }
+
+protected:
+    static constexpr int64_t kBlockSize = 256 * 1024;
+};
+
+TEST_F(CacheSelectScannerCacheTest, DeletionVectorsWarmOnlyReferencedBlocks) {
+    MemoryFileSystem fs;
+    const std::string path = "/cache_select_shared.puffin";
+    const int64_t file_size = 4 * kBlockSize + 31;
+    ASSERT_OK(fs.create_file(path));
+    ASSERT_OK(fs.append_file(path, std::string(file_size, 'x')));
+
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(path);
+    delete_file.__set_file_format(THdfsFileFormat::PUFFIN);
+    delete_file.__set_length(file_size);
+    delete_file.__set_content_offset(kBlockSize + 7);
+    delete_file.__set_content_size_in_bytes(32);
+
+    HdfsScannerContext ctx;
+    ctx.fs = &fs;
+    ctx.datacache_options.enable_datacache = true;
+    ctx.datacache_options.enable_cache_select = true;
+    ctx.table_specific.iceberg_delete_files = {&delete_file};
+    CacheSelectScanner scanner;
+    scanner._scanner_ctx = &ctx;
+
+    ASSERT_OK(scanner._fetch_iceberg_delete_files());
+    EXPECT_EQ(kBlockSize, scanner._fs_stats.bytes_read);
+
+    // A second DV in the same block reuses the cache populated with the full file's key.
+    delete_file.__set_content_offset(kBlockSize + 39);
+    delete_file.__set_content_size_in_bytes(40);
+    ASSERT_OK(scanner._fetch_iceberg_delete_files());
+    EXPECT_EQ(kBlockSize, scanner._fs_stats.bytes_read);
+
+    delete_file.__set_content_offset(2 * kBlockSize + 3);
+    delete_file.__set_content_size_in_bytes(24);
+    ASSERT_OK(scanner._fetch_iceberg_delete_files());
+    EXPECT_EQ(2 * kBlockSize, scanner._fs_stats.bytes_read);
+
+    delete_file.__set_content_offset(4 * kBlockSize + 7);
+    ASSERT_OK(scanner._fetch_iceberg_delete_files());
+    EXPECT_EQ(2 * kBlockSize + 31, scanner._fs_stats.bytes_read);
+    EXPECT_EQ(4, scanner._app_stats.iceberg_delete_files_per_scan);
+
+    ASSIGN_OR_ABORT(auto file, fs.new_random_access_file(path));
+    auto input = std::make_shared<SharedBufferedInputStream>(file->stream(), path, file_size);
+    CacheInputStream reader(input, path, file_size, -1);
+    auto* cache = BlockCache::instance();
+    EXPECT_FALSE(cache->exist(reader._cache_key, 0, kBlockSize));
+    EXPECT_TRUE(cache->exist(reader._cache_key, kBlockSize, kBlockSize));
+    EXPECT_TRUE(cache->exist(reader._cache_key, 2 * kBlockSize, kBlockSize));
+    EXPECT_FALSE(cache->exist(reader._cache_key, 3 * kBlockSize, kBlockSize));
+    EXPECT_TRUE(cache->exist(reader._cache_key, 4 * kBlockSize, 31));
+}
+
+TEST_F(CacheSelectScannerCacheTest, PositionDeleteFilesWarmEntireFile) {
+    MemoryFileSystem fs;
+    const int64_t file_size = 2 * kBlockSize + 17;
+    for (const auto format : {THdfsFileFormat::PARQUET, THdfsFileFormat::ORC}) {
+        const std::string path = "/cache_select_delete_" + std::to_string(format);
+        ASSERT_OK(fs.create_file(path));
+        ASSERT_OK(fs.append_file(path, std::string(file_size, 'x')));
+
+        TIcebergDeleteFile delete_file;
+        delete_file.__set_full_path(path);
+        delete_file.__set_file_format(format);
+        delete_file.__set_length(file_size);
+
+        HdfsScannerContext ctx;
+        ctx.fs = &fs;
+        ctx.datacache_options.enable_datacache = true;
+        ctx.datacache_options.enable_cache_select = true;
+        ctx.table_specific.iceberg_delete_files = {&delete_file};
+        CacheSelectScanner scanner;
+        scanner._scanner_ctx = &ctx;
+
+        ASSERT_OK(scanner._fetch_iceberg_delete_files());
+        EXPECT_EQ(file_size, scanner._fs_stats.bytes_read);
+        EXPECT_EQ(1, scanner._app_stats.iceberg_delete_files_per_scan);
+        ASSERT_OK(scanner._fetch_iceberg_delete_files());
+        EXPECT_EQ(file_size, scanner._fs_stats.bytes_read);
+    }
+}
+
+TEST_F(CacheSelectScannerTest, RejectInvalidDeletionVectorRangesBeforeOpeningFile) {
+    TIcebergDeleteFile valid;
+    valid.__set_full_path("/missing.puffin");
+    valid.__set_file_format(THdfsFileFormat::PUFFIN);
+    valid.__set_length(100);
+    valid.__set_content_offset(10);
+    valid.__set_content_size_in_bytes(20);
+
+    std::vector<TIcebergDeleteFile> invalid(9, valid);
+    invalid[0].__isset.content_offset = false;
+    invalid[1].__isset.content_size_in_bytes = false;
+    invalid[2].__set_content_offset(-1);
+    invalid[3].__set_content_size_in_bytes(0);
+    invalid[4].__set_content_size_in_bytes(-1);
+    invalid[5].__set_length(-1);
+    invalid[6].__set_content_offset(101);
+    invalid[7].__set_content_offset(81);
+    invalid[8].__set_content_size_in_bytes(std::numeric_limits<int64_t>::max());
+
+    MemoryFileSystem fs;
+    HdfsScannerContext ctx;
+    ctx.fs = &fs;
+    CacheSelectScanner scanner;
+    scanner._scanner_ctx = &ctx;
+    for (const auto& delete_file : invalid) {
+        ctx.table_specific.iceberg_delete_files = {&delete_file};
+        EXPECT_TRUE(scanner._fetch_iceberg_delete_files().is_invalid_argument());
+    }
+    EXPECT_EQ(0, scanner._fs_stats.io_count);
+    EXPECT_EQ(0, scanner._app_stats.iceberg_delete_files_per_scan);
 }
 } // namespace starrocks
