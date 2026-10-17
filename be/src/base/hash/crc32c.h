@@ -69,4 +69,10 @@ inline uint32_t Unmask(uint32_t masked_crc) {
     return ((rot >> 17) | (rot << 15));
 }
 
+#ifdef BE_TEST
+// For unit testing only: override runtime ARM CRC32 capability detection.
+void SetArmCrc32DisabledForTesting(bool disabled);
+void ResetArmCrc32cCacheForTesting();
+#endif
+
 } // namespace starrocks::crc32c
