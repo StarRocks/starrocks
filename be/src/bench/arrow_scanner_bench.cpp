@@ -15,6 +15,7 @@
 #include <arrow/builder.h>
 #include <arrow/io/file.h>
 #include <arrow/ipc/writer.h>
+#include <arrow/util/compression.h>
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
 
@@ -40,7 +41,8 @@
 
 namespace starrocks {
 
-static void generate_test_files(const std::string& arrow_path, const std::string& json_path, int64_t num_rows) {
+static void generate_test_files(const std::string& arrow_path, const std::string& arrow_lz4_path,
+                                const std::string& json_path, int64_t num_rows) {
     // 1. Generate Arrow IPC Stream File
     arrow::Int32Builder int_builder;
     arrow::StringBuilder str_builder;
@@ -81,7 +83,31 @@ static void generate_test_files(const std::string& arrow_path, const std::string
     (void)writer->Close();
     (void)out_file->Close();
 
-    // 2. Generate Line-delimited JSON (NDJSON) File
+    // 2. Generate LZ4-Frame Compressed Arrow IPC Stream File
+    arrow::ipc::IpcWriteOptions lz4_write_options = arrow::ipc::IpcWriteOptions::Defaults();
+    auto lz4_codec_res = arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+    if (!lz4_codec_res.ok()) {
+        LOG(FATAL) << "Failed to create LZ4_FRAME codec: " << lz4_codec_res.status().ToString();
+    }
+    lz4_write_options.codec = std::move(lz4_codec_res).ValueOrDie();
+
+    auto lz4_out_file_res = arrow::io::FileOutputStream::Open(arrow_lz4_path);
+    if (!lz4_out_file_res.ok()) {
+        LOG(FATAL) << "Failed to open LZ4 Arrow stream file: " << lz4_out_file_res.status().ToString();
+    }
+    auto lz4_out_file = lz4_out_file_res.ValueOrDie();
+
+    auto lz4_writer_res = arrow::ipc::MakeStreamWriter(lz4_out_file, schema, lz4_write_options);
+    if (!lz4_writer_res.ok()) {
+        LOG(FATAL) << "Failed to create LZ4 Arrow stream writer: " << lz4_writer_res.status().ToString();
+    }
+    auto lz4_writer = lz4_writer_res.ValueOrDie();
+
+    (void)lz4_writer->WriteRecordBatch(*batch);
+    (void)lz4_writer->Close();
+    (void)lz4_out_file->Close();
+
+    // 3. Generate Line-delimited JSON (NDJSON) File
     std::ofstream json_file(json_path);
     if (!json_file.is_open()) {
         LOG(FATAL) << "Failed to open JSON file for writing: " << json_path;
@@ -197,6 +223,7 @@ static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& 
 }
 
 static std::string g_arrow_file_path;
+static std::string g_arrow_lz4_file_path;
 static std::string g_json_file_path;
 static constexpr int64_t kNumRows = 100000;
 
@@ -210,6 +237,15 @@ static void setup_global_files() {
         g_arrow_file_path = "/tmp/arrow_bench.arrow";
     }
 
+    char arrow_lz4_pattern[] = "/tmp/arrow_lz4_bench_XXXXXX.arrow";
+    int fd_arrow_lz4 = mkstemps(arrow_lz4_pattern, 6);
+    if (fd_arrow_lz4 != -1) {
+        close(fd_arrow_lz4);
+        g_arrow_lz4_file_path = arrow_lz4_pattern;
+    } else {
+        g_arrow_lz4_file_path = "/tmp/arrow_lz4_bench.arrow";
+    }
+
     char json_pattern[] = "/tmp/json_bench_XXXXXX.json";
     int fd_json = mkstemps(json_pattern, 5);
     if (fd_json != -1) {
@@ -219,12 +255,13 @@ static void setup_global_files() {
         g_json_file_path = "/tmp/json_bench.json";
     }
 
-    generate_test_files(g_arrow_file_path, g_json_file_path, kNumRows);
+    generate_test_files(g_arrow_file_path, g_arrow_lz4_file_path, g_json_file_path, kNumRows);
 }
 
 static void cleanup_global_files() {
     std::error_code ec;
     std::filesystem::remove(g_arrow_file_path, ec);
+    std::filesystem::remove(g_arrow_lz4_file_path, ec);
     std::filesystem::remove(g_json_file_path, ec);
 }
 
@@ -279,8 +316,8 @@ public:
     bool is_discrete_message_pipe() const override { return true; }
 };
 
-static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
-    std::ifstream file(g_arrow_file_path, std::ios::binary | std::ios::ate);
+static void run_arrow_routine_load_pipe_benchmark(benchmark::State& state, const std::string& arrow_file_path) {
+    std::ifstream file(arrow_file_path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
         state.SkipWithError("Failed to open Arrow bench stream file");
         return;
@@ -384,6 +421,14 @@ static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
+static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
+    run_arrow_routine_load_pipe_benchmark(state, g_arrow_file_path);
+}
+
+static void BM_ArrowRoutineLoadPipeScannerLz4(benchmark::State& state) {
+    run_arrow_routine_load_pipe_benchmark(state, g_arrow_lz4_file_path);
+}
+
 static void BM_JsonScanner(benchmark::State& state) {
     ObjectPool pool;
     TQueryOptions query_options;
@@ -432,6 +477,7 @@ static void BM_JsonScanner(benchmark::State& state) {
 BENCHMARK(BM_JsonScanner)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ArrowScanner)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ArrowRoutineLoadPipeScanner)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_ArrowRoutineLoadPipeScannerLz4)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 
