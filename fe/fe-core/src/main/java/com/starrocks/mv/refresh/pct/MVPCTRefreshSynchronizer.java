@@ -188,7 +188,7 @@ public final class MVPCTRefreshSynchronizer {
             // Pinned mode reads from a pinned snapshot — drift check is irrelevant there.
             if (!processor.isPinnedMode()) {
                 MaterializedView mv = processor.getMv();
-                MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+                MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
                 if (!mv.isActive()) {
                     throw new DmlException(String.format(
                             "Materialized view: %s/%d is not active due to %s.",
