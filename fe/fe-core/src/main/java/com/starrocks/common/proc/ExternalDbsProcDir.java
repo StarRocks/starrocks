@@ -46,7 +46,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
         result.setNames(TITLE_NAMES);
 
         List<String> dbNames;
-        dbNames = metadataMgr.listDbNames(new ConnectContext(), catalogName);
+        dbNames = metadataMgr.listDbNames(ConnectContext.get(), catalogName);
 
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
@@ -59,7 +59,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
         if (Config.enable_check_db_state) {
             // if a large number of db under the catalog, this operation is very slow
             dbNames = dbNames.stream().filter(dbName -> {
-                Database db = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
+                Database db = metadataMgr.getDb(ConnectContext.get(), catalogName, dbName);
                 return db != null;
             }).collect(Collectors.toList());
         }
@@ -80,7 +80,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String name) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, name);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(ConnectContext.get(), catalogName, name);
         if (db == null) {
             throw new SemanticException("Database[" + name + "] does not exist.");
         }
