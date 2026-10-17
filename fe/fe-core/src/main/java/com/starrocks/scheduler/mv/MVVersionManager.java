@@ -100,14 +100,18 @@ public class MVVersionManager {
                 maxChangedTableRefreshTime = refreshTime;
             }
         }
-        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        // A run that touches a base table without refreshing any of its partitions yields 0 here; keep the
+        // previous data timestamp rather than reporting the MV as never refreshed.
+        if (maxChangedTableRefreshTime > 0) {
+            mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        }
         // Confirmed as of the batch's first-run start (the pinned-snapshot moment), only once the final run
         // completes. Monotonic (>) so it never moves backwards; piggybacks on the version-change edit log below.
         long freshnessBaseline = freshnessBaselineTime();
         if (isFinalBatchRun && freshnessBaseline > mvRefreshScheme.getLastFreshnessConfirmedAt()) {
             mvRefreshScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-        final long lastRefreshTime = maxChangedTableRefreshTime;
+        final long lastRefreshTime = mvRefreshScheme.getLastRefreshTime();
         persistRefreshScheme(() -> updateEditLogAfterVersionMetaChanged(mv, lastRefreshTime));
 
         // trigger timeless info event since mv version changed

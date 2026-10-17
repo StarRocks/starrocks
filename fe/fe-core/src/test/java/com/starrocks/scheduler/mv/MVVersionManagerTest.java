@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
 
 import static org.mockito.Mockito.mock;
@@ -61,6 +62,39 @@ public class MVVersionManagerTest {
             public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
             }
         };
+    }
+
+    // A base table can be processed by a run without any of its partitions being refreshed: the run is not
+    // skipped (isOlapTableRefreshed is set unconditionally), but the derived max is 0.
+    @Test
+    public void updateMVVersionInfoKeepsLastRefreshTimeWhenNoPartitionWasRefreshed() {
+        long absorbedRefreshTime = 1767225600000L;
+        MaterializedView mv = buildMv();
+        mv.getRefreshScheme().setLastRefreshTime(absorbedRefreshTime);
+        AtomicLong journaledRefreshTime = new AtomicLong(-1L);
+        new MockUp<MVVersionManager>() {
+            @Mock
+            public void updateEditLogAfterVersionMetaChanged(MaterializedView ignored, long maxChangedTableRefreshTime) {
+                journaledRefreshTime.set(maxChangedTableRefreshTime);
+            }
+        };
+
+        OlapTable baseTable = mock(OlapTable.class);
+        when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(baseTable.isOlapOrCloudNativeTable()).thenReturn(true);
+        when(baseTable.getId()).thenReturn(2000L);
+        when(baseTable.getVisiblePartitionNames()).thenReturn(Set.of());
+        TableSnapshotInfo snapshot = new TableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
+        Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext());
+        manager.updateMVVersionInfo(Map.of(2000L, snapshot), Set.of(), Set.of(2000L),
+                Map.of(), Map.of(), true);
+
+        Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
+                "a run that refreshed no partition must not report the MV as never refreshed");
+        Assertions.assertEquals(absorbedRefreshTime, journaledRefreshTime.get(),
+                "updateEditLogAfterVersionMetaChanged sets lastRefreshTime to the value it journals");
     }
 
     // PartitionUtil.getPartitionNames reaches a connector table's remote metadata, so it must not run under the
