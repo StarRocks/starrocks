@@ -86,6 +86,79 @@ class TestBuildParallelism(unittest.TestCase):
         linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
         self.assertEqual(linker_type, "legacy")
 
+    def test_detect_linker_type_cmake_starrocks_gcc_home(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            g++() { echo "11.2.0"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd, {"STARROCKS_LINKER": "", "STARROCKS_GCC_HOME": tmpdir, "CXX": ""}
+            )
+            self.assertEqual(linker_type, "modern")
+
+    def test_detect_linker_type_cmake_starrocks_gcc_home_older_version(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            g++() { echo "14.3.0"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd, {"STARROCKS_LINKER": "", "STARROCKS_GCC_HOME": tmpdir, "CXX": ""}
+            )
+            self.assertEqual(linker_type, "legacy")
+
+    def test_detect_linker_type_cxx_overrides_starrocks_gcc_home(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            mock_cxx = os.path.join(tmpdir, "custom-cxx")
+            with open(mock_cxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_cxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "STARROCKS_GCC_HOME": tmpdir,
+                    "CXX": mock_cxx,
+                },
+            )
+            self.assertEqual(linker_type, "modern")
+
     def test_detect_total_ram_gb_unreadable_fallback(self):
         cmd = """
         starrocks_is_darwin() { return 1; }
@@ -220,6 +293,94 @@ class TestBuildParallelism(unittest.TestCase):
         """
         p = self.run_bash(cmd, {"PARALLEL": ""})
         self.assertEqual(p, "1")
+
+    def test_detect_parallelism_cgroup_v2_cfs_quota(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_max_file = os.path.join(tmpdir, "cpu.max")
+            with open(cpu_max_file, "w") as f:
+                f.write("200000 100000\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 64; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "2")
+
+    def test_detect_parallelism_cgroup_v2_unconstrained(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_max_file = os.path.join(tmpdir, "cpu.max")
+            with open(cpu_max_file, "w") as f:
+                f.write("max 100000\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 64; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "64")
+
+    def test_detect_parallelism_cgroup_v1_cfs_quota(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_dir = os.path.join(tmpdir, "cpu")
+            os.makedirs(cpu_dir, exist_ok=True)
+            with open(os.path.join(cpu_dir, "cpu.cfs_quota_us"), "w") as f:
+                f.write("400000\n")
+            with open(os.path.join(cpu_dir, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 32; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "4")
+
+    def test_detect_parallelism_cgroup_v1_unconstrained(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_dir = os.path.join(tmpdir, "cpu")
+            os.makedirs(cpu_dir, exist_ok=True)
+            with open(os.path.join(cpu_dir, "cpu.cfs_quota_us"), "w") as f:
+                f.write("-1\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 32; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "32")
+
+    def test_detect_parallelism_cgroup_sub_core_clamp(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_max_file = os.path.join(tmpdir, "cpu.max")
+            with open(cpu_max_file, "w") as f:
+                f.write("50000 100000\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 16; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "1")
+
+    def test_detect_parallelism_cgroup_higher_than_host(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_max_file = os.path.join(tmpdir, "cpu.max")
+            with open(cpu_max_file, "w") as f:
+                f.write("1600000 100000\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 4; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
+            self.assertEqual(p, "4")
 
     def test_run_be_ut_detect_parallelism(self):
         # 1. Verify -j is documented in run-be-ut.sh help
