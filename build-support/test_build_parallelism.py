@@ -66,18 +66,32 @@ class TestBuildParallelism(unittest.TestCase):
         cmd = """
         starrocks_is_darwin() { return 1; }
         uname() { echo "x86_64"; }
-        gcc() { echo "14.3.0"; }
+        g++() { echo "14.3.0"; }
         ldd() { echo "ldd (GNU libc) 2.17"; }
         starrocks_detect_linker_type
         """
         linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
         self.assertEqual(linker_type, "modern")
 
+    def test_detect_linker_type_cmake_gold_fallback_cxx_mismatch(self):
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        gcc() { echo "14.3.0"; }
+        g++() { echo "13.2.0"; }
+        ldd() { echo "ldd (GNU libc) 2.17"; }
+        ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+        starrocks_detect_linker_type
+        """
+        linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
+        self.assertEqual(linker_type, "legacy")
+
     def test_detect_total_ram_gb_unreadable_fallback(self):
         cmd = """
         starrocks_is_darwin() { return 1; }
-        # simulate unreadable /proc/meminfo by overriding the path check in a mock
+        # simulate unreadable /proc/meminfo and unavailable cgroup limits
         awk() { return 1; }
+        cat() { return 1; }
         starrocks_detect_total_ram_gb
         """
         ram = self.run_bash(cmd)
@@ -238,11 +252,11 @@ class TestBuildParallelism(unittest.TestCase):
         . "${STARROCKS_HOME}/build-support/build_helpers.sh"
         starrocks_detect_ut_parallelism() { echo 42; }
         if starrocks_is_darwin; then
-            PARALLEL=999
+            starrocks_setup_darwin_build_env >/dev/null 2>&1 || true
         else
-            . "${STARROCKS_HOME}/env.sh" >/dev/null 2>&1
-            PARALLEL=$(starrocks_detect_ut_parallelism)
+            . "${STARROCKS_HOME}/env.sh" >/dev/null 2>&1 || true
         fi
+        PARALLEL=$(starrocks_detect_ut_parallelism)
         echo "INIT_PARALLEL=${PARALLEL}"
         """
         out_init = self.run_bash(cmd_init)
