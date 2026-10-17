@@ -509,6 +509,15 @@ CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
+// Column-mode partial update: partition the update rows by source segment into a local spill file
+// once per column batch, so every update file is read from object storage once instead of once per
+// source segment. false restores the per-segment re-read.
+CONF_mBool(lake_pk_column_mode_spill_update_rows, "true");
+// Memory the partition pass may buffer before flushing to the spill file.
+CONF_mInt64(lake_pk_column_mode_spill_buffer_bytes, "67108864"); // 64MB
+// Directory of the spill files. Empty: the first local storage path, or the system temp directory
+// when the node has no local storage path.
+CONF_String(lake_pk_column_mode_spill_dir, "");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");

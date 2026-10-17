@@ -15,8 +15,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <random>
+#include <set>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -370,6 +372,185 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 // This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
 // records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
 // segment is flagged shared.
+// Many update files, each touching rows of every source segment. The update rows are partitioned by
+// source segment into a local spill file, so every update file is read once; the result must equal
+// the per-segment re-read path, whether the partition pass flushes once per update file or on every
+// chunk, and the spill file must be gone when the publish is done.
+TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads update files while generating DCGs";
+    }
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    const int kSourceSegments = 4;
+    for (int shift = 0; shift < kSourceSegments; shift++) {
+        auto chunk = generate_data(kChunkSize, shift, false, 3);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+    ASSERT_EQ(kChunkSize * kSourceSegments,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Keys k, k + 4, k + 8, ... so that every update file carries rows of every source segment.
+    auto strided_update = [&](int slice, int update_ratio) {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = slice + i * kSourceSegments;
+            v1[i] = v0[i] * update_ratio;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill";
+    const std::string old_spill_dir = config::lake_pk_column_mode_spill_dir;
+    config::lake_pk_column_mode_spill_dir = spill_dir;
+    DeferOp restore_dir([&]() { config::lake_pk_column_mode_spill_dir = old_spill_dir; });
+
+    std::atomic<int> upt_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read",
+                                          [&](void*) { upt_reads++; });
+    // A flush must drop its per-segment buffers, not just clear them: a reset chunk keeps its capacity
+    // for the rest of the partition pass while the tracker already says the bytes are gone.
+    std::atomic<int> flushes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", [&](void* arg) {
+        flushes++;
+        EXPECT_EQ(0, *static_cast<size_t*>(arg)) << "flushed buffers retained after the flush";
+    });
+    // Every spill record a segment task reads back is charged to the update tracker while it is alive.
+    std::atomic<int> charged_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
+                                          [&](void* arg) {
+                                              charged_reads++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_update_mgr->mem_tracker()->consumption(), bytes);
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto run_update = [&](int update_ratio) {
+        // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
+        ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
+        upt_reads = 0;
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (int slice = 0; slice < kSourceSegments; slice++) {
+            auto chunk = strided_update(slice, update_ratio);
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [update_ratio](int c0, int c1, int c2) {
+                      return (c0 * update_ratio == c1) && (c0 * 4 == c2);
+                  }));
+    };
+
+    // Spill on: each update file is read exactly once, whatever the number of source segments.
+    const int64_t tracker_before_spill = _update_mgr->mem_tracker()->consumption();
+    run_update(5);
+    EXPECT_EQ(kSourceSegments, upt_reads.load());
+    EXPECT_GT(flushes.load(), 0);
+    EXPECT_GT(charged_reads.load(), 0);
+    // Flushing on every chunk splits a segment's rows of one update file over several records.
+    {
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        flushes = 0;
+        run_update(7);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(flushes.load(), kSourceSegments);
+    }
+    // Everything the spill charged (buffers, records read back) was released again; other caches
+    // may legitimately keep bytes on this tracker, so compare against the pre-spill baseline.
+    EXPECT_EQ(tracker_before_spill, _update_mgr->mem_tracker()->consumption());
+    // The spill files are removed with the handler.
+    std::set<std::string> leftovers;
+    if (fs::path_exist(spill_dir)) {
+        ASSERT_OK(FileSystem::Default()->iterate_dir(spill_dir, [&](std::string_view name) {
+            leftovers.insert(std::string(name));
+            return true;
+        }));
+    }
+    EXPECT_TRUE(leftovers.empty()) << *leftovers.begin();
+
+    // Spill off: the previous per-segment re-read path, same result.
+    {
+        ConfigResetGuard<bool> spill_guard(&config::lake_pk_column_mode_spill_update_rows, false);
+        run_update(9);
+        EXPECT_EQ(0, upt_reads.load());
+    }
+    EXPECT_EQ(0, _update_mgr->update_state_mem_tracker()->consumption());
+}
+
+TEST_P(LakePartialUpdateTest, test_column_mode_sweeps_leftover_spill_files) {
+    // A CN that dies between writing a spill file and releasing it leaves the file behind, and
+    // nothing reads it once the process is gone. The sweep run at startup removes exactly those
+    // files and leaves everything else in the directory alone.
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill_leftover";
+    const std::string old_spill_dir = config::lake_pk_column_mode_spill_dir;
+    config::lake_pk_column_mode_spill_dir = spill_dir;
+    DeferOp restore_dir([&]() { config::lake_pk_column_mode_spill_dir = old_spill_dir; });
+
+    // No directory yet: nothing to do, and nothing gets created.
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+    EXPECT_FALSE(fs::path_exist(spill_dir));
+
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(spill_dir));
+    auto touch = [&](const std::string& name) {
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(spill_dir + "/" + name));
+        ASSERT_OK(file->append("x"));
+        ASSERT_OK(file->close());
+    };
+    touch("pcu_10_20_0.spill");
+    touch("pcu_10_21_3.spill");
+    touch("keep.txt");
+    touch("pcu_notes.spill");
+
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+
+    std::set<std::string> left;
+    ASSERT_OK(FileSystem::Default()->iterate_dir(spill_dir, [&](std::string_view name) {
+        left.insert(std::string(name));
+        return true;
+    }));
+    EXPECT_EQ((std::set<std::string>{"keep.txt", "pcu_notes.spill"}), left);
+}
+
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.
