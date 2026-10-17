@@ -49,9 +49,11 @@
 #include "common/statusor.h"
 #include "common/storage_define.h"
 #include "compute_env/sorting/merge.h"
+#include "compute_env/spill/input_stream_internal.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
 #include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/restore_task.h"
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spill_observable.h"
 #include "compute_env/spill/spiller.h"
@@ -280,6 +282,72 @@ public:
     std::atomic_int64_t spill_bytes;
     SpillProcessMetrics metrics;
 };
+
+TEST_F(SpillTest, buffered_prefetch_contention_yields_restore_task) {
+    class BlockingInputStream final : public spill::SpillInputStream {
+    public:
+        BlockingInputStream(std::promise<void>* entered, std::shared_future<void> resume)
+                : _entered(entered), _resume(std::move(resume)) {}
+
+        StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext&, spill::SerdeContext&) override {
+            if (_read_once) {
+                return Status::EndOfFile("eos");
+            }
+            _read_once = true;
+            _entered->set_value();
+            _resume.wait();
+            return std::make_unique<Chunk>();
+        }
+
+        bool is_ready() override { return false; }
+        void close() override {}
+
+    private:
+        std::promise<void>* _entered;
+        std::shared_future<void> _resume;
+        bool _read_once = false;
+    };
+
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions options;
+    options.block_manager = dummy_block_mgr.get();
+    auto spiller = factory->create(options);
+    spiller->set_metrics(metrics);
+
+    std::promise<void> entered;
+    auto entered_future = entered.get_future();
+    std::promise<void> resume;
+    auto input = std::make_shared<BlockingInputStream>(&entered, resume.get_future().share());
+    auto buffered = spill::detail::make_buffered_input_stream(2, input, spiller.get());
+    spill::YieldableRestoreTask task(buffered);
+    spill::SerdeContext owner_serde;
+    workgroup::YieldContext owner_ctx;
+    Status owner_status = Status::OK();
+    std::jthread owner([&] { owner_status = buffered->prefetch(owner_ctx, owner_serde); });
+
+    const bool owner_entered = entered_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+    spill::SerdeContext contender_serde;
+    workgroup::YieldContext contender_ctx;
+    Status contender_status = Status::InternalError("owner did not enter get_next");
+    if (owner_entered) {
+        contender_status = task.do_read(contender_ctx, contender_serde);
+    }
+    resume.set_value();
+    owner.join();
+
+    ASSERT_TRUE(owner_entered);
+    ASSERT_OK(owner_status);
+    ASSERT_OK(contender_status);
+    EXPECT_TRUE(contender_ctx.need_yield);
+    EXPECT_EQ(0, contender_ctx.yield_point);
+    EXPECT_FALSE(buffered->eof());
+
+    auto chunk = buffered->get_next(contender_ctx, contender_serde);
+    ASSERT_OK(chunk.status());
+    contender_ctx.need_yield = false;
+    EXPECT_TRUE(task.do_read(contender_ctx, contender_serde).is_end_of_file());
+    EXPECT_TRUE(buffered->eof());
+}
 
 struct SpillTestContext {
     ObjectPool pool;
