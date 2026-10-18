@@ -45,6 +45,11 @@
 
 namespace starrocks {
 
+// Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
+bool KafkaConsumerPipe::is_discrete_message_pipe() const {
+    return true;
+}
+
 int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic) {
     static const std::string kSuffix = "-partition-";
     auto pos = message_topic.rfind(kSuffix);

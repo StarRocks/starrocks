@@ -39,78 +39,20 @@ public:
     using arrow::MemoryPool::Free;
     using arrow::MemoryPool::Reallocate;
 
-    explicit ArrowBoundedMemoryPool(int64_t max_bytes, arrow::MemoryPool* delegate = arrow::default_memory_pool())
-            : _max_bytes(max_bytes), _delegate(delegate) {}
+    explicit ArrowBoundedMemoryPool(int64_t max_bytes, arrow::MemoryPool* delegate = arrow::default_memory_pool());
+    ~ArrowBoundedMemoryPool() override;
 
-    ~ArrowBoundedMemoryPool() override = default;
-
-    arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override {
-        if (size < 0) {
-            return arrow::Status::Invalid("Negative Arrow allocation size: ", size);
-        }
-        int64_t current = _bytes_allocated.fetch_add(size, std::memory_order_relaxed) + size;
-        if (_max_bytes > 0 && current > _max_bytes) {
-            _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
-            return arrow::Status::OutOfMemory("Arrow IPC decoded allocation of ", size,
-                                              " bytes exceeds per-message limit of ", _max_bytes,
-                                              " bytes (current allocated: ", current - size, ")");
-        }
-        arrow::Status st = _delegate->Allocate(size, alignment, out);
-        if (!st.ok()) {
-            _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
-            return st;
-        }
-        _total_bytes_allocated.fetch_add(size, std::memory_order_relaxed);
-        _num_allocations.fetch_add(1, std::memory_order_relaxed);
-        update_peak(current);
-        return arrow::Status::OK();
-    }
-
-    arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override {
-        if (new_size < 0) {
-            return arrow::Status::Invalid("Negative Arrow reallocation size: ", new_size);
-        }
-        int64_t delta = new_size - old_size;
-        int64_t current = _bytes_allocated.fetch_add(delta, std::memory_order_relaxed) + delta;
-        if (_max_bytes > 0 && delta > 0 && current > _max_bytes) {
-            _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
-            return arrow::Status::OutOfMemory("Arrow IPC decoded reallocation of ", new_size,
-                                              " bytes exceeds per-message limit of ", _max_bytes, " bytes");
-        }
-        arrow::Status st = _delegate->Reallocate(old_size, new_size, alignment, ptr);
-        if (!st.ok()) {
-            _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
-            return st;
-        }
-        if (delta > 0) {
-            _total_bytes_allocated.fetch_add(delta, std::memory_order_relaxed);
-            update_peak(current);
-        }
-        return arrow::Status::OK();
-    }
-
-    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override {
-        _delegate->Free(buffer, size, alignment);
-        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
-    }
-
-    int64_t bytes_allocated() const override { return _bytes_allocated.load(std::memory_order_relaxed); }
-
-    int64_t max_memory() const override { return _peak_bytes.load(std::memory_order_relaxed); }
-
-    int64_t total_bytes_allocated() const override { return _total_bytes_allocated.load(std::memory_order_relaxed); }
-
-    int64_t num_allocations() const override { return _num_allocations.load(std::memory_order_relaxed); }
-
-    std::string backend_name() const override { return "starrocks_bounded_arrow_pool"; }
+    arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override;
+    arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override;
+    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override;
+    int64_t bytes_allocated() const override;
+    int64_t max_memory() const override;
+    int64_t total_bytes_allocated() const override;
+    int64_t num_allocations() const override;
+    std::string backend_name() const override;
 
 private:
-    void update_peak(int64_t current) {
-        int64_t prev_peak = _peak_bytes.load(std::memory_order_relaxed);
-        while (current > prev_peak &&
-               !_peak_bytes.compare_exchange_weak(prev_peak, current, std::memory_order_relaxed)) {
-        }
-    }
+    void update_peak(int64_t current);
 
     const int64_t _max_bytes;
     arrow::MemoryPool* _delegate;

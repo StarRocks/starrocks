@@ -54,7 +54,7 @@ public:
 
     ~KafkaConsumerPipe() override = default;
 
-    bool is_discrete_message_pipe() const override { return true; }
+    bool is_discrete_message_pipe() const override;
 
     // CSV path: one buffer may hold many rows separated by row_delimiter. No source metadata is
     // carried here (a CSV message can expand to N rows, so message-level meta is ambiguous).
