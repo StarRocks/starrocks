@@ -2517,6 +2517,12 @@ TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) 
     EXPECT_EQ(unwrap_arrow_dictionary_type(nested_dict_list_type.get())->id(), arrow::Type::LIST);
 
     SlotDescriptor int_slot(1, "col_int", TypeDescriptor(TYPE_INT));
+    EXPECT_TRUE(validate_arrow_column_type(nullptr, TypeDescriptor::from_logical_type(TYPE_INT), "col_null")
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(nullptr, &int_slot).is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), static_cast<const SlotDescriptor*>(nullptr))
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), nullptr).is_invalid_argument());
     Status st1 = validate_arrow_column_type(dict_struct_type.get(), &int_slot);
     EXPECT_TRUE(st1.is_invalid_argument()) << st1.to_string();
 
@@ -2525,6 +2531,10 @@ TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) 
 
     Status st3 = validate_arrow_column_type(struct_type.get(), &int_slot);
     EXPECT_TRUE(st3.is_invalid_argument()) << st3.to_string();
+    EXPECT_TRUE(validate_arrow_column_type(arrow::large_list(arrow::int32()).get(), &int_slot).is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::fixed_size_list(arrow::int32(), 2).get(), &int_slot)
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), &int_slot).ok());
 
     SlotDescriptor json_slot(2, "col_json", TypeDescriptor(TYPE_JSON));
     EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &json_slot).ok());

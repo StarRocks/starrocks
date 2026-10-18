@@ -57,6 +57,10 @@ TEST_F(KafkaConsumerPipeTest, append_read) {
     ASSERT_TRUE(k_pipe.is_discrete_message_pipe());
     StreamLoadPipe base_pipe;
     ASSERT_FALSE(base_pipe.is_discrete_message_pipe());
+    std::shared_ptr<StreamLoadPipe> poly_k_pipe = std::make_shared<KafkaConsumerPipe>(1024 * 1024, 64 * 1024);
+    ASSERT_TRUE(poly_k_pipe->is_discrete_message_pipe());
+    std::shared_ptr<StreamLoadPipe> poly_base_pipe = std::make_shared<StreamLoadPipe>();
+    ASSERT_FALSE(poly_base_pipe->is_discrete_message_pipe());
 
     std::string msg1 = "i have a dream";
     std::string msg2 = "This is from kafka";
