@@ -18,7 +18,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+import com.google.common.base.Throwables;
+>>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -327,8 +331,16 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                         lockFailedTimes, DebugUtil.getStackTrace(e));
                 lastException = e;
             } catch (Throwable e) {
-                refreshFailedTimes += 1;
-                logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
+                // A lock timeout raised where a checked exception cannot propagate arrives wrapped, e.g. from the
+                // non-ref base table check of change detection; it is still lock contention.
+                if (Throwables.getCausalChain(e).stream().anyMatch(t -> t instanceof LockTimeoutException)) {
+                    lockFailedTimes += 1;
+                    logger.warn("refresh mv failed at {}th time because try lock failed: {}",
+                            lockFailedTimes, DebugUtil.getStackTrace(e));
+                } else {
+                    refreshFailedTimes += 1;
+                    logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
+                }
                 lastException = e;
             }
 

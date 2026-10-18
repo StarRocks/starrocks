@@ -1545,6 +1545,55 @@ public class MvUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @FunctionalInterface
+    public interface BaseTableRead<T, E extends Exception> {
+        T read() throws E;
+    }
+
+    /**
+     * Run {@code read} over an internal base table of {@code mv} under the base table's READ lock, for an mv refresh.
+     * <p>
+     * An olap table's partition maps are mutated in place under its WRITE lock (automatic partition creation, TTL
+     * drops, INSERT OVERWRITE), so walking the live table without the lock fails with a
+     * ConcurrentModificationException, or looks up a partition that was dropped after its name was listed. An
+     * external base table, or one the mv does not name, is read as before: no FE lock protects it.
+     * <p>
+     * A freshness check for query rewrite, or for {@code inspect_mv_refresh_info} ({@code unlocked}), reads unlocked,
+     * as before: it runs while the planner may already hold other tables' locks, so taking a base table's lock
+     * there could wait out of order, and its staleness check may reach a connector.
+     *
+     * @throws LockTimeoutException if the lock is not acquired within {@code mv_refresh_try_lock_timeout_ms}
+     */
+    public static <T, E extends Exception> T readBaseTableUnderLock(MaterializedView mv, Table baseTable,
+                                                                    boolean unlocked,
+                                                                    BaseTableRead<T, E> read)
+            throws E, LockTimeoutException {
+        Optional<BaseTableInfo> baseTableInfo = unlocked || !baseTable.isNativeTableOrMaterializedView()
+                ? Optional.empty()
+                : mv.getBaseTableInfos().stream()
+                        .filter(info -> info.isInternalCatalog() && info.getTableId() == baseTable.getId())
+                        .findFirst();
+        if (baseTableInfo.isEmpty()) {
+            return read.read();
+        }
+        long dbId = baseTableInfo.get().getDbId();
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(dbId, baseTable.getId(), LockType.READ,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new LockTimeoutException(String.format("Materialized view %s failed to acquire read lock on " +
+                    "base table %s within %d ms", mv.getName(), baseTable.getName(),
+                    Config.mv_refresh_try_lock_timeout_ms));
+        }
+        try {
+            return read.read();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, baseTable.getId(), LockType.READ);
+        }
+    }
+
+>>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
         partitionExpr.collect(expr -> isStr2Date(expr), matches);

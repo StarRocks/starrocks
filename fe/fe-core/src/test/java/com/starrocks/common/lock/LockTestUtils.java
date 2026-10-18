@@ -50,6 +50,76 @@ public class LockTestUtils {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Copy a published table the way the planner does, under the table's read lock. For a test that needs a
+     * planning copy of a table it created through SQL; copying without the lock trips snapshot_copy_without_lock.
+     */
+    public static void copyUnderReadLock(OlapTable source, OlapTable target) {
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values().stream()
+                .filter(db -> db.getTable(source.getId()) != null)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("table " + source.getName() + " is not published"))
+                .getId();
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, source.getId(), LockType.READ)) {
+            source.copyOnlyForQuery(target);
+        }
+    }
+
+    /**
+     * Fail the test if any lock-invariant violation is on record, even when the statement itself succeeded. In the test JVM the
+     * rules raise an exception, but plenty of callers swallow it -- the MV rewrite rules catch everything and fall back to the
+     * unrewritten plan, an AUTO MV refresh falls back from IVM to PCT -- and an asynchronous task's exception never reaches the
+     * test thread at all. The per-site counts are bumped before the exception is raised, so they see both.
+     * <p>
+     * Nothing clears the counts before a test: a drain zeroes only what it read, so a violation recorded after it --
+     * by a task the previous test left running, or by class setup -- is reported by the next test instead of being
+     * thrown away. Surefire forks a JVM per class, so it never crosses into another class.
+     * <p>
+     * Also fails if the test thread still holds a metadata lock, see {@link #assertNoMetaLockHeld()}: a leaked lock
+     * silences the snapshot-copy check for every later test of the class.
+     */
+    public static void assertNoLockInvariantViolations() {
+        Map<String, Long> violations = LockInvariantViolations.drainViolations();
+        Assertions.assertTrue(violations.isEmpty(),
+                "lock invariant violated during the test, grep LOCK_INVARIANT_VIOLATION in the log: " + violations);
+        assertNoMetaLockHeld();
+    }
+
+    /**
+     * Fail if the test thread still holds an FE metadata lock. A lock leaked by one test -- a locker taken by the
+     * code under test and never closed -- makes every later check on the same thread see it as held, so the
+     * snapshot-copy check passes the next test's unlocked copy of that table without a word.
+     * <p>
+     * The count is dropped before failing, so only the test that leaked fails, not every later test of the class.
+     */
+    public static void assertNoMetaLockHeld() {
+        int depth = LockHoldDepth.current();
+        if (depth != 0) {
+            LockHoldDepth.reset();
+        }
+        Assertions.assertEquals(0, depth,
+                "the test thread still holds FE metadata lock(s); close the locker the test took");
+    }
+
+    /**
+     * Opt a test out of the snapshot-copy check.
+     * <p>
+     * For a test that copies a published table without its lock <em>on purpose</em> -- one that
+     * exercises copyOnlyForQuery itself on a table it registered. A test whose production path trips
+     * the check is reporting a real defect and must not use this. Pair with
+     * {@link #restoreSnapshotCopyValidation()} in teardown.
+     */
+    public static void disableSnapshotCopyValidation() {
+        Config.lock_snapshot_copy_validation_mode = "off";
+    }
+
+    public static void restoreSnapshotCopyValidation() {
+        Config.lock_snapshot_copy_validation_mode = DEFAULT_SNAPSHOT_COPY_VALIDATION_MODE;
+    }
+
+    /**
+>>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
      * Fake {@code ThreadPoolExecutor.submit} so the task runs on a thread of its own and is joined,
      * instead of running inline on the caller's thread.
      * <p>

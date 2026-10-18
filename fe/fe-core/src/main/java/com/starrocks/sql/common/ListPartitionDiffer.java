@@ -326,8 +326,14 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
+<<<<<<< HEAD
                 BaseToMVPartitionMapping mapping = MVPartitionCellBuilder.getPartitionCells(refBaseTable,
                         refPartitionColumns, pinnedRangeFor(refBaseTable));
+=======
+                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBaseTable, readsBaseTablesUnlocked(),
+                        () -> MVPartitionCellBuilder.getPartitionCells(refBaseTable, refPartitionColumns,
+                                pinnedRangeFor(refBaseTable)));
+>>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
                 refBaseTablePartitionMap.put(refBaseTable, mapping);
             }
         } catch (Exception e) {

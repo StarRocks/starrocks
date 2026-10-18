@@ -239,9 +239,15 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
+<<<<<<< HEAD
                 BaseToMVPartitionMapping mapping =
                         MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
                                 mvPartitionExprOpt.get(), pinnedRangeFor(refBT));
+=======
+                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, readsBaseTablesUnlocked(),
+                        () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
+>>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
                 if (mapping.cells() == null) {
                     return null;
                 }
