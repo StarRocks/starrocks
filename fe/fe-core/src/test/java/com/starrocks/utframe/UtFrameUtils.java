@@ -214,6 +214,10 @@ public class UtFrameUtils {
     // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
     private static final int MIN_UT_PORT = 10000;
     private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
+    // Serializes findValidPort() in this JVM. Two callers could otherwise pick the same port, both pass the
+    // RESERVED_PORTS check, and the second tryLock() on its file would throw OverlappingFileLockException.
+    // A dedicated lock rather than the class monitor, which createMinStarRocksCluster() holds while the FE starts.
+    private static final Object PORT_LOCK = new Object();
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -503,6 +507,12 @@ public class UtFrameUtils {
      * below the ephemeral range first, and fall back to the ephemeral range only if none is free there.
      */
     public static int findValidPort() {
+        synchronized (PORT_LOCK) {
+            return findValidPortLocked();
+        }
+    }
+
+    private static int findValidPortLocked() {
         File portDir = getUtPortDir();
         if (!portDir.exists() && !portDir.mkdirs()) {
             throw new IllegalStateException("Failed to create ut port dir: " + portDir.getAbsolutePath());
