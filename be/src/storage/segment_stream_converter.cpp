@@ -14,7 +14,9 @@
 
 #include "storage/segment_stream_converter.h"
 
+#include <algorithm>
 #include <atomic>
+#include <unordered_set>
 
 #include "fs/fs_memory.h"
 #include "replication_utils.h"
@@ -30,15 +32,22 @@ static
 
 SegmentStreamConverter::SegmentStreamConverter(std::string_view input_file_name, uint64_t input_file_size,
                                                std::unique_ptr<WritableFile> output_file,
-                                               std::unordered_map<uint32_t, uint32_t>* column_unique_id_map)
+                                               std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
+                                               bool strict_column_uid_map,
+                                               const std::unordered_set<uint32_t>* dropped_column_uids)
         : FileStreamConverter(input_file_name, input_file_size, std::move(output_file)),
-          _column_unique_id_map(column_unique_id_map) {
+          _column_unique_id_map(column_unique_id_map),
+          _strict_column_uid_map(strict_column_uid_map),
+          _dropped_column_uids(dropped_column_uids) {
     if (_column_unique_id_map != nullptr && !_column_unique_id_map->empty()) {
         _segment_footer_buffer.reserve(s_segment_footer_buffer_size.load(std::memory_order::acquire));
     }
 }
 
 Status SegmentStreamConverter::append(const void* data, size_t size) {
+    if (_strict_column_uid_map && (_column_unique_id_map == nullptr || _column_unique_id_map->empty())) {
+        return Status::Corruption("Missing strict lake replication column UID map");
+    }
     if (_column_unique_id_map == nullptr || _column_unique_id_map->empty()) {
         return FileStreamConverter::append(data, size);
     }
@@ -79,6 +88,9 @@ Status SegmentStreamConverter::append(const void* data, size_t size) {
 }
 
 Status SegmentStreamConverter::close() {
+    if (_strict_column_uid_map && (_column_unique_id_map == nullptr || _column_unique_id_map->empty())) {
+        return Status::Corruption("Missing strict lake replication column UID map");
+    }
     if (_column_unique_id_map == nullptr || _column_unique_id_map->empty()) {
         return FileStreamConverter::close();
     }
@@ -108,6 +120,30 @@ Status SegmentStreamConverter::close() {
                 Slice(_segment_footer_buffer.data(), _segment_footer_buffer.size() - segment_footer_size)));
     }
 
+    if (_strict_column_uid_map) {
+        std::unordered_set<uint32_t> seen;
+        for (const auto& column : segment_footer_pb.columns()) {
+            if (!column.has_unique_id() || !seen.insert(column.unique_id()).second) {
+                return Status::Corruption("Missing/duplicate strict lake replication segment column UID");
+            }
+            if (!_column_unique_id_map->contains(column.unique_id()) &&
+                (_dropped_column_uids == nullptr || !_dropped_column_uids->contains(column.unique_id()))) {
+                return Status::Corruption("LAKE_REPLICATION_UNKNOWN_SEGMENT_COLUMN_UID: " +
+                                          std::to_string(column.unique_id()));
+            }
+        }
+        if (_dropped_column_uids != nullptr) {
+            // Validate the whole footer before removing anything. Data and index pages
+            // keep their absolute offsets; only the validated dropped columns become
+            // unreachable. Preserve the remaining column order and column_id fields.
+            auto* columns = segment_footer_pb.mutable_columns();
+            columns->erase(std::remove_if(columns->begin(), columns->end(),
+                                          [this](const auto& column) {
+                                              return _dropped_column_uids->contains(column.unique_id());
+                                          }),
+                           columns->end());
+        }
+    }
     ReplicationUtils::convert_column_unique_ids(segment_footer_pb.mutable_columns(), _column_unique_id_map);
 
     RETURN_IF_ERROR(Segment::write_segment_footer(_output_file.get(), segment_footer_pb));

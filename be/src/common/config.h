@@ -269,6 +269,8 @@ CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Allow compatible scalar add/drop histories in shared-data replication snapshots.
+CONF_mBool(lake_replication_enable_light_schema_change, "false");
 // Number of threads in the dedicated thread pool used by lake replication for per-file copy.
 // The fixed default bounds per-copy read buffers independently of CPU count. 0 means
 // cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;

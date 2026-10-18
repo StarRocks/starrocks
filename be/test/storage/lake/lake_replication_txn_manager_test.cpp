@@ -2220,6 +2220,75 @@ protected:
         return request;
     }
 
+    MutableTabletMetadataPtr build_source_metadata_with_rowset() {
+        auto source_metadata = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+        source_metadata->set_version(2);
+        auto* rowset = source_metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(1024);
+        rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+        source_metadata->set_next_rowset_id(2);
+        return source_metadata;
+    }
+
+    void add_dcg(TabletMetadata* source_metadata, uint32_t segment_id, uint32_t column_uid) {
+        auto& dcg = (*source_metadata->mutable_dcg_meta()->mutable_dcgs())[segment_id];
+        dcg.add_unique_column_ids()->add_column_ids(column_uid);
+        dcg.add_column_files("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.cols");
+        dcg.add_versions(source_metadata->version());
+    }
+
+    uint32_t add_aligned_non_key_column(TabletMetadata* source_metadata) {
+        auto* source_column = source_metadata->mutable_schema()->add_column();
+        source_column->set_unique_id(next_id());
+        source_column->set_name("c2");
+        source_column->set_type("INT");
+        source_column->set_is_key(false);
+        source_column->set_is_nullable(true);
+        _target_tablet_metadata->mutable_schema()->add_column()->CopyFrom(*source_column);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+        return source_column->unique_id();
+    }
+
+    Status replicate_with_source_metadata(const TabletMetadataPtr& source_metadata, bool* before_copy_invoked) {
+        auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+        SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [mock_fs](void* arg) {
+            auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+            *fs_st = mock_fs;
+        });
+        SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                              [source_metadata](void* arg) {
+                                                  auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                                  *meta_ptr = source_metadata;
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                              [](void* arg) {
+                                                  auto* file_size = static_cast<size_t*>(arg);
+                                                  *file_size = 1024;
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                              [](void* arg) {
+                                                  auto* file_size = static_cast<size_t*>(arg);
+                                                  *file_size = 1024;
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy",
+                                              [before_copy_invoked](void*) { *before_copy_invoked = true; });
+
+        auto original_master_info = get_master_info();
+        TMasterInfo info = original_master_info;
+        info.__set_min_active_txn_id(0);
+        if (!update_master_info(info)) {
+            return Status::InternalError("Failed to update master info for replication test");
+        }
+
+        auto request = build_request(false /* with_full_path */);
+        Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+        (void)update_master_info(original_master_info);
+        return status;
+    }
+
     static void seed_test_encryption_keys() {
         EncryptionKeyPB root_pb;
         root_pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
@@ -2272,6 +2341,133 @@ protected:
     int64_t _src_partition_id = 90003;
     std::string _test_dir;
 };
+
+TEST_F(LakeReplicationRemoteStorageTest, test_light_schema_change_accepts_fresh_target_and_persists_marker) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = true;
+    auto source = build_source_metadata_with_rowset();
+    auto historical = source->schema();
+    historical.set_id(historical.id() + 10000);
+    (*source->mutable_historical_schemas())[historical.id()].CopyFrom(historical);
+    (*source->mutable_rowset_to_schema())[source->rowsets(0).id()] = historical.id();
+    add_aligned_non_key_column(source.get());
+    bool copied = false;
+    ASSERT_OK(replicate_with_source_metadata(source, &copied));
+    EXPECT_TRUE(copied);
+    auto log = _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id);
+    ASSERT_TRUE(log.ok()) << log.status();
+    const auto& op = log.value()->op_replication();
+    EXPECT_TRUE(op.normalize_rowset_schema());
+    EXPECT_EQ(1, op.tablet_metadata().historical_schemas_size());
+    EXPECT_EQ(_target_tablet_metadata->schema().id(),
+              op.tablet_metadata().rowset_to_schema().at(source->rowsets(0).id()));
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_light_schema_change_rejects_missing_history_before_copy) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = true;
+    auto source = build_source_metadata_with_rowset();
+    (*source->mutable_rowset_to_schema())[source->rowsets(0).id()] = source->schema().id() + 10000;
+    bool copied = false;
+    EXPECT_TRUE(replicate_with_source_metadata(source, &copied).is_corruption());
+    EXPECT_FALSE(copied);
+    EXPECT_FALSE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).ok());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_light_schema_change_preserves_dcg_uid_guard) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = true;
+    auto source = build_source_metadata_with_rowset();
+    auto historical = source->schema();
+    historical.set_id(historical.id() + 10000);
+    (*source->mutable_historical_schemas())[historical.id()].CopyFrom(historical);
+    (*source->mutable_rowset_to_schema())[source->rowsets(0).id()] = historical.id();
+    add_dcg(source.get(), source->rowsets(0).id(), source->schema().column(0).unique_id());
+    _target_tablet_metadata->mutable_schema()->mutable_column(0)->set_unique_id(101);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    bool copied = false;
+    const auto status = replicate_with_source_metadata(source, &copied);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("LAKE_REPLICATION_SOURCE_DCG_REQUIRES_COLUMN_UID_REMAP"));
+    EXPECT_FALSE(copied);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_light_schema_change_does_not_reuse_segment_uuid) {
+    auto source = build_source_metadata_with_rowset();
+    _target_tablet_metadata->add_rowsets()->CopyFrom(source->rowsets(0));
+    std::unordered_map<std::string, size_t> sizes;
+    std::map<std::string, std::string> locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filenames;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap encryption_metas;
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            source, _target_tablet_metadata, _src_tablet_id, _target_tablet_id, _transaction_id, "/source/data", sizes,
+            locations, filenames, encryption_metas, true);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(1, locations.size());
+    EXPECT_EQ(1, filenames.size());
+    EXPECT_NE(source->rowsets(0).segment_metas(0).filename(), result.value()->rowsets(0).segment_metas(0).filename());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, HistoricalRowsetsRequireOptInBeforeCopy) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = false;
+    auto source = build_source_metadata_with_rowset();
+    const auto historical_id = source->schema().id() + 10000;
+    auto& historical = (*source->mutable_historical_schemas())[historical_id];
+    historical.CopyFrom(source->schema());
+    historical.set_id(historical_id);
+    (*source->mutable_rowset_to_schema())[source->rowsets(0).id()] = historical_id;
+    bool copied = false;
+    auto status = replicate_with_source_metadata(source, &copied);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("LAKE_REPLICATION_SOURCE_HAS_HISTORICAL_ROWSET_SCHEMA"));
+    EXPECT_FALSE(copied);
+    EXPECT_FALSE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).ok());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, UnreferencedHistoryDoesNotRequireOptIn) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = false;
+    auto source = build_source_metadata_with_rowset();
+    (*source->mutable_rowset_to_schema())[999] = source->schema().id() + 10000;
+    bool copied = false;
+    ASSERT_OK(replicate_with_source_metadata(source, &copied));
+    EXPECT_TRUE(copied);
+    ASSERT_OK(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, DcgUidRemapIsRejectedWithoutOptIn) {
+    BoolConfigGuard guard(&config::lake_replication_enable_light_schema_change);
+    config::lake_replication_enable_light_schema_change = false;
+    auto source = build_source_metadata_with_rowset();
+    // Exercise a non-contiguous segment index, not the positional fallback.
+    source->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(3);
+    add_dcg(source.get(), source->rowsets(0).id() + 3, source->schema().column(0).unique_id());
+    _target_tablet_metadata->mutable_schema()->mutable_column(0)->set_unique_id(101);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    bool copied = false;
+    auto status = replicate_with_source_metadata(source, &copied);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("LAKE_REPLICATION_SOURCE_DCG_REQUIRES_COLUMN_UID_REMAP"));
+    EXPECT_FALSE(copied);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, ReusedConvertedSegmentWithoutTargetSizeDoesNotInheritSourceSize) {
+    auto source = build_source_metadata_with_rowset();
+    source->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(1024);
+    _target_tablet_metadata->add_rowsets()->CopyFrom(source->rowsets(0));
+    _target_tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(0)->clear_size();
+    std::unordered_map<std::string, size_t> sizes;
+    std::map<std::string, std::string> locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filenames;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap encryption_metas;
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            source, _target_tablet_metadata, _src_tablet_id, _target_tablet_id, _transaction_id, "/source/data", sizes,
+            locations, filenames, encryption_metas);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_TRUE(locations.empty());
+    EXPECT_FALSE(result.value()->rowsets(0).segment_metas(0).has_size());
+}
 
 TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencrypted) {
     seed_test_encryption_keys();

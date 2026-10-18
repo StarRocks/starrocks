@@ -899,6 +899,7 @@
         "lake_replication_max_file_copy_retry",
         "lake_replication_max_parallel_files_per_tablet",
         "lake_replication_parallel_copy_min_file_count",
+        "lake_replication_enable_light_schema_change",
         "enable_lake_segment_metadata_filter",
         "enable_lake_prepared_split_pre_refinement",
         "lake_flush_thread_num_per_store",
