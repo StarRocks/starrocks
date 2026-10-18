@@ -1727,17 +1727,39 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
         // so we submit an async task to do this check
         if (isReloadAsync) {
+<<<<<<< HEAD
             CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+=======
+            // A status change replayed while the check runs (an INACTIVE from the leader) wins over its verdict,
+            // which was computed for the status before, as in activateOnReplay.
+            final long epoch;
+            synchronized (this) {
+                epoch = statusEpoch;
+            }
+            // The returned future is what the startup readiness gate waits on; the task body itself is
+            // unchanged. Plan cache building stays where it was -- queued asynchronously by the setActive()
+            // hook -- and is deliberately NOT part of this task, see MvStartupActivationCoordinator.
+            return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
                 try {
                     onReloadImplHeavy();
 
                     if (desiredActive) {
+<<<<<<< HEAD
                         InactiveReason reason = checkIsActiveOnLoadBlocking();
                         setInActiveReason(reason);
                     }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
                     setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
+=======
+                        setInActiveReasonUnlessChanged(reason, epoch);
+                    }
+                } catch (Throwable e) {
+                    LOG.error("check and set active failed for mv: {}", this, e);
+                    setInActiveReasonUnlessChanged(
+                            InactiveReason.ofInactive("check and set active failed: " + e.getMessage()), epoch);
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
                 } finally {
                     changeReloadState(RELOAD_STATE_DONE);
                 }
@@ -1763,6 +1785,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         } else {
             setActive();
         }
+    }
+
+    /** Apply an asynchronous verdict only if the status it was computed for, {@code epoch}, is still current. */
+    private synchronized void setInActiveReasonUnlessChanged(InactiveReason reason, long epoch) {
+        if (statusEpoch != epoch) {
+            LOG.info("status of mv {} changed while it was being checked for activation, dropping the stale verdict",
+                    getName());
+            return;
+        }
+        setInActiveReason(reason);
     }
 
     /**

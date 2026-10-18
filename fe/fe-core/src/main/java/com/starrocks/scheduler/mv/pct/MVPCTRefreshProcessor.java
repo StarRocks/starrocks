@@ -376,6 +376,21 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
+<<<<<<< HEAD
+=======
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
+        TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+        // Seeded by the first run only, later runs carry it via the property copy above.
+        if (!newProperties.containsKey(TaskRun.MV_NON_REF_TABLE_FINGERPRINT)) {
+            Set<Long> refBaseTableIds = mv.getRefBaseTablePartitionColumns().keySet().stream()
+                    .map(Table::getId)
+                    .collect(Collectors.toSet());
+            String fingerprint = MVVersionManager.nonRefTableFingerprint(snapshotBaseTables, refBaseTableIds);
+            if (fingerprint != null) {
+                newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
+            }
+        }
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));

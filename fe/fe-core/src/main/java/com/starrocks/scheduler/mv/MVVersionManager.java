@@ -13,8 +13,14 @@
 // limitations under the License.
 package com.starrocks.scheduler.mv;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.hash.Hashing;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -37,11 +43,13 @@ import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -271,6 +279,13 @@ public class MVVersionManager {
                         snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
+            if (!refBaseTableIds.contains(snapshotTable.getId())
+                    && !isReadByEveryBatch(snapshotTable.getId(), pctTableSnapshotInfo)) {
+                logger.info("Skip update meta for olap base table {} of materialized view {}, because it changed " +
+                                "while the batches of this refresh ran, so the earlier batches read an older state",
+                        snapshotTable.getName(), mv.getName());
+                continue;
+            }
             Long tableId = snapshotTable.getId();
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
@@ -296,6 +311,52 @@ public class MVVersionManager {
             isOlapTableRefreshed = true;
         }
         return isOlapTableRefreshed;
+    }
+
+    /**
+     * Whether this run read the same state of a non-ref olap base table as the job's first run, which recorded it in
+     * {@link TaskRun#MV_NON_REF_TABLE_FINGERPRINT}. Batches after the first one read the table again, and the MV is
+     * only as fresh as the oldest state any batch read. A run without the property is the job's only run.
+     */
+    private boolean isReadByEveryBatch(long tableId, PCTTableSnapshotInfo snapshotInfo) {
+        Map<String, String> properties = mvTaskRunContext.getProperties();
+        String recorded = properties == null ? null : properties.get(TaskRun.MV_NON_REF_TABLE_FINGERPRINT);
+        if (recorded == null) {
+            return true;
+        }
+        String expected = null;
+        for (String entry : recorded.split(",")) {
+            String[] idAndHash = entry.split(":", 2);
+            if (idAndHash.length == 2 && idAndHash[0].equals(String.valueOf(tableId))) {
+                expected = idAndHash[1];
+            }
+        }
+        return fingerprint(snapshotInfo.getRefreshedPartitionInfos()).equals(expected);
+    }
+
+    /**
+     * The value of {@link TaskRun#MV_NON_REF_TABLE_FINGERPRINT} for a run: {@code tableId:hash,...} over the non-ref
+     * olap base tables, hashing the version entries the last run would record. Null if there are none.
+     */
+    public static String nonRefTableFingerprint(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
+                                                Set<Long> refBaseTableIds) {
+        List<String> entries = Lists.newArrayList();
+        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+            Table table = snapshotInfo.getBaseTable();
+            if (snapshotInfo instanceof PCTTableSnapshotInfo pctInfo && table.isNativeTableOrMaterializedView()
+                    && !refBaseTableIds.contains(table.getId())) {
+                entries.add(table.getId() + ":" + fingerprint(pctInfo.getRefreshedPartitionInfos()));
+            }
+        }
+        return entries.isEmpty() ? null : String.join(",", entries);
+    }
+
+    // The version time counts too: ADMIN SET PARTITION VERSION can bring a partition back to an earlier version.
+    private static String fingerprint(Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
+        StringBuilder sb = new StringBuilder();
+        new TreeMap<>(partitionInfos).forEach((name, info) -> sb.append(name).append('/').append(info.getId())
+                .append('/').append(info.getVersion()).append('/').append(info.getLastRefreshTime()).append(';'));
+        return Hashing.murmur3_128().hashString(sb, StandardCharsets.UTF_8).toString();
     }
 
     /**

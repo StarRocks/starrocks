@@ -80,6 +80,18 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
     public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+<<<<<<< HEAD
+=======
+    // First task run's processStartTime, propagated across batch runs so the terminal run can record
+    // refresh-job duration without looking up task-run history. Written only when processStartTime > 0.
+    public static final String MV_REFRESH_JOB_PROCESS_START_TIME = "MV_REFRESH_JOB_PROCESS_START_TIME";
+    // The MV's version map reset epoch as the job's first run read it, propagated across batch runs so that a reset
+    // since the job started fences every later batch too, see MVVersionManager#publishRefreshScheme.
+    public static final String MV_VERSION_MAP_RESET_EPOCH = "MV_VERSION_MAP_RESET_EPOCH";
+    // Fingerprints of the non-ref olap base tables as the job's first run read them, propagated across batch runs so
+    // that the last run records their versions only if no batch read a different state, see MVVersionManager.
+    public static final String MV_NON_REF_TABLE_FINGERPRINT = "MV_NON_REF_TABLE_FINGERPRINT";
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
     public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
@@ -98,8 +110,18 @@ public class TaskRun implements Comparable<TaskRun> {
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
     // - `PINNED_REFRESH_JOB_ID` scopes merge isolation to pinned batches; pure PCT is unaffected.
+<<<<<<< HEAD
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
             MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID);
+=======
+    // - `MV_VERSION_MAP_RESET_EPOCH` keeps a run started after a version map reset from merging into a batch of a job
+    //   started before it, whose versions the reset fences.
+    // - `MV_NON_REF_TABLE_FINGERPRINT` keeps a batch from merging into one of a job whose batches read another state of
+    //   the non-ref tables, whose fingerprint would then be lost.
+    public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID,
+            MV_VERSION_MAP_RESET_EPOCH, MV_NON_REF_TABLE_FINGERPRINT);
+>>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
