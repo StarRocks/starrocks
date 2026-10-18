@@ -88,6 +88,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -3018,6 +3019,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Assertions.assertFalse(versionMapBefore.isEmpty(),
                             "Version map should not be empty before refresh");
 
+                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    // Any status recorded so far is not the force refresh's, which must produce a new one.
+                    TaskRunStatus initialStatus = getLatestMVRefreshStatus(tm, mvTaskName);
+                    String initialQueryId = initialStatus == null ? null : initialStatus.getQueryId();
+
                     // Insert new data to trigger refresh need
                     executeInsertSql(connectContext, "insert into tt_complete_refresh partition(p0) " +
                             "values('2021-12-15',3,20);");
@@ -3025,34 +3032,22 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     // Perform force refresh with complete refresh
                     starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s FORCE", "test_mv_complete_refresh"));
 
-                    // Wait for refresh to complete
-                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-                    long taskId = tm.getTask(mvTaskName).getId();
+                    // Wait for the force refresh to finish. getRunnableTaskRun() returns null while the scheduler moves a
+                    // task run from the pending queue to the running map, so it cannot tell that the refresh has finished.
+                    TaskRunStatus status = getLatestMVRefreshStatus(tm, mvTaskName);
                     int waitCount = 0;
-                    while (waitCount++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
-                            || tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).isEmpty())) {
+                    while (waitCount++ < 120 && (status == null || Objects.equals(initialQueryId, status.getQueryId())
+                            || !status.getState().isFinishState())) {
                         Thread.sleep(1000);
+                        status = getLatestMVRefreshStatus(tm, mvTaskName);
                     }
-
-                    // After waiting, ensure we have at least one TaskRunStatus entry
-                    Map<String, List<TaskRunStatus>> statusMap =
-                            tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
-                    Assertions.assertNotNull(statusMap, "Status map should not be null");
-                    Assertions.assertFalse(statusMap.isEmpty(),
-                            "Timed out waiting for MV refresh to produce a TaskRunStatus entry");
-                    List<TaskRunStatus> statuses = statusMap.get(mvTaskName);
-                    Assertions.assertNotNull(statuses,
-                            "No task run status entry for materialized view: " + mvTaskName);
-                    Assertions.assertFalse(statuses.isEmpty(),
-                            "No task run status records for materialized view: " + mvTaskName);
-
-                    // Ensure the refresh task finished within the timeout
-                    Assertions.assertNull(tm.getTaskRunScheduler().getRunnableTaskRun(taskId),
-                            "Refresh task did not complete within the timeout");
+                    Assertions.assertNotNull(status, "No task run status for materialized view: " + mvTaskName);
+                    Assertions.assertNotEquals(initialQueryId, status.getQueryId(),
+                            "Force refresh did not produce a new task run status");
+                    Assertions.assertTrue(status.getState().isFinishState(),
+                            "Refresh task did not complete within the timeout: " + status);
 
                     // Verify refresh succeeded
-                    TaskRunStatus status = statuses.get(0);
                     Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getState(),
                             "Force refresh with complete refresh should succeed");
 
@@ -3066,6 +3061,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Assertions.assertEquals(partitionIdsBefore, partitionIdsAfter,
                             "Partitions should not be dropped/recreated during force+complete refresh");
                 });
+    }
+
+    // Returns the status of the latest running, pending or finished refresh of the materialized view, or null if none.
+    private static TaskRunStatus getLatestMVRefreshStatus(TaskManager tm, String mvTaskName) {
+        List<TaskRunStatus> statuses = tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).get(mvTaskName);
+        return statuses == null || statuses.isEmpty() ? null : statuses.get(0);
     }
 
     @Test
