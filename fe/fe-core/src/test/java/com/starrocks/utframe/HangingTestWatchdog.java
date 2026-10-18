@@ -35,12 +35,15 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>This listener is registered through META-INF/services. When no test or container starts or finishes for
  * {@value #THRESHOLD_PROPERTY} seconds (default {@value #DEFAULT_THRESHOLD_SECONDS}, longer than the 300 s JUnit
- * timeout), it prints the running tests and all thread stacks to stderr, once per stall. A value of 0 or less
- * disables it.
+ * timeout), it prints the running tests and all thread stacks to stderr, once per stall, each line starting with
+ * {@value #OUTPUT_PREFIX}. A value of 0 or less disables it.
  */
 public class HangingTestWatchdog implements TestExecutionListener {
     static final String THRESHOLD_PROPERTY = "starrocks.ut.hang.dump.seconds";
     static final long DEFAULT_THRESHOLD_SECONDS = 360;
+    // starts every line of the output, so that a build can pick the lines out of the test output; the Gradle
+    // build of fe-core forwards them to its log, since it does not show the test output streams
+    static final String OUTPUT_PREFIX = "[HangingTestWatchdog] ";
 
     private final long thresholdNanos;
     private final long checkIntervalSeconds;
@@ -125,12 +128,14 @@ public class HangingTestWatchdog implements TestExecutionListener {
         }
         // collect the stacks and print outside the lock, so that a slow dump never blocks test callbacks
         StringBuilder sb = new StringBuilder();
-        sb.append("HangingTestWatchdog: no test started or finished for ")
+        sb.append("no test started or finished for ")
                 .append(TimeUnit.NANOSECONDS.toSeconds(stalledNanos)).append(" s, running:\n");
         runningSnapshot.forEach((id, startNanos) -> sb.append("\t").append(id).append(" (")
                 .append(TimeUnit.NANOSECONDS.toSeconds(now - startNanos)).append(" s)\n"));
         sb.append("thread dump:\n").append(MockedFrontend.dumpAllThreads());
-        System.err.println(sb);
+        StringBuilder out = new StringBuilder();
+        sb.toString().lines().forEach(line -> out.append(OUTPUT_PREFIX).append(line).append('\n'));
+        System.err.print(out);
         System.err.flush();
     }
 }

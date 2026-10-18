@@ -69,6 +69,8 @@ public class HangingTestWatchdogTest {
         Assertions.assertTrue(dump.contains("[engine:stuck]"), dump);
         Assertions.assertTrue(dump.contains("thread dump:"), dump);
         Assertions.assertTrue(dump.contains("testDumpOncePerStall"), "the dump must include this thread: " + dump);
+        // the Gradle build forwards the output by this prefix
+        dump.lines().forEach(line -> Assertions.assertTrue(line.startsWith(HangingTestWatchdog.OUTPUT_PREFIX), line));
 
         Thread.sleep(1100);
         watchdog.check();
