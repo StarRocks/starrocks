@@ -58,10 +58,19 @@ import static org.mockito.Mockito.when;
 public class MVVersionManagerTest {
 
     private final AtomicInteger editLogCount = new AtomicInteger();
+    // The test MVs live in no catalog; this stands in for whether a DROP has removed the MV.
+    private boolean mvInCatalog;
 
     @BeforeEach
     public void setUp() {
         editLogCount.set(0);
+        mvInCatalog = true;
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean isInCatalog() {
+                return mvInCatalog;
+            }
+        };
         new MockUp<Locker>() {
             @Mock
             public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
@@ -170,6 +179,19 @@ public class MVVersionManagerTest {
 
         Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(1, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessSkipsAnMvDroppedBeforeTheLock() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
+        mvInCatalog = false;
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
     }
 
     @Test
