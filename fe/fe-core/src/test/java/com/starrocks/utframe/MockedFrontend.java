@@ -63,9 +63,14 @@ import org.junit.jupiter.api.Assertions;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.management.LockInfo;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
@@ -321,6 +326,7 @@ public class MockedFrontend {
 
     private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
+        boolean dumpedOnInterrupt = false;
         while (!fe.isReady() && tryCount < 6000) {
             try {
                 tryCount++;
@@ -330,13 +336,53 @@ public class MockedFrontend {
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
+                // usually the test timeout fired, dump threads to show where the fe start is stuck
+                if (!dumpedOnInterrupt) {
+                    dumpedOnInterrupt = true;
+                    LOG.error("interrupted while waiting for fe to be ready, thread dump:\n{}", dumpAllThreads());
+                }
             }
+        }
+
+        // dump before calling GlobalStateMgr.getCurrentState(), which may block if the fe thread
+        // is stuck in constructing GlobalStateMgr
+        if (!fe.isReady()) {
+            LOG.error("fe is not ready after {} tries, thread dump:\n{}", tryCount, dumpAllThreads());
         }
 
         if (!GlobalStateMgr.getCurrentState().isReady()) {
             LOG.error("globalStateMgr is not ready");
             throw new FeStartException("fe start failed");
         }
+    }
+
+    // ThreadInfo.toString() keeps only the top 8 frames, so print the full stacks here.
+    private static String dumpAllThreads() {
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        StringBuilder sb = new StringBuilder();
+        long[] deadlockedThreadIds = threadMXBean.findDeadlockedThreads();
+        if (deadlockedThreadIds != null) {
+            sb.append("deadlocked thread ids: ").append(Arrays.toString(deadlockedThreadIds)).append('\n');
+        }
+        for (ThreadInfo info : threadMXBean.dumpAllThreads(true, true)) {
+            sb.append('"').append(info.getThreadName()).append("\" id=").append(info.getThreadId())
+                    .append(' ').append(info.getThreadState());
+            if (info.getLockName() != null) {
+                sb.append(" on ").append(info.getLockName());
+            }
+            if (info.getLockOwnerName() != null) {
+                sb.append(" owned by \"").append(info.getLockOwnerName()).append("\" id=").append(info.getLockOwnerId());
+            }
+            sb.append('\n');
+            for (StackTraceElement element : info.getStackTrace()) {
+                sb.append("\tat ").append(element).append('\n');
+            }
+            for (LockInfo lock : info.getLockedSynchronizers()) {
+                sb.append("\tlocked synchronizer ").append(lock).append('\n');
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     public static class FeStartException extends Exception {
