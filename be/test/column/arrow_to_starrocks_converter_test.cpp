@@ -31,6 +31,7 @@
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/variant_column.h"
@@ -2496,17 +2497,6 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
 // rejected-records writer call site moved out of this translation unit.
 
 TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) {
-    struct SlotDescriptor {
-        SlotDescriptor(int /*id*/, std::string_view col_name, TypeDescriptor type)
-                : _col_name(col_name), _type(std::move(type)) {}
-        const TypeDescriptor& type() const { return _type; }
-        std::string_view col_name() const { return _col_name; }
-
-    private:
-        std::string _col_name;
-        TypeDescriptor _type;
-    };
-
     auto struct_type = arrow::struct_({arrow::field("a", arrow::int32())});
     auto dict_struct_type = arrow::dictionary(arrow::int8(), struct_type);
     auto nested_dict_list_type =
@@ -2516,48 +2506,38 @@ TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) 
     EXPECT_EQ(unwrap_arrow_dictionary_type(dict_struct_type.get())->id(), arrow::Type::STRUCT);
     EXPECT_EQ(unwrap_arrow_dictionary_type(nested_dict_list_type.get())->id(), arrow::Type::LIST);
 
-    SlotDescriptor int_slot(1, "col_int", TypeDescriptor(TYPE_INT));
-    EXPECT_TRUE(validate_arrow_column_type(nullptr, TypeDescriptor::from_logical_type(TYPE_INT), "col_null")
-                        .is_invalid_argument());
-    EXPECT_TRUE(validate_arrow_column_type(nullptr, &int_slot).is_invalid_argument());
-    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), static_cast<const SlotDescriptor*>(nullptr))
-                        .is_invalid_argument());
-    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), nullptr).is_invalid_argument());
-    Status st1 = validate_arrow_column_type(dict_struct_type.get(), &int_slot);
+    TypeDescriptor int_type(TYPE_INT);
+    EXPECT_TRUE(validate_arrow_column_type(nullptr, int_type, "c1").is_invalid_argument());
+    Status st1 = validate_arrow_column_type(dict_struct_type.get(), int_type, "col_int");
     EXPECT_TRUE(st1.is_invalid_argument()) << st1.to_string();
 
-    Status st2 = validate_arrow_column_type(nested_dict_list_type.get(), &int_slot);
+    Status st2 = validate_arrow_column_type(nested_dict_list_type.get(), int_type, "col_int");
     EXPECT_TRUE(st2.is_invalid_argument()) << st2.to_string();
 
-    Status st3 = validate_arrow_column_type(struct_type.get(), &int_slot);
+    Status st3 = validate_arrow_column_type(struct_type.get(), int_type, "col_int");
     EXPECT_TRUE(st3.is_invalid_argument()) << st3.to_string();
-    EXPECT_TRUE(validate_arrow_column_type(arrow::large_list(arrow::int32()).get(), &int_slot).is_invalid_argument());
-    EXPECT_TRUE(validate_arrow_column_type(arrow::fixed_size_list(arrow::int32(), 2).get(), &int_slot)
+    EXPECT_TRUE(validate_arrow_column_type(arrow::large_list(arrow::int32()).get(), int_type, "col_int")
                         .is_invalid_argument());
-    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), &int_slot).ok());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::fixed_size_list(arrow::int32(), 2).get(), int_type, "col_int")
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), int_type, "col_int").ok());
 
-    SlotDescriptor json_slot(2, "col_json", TypeDescriptor(TYPE_JSON));
-    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &json_slot).ok());
-
-    SlotDescriptor variant_slot(3, "col_variant", TypeDescriptor(TYPE_VARIANT));
-    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &variant_slot).ok());
-
-    SlotDescriptor varchar_slot(4, "col_varchar", TypeDescriptor::create_varchar_type(64));
-    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &varchar_slot).ok());
-
-    SlotDescriptor char_slot(5, "col_char", TypeDescriptor::create_char_type(64));
-    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &char_slot).ok());
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor(TYPE_JSON), "col_json").ok());
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor(TYPE_VARIANT), "col_variant").ok());
+    EXPECT_TRUE(
+            validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor::create_varchar_type(64), "col_varchar")
+                    .ok());
+    EXPECT_TRUE(
+            validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor::create_char_type(64), "col_char").ok());
 
     TypeDescriptor struct_desc(TYPE_STRUCT);
     struct_desc.field_names = {"a"};
     struct_desc.children.emplace_back(TYPE_INT);
-    SlotDescriptor struct_slot(6, "col_struct", struct_desc);
-    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), &struct_slot).ok());
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), struct_desc, "col_struct").ok());
 
     TypeDescriptor array_desc(TYPE_ARRAY);
     array_desc.children.emplace_back(TYPE_INT);
-    SlotDescriptor array_slot(7, "col_array", array_desc);
-    EXPECT_TRUE(validate_arrow_column_type(nested_dict_list_type.get(), &array_slot).ok());
+    EXPECT_TRUE(validate_arrow_column_type(nested_dict_list_type.get(), array_desc, "col_array").ok());
 }
 
 TEST_F(ArrowConverterTest, ClearCurrentColumnResetsNameAndTypeLength) {
@@ -2570,6 +2550,153 @@ TEST_F(ArrowConverterTest, ClearCurrentColumnResetsNameAndTypeLength) {
     ctx.clear_current_column();
     EXPECT_TRUE(ctx.current_column_name.empty());
     EXPECT_EQ(0, ctx.current_type_length);
+}
+
+PARALLEL_TEST(ArrowConverterTest, DictionaryCastRespectsBoundedMemoryPool) {
+    arrow::Int8Builder idx_builder;
+    for (int i = 0; i < 128; ++i) {
+        ASSERT_OK(idx_builder.Append(0));
+    }
+    std::shared_ptr<arrow::Array> indices;
+    ASSERT_OK(idx_builder.Finish(&indices));
+
+    arrow::StringBuilder dict_builder;
+    const std::string dict_val(64, 'a');
+    ASSERT_OK(dict_builder.Append(dict_val));
+    std::shared_ptr<arrow::Array> dictionary;
+    ASSERT_OK(dict_builder.Finish(&dictionary));
+
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+    ASSERT_OK_AND_ASSIGN(auto dict_array, arrow::DictionaryArray::FromArrays(dict_type, indices, dictionary));
+
+    TypeDescriptor varchar_desc = TypeDescriptor::create_varchar_type(128);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(dict_array->type().get(), &varchar_desc, true, &raw_type_desc,
+                                                     &conv_func, need_cast, true));
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowBoundedMemoryPool small_pool(1024);
+        ArrowConvertContext ctx;
+        ctx.memory_pool = &small_pool;
+        Status st = convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.message().find("Out of memory") != std::string::npos ||
+                    st.message().find("exceeds per-message limit") != std::string::npos)
+                << st.to_string();
+    }
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowBoundedMemoryPool large_pool(64 * 1024);
+        ArrowConvertContext ctx;
+        ctx.memory_pool = &large_pool;
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(128, col->size());
+        ASSERT_GE(large_pool.total_bytes_allocated(), 8192);
+    }
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowConvertContext ctx;
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(128, col->size());
+    }
+}
+
+PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
+    class FailingDelegateMemoryPool final : public arrow::MemoryPool {
+    public:
+        bool fail_allocate = false;
+        bool fail_reallocate = false;
+
+        arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override {
+            if (fail_allocate) {
+                return arrow::Status::OutOfMemory("delegate allocate failure");
+            }
+            return arrow::default_memory_pool()->Allocate(size, alignment, out);
+        }
+
+        arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override {
+            if (fail_reallocate) {
+                return arrow::Status::OutOfMemory("delegate reallocate failure");
+            }
+            return arrow::default_memory_pool()->Reallocate(old_size, new_size, alignment, ptr);
+        }
+
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) override {
+            arrow::default_memory_pool()->Free(buffer, size, alignment);
+        }
+
+        int64_t bytes_allocated() const override { return 0; }
+        int64_t max_memory() const override { return 0; }
+        int64_t total_bytes_allocated() const override { return 0; }
+        int64_t num_allocations() const override { return 0; }
+        std::string backend_name() const override { return "failing_delegate"; }
+    };
+
+    FailingDelegateMemoryPool delegate;
+    auto pool_ptr = std::make_unique<ArrowBoundedMemoryPool>(1024, &delegate);
+    ArrowBoundedMemoryPool& pool = *pool_ptr;
+    EXPECT_EQ("starrocks_bounded_arrow_pool", pool.backend_name());
+    EXPECT_EQ(0, pool.bytes_allocated());
+    EXPECT_EQ(0, pool.max_memory());
+    EXPECT_EQ(0, pool.total_bytes_allocated());
+    EXPECT_EQ(0, pool.num_allocations());
+
+    uint8_t* buf = nullptr;
+    EXPECT_TRUE(pool.Allocate(-1, 64, &buf).IsInvalid());
+    EXPECT_TRUE(pool.Allocate(2048, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(0, pool.bytes_allocated());
+
+    delegate.fail_allocate = true;
+    EXPECT_TRUE(pool.Allocate(128, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(0, pool.bytes_allocated());
+    delegate.fail_allocate = false;
+
+    ASSERT_OK(pool.Allocate(256, 64, &buf));
+    EXPECT_EQ(256, pool.bytes_allocated());
+    EXPECT_EQ(256, pool.max_memory());
+    EXPECT_EQ(256, pool.total_bytes_allocated());
+    EXPECT_EQ(1, pool.num_allocations());
+
+    EXPECT_TRUE(pool.Reallocate(256, -1, 64, &buf).IsInvalid());
+    EXPECT_TRUE(pool.Reallocate(256, 2048, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(256, pool.bytes_allocated());
+
+    delegate.fail_reallocate = true;
+    EXPECT_TRUE(pool.Reallocate(256, 512, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(256, pool.bytes_allocated());
+    delegate.fail_reallocate = false;
+
+    ASSERT_OK(pool.Reallocate(256, 512, 64, &buf));
+    EXPECT_EQ(512, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    ASSERT_OK(pool.Reallocate(512, 128, 64, &buf));
+    EXPECT_EQ(128, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    uint8_t* small_buf = nullptr;
+    ASSERT_OK(pool.Allocate(64, 64, &small_buf));
+    EXPECT_EQ(192, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    pool.Free(small_buf, 64, 64);
+
+    pool.Free(buf, 128, 64);
+    EXPECT_EQ(0, pool.bytes_allocated());
+
+    std::unique_ptr<arrow::MemoryPool> base_pool = std::move(pool_ptr);
+    base_pool.reset();
 }
 
 } // namespace starrocks

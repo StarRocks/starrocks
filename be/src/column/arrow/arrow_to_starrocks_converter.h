@@ -15,6 +15,7 @@
 #pragma once
 
 #include <arrow/array.h>
+#include <arrow/memory_pool.h>
 #include <arrow/status.h>
 
 #include <functional>
@@ -76,16 +77,14 @@ struct ArrowConvertContext {
     int64_t consumer_partition = -1;
     int64_t consumer_offset = -1;
     std::string consumer_message_id;
+    arrow::MemoryPool* memory_pool = nullptr;
 
     void set_current_column(std::string_view column_name, const TypeDescriptor& type) {
         current_column_name = std::string(column_name);
         current_type_length = type.len > 0 ? static_cast<size_t>(type.len) : 0;
     }
 
-    void clear_current_column() {
-        current_column_name.clear();
-        current_type_length = 0;
-    }
+    void clear_current_column();
 };
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with
@@ -142,17 +141,5 @@ const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type)
 
 Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
                                   std::string_view col_name);
-
-template <typename SlotDesc>
-Status validate_arrow_column_type(const arrow::DataType* arrow_type, const SlotDesc* slot_desc) {
-    if (arrow_type == nullptr || slot_desc == nullptr) {
-        return Status::InvalidArgument("null Arrow type or slot descriptor");
-    }
-    return validate_arrow_column_type(arrow_type, slot_desc->type(), slot_desc->col_name());
-}
-
-inline Status validate_arrow_column_type(const arrow::DataType* /*arrow_type*/, std::nullptr_t) {
-    return Status::InvalidArgument("null Arrow type or slot descriptor");
-}
 
 } // namespace starrocks

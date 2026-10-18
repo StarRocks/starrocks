@@ -28,6 +28,7 @@
 #include "base/decimal_types.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/arrow/arrow_to_json_converter.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -131,7 +132,12 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
     if (array->type_id() == ArrowTypeId::DICTIONARY) {
         auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
         auto sliced_array = array->Slice(batch_start_idx, num_elements);
-        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        arrow::MemoryPool* pool = (conv_ctx != nullptr && conv_ctx->memory_pool != nullptr)
+                                          ? conv_ctx->memory_pool
+                                          : arrow::default_memory_pool();
+        arrow::compute::ExecContext exec_ctx(pool);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type(),
+                                                      arrow::compute::CastOptions::Safe(), &exec_ctx);
         if (!decoded_array_res.ok()) {
             return Status::InternalError(decoded_array_res.status().ToString());
         }
@@ -1453,6 +1459,92 @@ Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeD
                                     type_to_string(lt), arrow_type->name()));
     }
     return Status::OK();
+}
+
+void ArrowConvertContext::clear_current_column() {
+    current_column_name.clear();
+    current_type_length = 0;
+}
+
+ArrowBoundedMemoryPool::ArrowBoundedMemoryPool(int64_t max_bytes, arrow::MemoryPool* delegate)
+        : _max_bytes(max_bytes), _delegate(delegate) {}
+
+ArrowBoundedMemoryPool::~ArrowBoundedMemoryPool() = default;
+
+arrow::Status ArrowBoundedMemoryPool::Allocate(int64_t size, int64_t alignment, uint8_t** out) {
+    if (size < 0) {
+        return arrow::Status::Invalid("Negative Arrow allocation size: ", size);
+    }
+    int64_t current = _bytes_allocated.fetch_add(size, std::memory_order_relaxed) + size;
+    if (_max_bytes > 0 && current > _max_bytes) {
+        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+        return arrow::Status::OutOfMemory("Arrow IPC decoded allocation of ", size,
+                                          " bytes exceeds per-message limit of ", _max_bytes,
+                                          " bytes (current allocated: ", current - size, ")");
+    }
+    arrow::Status st = _delegate->Allocate(size, alignment, out);
+    if (!st.ok()) {
+        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+        return st;
+    }
+    _total_bytes_allocated.fetch_add(size, std::memory_order_relaxed);
+    _num_allocations.fetch_add(1, std::memory_order_relaxed);
+    update_peak(current);
+    return arrow::Status::OK();
+}
+
+arrow::Status ArrowBoundedMemoryPool::Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) {
+    if (new_size < 0) {
+        return arrow::Status::Invalid("Negative Arrow reallocation size: ", new_size);
+    }
+    int64_t delta = new_size - old_size;
+    int64_t current = _bytes_allocated.fetch_add(delta, std::memory_order_relaxed) + delta;
+    if (_max_bytes > 0 && delta > 0 && current > _max_bytes) {
+        _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
+        return arrow::Status::OutOfMemory("Arrow IPC decoded reallocation of ", new_size,
+                                          " bytes exceeds per-message limit of ", _max_bytes, " bytes");
+    }
+    arrow::Status st = _delegate->Reallocate(old_size, new_size, alignment, ptr);
+    if (!st.ok()) {
+        _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
+        return st;
+    }
+    if (delta > 0) {
+        _total_bytes_allocated.fetch_add(delta, std::memory_order_relaxed);
+        update_peak(current);
+    }
+    return arrow::Status::OK();
+}
+
+void ArrowBoundedMemoryPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
+    _delegate->Free(buffer, size, alignment);
+    _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::bytes_allocated() const {
+    return _bytes_allocated.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::max_memory() const {
+    return _peak_bytes.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::total_bytes_allocated() const {
+    return _total_bytes_allocated.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::num_allocations() const {
+    return _num_allocations.load(std::memory_order_relaxed);
+}
+
+std::string ArrowBoundedMemoryPool::backend_name() const {
+    return "starrocks_bounded_arrow_pool";
+}
+
+void ArrowBoundedMemoryPool::update_peak(int64_t current) {
+    int64_t prev_peak = _peak_bytes.load(std::memory_order_relaxed);
+    while (current > prev_peak && !_peak_bytes.compare_exchange_weak(prev_peak, current, std::memory_order_relaxed)) {
+    }
 }
 
 } // namespace starrocks

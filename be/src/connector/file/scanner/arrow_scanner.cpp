@@ -26,9 +26,11 @@
 #include <rapidjson/writer.h>
 
 #include <algorithm>
+#include <cstring>
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/arrow/arrow_memory_pool.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/chunk.h"
@@ -105,29 +107,41 @@ private:
 
 // Inspects all RECORD_BATCH message headers in an Arrow IPC stream buffer
 // without decompressing or allocating body buffers so rejected messages
-// report their true declared row count even when ReadNext() fails mid-stream.
+// report their true declared row count even when ReadNext() fails mid-stream
+// or a RECORD_BATCH body is truncated after an intact metadata header.
 int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc_buffer) {
-    if (ipc_buffer == nullptr || ipc_buffer->size() == 0) {
-        return 0;
-    }
-    auto msg_reader = arrow::ipc::MessageReader::Open(std::make_shared<arrow::io::BufferReader>(ipc_buffer));
-    if (msg_reader == nullptr) {
-        return 1;
-    }
+    const int64_t total_size = ipc_buffer != nullptr ? ipc_buffer->size() : 0;
+    int64_t offset = 0;
     auto empty_schema = arrow::schema({});
     arrow::io::BufferReader empty_body(std::make_shared<arrow::Buffer>(nullptr, 0));
     arrow::ipc::IpcReadOptions header_opts = arrow::ipc::IpcReadOptions::Defaults();
     int64_t declared_rows = 0;
-    while (true) {
-        auto msg_res = msg_reader->ReadNextMessage();
-        if (!msg_res.ok()) {
+
+    while (offset < total_size) {
+        int32_t metadata_len = -1;
+        if (total_size - offset >= 4) {
+            std::memcpy(&metadata_len, ipc_buffer->data() + offset, sizeof(int32_t));
+            offset += 4;
+            if (metadata_len == -1 && total_size - offset >= 4) {
+                std::memcpy(&metadata_len, ipc_buffer->data() + offset, sizeof(int32_t));
+                offset += 4;
+            }
+        }
+        if (metadata_len == 0) {
+            break;
+        }
+        if (metadata_len < 0 || total_size - offset < metadata_len) {
+            declared_rows += 1;
+            break;
+        }
+        auto metadata_buf = arrow::SliceBuffer(ipc_buffer, offset, metadata_len);
+        offset += metadata_len;
+        auto msg_res = arrow::ipc::Message::Open(metadata_buf, nullptr);
+        if (!msg_res.ok() || msg_res.ValueUnsafe() == nullptr) {
             declared_rows += 1;
             break;
         }
         auto msg = std::move(msg_res).MoveValueUnsafe();
-        if (msg == nullptr) {
-            break;
-        }
         if (msg->type() == arrow::ipc::MessageType::RECORD_BATCH) {
             auto batch_res =
                     arrow::ipc::ReadRecordBatch(*msg->metadata(), empty_schema, nullptr, header_opts, &empty_body);
@@ -137,6 +151,14 @@ int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc
                 declared_rows += 1;
             }
         }
+        int64_t body_len = msg->body_length();
+        if (body_len < 0 || total_size - offset < body_len) {
+            if (msg->type() != arrow::ipc::MessageType::RECORD_BATCH) {
+                declared_rows += 1;
+            }
+            break;
+        }
+        offset += body_len;
     }
     return declared_rows;
 }
@@ -220,6 +242,17 @@ ArrowScanner::~ArrowScanner() = default;
 
 Status ArrowScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
+    if (_profile != nullptr) {
+        static const char* kArrowCounterPrefix = "FileScanner";
+        ADD_COUNTER(_profile, kArrowCounterPrefix, TUnit::NONE);
+        _arrow_messages_read_counter =
+                ADD_CHILD_COUNTER(_profile, "ArrowMessagesRead", TUnit::UNIT, kArrowCounterPrefix);
+        _arrow_messages_rejected_counter =
+                ADD_CHILD_COUNTER(_profile, "ArrowMessagesRejected", TUnit::UNIT, kArrowCounterPrefix);
+        _arrow_decompressed_bytes_counter =
+                ADD_CHILD_COUNTER(_profile, "ArrowDecompressedBytes", TUnit::BYTES, kArrowCounterPrefix);
+        _arrow_decode_timer = ADD_CHILD_TIMER(_profile, "ArrowDecodeTime", kArrowCounterPrefix);
+    }
     if (_scan_range.ranges.empty()) {
         return Status::OK();
     }
@@ -418,7 +451,8 @@ Status ArrowScanner::validate_batch_schema(const std::shared_ptr<arrow::RecordBa
                         "column $0 is non-nullable but missing in Arrow message", slot_desc->col_name()));
             }
         } else {
-            RETURN_IF_ERROR(validate_arrow_column_type(array_ptr->type().get(), slot_desc));
+            RETURN_IF_ERROR(
+                    validate_arrow_column_type(array_ptr->type().get(), slot_desc->type(), slot_desc->col_name()));
             MutableColumnPtr dummy_column;
             ConvertFuncTree dummy_conv;
             Expr* dummy_expr = nullptr;
@@ -446,7 +480,7 @@ Status ArrowScanner::validate_ipc_schema(const std::shared_ptr<arrow::Schema>& s
                         "column $0 is non-nullable but missing in Arrow message", slot_desc->col_name()));
             }
         } else {
-            RETURN_IF_ERROR(validate_arrow_column_type(field->type().get(), slot_desc));
+            RETURN_IF_ERROR(validate_arrow_column_type(field->type().get(), slot_desc->type(), slot_desc->col_name()));
             MutableColumnPtr dummy_column;
             ConvertFuncTree dummy_conv;
             Expr* dummy_expr = nullptr;
@@ -459,15 +493,24 @@ Status ArrowScanner::validate_ipc_schema(const std::shared_ptr<arrow::Schema>& s
 
 Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
     DCHECK(_parser_buf != nullptr);
-    SCOPED_RAW_TIMER(&_counter->arrow_decode_ns);
+    int64_t decode_ns = 0;
+    DeferOp update_decode_timer([this, &decode_ns]() {
+        _counter->arrow_decode_ns += decode_ns;
+        if (_arrow_decode_timer != nullptr) {
+            COUNTER_UPDATE(_arrow_decode_timer, decode_ns);
+        }
+    });
+    SCOPED_RAW_TIMER(&decode_ns);
     *filtered_rows = 0;
 
     // Release any previous batches BEFORE resetting _discrete_memory_pool so
     // arrow::PoolBuffer::~PoolBuffer() frees into the pool that allocated it.
+    _conv_ctx.memory_pool = nullptr;
     _batch.reset();
     _discrete_batches.clear();
     const int64_t max_decoded_bytes = config::routine_load_arrow_max_decoded_bytes_per_message;
     _discrete_memory_pool = std::make_unique<ArrowBoundedMemoryPool>(max_decoded_bytes);
+    _conv_ctx.memory_pool = _discrete_memory_pool.get();
 
     auto owning_buffer = make_owning_arrow_buffer(_parser_buf);
     auto buffer_reader = std::make_shared<arrow::io::BufferReader>(owning_buffer);
@@ -479,6 +522,9 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
     if (!reader_res.ok()) {
         *filtered_rows = 1;
         _counter->arrow_messages_rejected++;
+        if (_arrow_messages_rejected_counter != nullptr) {
+            COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
+        }
         return Status::InternalError("Arrow IPC parse error: " + reader_res.status().ToString());
     }
     auto reader = std::move(reader_res).MoveValueUnsafe();
@@ -498,6 +544,9 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
             batch.reset();
             *filtered_rows = std::max<int64_t>({rows, count_ipc_stream_declared_rows(owning_buffer), int64_t{1}});
             _counter->arrow_messages_rejected++;
+            if (_arrow_messages_rejected_counter != nullptr) {
+                COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
+            }
             std::string read_error = "Arrow IPC read batch error: " + st.ToString();
             if (!schema_error.empty()) {
                 return Status::InternalError(schema_error + "; " + read_error);
@@ -516,6 +565,9 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
             batch.reset();
             *filtered_rows = std::max<int64_t>({rows, count_ipc_stream_declared_rows(owning_buffer), int64_t{1}});
             _counter->arrow_messages_rejected++;
+            if (_arrow_messages_rejected_counter != nullptr) {
+                COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
+            }
             return Status::MemoryLimitExceeded(strings::Substitute(
                     "Arrow IPC message exceeds routine_load_arrow_max_decoded_bytes_per_message ($0 bytes)",
                     max_decoded_bytes));
@@ -544,11 +596,21 @@ Status ArrowScanner::decode_discrete_message(int64_t* filtered_rows) {
         valid_batches.clear();
         *filtered_rows = rows;
         _counter->arrow_messages_rejected++;
+        if (_arrow_messages_rejected_counter != nullptr) {
+            COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
+        }
         return Status::InvalidArgument(schema_error);
     }
 
+    const int64_t allocated = _discrete_memory_pool->total_bytes_allocated();
     _counter->arrow_messages_read++;
-    _counter->arrow_decompressed_bytes += _discrete_memory_pool->total_bytes_allocated();
+    _counter->arrow_decompressed_bytes += allocated;
+    if (_arrow_messages_read_counter != nullptr) {
+        COUNTER_UPDATE(_arrow_messages_read_counter, 1);
+    }
+    if (_arrow_decompressed_bytes_counter != nullptr) {
+        COUNTER_UPDATE(_arrow_decompressed_bytes_counter, allocated);
+    }
     _discrete_batches = std::move(valid_batches);
     return Status::OK();
 }
@@ -598,6 +660,9 @@ void ArrowScanner::filter_current_discrete_message(const std::string& reason, in
     _batch.reset();
     _discrete_batches.clear();
     _counter->arrow_messages_rejected++;
+    if (_arrow_messages_rejected_counter != nullptr) {
+        COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
+    }
     reject_discrete_message(reason, filtered);
 }
 
@@ -713,21 +778,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
         ChunkPtr chunk;
         _chunk_start_idx = 0;
         if (batch_is_exhausted()) {
-            while (true) {
-                Status status = next_batch();
-                if (_scanner_eof) {
-                    return status;
-                }
-                if (status.ok()) {
-                    break;
-                }
-                if (status.is_end_of_file()) {
-                    _curr_file_reader.reset();
-                    _file.reset();
-                    continue;
-                }
-                return status;
-            }
+            RETURN_IF_ERROR(next_batch());
         }
         auto init_st = initialize_src_chunk(&chunk);
         if (!init_st.ok()) {
@@ -812,6 +863,7 @@ Status ArrowScanner::get_schema(std::vector<SlotDescriptor>* schema) {
 }
 
 void ArrowScanner::close() {
+    _conv_ctx.memory_pool = nullptr;
     _batch.reset();
     _discrete_batches.clear();
     _discrete_memory_pool.reset();

@@ -99,6 +99,10 @@ private:
     int64_t _last_file_scan_rows{0};
     std::shared_ptr<SequentialFile> _file;
     ByteBufferPtr _parser_buf;
+    RuntimeProfile::Counter* _arrow_messages_read_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_messages_rejected_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_decompressed_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_decode_timer = nullptr;
 };
 
 } // namespace starrocks
