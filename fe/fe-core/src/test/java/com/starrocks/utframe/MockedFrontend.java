@@ -224,6 +224,8 @@ public class MockedFrontend {
         private final boolean startBDB;
         private final RunMode runMode;
         private volatile boolean isReady = false;
+        // set if the fe thread exits before it is ready
+        private volatile Throwable startFailure = null;
 
         public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
@@ -236,10 +238,15 @@ public class MockedFrontend {
             return isReady;
         }
 
+        public Throwable getStartFailure() {
+            return startFailure;
+        }
+
         @Override
         public void run() {
             if (Strings.isNullOrEmpty(frontend.getRunningDir())) {
                 System.err.println("env STARROCKS_HOME is not set.");
+                startFailure = new IllegalStateException("env STARROCKS_HOME is not set");
                 return;
             }
 
@@ -303,6 +310,9 @@ public class MockedFrontend {
                     Thread.sleep(2000);
                 }
             } catch (Throwable e) {
+                if (!isReady) {
+                    startFailure = e;
+                }
                 e.printStackTrace();
             }
         }
@@ -326,8 +336,8 @@ public class MockedFrontend {
 
     private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        boolean dumpedOnInterrupt = false;
-        while (!fe.isReady() && tryCount < 6000) {
+        // stop waiting as soon as the fe thread has failed, it never becomes ready then
+        while (!fe.isReady() && fe.getStartFailure() == null && tryCount < 6000) {
             try {
                 tryCount++;
                 Thread.sleep(100);
@@ -335,19 +345,23 @@ public class MockedFrontend {
                     LOG.warn("globalStateMgr is not ready, wait for 1 second");
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
                 // usually the test timeout fired, dump threads to show where the fe start is stuck
-                if (!dumpedOnInterrupt) {
-                    dumpedOnInterrupt = true;
-                    LOG.error("interrupted while waiting for fe to be ready, thread dump:\n{}", dumpAllThreads());
-                }
+                LOG.error("interrupted while waiting for fe to be ready, thread dump:\n{}", dumpAllThreads());
+                // the caller is giving up, so stop waiting and keep the interrupt status for it
+                Thread.currentThread().interrupt();
+                break;
             }
+        }
+
+        if (fe.getStartFailure() != null) {
+            throw new FeStartException("fe start failed", fe.getStartFailure());
         }
 
         // dump before calling GlobalStateMgr.getCurrentState(), which may block if the fe thread
         // is stuck in constructing GlobalStateMgr
         if (!fe.isReady()) {
             LOG.error("fe is not ready after {} tries, thread dump:\n{}", tryCount, dumpAllThreads());
+            throw new FeStartException("fe is not ready after " + tryCount + " tries");
         }
 
         if (!GlobalStateMgr.getCurrentState().isReady()) {
@@ -388,6 +402,10 @@ public class MockedFrontend {
     public static class FeStartException extends Exception {
         public FeStartException(String msg) {
             super(msg);
+        }
+
+        public FeStartException(String msg, Throwable cause) {
+            super(msg, cause);
         }
     }
 
