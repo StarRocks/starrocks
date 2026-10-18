@@ -19,6 +19,7 @@ import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -45,8 +46,11 @@ public class HangingTestWatchdog implements TestExecutionListener {
     private final long checkIntervalSeconds;
     // unique id -> start time in nanos, of the tests and containers that have started but not finished
     private final Map<String, Long> running = new ConcurrentHashMap<>();
-    private volatile long lastProgressNanos = System.nanoTime();
-    private volatile boolean dumpedForCurrentStall = false;
+    // guards lastProgressNanos and dumpedForCurrentStall, so that a callback's progress() cannot interleave
+    // with check() deciding and claiming a dump; otherwise check() could overwrite the reset of a new stall
+    private final Object stallLock = new Object();
+    private long lastProgressNanos = System.nanoTime();
+    private boolean dumpedForCurrentStall = false;
     private ScheduledExecutorService checker;
 
     public HangingTestWatchdog() {
@@ -100,21 +104,30 @@ public class HangingTestWatchdog implements TestExecutionListener {
     }
 
     private void progress() {
-        lastProgressNanos = System.nanoTime();
-        dumpedForCurrentStall = false;
+        synchronized (stallLock) {
+            lastProgressNanos = System.nanoTime();
+            dumpedForCurrentStall = false;
+        }
     }
 
     void check() {
-        long now = System.nanoTime();
-        long stalledNanos = now - lastProgressNanos;
-        if (dumpedForCurrentStall || running.isEmpty() || stalledNanos < thresholdNanos) {
-            return;
+        long now;
+        long stalledNanos;
+        Map<String, Long> runningSnapshot;
+        synchronized (stallLock) {
+            now = System.nanoTime();
+            stalledNanos = now - lastProgressNanos;
+            if (dumpedForCurrentStall || running.isEmpty() || stalledNanos < thresholdNanos) {
+                return;
+            }
+            dumpedForCurrentStall = true;
+            runningSnapshot = new HashMap<>(running);
         }
-        dumpedForCurrentStall = true;
+        // collect the stacks and print outside the lock, so that a slow dump never blocks test callbacks
         StringBuilder sb = new StringBuilder();
         sb.append("HangingTestWatchdog: no test started or finished for ")
                 .append(TimeUnit.NANOSECONDS.toSeconds(stalledNanos)).append(" s, running:\n");
-        running.forEach((id, startNanos) -> sb.append("\t").append(id).append(" (")
+        runningSnapshot.forEach((id, startNanos) -> sb.append("\t").append(id).append(" (")
                 .append(TimeUnit.NANOSECONDS.toSeconds(now - startNanos)).append(" s)\n"));
         sb.append("thread dump:\n").append(MockedFrontend.dumpAllThreads());
         System.err.println(sb);
