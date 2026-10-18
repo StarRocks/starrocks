@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fs/encryption.h"
@@ -95,8 +97,8 @@ public:
             const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
             std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
-            SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding,
-            PrimaryKeyEncodingType target_pk_encoding);
+            SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding,
+            bool strict_column_uid_map = false, const std::unordered_set<uint32_t>* dropped_column_uids = nullptr);
 
     // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
     // into DeltaColumnGroupMetadataPB for shared-data replication.

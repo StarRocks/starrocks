@@ -312,6 +312,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
+    ./storage/lake/replication_schema_utils_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
@@ -336,6 +337,7 @@ SET(DW_TEST_FILES
     ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
+    ./storage/lake/txn_log_applier_lake_replication_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp

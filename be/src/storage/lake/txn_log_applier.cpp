@@ -35,6 +35,7 @@
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/replication_schema_utils.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -485,6 +486,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -950,6 +954,10 @@ private:
                 _is_lake_replication = true;
 
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
@@ -967,7 +975,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(
@@ -1096,6 +1104,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -1555,6 +1566,10 @@ private:
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 if (copied_tablet_meta.has_idg_meta()) {
@@ -1570,7 +1585,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(

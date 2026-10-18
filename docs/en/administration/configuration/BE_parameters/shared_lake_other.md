@@ -149,6 +149,17 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_replication_enable_light_schema_change
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Allows shared-data replication snapshots with live rowsets from compatible lightweight add/drop column changes. The source and target current schemas must match logically. Added columns must be ordinary scalar value columns with a default value or nullable semantics; key, sort, type, generated-column, nested-UID, external-index, bundled-file, and shared/range-tablet changes are not supported. When disabled, snapshots with live historical rowset schemas are rejected. Validated dropped columns are removed from segment footer metadata; their data pages are not rewritten. The setting is captured when each replication task starts.
+- Introduced in: -
+
+Enable this option only after **all target CNs** support it. A normalized replication transaction records its target schema and fails publish if that schema changes. Disabling this option prevents new admissions but does not change replay of already recorded transactions. Older CNs cannot safely replay these transaction logs; finish or abort pending normalized transactions before any downgrade and do not assume that disabling the option makes a downgrade safe.
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
