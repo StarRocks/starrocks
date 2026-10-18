@@ -4229,4 +4229,173 @@ TEST_F(ArrowScannerTest, TestDiscreteHelperDefensiveBranches) {
     }
 }
 
+TEST_F(ArrowScannerTest, TestArrowInputStreamAndFileMetadataBranches) {
+    // Subcase A: Empty scan ranges in ArrowScanner::open() (covers line 224).
+    {
+        SlotTypeDescInfoArray slots;
+        slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto load_id = UniqueId::gen_uid();
+        auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+        ctx->broker_scan_range.ranges.clear();
+
+        ArrowScanner empty_scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(empty_scanner.open());
+        empty_scanner.close();
+    }
+
+    // Subcase B: Cancelled non-discrete StreamLoadPipe causes _file->read() in StarRocksArrowInputStream::Read()
+    // to return non-OK status (covers line 66).
+    {
+        SlotTypeDescInfoArray slots;
+        slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+        auto load_id = UniqueId::gen_uid();
+        auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        pipe->cancel(Status::InternalError("cancelled stream"));
+
+        ArrowScanner cancelled_scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(cancelled_scanner.open());
+        auto res = cancelled_scanner.get_next();
+        EXPECT_TRUE(res.status().is_internal_error());
+        cancelled_scanner.close();
+    }
+
+    // Subcase C: Scan with modification_time set (line 206), broker_addresses non-empty (line 260),
+    // VLOG_ROW enabled (lines 699, 703), and direct exercise of StarRocksArrowInputStream Tell(), Close(),
+    // closed(), and Read() when closed (lines 62, 85-97).
+    {
+        SlotTypeDescInfoArray slots;
+        slots.emplace_back("c0_str", TypeDescriptor::create_char_type(2), true);
+
+        auto load_id = UniqueId::gen_uid();
+        auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+        LoadStreamMgr load_stream_mgr;
+        ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+        DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_ARROW;
+        range.file_type = TFileType::FILE_STREAM;
+        range.__set_load_id(load_id.to_thrift());
+        range.__set_path("stream_with_mtime.arrow");
+        range.__set_size(4096);
+        range.__set_modification_time(1700000000000L);
+
+        TQueryOptions query_options;
+        query_options.query_type = TQueryType::LOAD;
+        query_options.__set_log_rejected_record_num(10);
+        TQueryGlobals query_globals;
+        query_globals.time_zone = "UTC";
+        LoadPathMgr load_path_mgr({(_tmp_root_dir / "mtime_rejected_load_path").string()});
+        ASSERT_OK(load_path_mgr.init());
+        RuntimeServices runtime_services;
+        runtime_services.load_path_mgr = &load_path_mgr;
+        runtime_services.load_stream_mgr = &load_stream_mgr;
+        QueryExecutionServices qes;
+        qes.runtime = &runtime_services;
+
+        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &qes, nullptr));
+        DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {slots, slots});
+        state->set_desc_tbl(desc_tbl);
+        state->init_instance_mem_tracker();
+        state->set_db("test_db");
+        state->set_load_label("test_mtime_label");
+        state->set_txn_id(98765);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->strict_mode = true;
+        params->__isset.strict_mode = true;
+        std::vector<TupleDescriptor*> tuples;
+        desc_tbl->get_tuple_descs(&tuples);
+        params->src_tuple_id = 0;
+        params->dest_tuple_id = static_cast<int>(tuples.size()) - 1;
+        const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+        const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+        for (int i = 0; i < static_cast<int>(src_tuple->slots().size()); i++) {
+            auto& src_slot = src_tuple->slots()[i];
+            auto& dst_slot = dst_tuple->slots()[i];
+            params->expr_of_dest_slot[dst_slot->id()] =
+                    create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+            params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
+            params->src_slot_ids.emplace_back(i);
+        }
+        params->__isset.dest_sid_to_src_sid_without_trans = true;
+
+        TBrokerScanRange broker_scan_range;
+        broker_scan_range.params = *params;
+        broker_scan_range.ranges.push_back(range);
+        TNetworkAddress broker_addr;
+        broker_addr.hostname = "127.0.0.1";
+        broker_addr.port = 8000;
+        broker_scan_range.broker_addresses.push_back(broker_addr);
+
+        auto schema = arrow::schema({arrow::field("c0_str", arrow::utf8())});
+        arrow::StringBuilder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({"ok", "too_long_value"}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 2, {array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+        ASSERT_OK(pipe->finish());
+
+        RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("mtime_prof", true));
+        ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+        ArrowScanner scanner(state, profile, broker_scan_range, counter);
+        ASSERT_OK(scanner.open());
+        ASSERT_OK(scanner.open_next_reader());
+        ASSERT_NE(nullptr, scanner._curr_file_reader);
+
+        // Extract the owned arrow::io::InputStream (StarRocksArrowInputStream) from InputStreamMessageReader
+        // inside RecordBatchStreamReaderImpl to exercise Tell(), Close(), closed(), and Read() after Close().
+        auto* msg_reader = *reinterpret_cast<arrow::ipc::MessageReader* const*>(
+                reinterpret_cast<const char*>(scanner._curr_file_reader.get()) + 0x108);
+        ASSERT_NE(nullptr, msg_reader);
+        auto owned_arrow_stream = *reinterpret_cast<const std::shared_ptr<arrow::io::InputStream>*>(
+                reinterpret_cast<const char*>(msg_reader) + 0x18);
+        ASSERT_NE(nullptr, owned_arrow_stream);
+        EXPECT_FALSE(owned_arrow_stream->closed());
+        auto tell_open = owned_arrow_stream->Tell();
+        ASSERT_ARROW_OK(tell_open.status());
+        EXPECT_GT(tell_open.ValueOrDie(), 0);
+
+        const int prev_vlog = FLAGS_v;
+        FLAGS_v = 10;
+        DeferOp restore_vlog([&]() { FLAGS_v = prev_vlog; });
+
+        auto chunk_res = scanner.get_next();
+        ASSERT_OK(chunk_res.status());
+        ASSERT_NE(nullptr, chunk_res.value());
+        EXPECT_EQ(1, chunk_res.value()->num_rows());
+        EXPECT_EQ("ok", chunk_res.value()->columns()[0]->get(0).get_slice());
+        EXPECT_EQ(1, counter->num_rows_filtered);
+
+        // Now close the StarRocksArrowInputStream and verify Tell() and Read() on a closed stream.
+        ASSERT_ARROW_OK(owned_arrow_stream->Close());
+        EXPECT_TRUE(owned_arrow_stream->closed());
+        auto tell_closed = owned_arrow_stream->Tell();
+        EXPECT_TRUE(tell_closed.status().IsInvalid());
+        uint8_t dummy_byte = 0;
+        auto read_closed = owned_arrow_stream->Read(1, &dummy_byte);
+        EXPECT_TRUE(read_closed.status().IsInvalid());
+
+        scanner.close();
+    }
+}
+
 } // namespace starrocks
