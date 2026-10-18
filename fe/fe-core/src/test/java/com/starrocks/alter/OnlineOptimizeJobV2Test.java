@@ -35,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -48,8 +49,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
 
     private static final Logger LOG = LogManager.getLogger(OnlineOptimizeJobV2Test.class);
 
-<<<<<<< HEAD
-=======
     @BeforeAll
     public static void beforeAll() {
         DDLTestBase.beforeAll();
@@ -61,10 +60,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        UtFrameUtils.setUpForPersistTest();
     }
 
->>>>>>> 64fa18b ([UT] Fix flaky OnlineOptimizeJobV2Test by stopping the background schema change scheduler (#80980))
     @BeforeEach
     public void setUp() throws Exception {
         super.setUp();
