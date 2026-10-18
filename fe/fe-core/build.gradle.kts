@@ -514,6 +514,13 @@ tasks.test {
 
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
 
+    // Unlike Maven surefire, Gradle does not pass the build's system properties to the test JVM, so forward the
+    // HangingTestWatchdog threshold, e.g. -Dstarrocks.ut.hang.dump.seconds=0 to disable it (-P works as well).
+    providers.systemProperty("starrocks.ut.hang.dump.seconds")
+        .orElse(providers.gradleProperty("starrocks.ut.hang.dump.seconds"))
+        .orNull
+        ?.let { systemProperty("starrocks.ut.hang.dump.seconds", it) }
+
     // Add JMockit Java agent to JVM arguments
     val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
     jvmArgs(
