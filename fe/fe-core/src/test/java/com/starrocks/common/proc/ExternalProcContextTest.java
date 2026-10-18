@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -51,13 +53,13 @@ class ExternalProcContextTest {
         ConnectorMetadata metadata = new ConnectorMetadata() {
             @Override
             public List<String> listDbNames(ConnectContext context) {
-                assertSame(expectedContext, context);
+                assertContext(context);
                 return List.of("db");
             }
 
             @Override
             public Database getDb(ConnectContext context, String dbName) {
-                assertSame(expectedContext, context);
+                assertContext(context);
                 assertEquals("db", dbName);
                 if (metadataFailure != null) {
                     throw metadataFailure;
@@ -67,14 +69,14 @@ class ExternalProcContextTest {
 
             @Override
             public List<String> listTableNames(ConnectContext context, String dbName) {
-                assertSame(expectedContext, context);
+                assertContext(context);
                 assertEquals("db", dbName);
                 return List.of("tbl");
             }
 
             @Override
             public Table getTable(ConnectContext context, String dbName, String tableName) {
-                assertSame(expectedContext, context);
+                assertContext(context);
                 assertEquals("db", dbName);
                 assertEquals("tbl", tableName);
                 return new Table(2, tableName, Table.TableType.HIVE,
@@ -145,14 +147,43 @@ class ExternalProcContextTest {
     }
 
     @Test
-    void missingSessionIsPassedToTheConnectorWithoutInventingAnIdentity() throws Exception {
+    void sessionlessCallsUseAnonymousContextsWithoutRetainingThePreviousUser() throws Exception {
         ConnectContext previous = ConnectContext.get();
+        boolean checkDbState = Config.enable_check_db_state;
+        Config.enable_check_db_state = true;
         ConnectContext.remove();
         try {
-            ProcNodeInterface schema = ProcService.getInstance().open("/catalog/" + CATALOG + "/db/tbl/schema");
-            assertEquals("id", schema.fetchResult().getRows().get(0).get(0));
+            ExternalDbsProcDir databases = new ExternalDbsProcDir(CATALOG);
+            ExternalTablesProcDir tables = new ExternalTablesProcDir(CATALOG, "db");
+            for (String user : List.of("alice", "bob")) {
+                ConnectContext context = session(user);
+                try (var ignored = context.bindScope()) {
+                    databases.fetchResult();
+                    tables.lookup("tbl");
+                }
+                expectedContext = null;
+                assertEquals(List.of(List.of("db")), databases.fetchResult().getRows());
+                assertEquals(List.of(List.of("tbl")), databases.lookup("db").fetchResult().getRows());
+                assertEquals(List.of(List.of("tbl")), tables.fetchResult().getRows());
+                ProcDirInterface table = (ProcDirInterface) tables.lookup("tbl");
+                assertEquals("id", table.lookup("schema").fetchResult().getRows().get(0).get(0));
+                ProcNodeInterface schema = ProcService.getInstance().open("/catalog/" + CATALOG + "/db/tbl/schema");
+                assertEquals("id", schema.fetchResult().getRows().get(0).get(0));
+                assertNull(ConnectContext.get(), "Anonymous fallback must not bind a thread-local session");
+            }
         } finally {
+            Config.enable_check_db_state = checkDbState;
             ConnectContext.set(previous);
+        }
+    }
+
+    private void assertContext(ConnectContext context) {
+        assertNotNull(context, "Connectors may dereference the context even for sessionless Proc calls");
+        if (expectedContext == null) {
+            assertNull(context.getCurrentUserIdentity());
+            assertNull(context.getAuthToken());
+        } else {
+            assertSame(expectedContext, context);
         }
     }
 
