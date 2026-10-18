@@ -371,7 +371,7 @@ public class MockedFrontend {
     }
 
     // ThreadInfo.toString() keeps only the top 8 frames, so print the full stacks here.
-    private static String dumpAllThreads() {
+    static String dumpAllThreads() {
         ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         StringBuilder sb = new StringBuilder();
         long[] deadlockedThreadIds = threadMXBean.findDeadlockedThreads();

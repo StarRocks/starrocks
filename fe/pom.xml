@@ -41,6 +41,12 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+<<<<<<< HEAD
+=======
+        <junit.version>5.8.2</junit.version>
+        <junit-platform.version>1.8.2</junit-platform.version>
+        <unboundid.ldapsdk.version>7.0.5</unboundid.ldapsdk.version>
+>>>>>>> 81c2ab9 ([UT] Dump all threads when an FE UT JVM makes no progress (#80992))
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.21.7</jackson.version>
@@ -474,6 +480,14 @@ under the License.
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>5.8.2</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.junit.platform/junit-platform-launcher -->
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>${junit-platform.version}</version>
                 <scope>test</scope>
             </dependency>
 
