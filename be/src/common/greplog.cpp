@@ -107,14 +107,17 @@ static void parse_log(std::string_view log, GrepLogContext* context) {
     tm local_tm;
     memset(&local_tm, 0, sizeof(tm));
     if (strptime(log.data() + 1, has_year ? "%Y%m%d %H:%M:%S" : "%m%d %H:%M:%S", &local_tm) != nullptr) {
+        local_tm.tm_isdst = -1;
         if (has_year) {
             entry.timestamp = mktime(&local_tm);
         } else {
             // handle the case log file was created on 2020-12-31 23:59:59, but the log was written on 2021-01-01 00:00:03
             local_tm.tm_year = context->cur_year - 1900;
+            // mktime mutates tm_isdst; let each candidate infer it independently.
+            tm next_year_tm = local_tm;
+            next_year_tm.tm_year++;
             int64_t candi1 = mktime(&local_tm);
-            local_tm.tm_year++;
-            int64_t candi2 = mktime(&local_tm);
+            int64_t candi2 = mktime(&next_year_tm);
             if (std::abs(candi1 - context->cur_ts) < std::abs(candi2 - context->cur_ts)) {
                 entry.timestamp = candi1;
             } else {
@@ -124,7 +127,20 @@ static void parse_log(std::string_view log, GrepLogContext* context) {
     }
     auto tid_start = log.find(' ', has_year ? 10 : 6);
     if (tid_start != string::npos) {
-        entry.thread_id = ::strtoll(log.data() + tid_start + 1, nullptr, 10);
+        tid_start = log.find_first_not_of(' ', tid_start);
+        if (tid_start != string::npos) {
+            auto tid_end = log.find(' ', tid_start);
+            // sys_log_timezone inserts a signed HHMM offset before the thread ID.
+            if (tid_end != string::npos && tid_end - tid_start == 5 &&
+                (log[tid_start] == '+' || log[tid_start] == '-') &&
+                std::all_of(log.begin() + tid_start + 1, log.begin() + tid_end,
+                            [](unsigned char c) { return std::isdigit(c); })) {
+                tid_start = log.find_first_not_of(' ', tid_end);
+            }
+            if (tid_start != string::npos) {
+                entry.thread_id = ::strtoll(log.data() + tid_start, nullptr, 10);
+            }
+        }
     }
 }
 
@@ -170,6 +186,7 @@ static void parse_ts_from_filename(const string& path, int64_t& ts, int32_t& yea
         default_time();
         return;
     }
+    local_tm_create.tm_isdst = -1;
     ts = mktime(&local_tm_create);
     year = local_tm_create.tm_year + 1900;
 }
