@@ -170,6 +170,109 @@ TEST_F(GrepLogTest, GrepLogReturnsErrorForInvalidPattern) {
     EXPECT_TRUE(entries.empty());
 }
 
+class GrepLogTimeFilterTest : public GrepLogTest, public testing::WithParamInterface<bool> {
+protected:
+    std::string prefix(const std::string& date) const { return "I" + (GetParam() ? date : date.substr(4)); }
+};
+
+TEST_P(GrepLogTimeFilterTest, TimestampBoundsAndRequestOutput) {
+    // Exercise both BE and CN file selection with the same query parameters used by /greplog.
+    for (bool is_cn : {false, true}) {
+        BackendOptions::_is_cn = is_cn;
+        const auto p = prefix("20261017");
+        const auto target = p + " 09:45:54.448190 21807688042176 lake_service.cpp:594] Published txns=48";
+        write_log_file(std::string(is_cn ? "cn" : "be") + ".INFO.log.20261017-090000",
+                       {p + " 09:45:53.999999 101 Published before", target,
+                        p + " 09:45:54.999999 103 Published same second", p + " 09:45:55.000000 104 Published end"});
+        const auto start = unix_seconds(2026, 10, 17, 9, 45, 54);
+        const auto end = start + 1;
+
+        std::deque<GrepLogEntry> entries;
+        ASSERT_TRUE(grep_log(0, 0, 'I', "Published", 0, entries).ok());
+        ASSERT_EQ(4, entries.size());
+        EXPECT_EQ(start, entries[1].timestamp);
+        EXPECT_EQ(start, entries[2].timestamp);
+        EXPECT_EQ(21807688042176ULL, entries[1].thread_id);
+        EXPECT_EQ('I', entries[1].level);
+
+        entries.clear();
+        ASSERT_TRUE(grep_log(start, end, 'I', "Published", 0, entries).ok());
+        EXPECT_THAT(logs(entries), ElementsAre(target, p + " 09:45:54.999999 103 Published same second"));
+
+        entries.clear();
+        ASSERT_TRUE(grep_log(start, 0, 'I', "Published", 0, entries).ok());
+        EXPECT_THAT(logs(entries), ElementsAre(target, p + " 09:45:54.999999 103 Published same second",
+                                               p + " 09:45:55.000000 104 Published end"));
+        entries.clear();
+        ASSERT_TRUE(grep_log(0, end, 'I', "Published", 0, entries).ok());
+        EXPECT_THAT(logs(entries), ElementsAre(p + " 09:45:53.999999 101 Published before", target,
+                                               p + " 09:45:54.999999 103 Published same second"));
+
+        const auto unbounded = grep_log_as_string(0, 0, "I", "Published txns=48", 10);
+        EXPECT_EQ(target + "\nLines: 1\n", unbounded);
+        EXPECT_EQ(unbounded, grep_log_as_string(start, end, "I", "Published txns=48", 10));
+    }
+}
+
+TEST_P(GrepLogTimeFilterTest, YearRollover) {
+    const auto december = prefix("20251231") + " 23:59:59.999999 101 Published before rollover";
+    const auto january = prefix("20260101") + " 00:00:00.000001 102 Published after rollover";
+    write_log_file("be.INFO.log.20251231-235958", {december, january});
+    const auto start = unix_seconds(2026, 1, 1, 0, 0, 0);
+
+    std::deque<GrepLogEntry> entries;
+    ASSERT_TRUE(grep_log(0, 0, 'I', "Published", 0, entries).ok());
+    ASSERT_EQ(2, entries.size());
+    EXPECT_EQ(start - 1, entries[0].timestamp);
+    EXPECT_EQ(start, entries[1].timestamp);
+
+    entries.clear();
+    ASSERT_TRUE(grep_log(start, start + 1, 'I', "Published", 0, entries).ok());
+    EXPECT_THAT(logs(entries), ElementsAre(january));
+    entries.clear();
+    ASSERT_TRUE(grep_log(start - 1, start, 'I', "Published", 0, entries).ok());
+    EXPECT_THAT(logs(entries), ElementsAre(december));
+}
+
+TEST_P(GrepLogTimeFilterTest, ContinuationLinesInheritUnmatchedPrefix) {
+    const auto p = prefix("20260101");
+    // Neither record prefix matches the regex. Include a malformed prefix-like continuation.
+    write_log_file("be.INFO.log.20260101-000000",
+                   {p + " 00:00:00.000000 101 record before window", "Published before continuation",
+                    "W" + p.substr(1) + " 00:00:01.000000 202 record in window", "Published in-window continuation",
+                    "I2026x101 00:00:00.000000 999 Published in-window malformed prefix",
+                    p + " 00:00:02.000000 303 record at end", "Published end continuation"});
+    const auto start = unix_seconds(2026, 1, 1, 0, 0, 1);
+    for (const auto& pattern : {std::string("Published"), std::string()}) {
+        std::deque<GrepLogEntry> entries;
+        ASSERT_TRUE(grep_log(start, start + 1, 'I', pattern, 0, entries).ok());
+        ASSERT_EQ(pattern.empty() ? 3 : 2, entries.size());
+        EXPECT_EQ("Published in-window continuation", entries[entries.size() - 2].log);
+        EXPECT_EQ("I2026x101 00:00:00.000000 999 Published in-window malformed prefix", entries.back().log);
+        for (const auto& entry : entries) {
+            EXPECT_EQ(start, entry.timestamp);
+            EXPECT_EQ('W', entry.level);
+            EXPECT_EQ(202, entry.thread_id);
+        }
+    }
+    EXPECT_EQ(grep_log_as_string(0, 0, "I", "Published in-window", 10),
+              grep_log_as_string(start, start + 1, "I", "Published in-window", 10));
+}
+
+INSTANTIATE_TEST_SUITE_P(LogFormats, GrepLogTimeFilterTest, testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) { return info.param ? "WithYear" : "Legacy"; });
+
+TEST_F(GrepLogTest, ExplicitYearOverridesFilenameYear) {
+    write_log_file("be.INFO.log.20240101-000000", {"E20261017 09:45:54.448190 123 Published explicit year"});
+    const auto start = unix_seconds(2026, 10, 17, 9, 45, 54);
+    std::deque<GrepLogEntry> entries;
+    ASSERT_TRUE(grep_log(start, start + 1, 'I', "Published", 0, entries).ok());
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ(start, entries[0].timestamp);
+    EXPECT_EQ('E', entries[0].level);
+    EXPECT_EQ(123, entries[0].thread_id);
+}
+
 } // namespace
 
 } // namespace starrocks

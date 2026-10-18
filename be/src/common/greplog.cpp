@@ -25,6 +25,7 @@
 #include <deque>
 #include <filesystem>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 #include "base/utility/defer_op.h"
@@ -70,55 +71,68 @@ struct GrepLogContext {
     char* line_start{nullptr};
     size_t line_len{0};
     bool stop_scan{false};
+    GrepLogEntry current_entry;
     std::deque<GrepLogEntry>* entries;
 };
 
-inline bool is_log_prefix(const string& log) {
+inline bool is_log_prefix(std::string_view log) {
     if (log.length() < 30) {
         return false;
     }
-    if (log[5] == ' ') {
-        if (log[0] == 'I' || log[0] == 'W' || log[0] == 'E' || log[0] == 'F') {
-            if (std::isdigit(log[1]) && std::isdigit(log[2]) && std::isdigit(log[3]) && std::isdigit(log[4])) {
-                return true;
-            }
+    if (log[0] != 'I' && log[0] != 'W' && log[0] != 'E' && log[0] != 'F') {
+        return false;
+    }
+    // glog prefixes are either LMMdd or LyyyyMMdd, followed by a space.
+    size_t date_end = log[5] == ' ' ? 5 : 9;
+    if (log[date_end] != ' ') {
+        return false;
+    }
+    for (size_t i = 1; i < date_end; ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(log[i]))) {
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
-static void parse_log(GrepLogEntry& entry, GrepLogContext* context) {
-    if (!is_log_prefix(entry.log)) {
+static void parse_log(std::string_view log, GrepLogContext* context) {
+    if (!is_log_prefix(log)) {
         return;
     }
-    entry.level = entry.log[0];
+    auto& entry = context->current_entry;
+    entry = GrepLogEntry();
+    entry.level = log[0];
+    bool has_year = log[9] == ' ';
     // convert time string to timestamp
     tm local_tm;
     memset(&local_tm, 0, sizeof(tm));
-    if (strptime(entry.log.c_str() + 1, "%m%d %H:%M:%S", &local_tm) != nullptr) {
-        // handle the case log file was created on 2020-12-31 23:59:59, but the log was written on 2021-01-01 00:00:03
-        local_tm.tm_year = context->cur_year - 1900;
-        int64_t candi1 = mktime(&local_tm);
-        local_tm.tm_year++;
-        int64_t candi2 = mktime(&local_tm);
-        if (std::abs(candi1 - context->cur_ts) < std::abs(candi2 - context->cur_ts)) {
-            entry.timestamp = candi1;
+    if (strptime(log.data() + 1, has_year ? "%Y%m%d %H:%M:%S" : "%m%d %H:%M:%S", &local_tm) != nullptr) {
+        if (has_year) {
+            entry.timestamp = mktime(&local_tm);
         } else {
-            entry.timestamp = candi2;
+            // handle the case log file was created on 2020-12-31 23:59:59, but the log was written on 2021-01-01 00:00:03
+            local_tm.tm_year = context->cur_year - 1900;
+            int64_t candi1 = mktime(&local_tm);
+            local_tm.tm_year++;
+            int64_t candi2 = mktime(&local_tm);
+            if (std::abs(candi1 - context->cur_ts) < std::abs(candi2 - context->cur_ts)) {
+                entry.timestamp = candi1;
+            } else {
+                entry.timestamp = candi2;
+            }
         }
     }
-    auto tid_start = entry.log.find(' ', 6);
+    auto tid_start = log.find(' ', has_year ? 10 : 6);
     if (tid_start != string::npos) {
-        entry.thread_id = ::strtoll(entry.log.c_str() + tid_start + 1, nullptr, 10);
+        entry.thread_id = ::strtoll(log.data() + tid_start + 1, nullptr, 10);
     }
 }
 
 static int scan_by_line_handler(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                                 void* ctx) {
     auto* context = (GrepLogContext*)ctx;
-    auto& new_log = context->entries->emplace_back();
+    auto& new_log = context->entries->emplace_back(context->current_entry);
     new_log.log.assign(context->line_start, context->line_len);
-    parse_log(new_log, context);
     if (context->start_ts > 0 && new_log.timestamp < context->start_ts) {
         context->entries->pop_back();
         return 0;
@@ -190,6 +204,9 @@ Status grep_log_single_file(const string& path, int64_t start_ts, int64_t end_ts
             read--;
         }
         ctx.line_len = read;
+        // Parse every prefix, even when it does not match the pattern, so continuation
+        // lines inherit the timestamp, severity and thread ID of their record.
+        parse_log(std::string_view(line, read), &ctx);
         if (database == nullptr) {
             // no pattern, add all lines
             scan_by_line_handler(0, 0, read, 0, &ctx);
