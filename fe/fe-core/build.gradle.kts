@@ -286,6 +286,8 @@ dependencies {
     implementation("org.jdom:jdom2")
     implementation("org.json:json")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // for HangingTestWatchdog, a TestExecutionListener
+    testImplementation("org.junit.platform:junit-platform-launcher")
     implementation("org.mariadb.jdbc:mariadb-java-client")
     testImplementation("org.mockito:mockito-inline:4.11.0")
     // Force ByteBuddy 1.14.9+ for Java 21 class file format support
@@ -498,7 +500,26 @@ tasks.test {
         showCauses = false // Show underlying causes for exceptions
     }
 
+    // HangingTestWatchdog prints the thread stacks of a hung test JVM to stderr. The test output streams are not
+    // shown above, and the report is written only when a test class finishes, which a hung one never does, so
+    // forward the watchdog's lines (each starts with this prefix) to the build log as they come.
+    addTestOutputListener(object : TestOutputListener {
+        override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
+            if (outputEvent.destination == TestOutputEvent.Destination.StdErr &&
+                    outputEvent.message.contains("[HangingTestWatchdog]")) {
+                logger.lifecycle(outputEvent.message.trimEnd())
+            }
+        }
+    })
+
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
+
+    // Unlike Maven surefire, Gradle does not pass the build's system properties to the test JVM, so forward the
+    // HangingTestWatchdog threshold, e.g. -Dstarrocks.ut.hang.dump.seconds=0 to disable it (-P works as well).
+    providers.systemProperty("starrocks.ut.hang.dump.seconds")
+        .orElse(providers.gradleProperty("starrocks.ut.hang.dump.seconds"))
+        .orNull
+        ?.let { systemProperty("starrocks.ut.hang.dump.seconds", it) }
 
     // Add JMockit Java agent to JVM arguments
     val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
