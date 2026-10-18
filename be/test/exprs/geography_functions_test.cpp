@@ -107,6 +107,62 @@ public:
                 type));
         return GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
     }
+    static std::vector<std::string> geometry_point_wkb_cases() {
+        auto encode = [](WkbCoordinate coordinate) {
+            std::string bytes(21, '\0');
+            bytes[0] = bytes[1] = 1;
+            const std::array<double, 2> xy = {coordinate.x, coordinate.y};
+            for (size_t axis = 0; axis < xy.size(); ++axis) {
+                const uint64_t bits = std::bit_cast<uint64_t>(xy[axis]);
+                for (size_t i = 0; i < sizeof(bits); ++i) {
+                    bytes[5 + axis * sizeof(bits) + i] = static_cast<char>(bits >> (8 * i));
+                }
+            }
+            return bytes;
+        };
+        const double tiny = std::numeric_limits<double>::denorm_min();
+        const double huge = std::numeric_limits<double>::max();
+        std::vector<WkbCoordinate> coordinates = {{0, 0},      {-0.0, 0.0}, {0.0, -0.0}, {-0.0, -0.0},  {180, 90},
+                                                  {-180, -90}, {181, -91},  {1e7, -2e7}, {tiny, -tiny}, {huge, -huge}};
+        std::mt19937_64 random(20261018);
+        for (size_t count = 0; count < 256;) {
+            const WkbCoordinate point{std::bit_cast<double>(random()), std::bit_cast<double>(random())};
+            if (std::isfinite(point.x) && std::isfinite(point.y)) {
+                coordinates.push_back(point);
+                ++count;
+            }
+        }
+        std::vector<std::string> values;
+        for (const auto& point : coordinates) {
+            auto bytes = encode(point);
+            values.push_back(bytes);
+            bytes[0] = 0;
+            std::reverse(bytes.begin() + 1, bytes.begin() + 5);
+            std::reverse(bytes.begin() + 5, bytes.begin() + 13);
+            std::reverse(bytes.begin() + 13, bytes.end());
+            values.push_back(bytes);
+        }
+        const double nan = std::bit_cast<double>(uint64_t{0xfff8000000001234});
+        const double inf = std::numeric_limits<double>::infinity();
+        for (const auto& point :
+             {WkbCoordinate{nan, nan}, {nan, 0}, {0, nan}, {inf, 0}, {-inf, 0}, {0, inf}, {0, -inf}}) {
+            values.push_back(encode(point));
+        }
+        const auto plain = encode({1, 2});
+        for (uint32_t type : {0x20000001U, 0x40000001U, 0x80000001U, 1001U, 2001U, 3001U}) {
+            auto bytes = plain;
+            for (size_t i = 0; i < sizeof(type); ++i) bytes[1 + i] = static_cast<char>(type >> (8 * i));
+            if (type == 0x20000001U) bytes.insert(5, "\xe6\x10\0\0", 4);
+            values.push_back(bytes);
+        }
+        auto bad_order = plain;
+        bad_order[0] = 2;
+        values.insert(values.end(), {bad_order, plain.substr(0, 20), plain + '\0', std::string()});
+        for (const char* wkt : {"POINT EMPTY", "LINESTRING (0 0, 1 1)", "POLYGON ((0 0, 1 0, 0 1, 0 0))"}) {
+            values.push_back(geometry({wkt})->get(0).get_slice().to_string());
+        }
+        return values;
+    }
 };
 
 TEST_F(geographyFunctionsTest, st_pointTest) {
@@ -1012,6 +1068,128 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
         auto result = GeoFunctions::st_geography_x(nullptr, {input});
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_not_supported());
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryPointWkbConstructorMatchesCodec) {
+    const auto values = geometry_point_wkb_cases();
+    auto input = BinaryColumn::create();
+    for (const auto& bytes : values) input->append(Slice(bytes));
+    const auto type = geometry_type("EPSG:4326", 4326);
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_VARCHAR)}, type));
+    auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:4326", values.size());
+    auto output = GeoFunctions::st_geom_from_wkb(context.get(), {input, crs});
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_TRUE((*output)->is_nullable());
+    ASSERT_EQ(values.size(), (*output)->size());
+    for (size_t row = 0; row < values.size(); ++row) {
+        SCOPED_TRACE(row);
+        WkbGeometry point;
+        auto status = WkbCodec::parse_wkb(Slice(values[row]), &point, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
+        std::string expected;
+        if (status.ok()) status = WkbCodec::to_wkb(point, &expected, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
+        ASSERT_EQ(!status.ok(), (*output)->is_null(row));
+        if (status.ok()) {
+            EXPECT_EQ(expected, (*output)->get(row).get_slice().to_string());
+        }
+    }
+    const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(output->get()));
+    EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
+    EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
+    auto nulls = NullColumn::create();
+    for (size_t row = 0; row < values.size(); ++row) nulls->append(row % 11 == 0);
+    auto mixed = GeoFunctions::st_geom_from_wkb(context.get(), {NullableColumn::create(input, nulls), crs});
+    ASSERT_TRUE(mixed.ok()) << mixed.status();
+    for (size_t row = 0; row < values.size(); ++row) {
+        EXPECT_EQ(row % 11 == 0 || (*output)->is_null(row), (*mixed)->is_null(row));
+        if (!(*mixed)->is_null(row)) {
+            EXPECT_EQ((*output)->get(row).get_slice(), (*mixed)->get(row).get_slice());
+        }
+    }
+    auto one = BinaryColumn::create();
+    one->append(Slice(values[2]));
+    auto constant = GeoFunctions::st_geom_from_wkb(
+            context.get(),
+            {ConstColumn::create(one, 17), ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:4326", 17)});
+    ASSERT_TRUE(constant.ok()) << constant.status();
+    EXPECT_TRUE((*constant)->is_constant());
+    EXPECT_EQ(17, (*constant)->size());
+    EXPECT_EQ(values[2], (*constant)->get(16).get_slice().to_string());
+    input->reset_column();
+    input->append("changed source");
+    EXPECT_EQ(values[0], (*output)->get(0).get_slice().to_string());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryPointAccessorsMatchCodec) {
+    const auto type = geometry_type("EPSG:4326", 4326);
+    for (const auto& bytes : geometry_point_wkb_cases()) {
+        SCOPED_TRACE(bytes.size());
+        auto input = GeoColumn::create(GeoColumnDescriptor{
+                type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        input->append_wkb(Slice(bytes));
+        WkbGeometry point;
+        const auto status = WkbCodec::parse_wkb(Slice(bytes), &point, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
+        for (bool x : {true, false}) {
+            for (bool constant : {false, true}) {
+                ColumnPtr source = input;
+                if (constant) source = ConstColumn::create(source, 9);
+                auto output = x ? GeoFunctions::st_geometry_x(nullptr, {source})
+                                : GeoFunctions::st_geometry_y(nullptr, {source});
+                if (!status.ok()) {
+                    ASSERT_FALSE(output.ok());
+                    EXPECT_EQ(status.message(), output.status().message());
+                } else if (point.type != WkbGeometryType::POINT || point.empty) {
+                    ASSERT_FALSE(output.ok());
+                    EXPECT_EQ(
+                            x ? "ST_X requires a non-empty POINT GEOMETRY" : "ST_Y requires a non-empty POINT GEOMETRY",
+                            output.status().message());
+                } else {
+                    ASSERT_TRUE(output.ok()) << output.status();
+                    EXPECT_EQ(constant, (*output)->is_constant());
+                    EXPECT_EQ(source->size(), (*output)->size());
+                    const double actual = ColumnViewer<TYPE_DOUBLE>(*output).value(source->size() - 1);
+                    EXPECT_EQ(std::bit_cast<uint64_t>(x ? point.coordinates[0].x : point.coordinates[0].y),
+                              std::bit_cast<uint64_t>(actual));
+                }
+                if (!output.ok()) {
+                    EXPECT_TRUE(output.status().is_invalid_argument());
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryPointFastPathRetainsNullsAndDescriptorChecks) {
+    auto source = geometry({"POINT (-0.0 2)", nullptr, "POINT (181 -91)", "POINT (1e7 -2e7)"},
+                           geometry_type("EPSG:4326", 4326));
+    for (bool x : {true, false}) {
+        auto result =
+                x ? GeoFunctions::st_geometry_x(nullptr, {source}) : GeoFunctions::st_geometry_y(nullptr, {source});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ColumnViewer<TYPE_DOUBLE> output(*result);
+        EXPECT_TRUE(output.is_null(1));
+        EXPECT_DOUBLE_EQ(x ? 181 : -91, output.value(2));
+        EXPECT_DOUBLE_EQ(x ? 1e7 : -2e7, output.value(3));
+        auto all_null = x ? GeoFunctions::st_geometry_x(nullptr, {ColumnHelper::create_const_null_column(17)})
+                          : GeoFunctions::st_geometry_y(nullptr, {ColumnHelper::create_const_null_column(17)});
+        ASSERT_TRUE(all_null.ok());
+        EXPECT_EQ(17, (*all_null)->size());
+        EXPECT_TRUE((*all_null)->is_null(16));
+    }
+    for (auto dimension : {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ}) {
+        auto input = GeoColumn::create(GeoColumnDescriptor{
+                geometry_type().geo_type.value(), {GEO_ENCODING_WKB, dimension, GEO_VALIDATION_STATE_UNVALIDATED}});
+        input->append_wkb("not WKB");
+        for (bool x : {true, false}) {
+            auto output =
+                    x ? GeoFunctions::st_geometry_x(nullptr, {input}) : GeoFunctions::st_geometry_y(nullptr, {input});
+            ASSERT_FALSE(output.ok());
+            EXPECT_TRUE(output.status().is_not_supported());
+            EXPECT_EQ(dimension == GEO_DIMENSION_XYZ ? "Unsupported GEOMETRY SQL boundary descriptor"
+                                                     : "GEOMETRY compute functions require XY dimension",
+                      output.status().message());
+        }
     }
 }
 
