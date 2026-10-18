@@ -1,0 +1,10 @@
+{
+  "source_commit": "dde163df62c27d787bc17cd3d81ccc60cd2f08c2",
+  "toolchain_tag": "main-20261029",
+  "inputs_sha256": "5649917cbf3746f5f7d459fad1c6e20f45513872f56524954a084349fdb4f58e",
+  "images": {
+    "ubuntu": "starrocks/dev-env-ubuntu@sha256:481eafa5fccf2d3706c65fa266bcb8af45590e9ef566f71f0691c93fad2b21c9",
+    "rocky9": "starrocks/dev-env-rocky9@sha256:6bbfa3f4b74d14020d9a907f3397118ee4ea504a397e87cbb75fe966d7ec8a05"
+  },
+  "verification": "Published Ubuntu and Rocky9 amd64/arm64 image labels identify source_commit. Its thirdparty recipes, env.sh and toolchain sources are byte-for-byte identical to main 9fd19cdde4bcc5cbcb797d24f246ae9ead2ba668, including BRPC 1.18.0 and toolchain main-20261029. This fingerprint includes the reviewed Lance-only additions to vars.sh, build-thirdparty.sh and package-manifest.sh; existing dependency recipes remain unchanged. Only standalone pprof URL/checksum assignments are normalized; the reuse path refreshes pprof through its checksummed download/install recipe. No C++ library version or build input is excluded."
+}
