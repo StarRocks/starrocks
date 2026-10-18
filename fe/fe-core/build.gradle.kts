@@ -286,6 +286,8 @@ dependencies {
     implementation("org.jdom:jdom2")
     implementation("org.json:json")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // for HangingTestWatchdog, a TestExecutionListener
+    testImplementation("org.junit.platform:junit-platform-launcher")
     implementation("org.mariadb.jdbc:mariadb-java-client")
     testImplementation("org.mockito:mockito-inline:4.11.0")
     // Force ByteBuddy 1.14.9+ for Java 21 class file format support
