@@ -344,9 +344,28 @@ public class LockManager {
         Thread current = Thread.currentThread();
         int lockTableIndex = getLockTableIndex(rid);
         synchronized (lockTableMutexes[lockTableIndex]) {
+<<<<<<< HEAD
             Set<LockHolder> owners = cloneOwnersInternal(rid, lockTableIndex);
             return owners != null && owners.stream().anyMatch(holder -> holder.getLockType() == lockType
                     && holder.getLocker().getLockerThread() == current);
+=======
+            final Lock lock = lockTables[lockTableIndex].get(rid);
+            return lock != null && lock.isOwnedByThread(currentThreadId, lockType);
+        }
+    }
+
+    /**
+     * Whether the calling thread holds READ or WRITE on {@code rid}, through any {@link Locker}: the two
+     * {@link #isOwnedByCurrentThread} questions under one acquisition of the lock table's mutex.
+     */
+    public boolean isReadOrWriteOwnedByCurrentThread(long rid) {
+        long currentThreadId = Thread.currentThread().getId();
+        int lockTableIndex = getLockTableIndex(rid);
+        synchronized (lockTableMutexes[lockTableIndex]) {
+            final Lock lock = lockTables[lockTableIndex].get(rid);
+            return lock != null && (lock.isOwnedByThread(currentThreadId, LockType.READ)
+                    || lock.isOwnedByThread(currentThreadId, LockType.WRITE));
+>>>>>>> e2c944c9059... [Enhancement][RB-374] Make the planning-copy lock check cheap on its conforming path (#65744)
         }
     }
 

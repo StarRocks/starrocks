@@ -44,7 +44,8 @@ import java.util.stream.Collectors;
  * </ul>
  * All of that runs only once a violation has already been established. A conforming lock
  * acquisition never reaches {@link #report}, so counting, resolving the call site and capturing the
- * stack are off the hot path.
+ * stack are off the hot path. On the violation path the call site is found by a lazy walk that stops at
+ * the first qualifying frame; only an emitted log line captures the full stack.
  */
 public class LockInvariantViolations {
     private static final Logger LOG = LogManager.getLogger(LockInvariantViolations.class);
@@ -109,6 +110,14 @@ public class LockInvariantViolations {
     static final String UNKNOWN_SITE = "<unknown>";
 
     static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
+
+    /**
+     * Resolves a violation's call site. Walks lazily and stops at the first frame that qualifies, so a violation
+     * costs a few frames rather than a materialised {@code Thread.getStackTrace()} -- which matters in {@code warn},
+     * where a violating site on a hot path pays this on every call even while its log lines are throttled. The
+     * site is still resolved every time: it is the key both the throttle and the per-site counts are kept under.
+     */
+    static final StackWalker STACK_WALKER = StackWalker.getInstance();
 
     /**
      * Leading token on every violation report, in the log and in the exception alike, so one grep
@@ -303,15 +312,19 @@ public class LockInvariantViolations {
      * Walks the stack, so it is called only once a violation has already been established.
      */
     private static String currentCallSite() {
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.") || className.startsWith("jdk.")
-                    || className.startsWith(LOCK_PACKAGE)) {
-                continue;
-            }
-            return className + "." + frame.getMethodName() + ":" + frame.getLineNumber();
-        }
-        return UNKNOWN_SITE;
+        return STACK_WALKER.walk(frames -> frames
+                .filter(frame -> !isJdkOrLockLayer(frame.getClassName()))
+                .findFirst()
+                .map(LockInvariantViolations::siteOf)
+                .orElse(UNKNOWN_SITE));
+    }
+
+    static boolean isJdkOrLockLayer(String className) {
+        return className.startsWith("java.") || className.startsWith("jdk.") || className.startsWith(LOCK_PACKAGE);
+    }
+
+    static String siteOf(StackWalker.StackFrame frame) {
+        return frame.getClassName() + "." + frame.getMethodName() + ":" + frame.getLineNumber();
     }
 
     // --------------- Introspection, for tests and for diagnosing a noisy deployment ---------------
