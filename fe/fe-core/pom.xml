@@ -1209,12 +1209,16 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
+                    <!-- -XX:TieredStopAtLevel=1 lowers the default code cache to 48m. A planner-heavy test class can
+                         fill it, and once there is no room left for an adapter the forked JVM fails the build even
+                         though every test passed, so reserve 128m. -->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
                         -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
                         ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
+                        -XX:ReservedCodeCacheSize=128m
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                         ${security.manager.arg}

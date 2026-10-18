@@ -511,6 +511,8 @@ tasks.test {
         "-XX:CICompilerCount=1",
         "-XX:-BackgroundCompilation",
         "-XX:+UseSerialGC",
+        // TieredStopAtLevel=1 lowers the default code cache to 48m, which a planner-heavy test class can fill.
+        "-XX:ReservedCodeCacheSize=128m",
         // Java 21 module access for JMockit/Mockito ByteBuddy
         // (Maven surefire 3.2.5 auto-injects these on Java 17+)
         "--add-opens", "java.base/java.lang=ALL-UNNAMED",
