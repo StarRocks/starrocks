@@ -485,7 +485,39 @@ tasks.test {
     jvmArgs(
         "-Djdk.attach.allowAttachSelf",
         "-Duser.timezone=Asia/Shanghai",
+<<<<<<< HEAD
         "-javaagent:${configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath}"
+=======
+        "-javaagent:${jmockitPath}",
+        // JIT tuning to match Maven surefire config
+        "-XX:TieredStopAtLevel=1",
+        "-XX:CICompilerCount=1",
+        "-XX:-BackgroundCompilation",
+        "-XX:+UseSerialGC",
+        // TieredStopAtLevel=1 lowers the default code cache to 48m, which a planner-heavy test class can fill.
+        "-XX:ReservedCodeCacheSize=128m",
+        // Java 21 module access for JMockit/Mockito ByteBuddy
+        // (Maven surefire 3.2.5 auto-injects these on Java 17+)
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens", "java.base/java.io=ALL-UNNAMED",
+        "--add-opens", "java.base/java.math=ALL-UNNAMED",
+        "--add-opens", "java.base/java.net=ALL-UNNAMED",
+        "--add-opens", "java.base/java.nio=ALL-UNNAMED",
+        "--add-opens", "java.base/java.text=ALL-UNNAMED",
+        "--add-opens", "java.base/java.time=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.stream=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.regex=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.ssl=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.x509=ALL-UNNAMED",
+        "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+        "--add-opens", "java.management/sun.management=ALL-UNNAMED",
+>>>>>>> 5e89806 ([UT] Reserve 128m code cache for FE unit test JVMs (#80989))
     )
 
     // Use independent class loading (equivalent to useSystemClassLoader=false)
