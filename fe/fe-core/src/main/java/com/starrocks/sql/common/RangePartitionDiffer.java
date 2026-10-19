@@ -234,17 +234,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
-<<<<<<< HEAD
                 Map<String, Range<PartitionKey>> refTablePartitionKeyMap = MvUtils.readBaseTableUnderLock(mv, refBT,
-                        isQueryRewrite(), () -> PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
-                                mvPartitionExprOpt.get()));
+                        readsBaseTablesUnlocked(), () -> PartitionUtil.getPartitionKeyRange(refBT,
+                                refBTPartitionColumns.get(0), mvPartitionExprOpt.get()));
                 if (refTablePartitionKeyMap == null) {
-=======
-                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, readsBaseTablesUnlocked(),
-                        () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
-                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
-                if (mapping.cells() == null) {
->>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
                     return null;
                 }
                 Map<String, PCell> refTableRangeCellMap = Maps.newHashMap();

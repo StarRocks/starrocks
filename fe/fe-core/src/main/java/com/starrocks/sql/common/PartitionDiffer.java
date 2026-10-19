@@ -46,17 +46,10 @@ public abstract class PartitionDiffer {
         return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
     }
 
-<<<<<<< HEAD
-=======
     protected boolean readsBaseTablesUnlocked() {
         return queryRewriteParams != null && queryRewriteParams.readsBaseTablesUnlocked();
     }
 
-    protected TvrVersionRange pinnedRangeFor(Table table) {
-        return pinnedRangeByTableIdentifier.get(table.getUUID());
-    }
-
->>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
     /**
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>

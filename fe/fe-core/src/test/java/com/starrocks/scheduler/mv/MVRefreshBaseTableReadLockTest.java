@@ -20,25 +20,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.util.UUIDUtil;
-=======
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
->>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
 import com.starrocks.sql.common.PCell;
-=======
-import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
->>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import mockit.Invocation;

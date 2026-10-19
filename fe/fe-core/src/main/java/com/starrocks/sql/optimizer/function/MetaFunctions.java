@@ -240,18 +240,11 @@ public class MetaFunctions {
         // change leaves the set empty.
         Set<String> mvToRefreshPartitions;
         try {
-<<<<<<< HEAD
-            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
-                    mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-            if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
-                // For a full refresh, getMvToRefreshPartitionNames() is empty by design (no partition-level tracking).
-=======
             MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, LockHoldDepth.isUnderLock()
                     ? MVTimelinessArbiter.QueryRewriteParams.ofUnlockedRefresh()
                     : MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-            if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
-                // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
->>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
+            if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
+                // For a full refresh, getMvToRefreshPartitionNames() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.
                 mvToRefreshPartitions = mv.getPartitionNames();
             } else {
