@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -1171,4 +1172,17 @@ TEST_F(MetaFileTest, test_remove_compacted_sst_keeps_inputs_without_output) {
         EXPECT_EQ(1024, metadata->orphan_files(0).size());
     }
 }
+
+TEST_F(MetaFileTest, test_update_primary_index_memory_limit) {
+    const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(30).ok());
+    ASSERT_EQ(process_mem_limit * 30 / 100, _update_manager->index_cache().capacity());
+    // out-of-range values are clamped to [0, 100]
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(200).ok());
+    ASSERT_EQ(process_mem_limit, _update_manager->index_cache().capacity());
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(-1).ok());
+    ASSERT_EQ(0, _update_manager->index_cache().capacity());
+}
+
 } // namespace starrocks::lake
