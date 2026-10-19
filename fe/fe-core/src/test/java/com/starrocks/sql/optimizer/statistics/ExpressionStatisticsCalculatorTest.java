@@ -786,10 +786,14 @@ public class ExpressionStatisticsCalculatorTest {
         // test str_to_date function
         callOperator = new CallOperator(FunctionSet.STR_TO_DATE, DateType.DATETIME, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Utils.getLongFromDateTime(ConstantOperator.MIN_DATETIME),
-                columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Utils.getLongFromDateTime(ConstantOperator.MAX_DATETIME),
-                columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Utils.MIN_DATETIME_EPOCH_SECOND, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Utils.MAX_DATETIME_EPOCH_SECOND, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        // test str2date function, the DATE variant of str_to_date
+        callOperator = new CallOperator(FunctionSet.STR2DATE, DateType.DATE, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Utils.MIN_DATETIME_EPOCH_SECOND, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Utils.MAX_DATE_EPOCH_SECOND, columnStatistic.getMaxValue(), 0.001);
         Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
 
         callOperator = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT, Lists.newArrayList(left, right));
