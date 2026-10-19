@@ -905,6 +905,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new MVRefreshParams(mv, properties).isCompleteRefresh() && processStartTime > 0
                             ? String.valueOf(processStartTime) : "0");
         }
+        TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -1101,8 +1102,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // refresh mv until mv is reloaded.
         this.mv.waitForReloaded();
         // Before the run reads the MV's definition or any base table: a reset after this point means the data
-        // this run writes may come from a definition that no longer holds.
-        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
+        // this run writes may come from a definition that no longer holds. A later batch of a refresh job takes the
+        // epoch its first run read instead, so that a reset since the job started fences it too: the job's partition
+        // range and freshness baseline were decided before that reset.
+        String inheritedEpoch = properties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH);
+        final long versionMapResetEpoch = inheritedEpoch != null
+                ? Long.parseLong(inheritedEpoch) : mv.getVersionMapResetEpoch();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 

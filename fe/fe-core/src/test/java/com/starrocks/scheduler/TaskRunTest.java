@@ -27,11 +27,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-<<<<<<< HEAD
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-=======
 import static org.junit.jupiter.api.Assertions.assertFalse;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -131,7 +128,6 @@ public class TaskRunTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testLegacyMvPostRunIsNotExecuted() throws Exception {
         String legacyAnalyze = "ANALYZE SAMPLE TABLE test_mv WITH ASYNC MODE";
         Task task = new Task("mv-task");
@@ -157,7 +153,9 @@ public class TaskRunTest {
 
         new SqlTaskRunProcessor().postTaskRun(context);
         assertEquals(1, executedStatements.get());
-=======
+    }
+
+    @Test
     public void testRunsFromBothSidesOfAVersionMapResetDoNotMerge() {
         Map<String, String> range = new HashMap<>();
         range.put(TaskRun.MV_ID, "1");
@@ -190,7 +188,6 @@ public class TaskRunTest {
         // A later batch keeps the epoch its job's first run read.
         TaskRun.seedVersionMapResetEpoch(newProperties, 4);
         assertEquals("2", newProperties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
     }
 
     @Test

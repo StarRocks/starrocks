@@ -368,15 +368,11 @@ public class AlterJobMgr {
             // suspend the inactive mv's task
             if (context.task() != null) {
                 // suspend the task to avoid scheduling new task runs
-<<<<<<< HEAD
-                taskManager.suspendTask(context.task());
-=======
                 if (!isReplay && !context.killTaskRuns()) {
                     taskManager.suspendTaskLeavingRuns(context.task());
                 } else {
-                    taskManager.suspendTask(context.task(), isReplay);
+                    taskManager.suspendTask(context.task());
                 }
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
             }
         }
     }

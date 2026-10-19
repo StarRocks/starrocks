@@ -242,7 +242,7 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
             Assertions.assertTrue(e.getMessage().contains("altered concurrently"), e.getMessage());
             Assertions.assertFalse(mv.isActive());
             Assertions.assertEquals(reason, mv.getInactiveReason());
-            Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE));
+            Assertions.assertFalse(probe.underLock.get());
         } finally {
             starRocksAssert.dropMaterializedView(mvName);
         }

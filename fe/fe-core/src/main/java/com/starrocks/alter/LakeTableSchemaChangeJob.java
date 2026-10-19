@@ -47,11 +47,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
-=======
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -769,23 +765,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
 
-            // inactivate related mv
-            inactiveRelatedMv(modifiedColumns, table);
+            // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
             table.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-<<<<<<< HEAD
             editLogFuture = writeEditLogAsync(this);
-=======
-            persistStateChange(this, JobState.FINISHED, () -> {
-                // Below this point, all query and load jobs will use the new schema.
-                visualiseShadowIndex(table);
-                // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
-                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
-                table.onReload();
-            });
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
         }
 
         EditLog.waitInfinity(editLogFuture);

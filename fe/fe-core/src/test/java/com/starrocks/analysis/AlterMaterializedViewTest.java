@@ -17,11 +17,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-=======
-import com.google.common.collect.Sets;
 import com.google.gson.JsonObject;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -32,36 +28,26 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-<<<<<<< HEAD
 import com.starrocks.scheduler.TaskRunContext;
-=======
 import com.starrocks.scheduler.TaskRunManager;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -82,10 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.atomic.AtomicInteger;
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -880,8 +863,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
         new MockUp<EditLog>() {
             @Mock
-            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
-                                         WALApplier walApplier) {
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log) {
                 journaled.add(log);
                 invocation.proceed();
             }
