@@ -47,6 +47,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -868,6 +869,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+
+        // Per-FE: each FE initializes Ranger audit in its own process.
+        STARROCKS_METRIC_REGISTER.addMetric(new GaugeMetric<Long>("ranger_audit_init_failed", MetricUnit.NOUNIT,
+                "1 if this FE failed to initialize Ranger audit and writes no Ranger audit event, otherwise 0") {
+            @Override
+            public Long getValue() {
+                return RangerAccessController.isAuditInitFailed() ? 1L : 0L;
+            }
+        });
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
