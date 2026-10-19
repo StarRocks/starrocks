@@ -2722,4 +2722,42 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
+// A constant JSON input is viewed as its single row; the map result must still span every input row,
+// or an aggregate such as count() reads past the end of its null column.
+TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
+    constexpr size_t kInputSize = 3;
+    for (const auto& [text, expected] :
+         std::vector<std::pair<std::string, std::string>>{{R"({"1":2})", "{1:2}"}, {R"(1)", "NULL"}}) {
+        TExprNode cast_expr;
+        cast_expr.opcode = TExprOpcode::CAST;
+        cast_expr.node_type = TExprNodeType::CAST_EXPR;
+        cast_expr.num_children = 1;
+        cast_expr.__isset.opcode = true;
+        cast_expr.__isset.child_type = true;
+        cast_expr.child_type = to_thrift(TYPE_JSON);
+        cast_expr.type = gen_map_type_desc(to_thrift(TYPE_INT), to_thrift(TYPE_INT));
+
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+        auto json = JsonValue::parse(text);
+        ASSERT_TRUE(json.ok());
+        auto json_column = JsonColumn::create();
+        json_column->append(&json.value());
+        MockExpr child(TypeDescriptor(TYPE_JSON), ConstColumn::create(std::move(json_column), kInputSize));
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kInputSize, result->size());
+        for (size_t i = 0; i < kInputSize; ++i) {
+            std::string debug = result->debug_item(i);
+            constexpr std::string_view kConstPrefix = "CONST: ";
+            if (debug.rfind(kConstPrefix.data(), 0) == 0) {
+                debug.erase(0, kConstPrefix.size());
+            }
+            EXPECT_EQ(expected, debug);
+        }
+    }
+}
+
 } // namespace starrocks
