@@ -962,38 +962,22 @@ public class DatabaseTransactionMgr {
     }
 
     /**
-     * Find the running transactions that may write to any of the given physical partitions.
+     * Find, per physical partition, the running transactions of this database that may write to it.
      * <p>
      * A transaction is reported as conflicting when either
      * <ul>
-     *   <li>it is already COMMITTED and its commit info covers one of the partitions, or</li>
-     *   <li>it is still in flight (PREPARE/PREPARED) and its tablet sink has registered one of the
-     *       partitions as a write target, see {@link TransactionState#getLoadedPhysicalPartitionIds}.</li>
+     *   <li>it is already COMMITTED and its commit info covers the partition, or</li>
+     *   <li>it is still in flight (PREPARE/PREPARED) and its tablet sink has registered the partition as a
+     *       write target, see {@link TransactionState#getLoadedPhysicalPartitionIds}.</li>
      * </ul>
-     * Callers that are about to replace or drop those partitions must invoke this while holding the
-     * table write lock, so that no transaction can commit in between.
-     *
-     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
-     * @return ids of the conflicting transactions, empty if there is none
-     */
-    public List<Long> getConflictingTxnIds(long tableId, Set<Long> physicalPartitionIds) {
-        if (physicalPartitionIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        List<Long> conflictingTxnIds = Lists.newArrayList();
-        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
-            if (!getTouchedPartitions(txn, tableId, physicalPartitionIds).isEmpty()) {
-                conflictingTxnIds.add(txn.getTransactionId());
-            }
-        }
-        return conflictingTxnIds;
-    }
-
-    /**
-     * Same as {@link #getConflictingTxnIds(long, Set)}, but per partition: each running transaction is looked at
-     * once whatever the number of partitions, so the cost stays linear even when a load targets every one of the
-     * thousands of partitions that a whole table optimize replaces. Callers must hold the table write lock too.
+     * Each running transaction is looked at once whatever the number of partitions, so the cost stays linear
+     * even when a load targets every one of the thousands of partitions that a whole table optimize replaces.
+     * Callers that are about to replace or drop those partitions must invoke this while holding the table write
+     * lock, so that no transaction can commit in between.
+     * <p>
+     * An explicit transaction joins this manager only right before its statement starts writing, after its plan
+     * registered the write targets. Callers go through
+     * {@link GlobalTransactionMgr#getConflictingTxnIdsByPartition(long, long, Set)}, which covers that window.
      *
      * @param physicalPartitionIds physical partition ids, NOT logical partition ids
      * @return physical partition id -> ids of the conflicting transactions, only for the partitions that have any
@@ -1030,7 +1014,7 @@ public class DatabaseTransactionMgr {
     /**
      * The given physical partitions that the transaction committed into or registered as write targets.
      */
-    private static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
+    static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
         Set<Long> touched = Sets.newHashSet();
         TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
         if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {

@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -873,26 +874,63 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     /**
      * Find the running transactions that may write to any of the given physical partitions.
-     * See {@link DatabaseTransactionMgr#getConflictingTxnIds(long, Set)}.
+     * See {@link #getConflictingTxnIdsByPartition(long, long, Set)}.
      *
      * @param physicalPartitionIds physical partition ids, NOT logical partition ids
      */
     public List<Long> getConflictingTxnIds(long dbId, long tableId, Set<Long> physicalPartitionIds) {
-        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
-        return dbTransactionMgr == null ? Collections.emptyList()
-                : dbTransactionMgr.getConflictingTxnIds(tableId, physicalPartitionIds);
+        Set<Long> conflictingTxnIds = Sets.newLinkedHashSet();
+        getConflictingTxnIdsByPartition(dbId, tableId, physicalPartitionIds).values()
+                .forEach(conflictingTxnIds::addAll);
+        return Lists.newArrayList(conflictingTxnIds);
     }
 
     /**
      * Find, per physical partition, the running transactions that may write to it.
      * See {@link DatabaseTransactionMgr#getConflictingTxnIdsByPartition(long, Set)}.
+     * <p>
+     * That lookup sees only the transactions the database transaction manager holds. A statement of an explicit
+     * transaction (BEGIN ... COMMIT) registers its write targets on the transaction while its plan is built, through
+     * the planning layout reservation of its tablet sink, but the transaction joins the manager, and the table its
+     * table list, only afterwards, right before the statement starts writing (TransactionStmtExecutor#loadData).
+     * The explicit transactions that reserved a layout on the table are looked at as well, so that a partition
+     * replaced in between is not one that the statement then writes into.
      *
      * @param physicalPartitionIds physical partition ids, NOT logical partition ids
      */
     public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
-        return dbTransactionMgr == null ? Collections.emptyMap()
-                : dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds);
+        Map<Long, List<Long>> conflictingTxnIds = dbTransactionMgr == null ? Maps.newHashMap()
+                : Maps.newHashMap(dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds));
+        for (TransactionState explicitTxn : getRunningExplicitTxnsPlannedOn(dbId, tableId)) {
+            for (Long physicalPartitionId :
+                    DatabaseTransactionMgr.getTouchedPartitions(explicitTxn, tableId, physicalPartitionIds)) {
+                List<Long> txnIds = conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList());
+                // reported already if the transaction has joined the database transaction manager
+                if (!txnIds.contains(explicitTxn.getTransactionId())) {
+                    txnIds.add(explicitTxn.getTransactionId());
+                }
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    // Collected under the lock that guards the planning layout reservations, and evaluated by the caller outside of it
+    private List<TransactionState> getRunningExplicitTxnsPlannedOn(long dbId, long tableId) {
+        List<Long> tableIds = List.of(tableId);
+        List<TransactionState> explicitTxns = Lists.newArrayList();
+        synchronized (explicitTxnStateLock) {
+            for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+                TransactionState txn = explicitTxnState.getTransactionState();
+                if (txn != null && txn.isRunning() && explicitTxnState.hasPlanningLayoutReservation(dbId, tableIds)) {
+                    explicitTxns.add(txn);
+                }
+            }
+        }
+        return explicitTxns;
     }
 
     /**

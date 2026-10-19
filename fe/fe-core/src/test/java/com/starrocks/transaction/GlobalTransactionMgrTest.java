@@ -1701,6 +1701,55 @@ public class GlobalTransactionMgrTest {
                 GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)).isEmpty());
     }
 
+    // A statement of an explicit transaction registers its write targets while its plan is built, but the
+    // transaction joins the database transaction manager only right before the statement starts writing
+    // (TransactionStmtExecutor#loadData). A replacement that runs in between must see it all the same.
+    @Test
+    public void testGetConflictingTxnIdsCoversExplicitTxnBetweenPlanAndWrite() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        Set<Long> replacedPartitionIds = Sets.newHashSet(physicalPartitionId, physicalPartitionId + 1);
+
+        // what TransactionStmtExecutor#beginStmt builds: no db id and no table list yet
+        long transactionId = masterTransMgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState explicitTxn = new TransactionState(transactionId, GlobalStateMgrTestUtil.testTxnLable1, null,
+                LoadJobSourceType.INSERT_STREAMING, transactionSource, Config.stream_load_default_timeout_second * 1000L);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitTxn);
+        masterTransMgr.addTransactionState(transactionId, explicitTxnState);
+
+        // the tablet sink of a statement builds its plan
+        Assertions.assertSame(explicitTxn, masterTransMgr.reserveExplicitTransactionLayout(transactionId, dbId, tableId));
+        explicitTxn.addPartitionLoadedIndexes(tableId, physicalPartitionId,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        Assertions.assertNull(masterTransMgr.getTransactionState(dbId, transactionId));
+
+        Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds));
+        Assertions.assertEquals(Lists.newArrayList(transactionId),
+                masterTransMgr.getConflictingTxnIds(dbId, tableId, replacedPartitionIds));
+        // the reservation covers that table of that database only
+        Assertions.assertTrue(
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId + 1, replacedPartitionIds).isEmpty());
+        Assertions.assertTrue(
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId + 1, tableId, replacedPartitionIds).isEmpty());
+
+        // the statement starts writing: once the transaction joined the manager it is reported once, not twice
+        masterTransMgr.registerExplicitTransactionState(transactionId, dbId);
+        masterTransMgr.activateExplicitTransactionTable(transactionId, dbId, tableId);
+        Assertions.assertSame(explicitTxn, masterTransMgr.getTransactionState(dbId, transactionId));
+        Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds));
+
+        // a transaction that ended no longer blocks, even while its explicit state is still around
+        masterTransMgr.abortTransaction(dbId, transactionId, "test");
+        Assertions.assertTrue(
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds).isEmpty());
+        masterTransMgr.clearExplicitTxnState(transactionId);
+    }
+
     /**
      * Begin a transaction and register the given physical partition as a write target, which is what the
      * tablet sink does when a load plan is built, before any row reaches a backend.
