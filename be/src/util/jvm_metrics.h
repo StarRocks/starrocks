@@ -14,6 +14,17 @@
 
 #pragma once
 
+<<<<<<< HEAD:be/src/util/jvm_metrics.h
+=======
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/metrics.h"
+>>>>>>> 48498a0 ([Enhancement] Collect BE JVM metrics only after a JVM exists instead of starting one (#81074)):be/src/runtime/java/jvm_metrics.h
 #include "common/status.h"
 #include "jni.h"
 #include "udf/java/java_udf.h"
@@ -72,13 +83,25 @@ public:
     METRIC_DEFINE_INT_GAUGE(jvm_perm_peak_max_bytes, MetricUnit::BYTES);
 
     Status init();
+    // Registers the gauges and a collect hook. It does not touch the JVM: the hook calls init()
+    // lazily once a JVM exists in this process, so installing the metrics never creates a JVM.
     void install(MetricRegistry*);
     Status update();
     StatusOr<MemoryUsage> get_heap_memory_usage();
     StatusOr<MemoryUsage> get_non_heap_memory_usage();
     StatusOr<std::vector<MemoryPool>> get_memory_pools();
 
+    // Whether a JVM has been created in this process. Never creates one. Returns an error when
+    // the loaded libjvm cannot answer, e.g. the mock libjvm used when JAVA_HOME is not set.
+    static StatusOr<bool> is_jvm_created();
+
 private:
+    void _update_if_jvm_ready();
+
+    std::mutex _init_lock;
+    std::atomic<bool> _initialized{false};
+    std::atomic<bool> _jvm_unavailable{false};
+
     std::unique_ptr<JVMClass> _management_factory_cls = nullptr;
     JavaGlobalRef _memory_mxbean_obj = nullptr;
 
