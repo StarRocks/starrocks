@@ -905,13 +905,24 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         Map<Long, List<Long>> conflictingTxnIds = dbTransactionMgr == null ? Maps.newHashMap()
                 : Maps.newHashMap(dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds));
-        for (TransactionState explicitTxn : getRunningExplicitTxnsPlannedOn(dbId, tableId)) {
-            for (Long physicalPartitionId :
-                    DatabaseTransactionMgr.getTouchedPartitions(explicitTxn, tableId, physicalPartitionIds)) {
+        long now = System.currentTimeMillis();
+        for (TransactionState plannedTxn : getExplicitTxnsPlannedOn(dbId, tableId)) {
+            // Once the transaction has joined the database transaction manager, the state there is the current one:
+            // a transition such as an abort replaces it with a copy, while the explicit transaction keeps the state
+            // it began with. Before that, the session is the only one that ends it, so stop at its timeout.
+            TransactionState txn = dbTransactionMgr == null ? null
+                    : dbTransactionMgr.getTransactionState(plannedTxn.getTransactionId());
+            if (txn == null && !plannedTxn.isTimeout(now)) {
+                txn = plannedTxn;
+            }
+            if (txn == null || !txn.isRunning()) {
+                continue;
+            }
+            for (Long physicalPartitionId : DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, physicalPartitionIds)) {
                 List<Long> txnIds = conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList());
                 // reported already if the transaction has joined the database transaction manager
-                if (!txnIds.contains(explicitTxn.getTransactionId())) {
-                    txnIds.add(explicitTxn.getTransactionId());
+                if (!txnIds.contains(txn.getTransactionId())) {
+                    txnIds.add(txn.getTransactionId());
                 }
             }
         }
@@ -919,13 +930,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     // Collected under the lock that guards the planning layout reservations, and evaluated by the caller outside of it
-    private List<TransactionState> getRunningExplicitTxnsPlannedOn(long dbId, long tableId) {
+    private List<TransactionState> getExplicitTxnsPlannedOn(long dbId, long tableId) {
         List<Long> tableIds = List.of(tableId);
         List<TransactionState> explicitTxns = Lists.newArrayList();
         synchronized (explicitTxnStateLock) {
             for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
                 TransactionState txn = explicitTxnState.getTransactionState();
-                if (txn != null && txn.isRunning() && explicitTxnState.hasPlanningLayoutReservation(dbId, tableIds)) {
+                if (txn != null && explicitTxnState.hasPlanningLayoutReservation(dbId, tableIds)) {
                     explicitTxns.add(txn);
                 }
             }

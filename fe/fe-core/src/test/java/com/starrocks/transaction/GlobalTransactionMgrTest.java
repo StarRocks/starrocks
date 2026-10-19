@@ -1712,18 +1712,8 @@ public class GlobalTransactionMgrTest {
         long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
         Set<Long> replacedPartitionIds = Sets.newHashSet(physicalPartitionId, physicalPartitionId + 1);
 
-        // what TransactionStmtExecutor#beginStmt builds: no db id and no table list yet
-        long transactionId = masterTransMgr.getTransactionIDGenerator().getNextTransactionId();
-        TransactionState explicitTxn = new TransactionState(transactionId, GlobalStateMgrTestUtil.testTxnLable1, null,
-                LoadJobSourceType.INSERT_STREAMING, transactionSource, Config.stream_load_default_timeout_second * 1000L);
-        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
-        explicitTxnState.setTransactionState(explicitTxn);
-        masterTransMgr.addTransactionState(transactionId, explicitTxnState);
-
-        // the tablet sink of a statement builds its plan
-        Assertions.assertSame(explicitTxn, masterTransMgr.reserveExplicitTransactionLayout(transactionId, dbId, tableId));
-        explicitTxn.addPartitionLoadedIndexes(tableId, physicalPartitionId,
-                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        TransactionState explicitTxn = beginExplicitTxnPlannedOn(physicalPartitionId, System.currentTimeMillis());
+        long transactionId = explicitTxn.getTransactionId();
         Assertions.assertNull(masterTransMgr.getTransactionState(dbId, transactionId));
 
         Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
@@ -1743,11 +1733,51 @@ public class GlobalTransactionMgrTest {
         Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
                 masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds));
 
-        // a transaction that ended no longer blocks, even while its explicit state is still around
+        // a transaction that ended no longer blocks, even while its explicit state, which the abort does not
+        // touch, is still around
         masterTransMgr.abortTransaction(dbId, transactionId, "test");
+        Assertions.assertTrue(explicitTxn.isRunning());
         Assertions.assertTrue(
                 masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds).isEmpty());
         masterTransMgr.clearExplicitTxnState(transactionId);
+    }
+
+    // Nothing aborts an explicit transaction on timeout before it joined the database transaction manager, so a
+    // statement that was planned but never got to write must not block a replacement past that timeout.
+    @Test
+    public void testGetConflictingTxnIdsSkipsTimedOutExplicitTxnThatNeverWrote() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+
+        TransactionState explicitTxn = beginExplicitTxnPlannedOn(physicalPartitionId,
+                System.currentTimeMillis() - Config.stream_load_default_timeout_second * 1000L - 1000L);
+
+        Assertions.assertTrue(explicitTxn.isRunning());
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)).isEmpty());
+        masterTransMgr.clearExplicitTxnState(explicitTxn.getTransactionId());
+    }
+
+    /**
+     * Begin an explicit transaction the way TransactionStmtExecutor#beginStmt does, with no db id and no table list
+     * yet, and let the tablet sink of one of its statements plan the given physical partition as a write target.
+     * The transaction has not joined the database transaction manager: that happens only right before the statement
+     * starts writing.
+     */
+    private TransactionState beginExplicitTxnPlannedOn(long physicalPartitionId, long prepareTime) throws Exception {
+        long transactionId = masterTransMgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState explicitTxn = new TransactionState(transactionId, GlobalStateMgrTestUtil.testTxnLable1, null,
+                LoadJobSourceType.INSERT_STREAMING, transactionSource, Config.stream_load_default_timeout_second * 1000L);
+        explicitTxn.setPrepareTime(prepareTime);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitTxn);
+        masterTransMgr.addTransactionState(transactionId, explicitTxnState);
+
+        Assertions.assertSame(explicitTxn, masterTransMgr.reserveExplicitTransactionLayout(transactionId,
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1));
+        explicitTxn.addPartitionLoadedIndexes(GlobalStateMgrTestUtil.testTableId1, physicalPartitionId,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        return explicitTxn;
     }
 
     /**
