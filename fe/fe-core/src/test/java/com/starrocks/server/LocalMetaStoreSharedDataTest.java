@@ -14,11 +14,18 @@
 
 package com.starrocks.server;
 
+import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
@@ -30,6 +37,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 public class LocalMetaStoreSharedDataTest {
@@ -130,5 +139,36 @@ public class LocalMetaStoreSharedDataTest {
                 () -> GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt));
         Assertions.assertTrue(exception.getMessage().contains("enable_statistic_auto_collect"), exception.getMessage());
         Assertions.assertEquals(boundTables, svMgr.storageVolumeToTables.values().stream().mapToInt(Set::size).sum());
+    }
+
+    @Test
+    public void testAlterTablePropertiesEnableStatisticAutoCollect() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test.t_auto_collect(k1 int)"
+                + " distributed by hash(k1) buckets 1 properties('replication_num' = '1');");
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) metastore.getTable(db.getFullName(), "t_auto_collect");
+        Assertions.assertTrue(table.enableStatisticAutoCollect());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "false");
+        metastore.alterTableProperties(db, table, properties);
+
+        Assertions.assertFalse(table.enableStatisticAutoCollect());
+        Assertions.assertEquals("false", table.getProperties().get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
+        Assertions.assertFalse(table.getTableProperty().copy().enableStatisticAutoCollect());
+        TableProperty fromImage = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table.getTableProperty()),
+                TableProperty.class);
+        Assertions.assertFalse(fromImage.enableStatisticAutoCollect());
+        JsonObject olderFeImage = GsonUtils.GSON.toJsonTree(table.getTableProperty()).getAsJsonObject();
+        olderFeImage.remove("enableStatisticAutoCollect");
+        TableProperty fromOlderFeImage = GsonUtils.GSON.fromJson(olderFeImage, TableProperty.class);
+        Assertions.assertFalse(fromOlderFeImage.enableStatisticAutoCollect());
+
+        ModifyTablePropertyOperationLog replayInfo = (ModifyTablePropertyOperationLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        table.setEnableStatisticAutoCollect(true);
+        metastore.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, replayInfo);
+        Assertions.assertFalse(table.enableStatisticAutoCollect());
     }
 }

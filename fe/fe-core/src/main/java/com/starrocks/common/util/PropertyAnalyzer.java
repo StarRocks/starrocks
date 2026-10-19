@@ -631,6 +631,30 @@ public class PropertyAnalyzer {
         return enable;
     }
 
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
+    }
+
+    public static boolean parseBooleanStrictly(String property, String value) throws SemanticException {
+        boolean ret = false;
+        if ("true".equalsIgnoreCase(value)) {
+            ret = true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            ret = false;
+        } else {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, property, value, "'true' or 'false'");
+        }
+        return ret;
+    }
+
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
