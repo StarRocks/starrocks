@@ -1727,39 +1727,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
         // so we submit an async task to do this check
         if (isReloadAsync) {
-<<<<<<< HEAD
-            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
-=======
             // A status change replayed while the check runs (an INACTIVE from the leader) wins over its verdict,
             // which was computed for the status before, as in activateOnReplay.
             final long epoch;
             synchronized (this) {
                 epoch = statusEpoch;
             }
-            // The returned future is what the startup readiness gate waits on; the task body itself is
-            // unchanged. Plan cache building stays where it was -- queued asynchronously by the setActive()
-            // hook -- and is deliberately NOT part of this task, see MvStartupActivationCoordinator.
-            return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
->>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
+            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
                     onReloadImplHeavy();
 
                     if (desiredActive) {
-<<<<<<< HEAD
                         InactiveReason reason = checkIsActiveOnLoadBlocking();
-                        setInActiveReason(reason);
-                    }
-                } catch (Throwable e) {
-                    LOG.error("check and set active failed for mv: {}", this, e);
-                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
-=======
                         setInActiveReasonUnlessChanged(reason, epoch);
                     }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
                     setInActiveReasonUnlessChanged(
                             InactiveReason.ofInactive("check and set active failed: " + e.getMessage()), epoch);
->>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
                 } finally {
                     changeReloadState(RELOAD_STATE_DONE);
                 }

@@ -321,13 +321,14 @@ public class AlterMVReplayActivateTest extends MVTestBase {
             probe.gate = new CountDownLatch(1);
             // as after loading an image: not reloaded yet, and reloaded asynchronously
             mv.changeReloadState(-1);
-            CompletableFuture<?> check = mv.onReload(true);
+            mv.onReload(true);
             Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
                     "the activation check never reached the connector, so nothing was in flight");
 
             mv.setInactiveAndReason("test: a later replayed INACTIVE");
             probe.gate.countDown();
-            check.get(30, TimeUnit.SECONDS);
+            // the asynchronous check marks the reload done when it finishes
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).until(mv::hasReloaded);
 
             Assertions.assertFalse(mv.isActive(), "the stale verdict re-activated the MV");
             Assertions.assertEquals("test: a later replayed INACTIVE", mv.getInactiveReason());

@@ -13,11 +13,7 @@
 // limitations under the License.
 package com.starrocks.scheduler.mv;
 
-<<<<<<< HEAD
-=======
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
->>>>>>> be868798cae... [BugFix][RB-374] Fix MV refresh and freshness under base table partition churn and batched refresh (#65758)
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hashing;
