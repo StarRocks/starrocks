@@ -18,6 +18,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
+#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
@@ -95,6 +96,9 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     finish_task_request->__set_report_version(g_report_version.load(std::memory_order_relaxed));
     finish_task_request->__set_task_type(TTaskType::ALTER);
     finish_task_request->__set_signature(signature);
+    if (agent_task_req.__isset.job_id) {
+        finish_task_request->__set_alter_job_id(agent_task_req.job_id);
+    }
 
     std::vector<TTabletInfo> finish_tablet_infos;
     if (status == STARROCKS_SUCCESS) {
@@ -301,10 +305,16 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
         if (time_elapsed > config::report_task_interval_seconds * 20) {
-            // task have been in queue for a long time, this task may already be cancelled by FE
-            // so just ignore this task, cause if it's not cancelled, FE will resend a new one
-            LOG(INFO) << alter_msg_head << " ignore expired task request " << time_elapsed << "s since enqueue";
-            is_task_req_expired = true;
+            if (agent_task_req->task_req.__isset.job_id && master_matches_alter_finish_by_job_id()) {
+                // The FE ignores the finish report of a copy left by an ended job, so run the task however long it
+                // waited: dropping it would only make the FE resend it to the back of the same queue.
+                LOG(INFO) << alter_msg_head << " run task request " << time_elapsed << "s since enqueue";
+            } else {
+                // task have been in queue for a long time, this task may already be cancelled by FE
+                // so just ignore this task, cause if it's not cancelled, FE will resend a new one
+                LOG(INFO) << alter_msg_head << " ignore expired task request " << time_elapsed << "s since enqueue";
+                is_task_req_expired = true;
+            }
         }
     }
     if (!is_task_req_expired) {
