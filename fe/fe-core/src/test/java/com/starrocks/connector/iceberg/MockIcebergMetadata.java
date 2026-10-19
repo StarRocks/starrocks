@@ -177,70 +177,10 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-<<<<<<< HEAD
         List<Column> schemas = ImmutableList.of(new Column("id", IntegerType.INT, true),
                 new Column("data", StringType.STRING, true),
                 new Column("date", StringType.STRING, true));
         schemas = addMetaColumns(schemas);
-=======
-        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NAME0,
-                ImmutableList.of(new Column("id", IntegerType.INT, true),
-                        new Column("data", StringType.STRING, true),
-                        new Column("date", StringType.STRING, true)),
-                new Schema(required(3, "id", Types.IntegerType.get()),
-                        required(4, "data", Types.StringType.get()),
-                        required(5, "date", Types.StringType.get())),
-                3);
-        // V2 unpartitioned table for UPDATE tests (format version 2)
-        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_V2_TABLE_NAME,
-                ImmutableList.of(new Column("id", IntegerType.INT, true),
-                        new Column("data", StringType.STRING, true),
-                        new Column("date", StringType.STRING, true)),
-                new Schema(required(3, "id", Types.IntegerType.get()),
-                        required(4, "data", Types.StringType.get()),
-                        required(5, "date", Types.StringType.get())),
-                2);
-        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME,
-                ImmutableList.of(new Column("id", IntegerType.INT, true),
-                        new Column("v", VariantType.VARIANT, true)),
-                new Schema(required(3, "id", Types.IntegerType.get()),
-                        required(4, "v", Types.VariantType.get())),
-                3);
-        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NUMERIC,
-                ImmutableList.of(new Column("id", IntegerType.INT, true),
-                        new Column("c1", IntegerType.INT, true),
-                        new Column("c2", IntegerType.INT, true)),
-                new Schema(required(6, "id", Types.IntegerType.get()),
-                        required(7, "c1", Types.IntegerType.get()),
-                        required(8, "c2", Types.IntegerType.get())),
-                3);
-        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
-                ImmutableList.of(new Column("k", IntegerType.INT, true),
-                        new Column("name", StringType.STRING, true),
-                        new Column("arr", new ArrayType(IntegerType.INT), true),
-                        new Column("st", new StructType(Lists.newArrayList(
-                                new StructField("a", IntegerType.INT), new StructField("b", IntegerType.INT))), true),
-                        new Column("mp", new MapType(IntegerType.INT, IntegerType.INT), true),
-                        new Column("arr_st", new ArrayType(new StructType(Lists.newArrayList(
-                                new StructField("a", IntegerType.INT)))), true),
-                        new Column("st_arr", new StructType(Lists.newArrayList(
-                                new StructField("a", new ArrayType(IntegerType.INT)))), true),
-                        new Column("v", IntegerType.BIGINT, true)),
-                new Schema(required(1, "k", Types.IntegerType.get()),
-                        required(2, "name", Types.StringType.get()),
-                        required(3, "arr", Types.ListType.ofRequired(4, Types.IntegerType.get())),
-                        required(5, "st", Types.StructType.of(required(6, "a", Types.IntegerType.get()),
-                                required(7, "b", Types.IntegerType.get()))),
-                        required(8, "mp", Types.MapType.ofRequired(9, 10,
-                                Types.IntegerType.get(), Types.IntegerType.get())),
-                        required(11, "arr_st", Types.ListType.ofRequired(12,
-                                Types.StructType.of(required(13, "a", Types.IntegerType.get())))),
-                        required(14, "st_arr", Types.StructType.of(required(15, "a",
-                                Types.ListType.ofRequired(16, Types.IntegerType.get())))),
-                        required(17, "v", Types.LongType.get())),
-                3);
-    }
->>>>>>> e3ee918 ([BugFix] Reject a complex-typed row identity key for an incremental MV (#79312))
 
         Schema schema =
                 new Schema(required(3, "id", Types.IntegerType.get()),
@@ -288,6 +228,48 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 col -> ColumnStatistic.unknown()));
 
         icebergTableInfoMap.put(MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
+
+        schemas = ImmutableList.of(new Column("k", IntegerType.INT, true),
+                new Column("name", StringType.STRING, true),
+                new Column("arr", new ArrayType(IntegerType.INT), true),
+                new Column("st", new StructType(Lists.newArrayList(
+                        new StructField("a", IntegerType.INT), new StructField("b", IntegerType.INT))), true),
+                new Column("mp", new MapType(IntegerType.INT, IntegerType.INT), true),
+                new Column("arr_st", new ArrayType(new StructType(Lists.newArrayList(
+                        new StructField("a", IntegerType.INT)))), true),
+                new Column("st_arr", new StructType(Lists.newArrayList(
+                        new StructField("a", new ArrayType(IntegerType.INT)))), true),
+                new Column("v", IntegerType.BIGINT, true));
+        schemas = addMetaColumns(schemas);
+
+        schema = new Schema(required(1, "k", Types.IntegerType.get()),
+                required(2, "name", Types.StringType.get()),
+                required(3, "arr", Types.ListType.ofRequired(4, Types.IntegerType.get())),
+                required(5, "st", Types.StructType.of(required(6, "a", Types.IntegerType.get()),
+                        required(7, "b", Types.IntegerType.get()))),
+                required(8, "mp", Types.MapType.ofRequired(9, 10,
+                        Types.IntegerType.get(), Types.IntegerType.get())),
+                required(11, "arr_st", Types.ListType.ofRequired(12,
+                        Types.StructType.of(required(13, "a", Types.IntegerType.get())))),
+                required(14, "st_arr", Types.StructType.of(required(15, "a",
+                        Types.ListType.ofRequired(16, Types.IntegerType.get())))),
+                required(17, "v", Types.LongType.get()));
+        spec = PartitionSpec.builderFor(schema).build();
+        baseTable = TestTables.create(
+                new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
+                        MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME), MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
+                schema, spec, 3);
+
+        mockIcebergTable = new MockIcebergTable(MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME.hashCode(),
+                MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME, MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
+                MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME, schemas, baseTable, null, "");
+
+        colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
+        columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                col -> ColumnStatistic.unknown()));
+
+        icebergTableInfoMap.put(MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
                 new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
     }
 
