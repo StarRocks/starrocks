@@ -144,6 +144,28 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         return true;
     }
 
+    /**
+     * Whether a base table of the MV is known to be dropped. A lookup that fails (an HMS timeout, say) proves nothing,
+     * so it does not count: the defined query may still succeed.
+     */
+    private static boolean hasDroppedBaseTable(MaterializedView mv) {
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        if (CollectionUtils.isEmpty(baseTableInfos)) {
+            return false;
+        }
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            try {
+                if (MvUtils.getTable(baseTableInfo).isEmpty()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to get base table: {} of mv: {}, error: {}",
+                        baseTableInfo, mv.getName(), e.getMessage());
+            }
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
@@ -193,6 +215,11 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                     // defined query reads the base tables at their current state and needs no timeliness check, so try
                     // it before that, unless the scan is restricted: the defined query has no equivalent of that.
                     if (restrictedScan) {
+                        return Collections.emptyList();
+                    }
+                    // A dropped base table fails the defined query too, so keep serving the data the MV holds.
+                    if (hasDroppedBaseTable(mv)) {
+                        LOG.warn("A base table of mv: {} no longer exists, scan the mv as it is", mv.getName());
                         return Collections.emptyList();
                     }
                     try {
