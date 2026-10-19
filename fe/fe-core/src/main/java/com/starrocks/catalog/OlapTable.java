@@ -2848,6 +2848,16 @@ public class OlapTable extends Table {
         return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return tableProperty == null || tableProperty.enableStatisticAutoCollect();
+    }
+
+    public void setEnableStatisticAutoCollect(boolean enable) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                Boolean.toString(enable));
+        tableProperty.buildEnableStatisticAutoCollect();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -3713,6 +3723,10 @@ public class OlapTable extends Table {
         if (isSetEnableStatisticCollectOnFirstLoad()) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                     Boolean.toString(enableStatisticCollectOnFirstLoad()));
+        }
+
+        if (!enableStatisticAutoCollect()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "false");
         }
 
         // base compaction forbidden time ranges

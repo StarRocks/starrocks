@@ -807,6 +807,7 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
+- `enable_statistic_auto_collect`
 
 :::note
 

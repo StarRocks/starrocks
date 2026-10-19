@@ -269,6 +269,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
+    public static final String PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT = "enable_statistic_auto_collect";
+
     // For admin repair cloud native table
     // Enforces consistent version across all tablets in a physical partition
     public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
@@ -627,6 +629,30 @@ public class PropertyAnalyzer {
             enable = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
         }
         return enable;
+    }
+
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
+    }
+
+    public static boolean parseBooleanStrictly(String property, String value) throws SemanticException {
+        boolean ret = false;
+        if ("true".equalsIgnoreCase(value)) {
+            ret = true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            ret = false;
+        } else {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, property, value, "'true' or 'false'");
+        }
+        return ret;
     }
 
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
