@@ -42,9 +42,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.UnknownType;
 import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -83,6 +87,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
+    public static final String MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME = "t_complex";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
     // date partition table
@@ -223,6 +228,48 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 col -> ColumnStatistic.unknown()));
 
         icebergTableInfoMap.put(MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
+
+        schemas = ImmutableList.of(new Column("k", IntegerType.INT, true),
+                new Column("name", StringType.STRING, true),
+                new Column("arr", new ArrayType(IntegerType.INT), true),
+                new Column("st", new StructType(Lists.newArrayList(
+                        new StructField("a", IntegerType.INT), new StructField("b", IntegerType.INT))), true),
+                new Column("mp", new MapType(IntegerType.INT, IntegerType.INT), true),
+                new Column("arr_st", new ArrayType(new StructType(Lists.newArrayList(
+                        new StructField("a", IntegerType.INT)))), true),
+                new Column("st_arr", new StructType(Lists.newArrayList(
+                        new StructField("a", new ArrayType(IntegerType.INT)))), true),
+                new Column("v", IntegerType.BIGINT, true));
+        schemas = addMetaColumns(schemas);
+
+        schema = new Schema(required(1, "k", Types.IntegerType.get()),
+                required(2, "name", Types.StringType.get()),
+                required(3, "arr", Types.ListType.ofRequired(4, Types.IntegerType.get())),
+                required(5, "st", Types.StructType.of(required(6, "a", Types.IntegerType.get()),
+                        required(7, "b", Types.IntegerType.get()))),
+                required(8, "mp", Types.MapType.ofRequired(9, 10,
+                        Types.IntegerType.get(), Types.IntegerType.get())),
+                required(11, "arr_st", Types.ListType.ofRequired(12,
+                        Types.StructType.of(required(13, "a", Types.IntegerType.get())))),
+                required(14, "st_arr", Types.StructType.of(required(15, "a",
+                        Types.ListType.ofRequired(16, Types.IntegerType.get())))),
+                required(17, "v", Types.LongType.get()));
+        spec = PartitionSpec.builderFor(schema).build();
+        baseTable = TestTables.create(
+                new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
+                        MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME), MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
+                schema, spec, 3);
+
+        mockIcebergTable = new MockIcebergTable(MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME.hashCode(),
+                MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME, MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
+                MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME, schemas, baseTable, null, "");
+
+        colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
+        columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                col -> ColumnStatistic.unknown()));
+
+        icebergTableInfoMap.put(MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
                 new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
     }
 
