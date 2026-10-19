@@ -29,8 +29,8 @@
 #include <string>
 #include <vector>
 
-#include "common/config_path_fwd.h"
-#include "common/system/backend_options.h"
+#include "common/config.h"
+#include "service/backend_options.h"
 
 namespace starrocks {
 
