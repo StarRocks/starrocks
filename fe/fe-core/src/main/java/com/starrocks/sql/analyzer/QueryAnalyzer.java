@@ -634,6 +634,13 @@ public class QueryAnalyzer {
                         && CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(icebergTable.getCatalogName())) {
                     table = icebergTable.copyForQuery();
                 }
+                // A resource-mapping Hive table is shared and planned without the meta lock too
+                // (HiveTable.isMetaLockTarget), and a schema refresh replaces its schema fields one by one: the
+                // query plans on a copy taken in one step, so it sees one schema generation.
+                if (table instanceof HiveTable hiveTable
+                        && CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(hiveTable.getCatalogName())) {
+                    table = hiveTable.copyForQuery();
+                }
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;

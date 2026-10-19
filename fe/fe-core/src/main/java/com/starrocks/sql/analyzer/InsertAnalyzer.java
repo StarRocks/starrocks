@@ -109,6 +109,9 @@ public class InsertAnalyzer {
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
             afterQueryAnalyzed.run();
 
+            // Read the partition names and file lists of the Hive sources past the cache, unless the session says the
+            // cache is fine. With the auto refresh the sources are also refreshed (InsertSourceRefresher), but that
+            // alone is not enough: a background refresh that read them before writes what it read back after it.
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
             if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
