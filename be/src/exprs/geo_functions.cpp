@@ -46,6 +46,7 @@
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
 #include "gutil/compiler_util.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -599,23 +600,171 @@ bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, c
     return planar_orientation(c, d, a) * planar_orientation(c, d, b) < 0;
 }
 
-bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
-    for (const auto& lhs_ring : lhs.rings) {
-        for (const auto& rhs_ring : rhs.rings) {
-            for (size_t i = 1; i < lhs_ring.size(); ++i) {
-                for (size_t j = 1; j < rhs_ring.size(); ++j) {
-                    if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j])) {
-                        return true;
+struct PlanarIntersectsBounds {
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = std::numeric_limits<double>::infinity();
+    double max_x = -std::numeric_limits<double>::infinity();
+    double max_y = -std::numeric_limits<double>::infinity();
+
+    void add(const WkbCoordinate& point) {
+        min_x = std::min(min_x, point.x);
+        min_y = std::min(min_y, point.y);
+        max_x = std::max(max_x, point.x);
+        max_y = std::max(max_y, point.y);
+    }
+
+    std::optional<PlanarIntersectsBounds> expanded(double padding) const {
+        PlanarIntersectsBounds result{min_x - padding, min_y - padding, max_x + padding, max_y + padding};
+        if (!std::isfinite(result.min_x) || !std::isfinite(result.min_y) || !std::isfinite(result.max_x) ||
+            !std::isfinite(result.max_y)) {
+            return std::nullopt;
+        }
+        return result;
+    }
+
+    bool disjoint(const PlanarIntersectsBounds& rhs) const {
+        return max_x < rhs.min_x || min_x > rhs.max_x || max_y < rhs.min_y || min_y > rhs.max_y;
+    }
+};
+
+PlanarIntersectsBounds planar_intersects_bounds(const std::vector<WkbCoordinate>& ring) {
+    PlanarIntersectsBounds result;
+    for (const auto& point : ring) result.add(point);
+    return result;
+}
+
+PlanarIntersectsBounds planar_intersects_bounds(const WkbGeometry& polygon) {
+    PlanarIntersectsBounds result;
+    for (const auto& ring : polygon.rings) {
+        for (const auto& point : ring) result.add(point);
+    }
+    return result;
+}
+
+std::optional<double> planar_intersects_padding(const PlanarIntersectsBounds& lhs, const PlanarIntersectsBounds& rhs) {
+    const double span = std::max(std::max(lhs.max_x, rhs.max_x) - std::min(lhs.min_x, rhs.min_x),
+                                 std::max(lhs.max_y, rhs.max_y) - std::min(lhs.min_y, rhs.min_y));
+    if (!std::isfinite(span)) return std::nullopt;
+    // Four times the endpoint tolerance, plus a normal underflow margin; bounds compare binary64 endpoints.
+    constexpr double kPaddingFactor = 4 * kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon();
+    return kPaddingFactor * span + std::numeric_limits<double>::min();
+}
+
+// Calibration: a plain first probe avoids setup for tiny pairs without giving up disjoint pruning.
+constexpr size_t kPlanarIntersectsPlainPairBudget = 64;
+
+struct PlanarIntersectsEdgeIndex {
+    struct Edge {
+        PlanarIntersectsBounds bounds;
+        WkbCoordinate a;
+        WkbCoordinate b;
+    };
+    std::vector<Edge> edges;
+    std::vector<double> prefix_max_x;
+
+    void build(const std::vector<WkbCoordinate>& ring) {
+        edges.clear();
+        edges.reserve(ring.size() - 1);
+        for (size_t j = 1; j < ring.size(); ++j) {
+            PlanarIntersectsBounds bounds;
+            bounds.add(ring[j - 1]);
+            bounds.add(ring[j]);
+            edges.push_back({bounds, ring[j - 1], ring[j]});
+        }
+        std::sort(edges.begin(), edges.end(),
+                  [](const Edge& a, const Edge& b) { return a.bounds.min_x < b.bounds.min_x; });
+        prefix_max_x.resize(edges.size());
+        double max_x = -std::numeric_limits<double>::infinity();
+        for (size_t j = 0; j < edges.size(); ++j) {
+            max_x = std::max(max_x, edges[j].bounds.max_x);
+            prefix_max_x[j] = max_x;
+        }
+    }
+
+    bool intersects(const WkbCoordinate& a, const WkbCoordinate& b, const PlanarIntersectsBounds& query) const {
+        const auto first = std::lower_bound(prefix_max_x.begin(), prefix_max_x.end(), query.min_x);
+        const auto last = std::upper_bound(edges.begin(), edges.end(), query.max_x,
+                                           [](double x, const Edge& edge) { return x < edge.bounds.min_x; });
+        for (size_t j = first - prefix_max_x.begin(), end = last - edges.begin(); j < end; ++j) {
+            const auto& edge = edges[j];
+            if (!query.disjoint(edge.bounds) && planar_segments_intersect(a, b, edge.a, edge.b)) return true;
+        }
+        return false;
+    }
+};
+
+// Separate calibration: avoid index setup on small rings and pairs with an early hit.
+constexpr size_t kPlanarIntersectsIndexMinEdges = 128;
+constexpr size_t kPlanarIntersectsIndexPairBudget = 256;
+
+bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs, PlanarIntersectsEdgeIndex* index) {
+    const auto& first_left = lhs.rings[0];
+    const auto& first_right = rhs.rings[0];
+    const size_t left_edges = first_left.size() - 1;
+    const size_t right_edges = first_right.size() - 1;
+    const bool tiny = left_edges <= kPlanarIntersectsPlainPairBudget &&
+                      right_edges <= kPlanarIntersectsPlainPairBudget &&
+                      left_edges * right_edges <= kPlanarIntersectsPlainPairBudget;
+    const size_t plain_end = tiny ? first_right.size() : 2;
+    for (size_t j = 1; j < plain_end; ++j) {
+        if (planar_segments_intersect(first_left[0], first_left[1], first_right[j - 1], first_right[j])) return true;
+    }
+    const auto lhs_bounds = planar_intersects_bounds(lhs);
+    const auto rhs_bounds = planar_intersects_bounds(rhs);
+    const auto padding = planar_intersects_padding(lhs_bounds, rhs_bounds);
+    const auto expanded = padding ? lhs_bounds.expanded(*padding) : std::nullopt;
+    if (!expanded || !expanded->disjoint(rhs_bounds)) {
+        for (const auto& lhs_ring : lhs.rings) {
+            const auto left = lhs.rings.size() == 1 ? lhs_bounds : planar_intersects_bounds(lhs_ring);
+            for (const auto& rhs_ring : rhs.rings) {
+                const auto right = rhs.rings.size() == 1 ? rhs_bounds : planar_intersects_bounds(rhs_ring);
+                const auto ring_bounds = padding ? left.expanded(*padding) : std::nullopt;
+                if (ring_bounds && ring_bounds->disjoint(right)) continue;
+                const bool eligible = padding && lhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges &&
+                                      rhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges;
+                size_t tested_pairs = 0;
+                bool indexed = false;
+                for (size_t i = 1; i < lhs_ring.size(); ++i) {
+                    if (eligible && !indexed && tested_pairs >= kPlanarIntersectsIndexPairBudget) {
+                        index->build(rhs_ring);
+                        indexed = true;
                     }
+                    PlanarIntersectsBounds edge;
+                    edge.add(lhs_ring[i - 1]);
+                    edge.add(lhs_ring[i]);
+                    const auto query = padding ? edge.expanded(*padding) : std::nullopt;
+                    const size_t first =
+                            i == 1 && &lhs_ring == &lhs.rings[0] && &rhs_ring == &rhs.rings[0] ? plain_end : 1;
+                    if (!query) {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j]))
+                                return true;
+                        }
+                    } else if (indexed) {
+                        if (index->intersects(lhs_ring[i - 1], lhs_ring[i], *query)) return true;
+                    } else {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            const auto& c = rhs_ring[j - 1];
+                            const auto& d = rhs_ring[j];
+                            if (query->max_x < std::min(c.x, d.x) || query->min_x > std::max(c.x, d.x) ||
+                                query->max_y < std::min(c.y, d.y) || query->min_y > std::max(c.y, d.y)) {
+                                continue;
+                            }
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], c, d)) return true;
+                        }
+                    }
+                    if (eligible && !indexed) tested_pairs += rhs_ring.size() - first;
                 }
             }
         }
     }
+    // Bounds prune edge contacts only: preserve the original containment calculation.
     return planar_polygon_relation(lhs, rhs.rings[0][0]) != PointPolygonRelation::OUTSIDE ||
            planar_polygon_relation(rhs, lhs.rings[0][0]) != PointPolygonRelation::OUTSIDE;
 }
 
-bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs,
+                                      PlanarIntersectsEdgeIndex* index) {
     const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
     const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
     for (size_t i = 0; i < lhs_count; ++i) {
@@ -623,7 +772,7 @@ bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry&
         if (lhs_polygon.empty) continue;
         for (size_t j = 0; j < rhs_count; ++j) {
             const auto& rhs_polygon = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
-            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon)) return true;
+            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon, index)) return true;
         }
     }
     return false;
@@ -907,6 +1056,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
     }
     std::optional<WkbGeometry> constant_geometry[2];
     SphericalPolygonFamilyCache constant_spherical_polygons[2];
+    PlanarIntersectsEdgeIndex edge_index;
     for (size_t row = 0; row < rows; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             result.append_null();
@@ -942,7 +1092,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
                              spherical_polygon_family_intersects(*left, *right, left_cache, right_cache));
             result.append(intersects);
         } else {
-            result.append(planar_polygon_family_intersects(*left, *right));
+            result.append(planar_polygon_family_intersects(*left, *right, &edge_index));
         }
     }
     auto output = result.build(false);
@@ -1984,7 +2134,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_intersects(FunctionContext* conte
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersects(FunctionContext* context, const Columns& columns) {
-    return geo_intersects<TYPE_GEOMETRY>(context, columns);
+    TRY_CATCH_BAD_ALLOC(return geo_intersects<TYPE_GEOMETRY>(context, columns));
 }
 Status GeoFunctions::native_geo_unary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();

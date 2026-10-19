@@ -28,6 +28,12 @@
 #include <thread>
 #include <unordered_set>
 
+#include "exprs/geo_functions.h"
+
+#define BOOST_MATH_DISABLE_FLOAT128
+#define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include "butil/time.h"
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
@@ -36,11 +42,11 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_call_expr.h"
-#include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_measurements.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "gutil/compiler_util.h"
 #include "runtime/runtime_state.h"
 #include "types/geo_wkb.h"
 
@@ -1843,6 +1849,305 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
     EXPECT_FALSE(spherical.value(4));
     EXPECT_TRUE(spherical.value(5));
     EXPECT_TRUE(spherical.value(6));
+}
+
+namespace intersects_reference {
+// Frozen from main 8ed24335179f: no bounding-box pruning or index.
+enum class PointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
+
+constexpr long double kPlanarBoundaryUlps = 32;
+
+bool planar_point_on_segment(const WkbCoordinate& point, const WkbCoordinate& lhs, const WkbCoordinate& rhs) {
+    const long double abx = static_cast<long double>(rhs.x) - lhs.x;
+    const long double aby = static_cast<long double>(rhs.y) - lhs.y;
+    const long double apx = static_cast<long double>(point.x) - lhs.x;
+    const long double apy = static_cast<long double>(point.y) - lhs.y;
+    const long double cross_lhs = abx * apy;
+    const long double cross_rhs = aby * apx;
+    const long double cross_scale = std::abs(cross_lhs) + std::abs(cross_rhs);
+    const long double cross_tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * cross_scale;
+    if (std::abs(cross_lhs - cross_rhs) > cross_tolerance) return false;
+
+    const long double coordinate_scale = std::max({std::abs(abx), std::abs(aby), std::abs(apx), std::abs(apy)});
+    const long double coordinate_tolerance =
+            kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * coordinate_scale;
+    return apx >= std::min(0.0L, abx) - coordinate_tolerance && apx <= std::max(0.0L, abx) + coordinate_tolerance &&
+           apy >= std::min(0.0L, aby) - coordinate_tolerance && apy <= std::max(0.0L, aby) + coordinate_tolerance;
+}
+
+PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring, const WkbCoordinate& point) {
+    bool inside = false;
+    for (size_t i = 1; i < ring.size(); ++i) {
+        const auto& lhs = ring[i - 1];
+        const auto& rhs = ring[i];
+        if (planar_point_on_segment(point, lhs, rhs)) return PointPolygonRelation::BOUNDARY;
+        if ((lhs.y > point.y) != (rhs.y > point.y)) {
+            const long double intersection_offset =
+                    (static_cast<long double>(lhs.x) - point.x) + (static_cast<long double>(point.y) - lhs.y) *
+                                                                          (static_cast<long double>(rhs.x) - lhs.x) /
+                                                                          (static_cast<long double>(rhs.y) - lhs.y);
+            if (intersection_offset > 0) inside = !inside;
+        }
+    }
+    return inside ? PointPolygonRelation::INSIDE : PointPolygonRelation::OUTSIDE;
+}
+
+PointPolygonRelation planar_polygon_relation(const WkbGeometry& polygon, const WkbCoordinate& point) {
+    auto relation = planar_ring_relation(polygon.rings[0], point);
+    if (relation != PointPolygonRelation::INSIDE) return relation;
+    for (size_t i = 1; i < polygon.rings.size(); ++i) {
+        relation = planar_ring_relation(polygon.rings[i], point);
+        if (relation == PointPolygonRelation::BOUNDARY) return relation;
+        if (relation == PointPolygonRelation::INSIDE) return PointPolygonRelation::OUTSIDE;
+    }
+    return PointPolygonRelation::INSIDE;
+}
+
+PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, const WkbCoordinate& point) {
+    if (polygon.type == WkbGeometryType::POLYGON) return planar_polygon_relation(polygon, point);
+    PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
+    for (const auto& child : polygon.children) {
+        if (child.empty) continue;
+        const auto relation = planar_polygon_relation(child, point);
+        if (relation == PointPolygonRelation::BOUNDARY) return relation;
+        if (relation == PointPolygonRelation::INSIDE) result = relation;
+    }
+    return result;
+}
+
+ALWAYS_NOINLINE int exact_planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    // Finite binary64 coordinates scaled by 2^1074 have magnitude <2^2098.
+    // Differences need at most 2099 bits and the determinant 4199, so
+    // 4224 fixed bits suffice without heap allocations.
+    using Integer = boost::multiprecision::number<
+            boost::multiprecision::cpp_int_backend<4224, 4224, boost::multiprecision::signed_magnitude,
+                                                   boost::multiprecision::unchecked, void>,
+            boost::multiprecision::et_off>;
+    const auto scaled = [](double value) -> Integer {
+        const uint64_t bits = std::bit_cast<uint64_t>(value);
+        const uint64_t exponent = (bits >> 52) & 0x7ff;
+        Integer result = bits & ((uint64_t{1} << 52) - 1);
+        if (exponent != 0) {
+            result += uint64_t{1} << 52;
+            result <<= exponent - 1;
+        }
+        return bits >> 63 ? -result : result;
+    };
+    const Integer ax = scaled(a.x), ay = scaled(a.y);
+    const Integer bx = scaled(b.x), by = scaled(b.y);
+    const Integer cx = scaled(c.x), cy = scaled(c.y);
+    const Integer determinant = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    return (determinant > 0) - (determinant < 0);
+}
+
+int planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    const long double left = (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y);
+    const long double right = (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+    const long double determinant = left - right;
+    // Eight epsilons bound the rounding of differences, products and subtraction.
+    constexpr long double kErrorBound = 8 * std::numeric_limits<long double>::epsilon();
+    const long double error = kErrorBound * (std::abs(left) + std::abs(right));
+    bool certain = std::abs(determinant) > error;
+    // A wide long double exponent range also covers the smallest binary64
+    // product's error bound. Narrower platforms must check for underflow.
+    if constexpr (std::numeric_limits<long double>::min_exponent >
+                  2 * (std::numeric_limits<double>::min_exponent - std::numeric_limits<double>::digits) -
+                          std::numeric_limits<long double>::digits) {
+        certain &= error >= std::numeric_limits<long double>::min();
+    }
+    if (!certain) [[unlikely]] return exact_planar_orientation(a, b, c);
+    return determinant > 0 ? 1 : -1;
+}
+
+bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c,
+                               const WkbCoordinate& d) {
+    if (planar_point_on_segment(a, c, d) || planar_point_on_segment(b, c, d) || planar_point_on_segment(c, a, b) ||
+        planar_point_on_segment(d, a, b)) {
+        return true;
+    }
+    const int abc = planar_orientation(a, b, c);
+    const int abd = planar_orientation(a, b, d);
+    if (abc * abd >= 0) return false;
+    return planar_orientation(c, d, a) * planar_orientation(c, d, b) < 0;
+}
+
+bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+    for (const auto& lhs_ring : lhs.rings) {
+        for (const auto& rhs_ring : rhs.rings) {
+            for (size_t i = 1; i < lhs_ring.size(); ++i) {
+                for (size_t j = 1; j < rhs_ring.size(); ++j) {
+                    if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j])) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return planar_polygon_relation(lhs, rhs.rings[0][0]) != PointPolygonRelation::OUTSIDE ||
+           planar_polygon_relation(rhs, lhs.rings[0][0]) != PointPolygonRelation::OUTSIDE;
+}
+
+bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+    const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
+    const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
+    for (size_t i = 0; i < lhs_count; ++i) {
+        const auto& lhs_polygon = lhs.type == WkbGeometryType::POLYGON ? lhs : lhs.children[i];
+        if (lhs_polygon.empty) continue;
+        for (size_t j = 0; j < rhs_count; ++j) {
+            const auto& rhs_polygon = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
+            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon)) return true;
+        }
+    }
+    return false;
+}
+
+} // namespace intersects_reference
+
+namespace {
+WkbGeometry intersects_test_polygon(size_t vertices, double x, double y, double radius, bool concave = false) {
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto& ring = polygon.rings.emplace_back();
+    for (size_t i = 0; i < vertices; ++i) {
+        const double angle = 2 * std::acos(-1.0) * i / vertices;
+        const double r = concave && i % 2 ? radius / 3 : radius;
+        ring.push_back({x + r * std::cos(angle), y + r * std::sin(angle)});
+    }
+    ring.push_back(ring[0]);
+    return polygon;
+}
+
+void check_intersects_equivalence(const WkbGeometry& a, const WkbGeometry& b, const TypeDescriptor& type) {
+    const bool expected = intersects_reference::planar_polygon_family_intersects(a, b);
+    Columns inputs;
+    for (const auto* polygon : {&a, &b}) {
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(*polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        auto column = GeoColumn::create(
+                GeoColumnDescriptor{type.geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+        column->append_wkb(Slice(bytes));
+        inputs.emplace_back(std::move(column));
+    }
+    for (int form = 0; form < 4; ++form) {
+        Columns columns = {form & 1 ? ConstColumn::create(inputs[0], 1) : inputs[0],
+                           form & 2 ? ConstColumn::create(inputs[1], 1) : inputs[1]};
+        for (int direction = 0; direction < 2; ++direction) {
+            auto result = GeoFunctions::st_geometry_intersects(nullptr, columns);
+            ASSERT_TRUE(result.ok()) << result.status();
+            ColumnViewer<TYPE_BOOLEAN> values(*result);
+            ASSERT_FALSE(values.is_null(0));
+            EXPECT_EQ(expected, values.value(0)) << form << ":" << direction;
+            std::swap(columns[0], columns[1]);
+        }
+    }
+}
+} // namespace
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsMatchesFixedBruteForce) {
+    std::mt19937_64 random(81020);
+    for (size_t vertices : {4, 7, 8, 9, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257}) {
+        for (bool concave : {false, true}) {
+            for (double offset : {0.0, 1e7}) {
+                const double jitter = static_cast<double>(random() % 1024) / 8192;
+                auto lhs = intersects_test_polygon(vertices, offset, offset, 1, concave);
+                for (double shift : {0.0, 0.5, 1.8, 3.0}) {
+                    auto rhs =
+                            intersects_test_polygon(vertices + 1, offset + shift + jitter, offset + 0.1, 1, !concave);
+                    check_intersects_equivalence(lhs, rhs, geometry_type());
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsLazySetupKeepsFirstProbe) {
+    // Products below, at and above the calibrated 64-pair boundary; same-size and asymmetric rings.
+    for (size_t vertices : {7, 8, 9}) {
+        const auto lhs = intersects_test_polygon(vertices, 0, 0, 1, false);
+        for (size_t rhs_vertices : {vertices, vertices + 1}) {
+            for (double shift : {0.0, 0.3, 2.0, 3.0}) {
+                const auto rhs = intersects_test_polygon(rhs_vertices, shift, 0, 1, false);
+                check_intersects_equivalence(lhs, rhs, geometry_type());
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIndexThresholdsAndScratchReuse) {
+    const auto type = geometry_type();
+    auto left = GeoColumn::create(GeoColumnDescriptor{
+            type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+    auto right = GeoColumn::create(left->descriptor());
+    std::vector<bool> expected;
+    // Around the 128-edge threshold and the 256-pair budget (first probe skips its already checked pair).
+    for (size_t n : {127, 128, 129, 255, 256, 257}) {
+        auto a = intersects_test_polygon(n, 0, 0, 2);
+        for (double shift : {0.0, 1.7, 4.5}) {
+            auto b = intersects_test_polygon(129, shift, 0.1, 0.5, true);
+            check_intersects_equivalence(a, b, type);
+            for (size_t side = 0; side < 2; ++side) {
+                std::string bytes;
+                ASSERT_TRUE(
+                        WkbCodec::to_wkb(side == 0 ? a : b, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                (side == 0 ? left : right)->append_wkb(Slice(bytes));
+            }
+            expected.push_back(intersects_reference::planar_polygon_family_intersects(a, b));
+        }
+    }
+    auto result = GeoFunctions::st_geometry_intersects(nullptr, {left, right});
+    ASSERT_TRUE(result.ok()) << result.status();
+    ColumnViewer<TYPE_BOOLEAN> values(*result);
+    ASSERT_EQ(expected.size(), (*result)->size());
+    for (size_t row = 0; row < expected.size(); ++row) EXPECT_EQ(expected[row], values.value(row)) << row;
+    auto shell = intersects_test_polygon(256, 0, 0, 2);
+    shell.rings.push_back(intersects_test_polygon(128, 0, 0, 0.7).rings[0]);
+    check_intersects_equivalence(shell, intersects_test_polygon(129, 0, 0, 0.3), type);
+    WkbGeometry multi;
+    multi.type = WkbGeometryType::MULTIPOLYGON;
+    multi.children = {shell, intersects_test_polygon(257, 8, 0, 1)};
+    check_intersects_equivalence(multi, intersects_test_polygon(129, 8, 0, 0.3), type);
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsPruningKeepsHolesAndComponents) {
+    const char* left[] = {"POLYGON ((0 0,10 0,10 10,0 10,0 0),(3 3,7 3,7 7,3 7,3 3))",
+                          "MULTIPOLYGON (EMPTY,((0 0,2 0,2 2,0 2,0 0)),((20 20,30 20,30 30,20 30,20 20)))",
+                          "POLYGON ((0 0,1 0,1 0,1 1,0 1,0 0))",
+                          // Existing compute accepts a ring outside its shell; pruning must include every ring.
+                          "POLYGON ((0 0,1 0,1 1,0 1,0 0),(10 10,12 10,12 12,10 12,10 10))"};
+    const char* right[] = {"POLYGON ((4 4,6 4,6 6,4 6,4 4))", "POLYGON ((25 25,26 25,26 26,25 26,25 25))",
+                           "POLYGON ((1 0,2 0,2 1,1 1,1 0))", "POLYGON ((11 9,11.5 9,11.5 11,11 11,11 9))"};
+    for (size_t i = 0; i < std::size(left); ++i) {
+        WkbGeometry a, b;
+        ASSERT_TRUE(WkbCodec::parse_wkt(left[i], &a, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        ASSERT_TRUE(WkbCodec::parse_wkt(right[i], &b, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        check_intersects_equivalence(a, b, geometry_type());
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsPaddingFallsBackForExtremeCoordinates) {
+    const double max = std::numeric_limits<double>::max();
+    WkbGeometry a, b;
+    a.type = b.type = WkbGeometryType::POLYGON;
+    // The union span exceeds DBL_MAX: pruning must fall back even on wide-long-double hosts.
+    a.rings = {{{-max, -2}, {-max / 2, -2}, {-max / 2, -1}, {-max, -2}}};
+    b.rings = {{{max / 2, 1}, {max, 1}, {max / 2, 2}, {max / 2, 1}}};
+    check_intersects_equivalence(a, b, geometry_type());
+    // Finite span: max/2 makes the padded max overflow; the adjacent-double case remains finite.
+    for (double near : {std::nextafter(max, 0.0), max / 2}) {
+        a.rings = {{{near, 0}, {max, 0}, {max, 1}, {near, 0}}};
+        b.rings = {{{near, 3}, {max, 3}, {near, 4}, {near, 3}}};
+        check_intersects_equivalence(a, b, geometry_type());
+    }
+    for (int exponent : {-1070, -1000, -300, 300, 990}) {
+        const double scale = std::ldexp(1.0, exponent);
+        a.rings = {{{0, 0}, {scale, scale}, {0, scale}, {0, 0}}};
+        for (int ulps : {0, 1, 16, 32, 64}) {
+            const double p = scale * (1 + ulps * std::numeric_limits<double>::epsilon());
+            b.rings = {{{p, p}, {2 * scale, p}, {p, 2 * scale}, {p, p}}};
+            check_intersects_equivalence(a, b, geometry_type());
+        }
+    }
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryIntersectsFiltersRoundedOrientation) {
