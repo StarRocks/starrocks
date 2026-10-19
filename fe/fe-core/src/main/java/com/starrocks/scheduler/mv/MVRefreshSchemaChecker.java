@@ -15,7 +15,6 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Strings;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -69,8 +68,8 @@ public final class MVRefreshSchemaChecker {
             boolean isExternalCatalog = !CatalogMgr.isInternalCatalog(bti.getCatalogName());
 
             if (!baseTableOpt.isPresent() && isExternalCatalog) {
-                AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(bti.getTableName()), true);
+                mv.setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(bti.getTableName()));
                 return;
             }
             if (baseTableOpt.isPresent() && !baseTableOpt.get().isNativeTableOrMaterializedView()) {
@@ -102,8 +101,8 @@ public final class MVRefreshSchemaChecker {
             // known drift signatures so a transient catalog blip doesn't brick the MV.
             if (isLikelyDriftException(e)) {
                 if (mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndSuspendTask(mv, MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
-                            mv.getName(), e.getMessage()), true);
+                    mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
+                            mv.getName(), e.getMessage()));
                 }
                 LOG.warn("[MVRefreshSchemaChecker] schema drift detected for MV {}: {}", mv.getName(), e.getMessage());
             } else {

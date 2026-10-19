@@ -38,10 +38,9 @@ public class AlterMaterializedViewStatusLog implements Writable {
     // holding the MV lock. Null in entries written by older versions, which replay the old way.
     @SerializedName(value = "baseTableInfos")
     private List<BaseTableInfo> baseTableInfos;
-    // INACTIVE: also clear the visible version maps and the confirmed freshness, because the MV's data no longer
-    // matches what its definition reads. ACTIVE: clear them once more, see MaterializedView#versionMapResetPending.
-    // Null in entries written by older versions, which did not journal the clear: GSON builds the entry without
-    // running the constructor, which sets it for every entry written now.
+    // INACTIVE only: also clear the visible version maps and the confirmed freshness, because the MV's data no longer
+    // matches what its definition reads. Null in entries written by older versions, which did not journal the clear:
+    // GSON builds the entry without running the constructor, which sets it for every entry written now.
     @SerializedName(value = "clearVersionMap")
     private Boolean clearVersionMap;
 

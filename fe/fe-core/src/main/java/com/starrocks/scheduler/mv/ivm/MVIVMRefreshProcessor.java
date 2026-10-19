@@ -74,7 +74,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -213,25 +212,6 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return commitTimes;
     }
 
-    /**
-     * A run planned before an inactivation that cleared the version map (its kill can fail, see
-     * AlterJobMgr#prepareAlterMaterializedViewStatus) must not commit its delta: the activation after that clear dropped
-     * the baseline the delta extends, and committing would install it back. Checked after the delta is staged: a clear
-     * landing later also clears the staged delta (see AlterMVJobExecutor#clearTvrBaselineIfUnusable), so the commit has
-     * nothing to install.
-     */
-    private void abortIfVersionMapResetSinceStart(MaterializedView.AsyncRefreshContext mvRefreshContext, String owner) {
-        long runEpoch = mvContext.getVersionMapResetEpoch();
-        if (runEpoch < 0 || (runEpoch % 2 == 0 && mv.getVersionMapResetEpoch() == runEpoch)) {
-            return;
-        }
-        if (Objects.equals(mvRefreshContext.getTempTvrOwnerStartTaskRunId(), owner)) {
-            mvRefreshContext.clearTempBaseTableInfoTvrDeltaState();
-        }
-        throw new SemanticException("Materialized view %s refresh aborted: its version map was reset after the "
-                + "refresh started, so the incremental baseline it extends no longer holds", mv.getName());
-    }
-
     @Override
     public Constants.TaskRunState execProcessExecPlan(TaskRunContext taskRunContext,
                                                       ProcessExecPlan processExecPlan,
@@ -253,16 +233,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
                 String owner = mvContext.getStatus().getStartTaskRunId();
                 mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
-<<<<<<< HEAD
                 executor.executePlan(execPlan, insertStmt);
-=======
-                abortIfVersionMapResetSinceStart(mvRefreshContext, owner);
-                try {
-                    executor.executePlan(execPlan, insertStmt);
-                } catch (Exception e) {
-                    throw translateBackendFailure(e);
-                }
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
             }
 
             try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
@@ -536,11 +507,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
-<<<<<<< HEAD
-=======
-        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));

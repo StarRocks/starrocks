@@ -17,7 +17,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -78,8 +77,8 @@ public class MVPCTMetaRepairer {
                 toRepairTables.stream().filter(p -> !isSupportedPCTRepairer(p.first, p.second)).findFirst();
         if (nonSupportedTableOpt.isPresent()) {
             Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
-            AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()), true);
+            mv.setInactiveAndReason(
+                    MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
             throw new DmlException(String.format("Materialized view %s.%s set inactive: base table '%s' " +
                             "(catalog=%s, db=%s) was recreated but its table type is not supported for automatic meta repair. " +
                             "Only Hive tables support automatic repair. Please manually refresh the MV.",

@@ -550,57 +550,24 @@ public class AlterJobMgr {
                     throw new SemanticException("Can not find running task for materialized view [%s]",
                             mv.getName());
                 }
-<<<<<<< HEAD
-=======
-                replayActivationClear(mv, log);
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
                 mv.activateOnReplay(Lists.newArrayList(log.getBaseTableInfos()));
                 // resume the mv scheduler
                 GlobalStateMgr.getCurrentState().getTaskManager().resumeTask(task, true);
                 return;
             }
-<<<<<<< HEAD
-            AlterMaterializedViewStatusContext context =
-                    prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
-            applyAlterMaterializedViewStatus(mv, context, true);
-            if (log.isClearVersionMap()) {
+            // The clear goes first, so that a failure below cannot skip it.
+            if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(log.getStatus())
+                    && clearsOnInactivation(log, reason)) {
                 mv.getRefreshScheme().clearVersionState();
-=======
-            // The clear goes first in both directions, so that a failure below cannot skip it.
-            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus())) {
-                replayActivationClear(mv, log);
-            } else if (clearsOnInactivation(log, reason)) {
-                mv.clearVersionStateForInactivation();
             }
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
-            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus()) && !mv.isActive()) {
-                // The leader journals ACTIVE only once the activation actually succeeded, so failing to
-                // reproduce it here is a real divergence between this FE and the leader, not the expected
-                // outcome of replaying a doomed retry. Loud and searchable on purpose.
-                LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
-                                + "relationship, so this FE's metadata has diverged from the leader's: {}",
-                        mv.getName(), mv.getInactiveReason());
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
-            }
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
-        }
-    }
-
-    // An ACTIVE entry clears the version map once more if the leader found an inactivation's clear pending. An entry
-    // written before the clear was journaled carries no flag, but that leader had cleared the map in memory when it
-    // inactivated the MV, so it activated it with none: a clear still pending here (set by an old INACTIVE entry, or
-    // by an old image that holds the map it cleared) is done too, or the MV would turn active with versions its
-    // leader no longer had, which a refresh may never come to replace.
-    @VisibleForTesting
-    static void replayActivationClear(MaterializedView mv, AlterMaterializedViewStatusLog log) {
-        if (log.isClearVersionMap() || (log.isClearVersionMapUnset() && mv.isVersionMapResetPending())) {
-            mv.clearVersionStateForActivation();
         }
     }
 

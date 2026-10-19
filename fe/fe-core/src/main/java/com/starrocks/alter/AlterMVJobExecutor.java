@@ -594,7 +594,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
-<<<<<<< HEAD
     // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
     // of another kind, or when this clause needs nothing resolved.
     private Map<String, String> preResolvedPropClone;
@@ -603,30 +602,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     private ConstraintBasis preResolvedConstraintBasis;
     private ParseNode preResolvedDefineQueryAst;
     private String preResolvedDefineSql;
-=======
-    /**
-     * ADD/DROP COLUMN: the define-query AST, and the definition it was built from.
-     */
-    private record PreResolvedDefineQuery(String defineSql, ParseNode ast) {
-    }
-
-    /**
-     * ACTIVE: the definition the analysis was made from, the status epoch it was made at, and either the analysis
-     * with the base tables that the relationship rebuild resolves, or the failure the analysis ended with.
-     */
-    private record PreResolvedActivate(String defineSql, long statusEpoch,
-                                       AlterJobMgr.AlterMaterializedViewStatusContext statusContext,
-                                       PreResolvedBaseTables baseTables, RuntimeException failure) {
-    }
-
-    // Resolved by resolveBeforeLock, consumed by the clause visitors below. One statement has one clause, so at
-    // most one of these is set; null when the clause is of another kind, or needs nothing resolved.
-    private PreResolvedProperties preResolvedProperties;
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
     private Boolean preResolvedHasNonNativeBaseTable;
     private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
     private AlterJobMgr.AlterMaterializedViewStatusContext preResolvedActivateContext;
     private RuntimeException preResolvedActivateFailure;
+    // ACTIVE: the MV's status epoch the analysis was made at.
+    private long preResolvedActivateStatusEpoch;
     private PreResolvedBaseTables preResolvedBaseTables;
 
     /**
@@ -694,8 +675,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // takePreResolvedActivate.
             LOG.info("process change materialized view {} status to {}, isReplay: false", mv.getName(),
                     AlterMaterializedViewStatusClause.ACTIVE);
-<<<<<<< HEAD
             preResolvedDefineSql = mv.getOriginalViewDefineSql();
+            // Read before the analysis, so that an inactivation landing while it runs is seen under the lock.
+            preResolvedActivateStatusEpoch = mv.getStatusSnapshot().epoch();
             try {
                 preResolvedActivateContext = GlobalStateMgr.getCurrentState().getAlterJobMgr()
                         .resolveActivate(mv, "", false);
@@ -703,18 +685,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         preResolvedActivateContext.baseTableInfos());
             } catch (RuntimeException e) {
                 preResolvedActivateFailure = e;
-=======
-            String defineSql = mv.getOriginalViewDefineSql();
-            // Read before the analysis, so that an inactivation landing while it runs is seen under the lock.
-            long statusEpoch = mv.getStatusSnapshot().epoch();
-            try {
-                AlterJobMgr.AlterMaterializedViewStatusContext statusContext = GlobalStateMgr.getCurrentState()
-                        .getAlterJobMgr().resolveActivate(mv, "", false);
-                preResolvedActivate = new PreResolvedActivate(defineSql, statusEpoch, statusContext,
-                        PreResolvedBaseTables.resolveForActivation(statusContext.baseTableInfos()), null);
-            } catch (RuntimeException e) {
-                preResolvedActivate = new PreResolvedActivate(defineSql, statusEpoch, null, null, e);
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
             }
         }
     }
@@ -734,23 +704,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      */
     private AlterJobMgr.AlterMaterializedViewStatusContext takePreResolvedActivate(MaterializedView mv) {
         if ((preResolvedActivateContext == null && preResolvedActivateFailure == null)
-                || !Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())) {
+                || !Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())
+                || mv.getStatusSnapshot().epoch() != preResolvedActivateStatusEpoch) {
             throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
                     + "please retry the statement", mv.getName()));
         }
-<<<<<<< HEAD
         if (preResolvedActivateFailure != null) {
             AlterJobMgr.applyActivateFailure(mv, preResolvedActivateFailure);
             throw preResolvedActivateFailure;
-=======
-        checkDefinitionUnchanged(mv, preResolvedActivate.defineSql());
-        if (mv.getStatusSnapshot().epoch() != preResolvedActivate.statusEpoch()) {
-            throw alteredConcurrently(mv);
-        }
-        if (preResolvedActivate.failure() != null) {
-            AlterJobMgr.applyActivateFailure(mv, preResolvedActivate.failure());
-            throw preResolvedActivate.failure();
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
         }
         return preResolvedActivateContext;
     }
@@ -1767,114 +1728,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
-     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
-     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
-     */
-    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
-        inactiveMvAndSuspendTask(mv, inactiveReason, false);
-    }
-
-    /** {@link #inactiveMvAndSuspendTask} that also clears the version map, see {@link #inactiveMvAndLog}. */
-    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason, boolean isClearVersionMap) {
-        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
-            // A refresh can get here after its MV, or the MV's database, was dropped: the entry would then have
-            // nothing to apply to on any FE.
-            if (!mv.isInCatalog()) {
-                LOG.info("Skip inactivating materialized view {}/{}, it was dropped: {}", mv.getName(), mv.getId(),
-                        inactiveReason);
-                return;
-            }
-            inactiveMvAndLog(mv, inactiveReason, isClearVersionMap);
-        }
-    }
-
-    /**
-     * {@link #inactiveMvAndSuspendTaskLocked} for a refresh that broke the incremental chain, except when the MV was
-     * altered to AUTO while that refresh ran: its next refresh falls back to PCT, which, like a FORCE rebuild, does not
-     * read the baseline the refresh broke on. The caller holds the MV's write lock, which the ALTER takes too, so this
-     * sees the mode either way.
-     */
-    public static void inactiveMvAndSuspendTaskUnlessAutoRecoversLocked(MaterializedView mv, RefreshFailureKind kind) {
-        String inactiveReason = kind.inactiveReason(mv.getName());
-        if (mv.getCurrentRefreshMode().isAuto() && kind.invalidatesBaseline()) {
-            LOG.info("Keep materialized view {} active: it was altered to AUTO while a refresh broke ({}), and its "
-                    + "next refresh falls back to PCT", mv.getName(), inactiveReason);
-            return;
-        }
-        inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
-    }
-
-    // Without a baseline the next refresh goes through the hybrid processor, whose PCT fallback rebuilds it from the
-    // partitions that changed since the last successful refresh. An inactivation that cleared the version map (a view,
-    // column or table the MV reads changed) makes the baseline unusable too: it would only add, under the current
-    // definition, the changes since the baseline to the rows computed under the old one. The version map is cleared
-    // after this, so that fallback recomputes everything.
-    private static void clearTvrBaselineIfUnusable(MaterializedView mv, String inactiveReason) {
-        boolean unusable = MaterializedViewExceptions.invalidatesBaseline(inactiveReason)
-                || mv.isVersionMapResetPending();
-        if (!unusable || !mv.getCurrentRefreshMode().isIncrementalOrAuto() || mv.getRowIdStrategy() == null) {
-            return;
-        }
-        long versionMapResetEpoch = mv.getVersionMapResetEpoch();
-        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
-        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
-        if (refreshContext.getBaseTableInfoTvrVersionRangeMap().isEmpty()
-                && refreshContext.getTempBaseTableInfoTvrDeltaMap().isEmpty()) {
-            return;
-        }
-        refreshContext.getBaseTableInfoTvrVersionRangeMap().clear();
-        refreshContext.clearTempBaseTableInfoTvrDeltaState();
-        MVVersionManager.publishRefreshScheme(mv, copiedScheme, versionMapResetEpoch, LOG);
-        LOG.info("Cleared the incremental baseline of materialized view {} on activation, it was inactive because: {}",
-                mv.getName(), inactiveReason);
-    }
-
-    /** {@link #inactiveMvAndSuspendTask} for a caller that already holds the MV's write lock. */
-    public static void inactiveMvAndSuspendTaskLocked(MaterializedView mv, String inactiveReason) {
-        inactiveMvAndLog(mv, inactiveReason);
-    }
-
->>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
     // or failover instead of reverting to active until the next refresh re-detects the condition.
-    // The caller holds the MV's write lock, see inactiveMvAndSuspendTask.
     public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
-        inactiveMvAndLog(mv, inactiveReason, false);
-    }
-
-    /**
-     * {@link #inactiveMvAndLog} that also clears the version map when the MV's data no longer matches what its
-     * definition reads, the way {@link #doInactiveMaterializedViewOnly} does. The task is suspended, as replaying the
-     * entry suspends it on every other FE, but its running refresh is not killed: a refresh run can inactivate its
-     * own MV. The caller holds the MV's write lock, see {@link #inactiveMvAndSuspendTask}.
-     */
-    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason, boolean isClearVersionMap) {
         AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                 mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
-        log.setClearVersionMap(isClearVersionMap);
-        if (isClearVersionMap) {
-            mv.markVersionMapReset();
-        }
-        try {
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
-                mv.setInactiveAndReason(inactiveReason);
-                if (isClearVersionMap) {
-                    mv.clearVersionStateForInactivation();
-                }
-            });
-        } finally {
-            if (isClearVersionMap) {
-                mv.markVersionMapReset();
-            }
-        }
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        if (task != null && task.getState() != Constants.TaskState.PAUSE) {
-            taskManager.suspendTaskWithoutKilling(task);
-        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log,
+                wal -> mv.setInactiveAndReason(inactiveReason));
     }
 }

@@ -20,7 +20,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -625,8 +624,8 @@ public abstract class MVRefreshProcessor {
             final Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
             if (optTable.isEmpty()) {
                 logger.warn("table {} do not exist when refreshing materialized view", baseTableInfo.getTableInfoStr());
-                AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()), true);
+                mv.setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s does not exist",
                         db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr());
             }
@@ -666,8 +665,8 @@ public abstract class MVRefreshProcessor {
             if (optNewTable.isEmpty()) {
                 logger.warn("table {} does not exist after refreshing materialized view",
                         baseTableInfo.getTableInfoStr());
-                AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()), true);
+                mv.setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s disappeared " +
                                 "after metadata refresh",
                         db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr());
