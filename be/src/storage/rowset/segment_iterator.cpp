@@ -2184,8 +2184,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
 
         // TODO: plan vector column in FE Planner
-        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
-                                    _vector_index_ctx->vector_slot_id);
+        // The distance column reuses vector_column_id as its column id because the FE does not yet
+        // allocate a distinct one. The scan loop `do { _do_get_next(chunk); } while (chunk->num_rows()
+        // == 0)` re-invokes _do_get_next on the same chunk whenever a batch is fully filtered (e.g. the
+        // vector_range predicate dropped every row), and Chunk::reset() keeps the appended column in
+        // _cid_to_index. append_or_update_column tolerates that by updating the distance column in place
+        // instead of appending a duplicate.
+        chunk->append_or_update_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                       _vector_index_ctx->vector_slot_id);
     }
 
     result->swap_chunk(*chunk);
