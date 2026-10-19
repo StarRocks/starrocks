@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// the following code are modified under BSD license here:
+// https://github.com/frida/v8-zlib/blob/main/crc32_simd.c
+//
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the Chromium source repository LICENSE file.
+
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 
 #include <arm_neon.h>
