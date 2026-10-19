@@ -788,22 +788,6 @@ public final class MetricRepo {
         GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
 
-<<<<<<< HEAD
-=======
-        // Per-FE dict cache size, so not leader-aware.
-        GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES = new GaugeMetric<Long>("low_cardinality_dict_cache_bytes", MetricUnit.BYTES,
-                "total bytes of cached dictionary data in the low-cardinality global dictionary cache") {
-            @Override
-            public Long getValue() {
-                IDictManager dictManager = IDictManager.getInstance();
-                if (dictManager instanceof CacheDictManager) {
-                    return ((CacheDictManager) dictManager).getCacheWeightedBytes();
-                }
-                return 0L;
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
-
         // Per-FE: each FE initializes Ranger audit in its own process.
         STARROCKS_METRIC_REGISTER.addMetric(new GaugeMetric<Long>("ranger_audit_init_failed", MetricUnit.NOUNIT,
                 "1 if this FE failed to initialize Ranger audit and writes no Ranger audit event, otherwise 0") {
@@ -813,7 +797,6 @@ public final class MetricRepo {
             }
         });
 
->>>>>>> 2bdd3f3 ([BugFix] Keep a broken Ranger audit config from failing catalog access, and ship the ZooKeeper classes Solr audit needs (#81075))
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
         GAUGE_QUERY_LATENCY_MEAN.addLabel(new MetricLabel("type", "mean"));
