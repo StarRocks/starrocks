@@ -38,6 +38,7 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -702,6 +703,164 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, externalAnalyzeJob.getStatus());
         Assertions.assertEquals("mock exception", externalAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobContinuesAfterFailedTable() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        String failedTable = jobs.get(0).getTable().getName();
+        List<String> collectedTables = mockCollectFailingOn(failedTable);
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+        Assertions.assertEquals("collect failed on " + failedTable, analyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobContinuesAfterFailedTable() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db", null, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        String failedTable = jobs.get(0).getTable().getName();
+        List<String> collectedTables = mockCollectFailingOn(failedTable);
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+        Assertions.assertEquals("collect failed on " + failedTable, analyzeJob.getReason());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobStopsAfterKillAnalyze() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = mockCollectKilledByUser();
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(List.of(jobs.get(0).getTable().getName()), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobStopsAfterKillAnalyze() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db", null, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = mockCollectKilledByUser();
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(List.of(jobs.get(0).getTable().getName()), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobIgnoresKillAfterTableFinished() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
+            }
+
+            @Mock
+            public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+            }
+        };
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus) {
+                StatisticsCollectJob statsJob = invocation.getInvokedInstance();
+                collectedTables.add(statsJob.getTable().getName());
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().killConnection(analyzeStatus.getId());
+            }
+        };
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FINISH, analyzeJob.getStatus());
+    }
+
+    private static List<String> mockCollectKilledByUser() {
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                killAnalyzeDuringCollect(invocation.getInvokedInstance(), analyzeStatus, collectedTables);
+            }
+        };
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                killAnalyzeDuringCollect(invocation.getInvokedInstance(), analyzeStatus, collectedTables);
+            }
+        };
+        return collectedTables;
+    }
+
+    private static void killAnalyzeDuringCollect(StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus,
+                                                 List<String> collectedTables) throws DdlException {
+        collectedTables.add(statsJob.getTable().getName());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().killConnection(analyzeStatus.getId());
+        throw new DdlException("USER_CANCEL: kill analyze");
+    }
+
+    private static List<String> mockCollectFailingOn(String failedTable) {
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx, StatisticsCollectJob statsJob,
+                                                   AnalyzeStatus analyzeStatus, boolean refreshAsync,
+                                                   boolean resetWarehouse) {
+                String tableName = statsJob.getTable().getName();
+                collectedTables.add(tableName);
+                if (tableName.equals(failedTable)) {
+                    analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                    analyzeStatus.setReason("collect failed on " + tableName);
+                } else {
+                    analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+                }
+                return analyzeStatus;
+            }
+        };
+        return collectedTables;
     }
 
     @Test
