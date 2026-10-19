@@ -15,14 +15,18 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import mockit.Invocation;
 import mockit.Mock;
@@ -32,6 +36,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -85,13 +90,13 @@ public class MVRefreshBaseTableReadLockTest extends MVTestBase {
             PartitionMapReadProbe probe = this;
             new MockUp<OlapTable>() {
                 @Mock
-                public PCellSortedSet getRangePartitionMap(Invocation inv) {
+                public Map<String, Range<PartitionKey>> getRangePartitionMap(Invocation inv) {
                     probe.sample(inv.getInvokedInstance(), "getRangePartitionMap");
                     return inv.proceed();
                 }
 
                 @Mock
-                public PCellSortedSet getPartitionCells(Invocation inv, Optional<List<Column>> partitionColumnsOpt) {
+                public Map<String, PCell> getPartitionCells(Invocation inv, Optional<List<Column>> partitionColumnsOpt) {
                     probe.sample(inv.getInvokedInstance(), "getPartitionCells");
                     return inv.proceed();
                 }
@@ -142,6 +147,12 @@ public class MVRefreshBaseTableReadLockTest extends MVTestBase {
 
     private static OlapTable baseTable(String name) {
         return (OlapTable) getTable(DB_NAME, name);
+    }
+
+    private void withMVRefreshTaskRun(String dbName, MaterializedView mv) throws Exception {
+        TaskRun taskRun = buildMVTaskRun(mv, dbName);
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
     }
 
     /** N-1 (range): partition sync and change detection of a range-partitioned MV over a range base table. */

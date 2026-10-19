@@ -192,29 +192,19 @@ public class MvRefreshArbiter {
             return baseTableUpdateInfo;
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
-<<<<<<< HEAD
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, 
-                    queryRewriteParams.isQueryRewrite());
-=======
-            MvUtils.BaseTableRead<PCellSortedSet, RuntimeException> readUpdatedPartitions = () -> {
-                Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                        queryRewriteParams.isQueryRewrite());
-                return baseUpdatedPartitionNames == null ? null
-                        : PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
-            };
-            PCellSortedSet updatedPCellSet;
+            Set<String> baseUpdatedPartitionNames;
             try {
-                updatedPCellSet = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
-                        queryRewriteParams.isQueryRewrite(), readUpdatedPartitions);
+                baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.isQueryRewrite(),
+                        () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
             } catch (LockTimeoutException e) {
                 logMVPrepare(mv, "Failed to get updated partitions of base table {}: {}",
                         olapBaseTable.getName(), e.getMessage());
                 return null;
             }
-            if (updatedPCellSet == null) {
+            if (baseUpdatedPartitionNames == null) {
                 return null;
             }
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
                 MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);

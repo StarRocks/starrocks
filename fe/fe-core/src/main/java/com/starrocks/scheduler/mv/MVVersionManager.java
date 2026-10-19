@@ -242,7 +242,7 @@ public class MVVersionManager {
                 continue;
             }
             if (!refBaseTableIds.contains(snapshotTable.getId())
-                    && !isReadByEveryBatch(snapshotTable.getId(), pctTableSnapshotInfo)) {
+                    && !isReadByEveryBatch(snapshotTable.getId(), snapshotInfo)) {
                 logger.info("Skip update meta for olap base table {} of materialized view {}, because it changed " +
                                 "while the batches of this refresh ran, so the earlier batches read an older state",
                         snapshotTable.getName(), mv.getName());
@@ -280,7 +280,7 @@ public class MVVersionManager {
      * {@link TaskRun#MV_NON_REF_TABLE_FINGERPRINT}. Batches after the first one read the table again, and the MV is
      * only as fresh as the oldest state any batch read. A run without the property is the job's only run.
      */
-    private boolean isReadByEveryBatch(long tableId, PCTTableSnapshotInfo snapshotInfo) {
+    private boolean isReadByEveryBatch(long tableId, TableSnapshotInfo snapshotInfo) {
         Map<String, String> properties = mvTaskRunContext.getProperties();
         String recorded = properties == null ? null : properties.get(TaskRun.MV_NON_REF_TABLE_FINGERPRINT);
         if (recorded == null) {
@@ -300,14 +300,13 @@ public class MVVersionManager {
      * The value of {@link TaskRun#MV_NON_REF_TABLE_FINGERPRINT} for a run: {@code tableId:hash,...} over the non-ref
      * olap base tables, hashing the version entries the last run would record. Null if there are none.
      */
-    public static String nonRefTableFingerprint(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
+    public static String nonRefTableFingerprint(Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                 Set<Long> refBaseTableIds) {
         List<String> entries = Lists.newArrayList();
-        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+        for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table table = snapshotInfo.getBaseTable();
-            if (snapshotInfo instanceof PCTTableSnapshotInfo pctInfo && table.isNativeTableOrMaterializedView()
-                    && !refBaseTableIds.contains(table.getId())) {
-                entries.add(table.getId() + ":" + fingerprint(pctInfo.getRefreshedPartitionInfos()));
+            if (table.isNativeTableOrMaterializedView() && !refBaseTableIds.contains(table.getId())) {
+                entries.add(table.getId() + ":" + fingerprint(snapshotInfo.getRefreshedPartitionInfos()));
             }
         }
         return entries.isEmpty() ? null : String.join(",", entries);

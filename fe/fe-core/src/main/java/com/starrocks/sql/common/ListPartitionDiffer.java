@@ -27,11 +27,8 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-<<<<<<< HEAD
-import org.apache.commons.collections4.CollectionUtils;
-=======
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -228,16 +225,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
-<<<<<<< HEAD
-                Map<String, PCell> basePartitionCells = PartitionUtil.getPartitionCells(refBaseTable,
-                        refPartitionColumns);
+                Map<String, PCell> basePartitionCells = MvUtils.readBaseTableUnderLock(mv, refBaseTable,
+                        isQueryRewrite(), () -> PartitionUtil.getPartitionCells(refBaseTable, refPartitionColumns));
                 refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
-=======
-                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBaseTable, isQueryRewrite(),
-                        () -> MVPartitionCellBuilder.getPartitionCells(refBaseTable, refPartitionColumns,
-                                pinnedRangeFor(refBaseTable)));
-                refBaseTablePartitionMap.put(refBaseTable, mapping);
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
             }
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.",

@@ -133,11 +133,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-<<<<<<< HEAD
-=======
-import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;

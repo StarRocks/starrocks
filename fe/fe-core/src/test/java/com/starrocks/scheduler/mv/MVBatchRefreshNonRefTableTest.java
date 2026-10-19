@@ -20,8 +20,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -78,9 +78,11 @@ public class MVBatchRefreshNonRefTableTest extends MVTestBase {
 
     /** Run a refresh and every batch it spawns, the way the task manager would. */
     private void refreshAllBatches(MaterializedView mv, Runnable betweenFirstAndSecondBatch) throws Exception {
-        TaskRun taskRun = withMVRefreshTaskRun(DB_NAME, mv);
+        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
         for (int batch = 1; batch < 10; batch++) {
-            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
             TaskRun next = processor.getNextTaskRun();
             if (next == null) {
                 return;
@@ -121,8 +123,8 @@ public class MVBatchRefreshNonRefTableTest extends MVTestBase {
                     "a change of the non-ref table left these mv partitions unrefreshed");
             // Every batch read the same non-ref state, so the last one records it and the mv is fresh.
             MvUpdateInfo updateInfo = getMvUpdateInfo(mv);
-            Assertions.assertNotEquals(MvUpdateInfo.MvToRefreshType.FULL, updateInfo.getMVToRefreshType());
-            Assertions.assertEquals(Set.of(), updateInfo.getMVToRefreshPCells().getPartitionNames());
+            Assertions.assertNotEquals(MvUpdateInfo.MvToRefreshType.FULL, updateInfo.getMvToRefreshType());
+            Assertions.assertEquals(Set.of(), updateInfo.getMvToRefreshPartitionNames());
         } finally {
             starRocksAssert.dropMaterializedView(mvName);
         }
@@ -158,10 +160,10 @@ public class MVBatchRefreshNonRefTableTest extends MVTestBase {
             });
             // A non-ref change reports FULL with an empty partition set, so the type is what tells stale from fresh.
             MvUpdateInfo updateInfo = getMvUpdateInfo(mv);
-            Assertions.assertTrue(updateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL
-                            || !updateInfo.getMVToRefreshPCells().isEmpty(),
+            Assertions.assertTrue(updateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL
+                            || !updateInfo.getMvToRefreshPartitionNames().isEmpty(),
                     "the partition the first batch refreshed lacks the second change, but the mv counts as fresh: "
-                            + updateInfo.getMVToRefreshType());
+                            + updateInfo.getMvToRefreshType());
         } finally {
             starRocksAssert.dropMaterializedView(mvName);
         }
