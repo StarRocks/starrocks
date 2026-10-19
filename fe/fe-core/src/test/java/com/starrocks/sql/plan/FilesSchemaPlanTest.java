@@ -199,6 +199,34 @@ public class FilesSchemaPlanTest extends PlanTestBase {
                 "OLAP-table source must keep per-driver-seq assignment on the OlapTableSink fragment");
     }
 
+    /**
+     * A fragment that contains both a FileScanNode and a non-file scan (here a UNION ALL of an OLAP table
+     * with FILES()) must keep the force flag, so the OLAP scan retains its scan/sink DOP alignment. The
+     * exception is only for fragments whose scans are all file scans.
+     */
+    @Test
+    public void testInsertFromOlapAndFilesUnionStillForcesPerDriverSeq() throws Exception {
+        new MockUp<FileScanNode>() {
+            @Mock
+            public void init(DescriptorTable descriptorTable) {
+            }
+
+            @Mock
+            public void finalizeStats() {
+            }
+        };
+        String sql = "INSERT INTO t_sink " +
+                "SELECT x, y FROM t_source " +
+                "UNION ALL " +
+                "SELECT x, y FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x BIGINT, y VARCHAR(64)')";
+        PlanFragment sinkFragment = sinkFragmentOf(sql);
+        assertTrue(sinkFragment.isForceAssignScanRangesPerDriverSeq(),
+                "A fragment mixing an OLAP scan with a file scan must keep per-driver-seq assignment");
+    }
+
     /** Plans an INSERT through InsertPlanner (non-optimistic, lock-free path) and returns its sink fragment. */
     private static PlanFragment sinkFragmentOf(String sql) throws Exception {
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

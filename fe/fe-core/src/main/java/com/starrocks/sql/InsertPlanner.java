@@ -50,6 +50,7 @@ import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.planner.TupleDescriptor;
@@ -125,6 +126,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -657,9 +659,10 @@ public class InsertPlanner {
 
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
-                    boolean hasFileScanNode = sinkFragment.collectScanNodes().values().stream()
-                            .anyMatch(scanNode -> scanNode instanceof FileScanNode);
-                    if (!hasFileScanNode) {
+                    Collection<ScanNode> scanNodes = sinkFragment.collectScanNodes().values();
+                    boolean onlyFileScanNodes = !scanNodes.isEmpty()
+                            && scanNodes.stream().allMatch(scanNode -> scanNode instanceof FileScanNode);
+                    if (!onlyFileScanNodes) {
                         sinkFragment.setForceAssignScanRangesPerDriverSeq();
                     }
                 } else if (targetTable.isHiveTable()) {
