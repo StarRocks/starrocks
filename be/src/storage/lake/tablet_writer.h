@@ -112,6 +112,13 @@ public:
     // that produced no such losers (e.g. the sort-key==PK eager path). PK table only.
     const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
 
+    // Parallel to dels(): the pre-built tombstone sstable for each del file, built at write time when
+    // its serialized size reaches pk_index_eager_build_threshold_bytes. An empty entry means publish
+    // applies that delete via the memtable erase path. del_sst_ranges() carries each sstable's key range.
+    const std::vector<FileInfo>& del_ssts() const { return _del_ssts; }
+
+    const std::vector<PersistentIndexSstableRangePB>& del_sst_ranges() const { return _del_sst_ranges; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -239,9 +246,23 @@ public:
     // (for example, during large imports or major compaction tasks), it will invoke this function.
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
+    // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
+    // when this del file has no sstable). Built when the serialized del-file size reaches
+    // pk_index_eager_build_threshold_bytes when the load's publish path can ingest it directly.
+    std::vector<FileInfo> _del_ssts;
+    std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
+
+    // Set by DeltaWriter when the tablet does not use the cloud-native persistent index, or for the
+    // column partial-update modes, whose publish path
+    // (UpdateManager::_handle_delete_files) applies every del file with index.erase and never consults
+    // op_write.del_ssts(). A tombstone sstable built for such a load is therefore never ingested, so it
+    // never enters sstable_meta() and only a full vacuum's orphan scan reclaims it -- pure waste on both
+    // the write and the storage side. Skip the build instead of emitting a file nobody consumes.
+    bool skip_del_tombstone_sstable() const { return _skip_del_tombstone_sstable; }
+    void set_skip_del_tombstone_sstable() { _skip_del_tombstone_sstable = true; }
 
     void check_global_dict(SegmentWriter* segment_writer);
 
@@ -281,6 +302,7 @@ protected:
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
+    bool _skip_del_tombstone_sstable = false;
 };
 
 } // namespace lake
