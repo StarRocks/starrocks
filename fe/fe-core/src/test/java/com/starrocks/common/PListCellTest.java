@@ -16,10 +16,13 @@ package com.starrocks.common;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.sql.common.PListCell;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class PListCellTest {
@@ -138,4 +141,95 @@ public class PListCellTest {
             Assertions.assertEquals(-2, c1.compareTo(c2));
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void toStringReturnsEmptyStringForEmptyPartitionItems() {
+        PListCell cell = new PListCell(ImmutableList.of());
+        Assertions.assertEquals("", cell.toString());
+    }
+
+    @Test
+    public void toStringHandlesPartitionItemsWithinMaxLength() {
+        Config.max_mv_task_run_meta_message_values_length = 5;
+        PListCell cell = new PListCell(ImmutableList.of(
+                ImmutableList.of("item1"),
+                ImmutableList.of("item2"),
+                ImmutableList.of("item3")
+        ));
+        Assertions.assertEquals("(item1),(item2),(item3)", cell.toString());
+    }
+
+    @Test
+    public void toStringHandlesPartitionItemsExceedingMaxLength() {
+        Config.max_mv_task_run_meta_message_values_length = 4;
+        PListCell cell = new PListCell(ImmutableList.of(
+                ImmutableList.of("item1"),
+                ImmutableList.of("item2"),
+                ImmutableList.of("item3"),
+                ImmutableList.of("item4"),
+                ImmutableList.of("item5")
+        ));
+        Assertions.assertEquals("(item1),(item2),...,(item4),(item5)", cell.toString());
+        Config.max_mv_task_run_meta_message_values_length = 8;
+    }
+
+    @Test
+    public void toStringHandlesNullPartitionItemsGracefully() {
+        PListCell cell = new PListCell(Lists.newArrayList());
+        Assertions.assertEquals("", cell.toString());
+    }
+
+    private static Set<PListCell> tenantCells(int count) {
+        Set<PListCell> cells = new LinkedHashSet<>();
+        for (int i = 0; i < count; i++) {
+            cells.add(new PListCell("tenant-" + i + ".com"));
+        }
+        return cells;
+    }
+
+    @Test
+    public void testShrinkBatchForDisplayKeepsPrefixAndTotal() {
+        String serialized = PListCell.batchSerialize(tenantCells(20));
+
+        String shrunk = PListCell.shrinkBatchForDisplay(serialized, 8);
+
+        JsonObject json = JsonParser.parseString(shrunk).getAsJsonObject();
+        Assertions.assertEquals(20, json.get("total").getAsInt());
+        Assertions.assertEquals(8, json.getAsJsonArray("data").size());
+        Assertions.assertTrue(shrunk.contains("tenant-0.com"), shrunk);
+        Assertions.assertFalse(shrunk.contains("tenant-8.com"), shrunk);
+    }
+
+    @Test
+    public void testShrinkBatchForDisplayLeavesShortOrInvalidInput() {
+        String serialized = PListCell.batchSerialize(tenantCells(8));
+        Assertions.assertSame(serialized, PListCell.shrinkBatchForDisplay(serialized, 8));
+        Assertions.assertNull(PListCell.shrinkBatchForDisplay(null, 8));
+        Assertions.assertEquals("", PListCell.shrinkBatchForDisplay("", 8));
+        Assertions.assertEquals("not json", PListCell.shrinkBatchForDisplay("not json", 8));
+
+        String shrunk = PListCell.shrinkBatchForDisplay(PListCell.batchSerialize(tenantCells(20)), 8);
+        Assertions.assertSame(shrunk, PListCell.shrinkBatchForDisplay(shrunk, 4));
+    }
+
+    @Test
+    public void testShrinkBatchForDisplayKeepsAtLeastOneCell() {
+        String shrunk = PListCell.shrinkBatchForDisplay(PListCell.batchSerialize(tenantCells(3)), 0);
+
+        JsonObject json = JsonParser.parseString(shrunk).getAsJsonObject();
+        Assertions.assertEquals(3, json.get("total").getAsInt());
+        Assertions.assertEquals(1, json.getAsJsonArray("data").size());
+    }
+
+    @Test
+    public void testBatchDeserializeRejectsShrunkValues() {
+        String shrunk = PListCell.shrinkBatchForDisplay(PListCell.batchSerialize(tenantCells(20)), 8);
+
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class,
+                () -> PListCell.batchDeserialize(shrunk));
+        Assertions.assertTrue(e.getMessage().contains("8 of 20"), e.getMessage());
+    }
+>>>>>>> 158cf60 ([BugFix] Shrink list partition values in archived MV task run history (#80944))
 }
