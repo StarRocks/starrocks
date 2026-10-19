@@ -25,7 +25,11 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
@@ -41,6 +45,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
@@ -62,6 +67,43 @@ public class MVVersionManagerTest {
             public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
             }
         };
+    }
+
+    @Test
+    public void confirmFreshnessSkipsAnMvDroppedBeforeTheLock() {
+        AtomicInteger editLogCount = new AtomicInteger();
+        // The test MV lives in no catalog; this stands in for a DROP that removed the MV before the lock.
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean isInCatalog() {
+                return false;
+            }
+        };
+        new MockUp<Locker>() {
+            @Mock
+            public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
+                                                           long timeout, TimeUnit unit) {
+                return true;
+            }
+
+            @Mock
+            public void unLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType) {
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+                editLogCount.incrementAndGet();
+            }
+        };
+        MaterializedView mv = buildMv();
+        mv.getRefreshScheme().setLastFreshnessConfirmedAt(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext());
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
     }
 
     // A base table can be processed by a run without any of its partitions being refreshed: the run is not
