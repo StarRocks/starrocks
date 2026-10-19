@@ -55,6 +55,10 @@ public abstract class PartitionDiffer {
         return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
     }
 
+    protected boolean readsBaseTablesUnlocked() {
+        return queryRewriteParams != null && queryRewriteParams.readsBaseTablesUnlocked();
+    }
+
     protected TvrVersionRange pinnedRangeFor(Table table) {
         return pinnedRangeByTableIdentifier.get(table.getUUID());
     }
