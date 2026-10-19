@@ -371,6 +371,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
+        TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
         // Seeded by the first run only, later runs carry it via the property copy above.
         if (!newProperties.containsKey(TaskRun.MV_NON_REF_TABLE_FINGERPRINT)) {
             Set<Long> refBaseTableIds = mv.getRefBaseTablePartitionColumns().keySet().stream()
