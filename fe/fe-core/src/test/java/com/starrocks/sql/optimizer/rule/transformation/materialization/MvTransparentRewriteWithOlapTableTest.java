@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
@@ -45,6 +46,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -347,6 +349,56 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
             plan = getFragmentPlan("SELECT * from mv0 BEFORE '1234567' where k1<6 and k2 like 'a%'");
             PlanTestBase.assertContains(plan, ": mv0");
             PlanTestBase.assertNotContains(plan, ": m1");
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteScansMvAsItIsWhenABaseTableIsDropped() {
+        withPartialScanMv(() -> {
+            // A dropped base table fails the timeliness check, and would fail the defined query too: keep serving the
+            // data the MV holds, as before the defined-query fallback.
+            new MockUp<MvRefreshArbiter>() {
+                @Mock
+                public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                              MVTimelinessArbiter.QueryRewriteParams params) {
+                    throw new RuntimeException("Failed to get table [m1]");
+                }
+            };
+            new MockUp<MvUtils>() {
+                @Mock
+                public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+                    return Optional.empty();
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ": mv0");
+            PlanTestBase.assertNotContains(plan, ": m1");
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteRedirectsToDefinedQueryWhenABaseTableLookupFails() {
+        withPartialScanMv(() -> {
+            // A failed lookup (an HMS timeout, say) does not prove the base table is gone, and only p1 of mv0 is
+            // fresh: redirect to the defined query rather than serve stale data.
+            new MockUp<MvRefreshArbiter>() {
+                @Mock
+                public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                              MVTimelinessArbiter.QueryRewriteParams params) {
+                    throw new RuntimeException("metastore timed out");
+                }
+            };
+            new MockUp<MvUtils>() {
+                @Mock
+                public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+                    throw new RuntimeException("metastore timed out");
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ": m1");
+            PlanTestBase.assertNotContains(plan, ": mv0");
         });
     }
 
