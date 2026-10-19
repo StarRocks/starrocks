@@ -97,6 +97,12 @@ description: "Alphabetical q - r"
 - 标签：`storage_type`
 - 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
 
+## `ranger_audit_init_failed`
+
+- 单位：-
+- 类型：Gauge
+- 描述：本 FE 初始化 Ranger 审计是否失败。`1` 表示鉴权仍正常工作，但在修正审计配置并重启之前，本 FE 不会写出任何 Ranger 审计事件，FE 日志中会写明失败的审计目的地；否则为 `0`。常见原因是配置了 FE 未打包的审计目的地：FE 只提供 `file` 和 `solr` 两种 Ranger 审计目的地。
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`
