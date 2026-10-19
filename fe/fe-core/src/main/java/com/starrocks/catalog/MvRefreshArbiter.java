@@ -25,10 +25,12 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -138,8 +140,16 @@ public class MvRefreshArbiter {
                 return Optional.of(false);
             }
 
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                    queryRewriteParams.isQueryRewrite());
+            Set<String> baseUpdatedPartitionNames;
+            try {
+                baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.isQueryRewrite(),
+                        () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
+            } catch (LockTimeoutException e) {
+                logMVPrepare(mv, "Failed to check updated partitions of base table {}: {}",
+                        olapBaseTable.getName(), e.getMessage());
+                return Optional.empty();
+            }
             if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
             }
@@ -181,12 +191,24 @@ public class MvRefreshArbiter {
             return baseTableUpdateInfo;
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                    queryRewriteParams.isQueryRewrite());
-            if (baseUpdatedPartitionNames == null) {
+            MvUtils.BaseTableRead<PCellSortedSet, RuntimeException> readUpdatedPartitions = () -> {
+                Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                        queryRewriteParams.isQueryRewrite());
+                return baseUpdatedPartitionNames == null ? null
+                        : PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
+            };
+            PCellSortedSet updatedPCellSet;
+            try {
+                updatedPCellSet = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.isQueryRewrite(), readUpdatedPartitions);
+            } catch (LockTimeoutException e) {
+                logMVPrepare(mv, "Failed to get updated partitions of base table {}: {}",
+                        olapBaseTable.getName(), e.getMessage());
                 return null;
             }
-            PCellSortedSet updatedPCellSet = PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
+            if (updatedPCellSet == null) {
+                return null;
+            }
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
                 MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);

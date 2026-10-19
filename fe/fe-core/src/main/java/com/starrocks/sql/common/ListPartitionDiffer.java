@@ -26,6 +26,7 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -325,8 +326,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
-                PCellSortedSet basePartitionCells = PartitionUtil.getPartitionCells(refBaseTable,
-                        refPartitionColumns, pinnedRangeFor(refBaseTable));
+                PCellSortedSet basePartitionCells = MvUtils.readBaseTableUnderLock(mv, refBaseTable,
+                        isQueryRewrite(), () -> PartitionUtil.getPartitionCells(refBaseTable,
+                                refPartitionColumns, pinnedRangeFor(refBaseTable)));
                 refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
             }
         } catch (Exception e) {
