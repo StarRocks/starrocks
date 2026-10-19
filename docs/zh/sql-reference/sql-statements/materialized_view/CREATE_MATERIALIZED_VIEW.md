@@ -98,6 +98,37 @@ SELECT select_expr[, select_expr ...]
     - 如果物化视图是聚合类型，则所有的分组列自动补充为排序列。
     - 如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
 
+### 在存算分离 Range 分布表上创建
+
+对于满足条件的存算分离 [Range 分布表](../../../table_design/data_distribution/Data_distribution.md)，可以使用普通的 `CREATE MATERIALIZED VIEW ... AS SELECT` 语句。创建 Range 分布基表时，不指定 `DISTRIBUTED BY`。下例中，基表按 `id` 排序，物化视图按 `store_id` 分组；过滤条件使用的列无需出现在视图的输出中。
+
+```sql
+SET enable_range_distribution = true;
+
+CREATE TABLE range_sales (
+    id BIGINT NOT NULL,
+    store_id INT NOT NULL,
+    amount BIGINT,
+    is_valid INT
+)
+DUPLICATE KEY(id)
+ORDER BY(id);
+
+CREATE MATERIALIZED VIEW range_store_amount AS
+SELECT store_id, SUM(amount)
+FROM range_sales
+WHERE is_valid > 0
+GROUP BY store_id;
+```
+
+物化视图拥有独立的 Range Tablet 布局和排序键。对于聚合视图，所有分组键都作为排序键，无需与基表的 `ORDER BY` 相同。历史数据在线构建，后续 INSERT 和导入操作同步维护视图。基表和视图的 Tablet 均支持通过 `ALTER TABLE ... SPLIT TABLETS` 和 `ALTER TABLE ... MERGE TABLETS` 进行分裂与合并；如需操作视图的布局，请指定其 Tablet ID。合并仍要求源 Tablet 不包含共享文件，Compaction 可以清除分裂产生的共享文件。当前创建任务达到 `FINISHED` 后，才能继续创建同一基表的其他同步物化视图或 Rollup。
+
+现有的单表、表达式和基表模型限制仍然适用。Range 同步物化视图不支持存算一体集群、主键基表、Colocate 基表或包含 `AUTO_INCREMENT` 的基表。创建时，每个逻辑分区必须恰好对应一个物理分区，支持多个逻辑分区。创建前，请完成所有 FE 的协调升级：旧版本 FE 无法安全地恢复此类 Range 视图的元数据。对此类视图执行 tablet 切分或合并前，还需升级所有 CN。
+
+Range 同步物化视图不支持表达式生成的 MV 列名与真实基表列重名。例如，基表已包含 `mv_sum_v` 时，不能使用 `SUM(v)`。请重命名冲突的基表列，或在支持别名的表达式中使用其他别名。直接选择名称以 `mv_` 开头的真实基表列仍受支持。
+
+如果 schema 变更或列重命名会使仍保留的 MV 表达式或 `WHERE` 子句无法解析，或改变已存储的聚合状态签名，则会拒绝该操作，包括删除被引用的 Struct 字段。添加字段和删除未引用字段仍受支持。请先删除受影响的视图。仅从指定视图中删除列不会删除其基表源列。
+
 ### 查询同步物化视图
 
 因为同步物化视图本质上是基表的索引而不是物理表，所以您只能使用 Hint `[_SYNC_MV_]` 查询同步物化视图：

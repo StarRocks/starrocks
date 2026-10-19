@@ -824,7 +824,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             modifiedColumns.add(clause.getColName());
             ErrorReport.wrapWithRuntimeException(() ->
-                    AlterMVJobExecutor.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
+                    AlterMVJobExecutor.checkRenamedColumnWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
 
             // If modified columns are already done, inactive related mv

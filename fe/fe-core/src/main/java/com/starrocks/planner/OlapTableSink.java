@@ -925,6 +925,9 @@ public class OlapTableSink extends DataSink {
                 }
 
                 Expr whereClause = indexMeta.getWhereClause().clone();
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    whereClause = ExprUtils.rewriteStructFieldSlotRefs(whereClause);
+                }
                 List<SlotRef> slots = Lists.newArrayList();
                 whereClause.collect(SlotRef.class, slots);
 
