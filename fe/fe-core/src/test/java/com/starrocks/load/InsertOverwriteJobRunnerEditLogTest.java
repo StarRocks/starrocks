@@ -185,7 +185,8 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId, remainingTempPartitionId));
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        runner.gc();
+        // A failed job runs gc().
+        runner.handle();
 
         Assertions.assertEquals(tempPartitionId, table.getPartition(TABLE_NAME).getId());
         Assertions.assertFalse(table.existTempPartitions());
