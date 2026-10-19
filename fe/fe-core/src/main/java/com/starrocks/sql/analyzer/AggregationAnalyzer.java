@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -198,6 +199,14 @@ public class AggregationAnalyzer {
             // collection itself. Only checking the collection lets a bare column slip through, e.g.
             // `SELECT map_agg(k, v)[c] FROM t`, and the planner then fails much later with an
             // unactionable "Invalid plan" from the input-dependency checker.
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitSubfieldExpr(SubfieldExpr node, Void context) {
+            // A field of a struct-valued expression is constant within a group when the struct is, e.g.
+            // `named_struct('a', sum(x)).a` or `any_value(struct_col).a`. Without this the whole access fell
+            // through to visitExpression and was rejected even though its struct is an aggregate.
             return node.getChildren().stream().allMatch(this::visit);
         }
 

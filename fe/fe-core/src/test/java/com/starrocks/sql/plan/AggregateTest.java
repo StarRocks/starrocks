@@ -3501,4 +3501,11 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*)\n" +
                 "  |  group by: ");
     }
+
+    @Test
+    public void testStructFieldOfAggregates() throws Exception {
+        String plan = getFragmentPlan("select v1, named_struct('a', sum(v2), 'b', max(v3)).a from t0 group by v1");
+        assertContains(plan, "output: sum(2: v2), max(3: v3)");
+        assertContains(plan, "named_struct('a', 4: sum, 'b', 5: max).a");
+    }
 }
