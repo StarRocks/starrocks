@@ -149,15 +149,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタの Tablet メタデータおよびトランザクションログファイルを、Adler-32 チェックサム付きで書き込むかどうか。これにより、これらのファイルの破損を読み取り時に検出できます。この項目の設定にかかわらず、読み取り側はチェックサムが存在する場合は常に自動的に検出して検証します。この項目は書き込み形式のみを制御します。クラスタが、チェックサム形式に対応していないバージョンへダウングレードされる可能性がある場合にのみ、この項目を `false` に設定してください。ローリングアップグレードまたはダウングレードの期間中、古い BE または CN は旧来のリーダーを使用するため、新形式で書き込まれたファイルを解析できません。
 - 導入バージョン: v4.2
 
-### lake_enable_tablet_location_handoff
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタで、ロードのデータを書き込むノードが、所有する tablet のストレージロケーションをそのロードを調整するノードに引き渡すかどうか。`file_bundling` が有効なテーブルでは、調整ノードがパーティションごとに 1 つの combined txn log を書き込みますが、通常は大部分のパーティションの tablet を所有していません。`true` の場合、tablet を所有するノードはトランザクションログと一緒にパーティションごとに 1 つの tablet のストレージロケーションを返し、調整ノードは StarMgr に問い合わせることなく combined txn log を書き込みます。省かれた問い合わせは `lake_tablet_location_handoff_hits_total` に計上されます。`false` の場合、調整ノードはロードごとに、tablet を所有していないパーティションごとに StarMgr へロケーションを問い合わせ、その回数は `starrocks_be_staros_shard_info_fallback_total` に計上されます。返されるロケーションにはストレージボリュームの認証情報が含まれます。
-- 導入バージョン: -
-
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -290,6 +281,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
+
+### lake_shard_info_cache_ttl_sec
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 共有データクラスタで、BE または CN が自身の所有していない tablet のストレージロケーションを保持する時間。保持している間に同じ tablet に再びアクセスしても、StarMgr への問い合わせは発生しません。ノードが保持するロケーションは 2 種類あります。1 つ目は、ノード自身が StarMgr に問い合わせて得たものです。他のノードに割り当てられた tablet のファイルを読み書きするときに問い合わせが発生し、その回数は `starrocks_be_staros_shard_info_fallback_total` に計上されます。たとえば、1 回のロードで複数のノードが同じ tablet に書き込む場合や、Vacuum がパーティション内のすべての tablet のメタデータを読み取る場合です。このロケーションで応答した回数は `staros_shard_info_fallback_cache_hits_total` に計上されます。2 つ目は、tablet を所有するノードから引き渡されたものです。`file_bundling` が有効なテーブルへのロードでは、所有ノードがトランザクションログとともにロケーションを返し、ロードを調整するノードはそれを使って各パーティションの combined txn log を問い合わせなしで書き込みます。このロケーションで応答した回数は `lake_tablet_location_handoff_hits_total` に計上されます。tablet を所有するノードには StarMgr からストレージボリュームの更新がプッシュされますが、保持されたロケーションは期限が切れるまで更新されません。そのため、この項目は、こうしたノードが古いストレージボリューム設定 (ローテーション済みの認証情報など) を使い続ける最長時間も決めます。保持されるロケーションにはストレージボリュームの認証情報が含まれます。`0` に設定すると 2 種類とも無効になり、引き渡しも保持も行われず、毎回 StarMgr に問い合わせます。
+- 導入バージョン: -
 
 ### lake_vacuum_enable_task_timeout
 

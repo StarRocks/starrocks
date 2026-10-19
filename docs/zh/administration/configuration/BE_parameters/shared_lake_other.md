@@ -146,15 +146,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
-### lake_enable_tablet_location_handoff
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：存算分离集群下，写入导入数据的节点是否把所持有 tablet 的存储位置交给负责该导入的协调节点。对于开启了 `file_bundling` 的表，协调节点会为每个分区写一个 combined txn log，而它通常不持有大多数分区的 tablet。设为 `true` 时，持有 tablet 的节点在回传事务日志时，每个分区附带一个 tablet 的存储位置，协调节点据此写 combined txn log，无需向 StarMgr 查询；省掉的查询计入 `lake_tablet_location_handoff_hits_total`。设为 `false` 时，每次导入中协调节点没有 tablet 的分区都要向 StarMgr 查询一次存储位置，这些查询计入 `starrocks_be_staros_shard_info_fallback_total`。回传的存储位置包含存储卷的访问凭证。
-- 引入版本：-
-
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -287,6 +278,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
+
+### lake_shard_info_cache_ttl_sec
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：存算分离集群下，BE 或 CN 保留不归自己持有的 tablet 的存储位置的时长。在此期间再次访问该 tablet，不必向 StarMgr 查询。节点保留两类存储位置。第一类是节点自己向 StarMgr 查询得到的：节点读写分配给其他节点的 tablet 的文件时需要查询，查询计入 `starrocks_be_staros_shard_info_fallback_total`，例如一次导入由多个节点同时写同一个 tablet，或者 Vacuum 读取一个分区内所有 tablet 的元数据；由这类位置直接应答的查询计入 `staros_shard_info_fallback_cache_hits_total`。第二类是持有 tablet 的节点交来的：向开启了 `file_bundling` 的表导入时，持有节点在回传事务日志时附带存储位置，负责该导入的协调节点据此写各分区的 combined txn log，无需查询；由这类位置直接应答的查询计入 `lake_tablet_location_handoff_hits_total`。持有 tablet 的节点会收到 StarMgr 推送的存储卷变更，而保留的存储位置要到过期后才会更新，因此该配置项同时限定了这类节点最多还会使用多久过时的存储卷配置，例如已轮换的访问凭证。保留的存储位置包含存储卷的访问凭证。设为 `0` 表示两类都关闭：既不交接也不保留，每次都向 StarMgr 查询。
+- 引入版本：-
 
 ### lake_vacuum_enable_task_timeout
 

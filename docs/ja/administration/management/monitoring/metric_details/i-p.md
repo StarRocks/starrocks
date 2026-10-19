@@ -351,7 +351,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: 件数
 - タイプ: 瞬時値
-- 説明: 共有データモード専用。この BE が所有していない tablet について保持しているストレージロケーションの件数。これらは combined txn log を書き込むために、ロード時に tablet の所有ノードから引き渡されたものです（BE 設定項目 `lake_enable_tablet_location_handoff` を参照）。エントリは 16 MiB の LRU キャッシュに保持され、最後の更新から 5 分間有効で、キャッシュに空きが必要になったときに削除されます。そのため、この値は引き渡しが現在使われているかどうかではなく、キャッシュの占有量を表します。
+- 説明: 共有データモード専用。この BE が所有していない tablet について保持しているストレージロケーションの件数。これらは combined txn log を書き込むために、ロード時に tablet の所有ノードから引き渡されたものです（BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照）。エントリは `staros_shard_info_fallback_cache_entries` で数えられるエントリと共有する 16 MiB の LRU キャッシュに保持され、最後の更新から `lake_shard_info_cache_ttl_sec` の間有効で、キャッシュに空きが必要になったときに削除されます。そのため、この値は引き渡しが現在使われているかどうかではなく、キャッシュの占有量を表します。
 
 ## `lake_tablet_location_handoff_hits_total`
 
