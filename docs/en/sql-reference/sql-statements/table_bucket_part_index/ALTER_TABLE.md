@@ -805,6 +805,7 @@ Currently, StarRocks supports modifying the following table properties:
 - `colocate_with`
 - `bucket_size` (supported since 3.2)
 - `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
+- `enable_statistic_auto_collect`
 
 :::note
 

@@ -804,6 +804,24 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (オプション): 同じ名前を持つ列の割合の閾値。同じ名前を持つ列の割合がこの値未満の場合、Flat JSON ではその列が抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。デフォルト値: `0.3`。
 - `flat_json.column.max` (オプション): Flat JSON で抽出可能なサブフィールドの最大数。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `100`。
 
+### 統計情報の自動収集で特定のテーブルをスキップする
+
+`enable_statistic_auto_collect` を `false` に設定すると、統計情報の自動収集でそのテーブルがスキップされます。デフォルト: `true`。
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+このプロパティが `false` の場合:
+
+- StarRocks が提供する自動収集タスク、および `CREATE ANALYZE ALL` または `CREATE ANALYZE DATABASE` で作成した自動収集タスクは、このテーブルをスキップします。
+- このテーブルを明示的に指定した収集タスク（`CREATE ANALYZE TABLE` で作成したもの、または `ANALYZE TABLE` で実行したもの）は、引き続きこのテーブルの統計情報を収集します。
+- データロード時にトリガーされる統計情報の収集には影響しません。これは `enable_statistic_collect_on_first_load` で別途制御されます。
+
+このプロパティは [ALTER TABLE](ALTER_TABLE.md) で変更できます。マテリアライズドビューではサポートされていません。
+
 ## 例
 
 ### ハッシュバケット法と列指向ストレージを使用した集計テーブル
