@@ -76,13 +76,8 @@ subprojects {
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.18.1")
         set("ranger.version", "2.9.0")
-<<<<<<< HEAD
-        set("protobuf-java.version", "3.25.5")
-=======
         set("zookeeper.version", "3.9.5")
-        set("orc.version", "1.9.1")
-        set("protobuf-java.version", "3.25.9")
->>>>>>> 2bdd3f3 ([BugFix] Keep a broken Ranger audit config from failing catalog access, and ship the ZooKeeper classes Solr audit needs (#81075))
+        set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
         set("staros.version", "4.0.9")
