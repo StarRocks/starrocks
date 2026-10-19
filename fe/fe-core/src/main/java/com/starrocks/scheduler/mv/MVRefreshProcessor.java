@@ -624,11 +624,7 @@ public abstract class MVRefreshProcessor {
             final Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
             if (optTable.isEmpty()) {
                 logger.warn("table {} do not exist when refreshing materialized view", baseTableInfo.getTableInfoStr());
-<<<<<<< HEAD
                 mv.setInactiveAndReason(
-=======
-                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s does not exist",
                         db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr());
@@ -669,11 +665,7 @@ public abstract class MVRefreshProcessor {
             if (optNewTable.isEmpty()) {
                 logger.warn("table {} does not exist after refreshing materialized view",
                         baseTableInfo.getTableInfoStr());
-<<<<<<< HEAD
                 mv.setInactiveAndReason(
-=======
-                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s disappeared " +
                                 "after metadata refresh",

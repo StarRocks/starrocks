@@ -68,11 +68,7 @@ public final class MVRefreshSchemaChecker {
             boolean isExternalCatalog = !CatalogMgr.isInternalCatalog(bti.getCatalogName());
 
             if (!baseTableOpt.isPresent() && isExternalCatalog) {
-<<<<<<< HEAD
                 mv.setInactiveAndReason(
-=======
-                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(bti.getTableName()));
                 return;
             }
@@ -105,11 +101,7 @@ public final class MVRefreshSchemaChecker {
             // known drift signatures so a transient catalog blip doesn't brick the MV.
             if (isLikelyDriftException(e)) {
                 if (mv.isActive()) {
-<<<<<<< HEAD
                     mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
-=======
-                    AlterMVJobExecutor.inactiveMvFromRefresh(mv, MaterializedViewExceptions.inactiveReasonForSchemaCheckFailed(
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
                             mv.getName(), e.getMessage()));
                 }
                 LOG.warn("[MVRefreshSchemaChecker] schema drift detected for MV {}: {}", mv.getName(), e.getMessage());

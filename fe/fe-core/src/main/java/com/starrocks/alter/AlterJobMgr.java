@@ -534,11 +534,6 @@ public class AlterJobMgr {
             }
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
-            if (log.isKeepTaskScheduled()) {
-                // Inactivated by a refresh, which left the task scheduled: see AlterMVJobExecutor#inactiveMvFromRefresh.
-                context = new AlterMaterializedViewStatusContext(context.status(), context.reason(),
-                        context.baseTableInfos(), null);
-            }
             applyAlterMaterializedViewStatus(mv, context, true);
             if (log.isClearVersionMap()) {
                 mv.getRefreshScheme().clearVersionState();

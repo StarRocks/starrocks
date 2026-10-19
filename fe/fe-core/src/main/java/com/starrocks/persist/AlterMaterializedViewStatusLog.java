@@ -41,16 +41,7 @@ public class AlterMaterializedViewStatusLog implements Writable {
     // INACTIVE only: also clear the visible version maps and the confirmed freshness, because the MV's data no longer
     // matches what its definition reads. False in entries written by older versions, which did not journal the clear.
     @SerializedName(value = "clearVersionMap")
-<<<<<<< HEAD
     private boolean clearVersionMap;
-=======
-    private Boolean clearVersionMap;
-    // INACTIVE only: leave the MV's task scheduled, so that its next refresh tries to activate the MV again. Set by a
-    // refresh that found a base table gone or changed, which may well be back by the next one. Null in entries
-    // written by older versions, which suspend the task.
-    @SerializedName(value = "keepTaskScheduled")
-    private Boolean keepTaskScheduled;
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
 
     public AlterMaterializedViewStatusLog(long dbId, long tableId, String status, String reason) {
         this.dbId = dbId;
@@ -101,13 +92,5 @@ public class AlterMaterializedViewStatusLog implements Writable {
 
     public void setClearVersionMap(boolean clearVersionMap) {
         this.clearVersionMap = clearVersionMap;
-    }
-
-    public boolean isKeepTaskScheduled() {
-        return Boolean.TRUE.equals(keepTaskScheduled);
-    }
-
-    public void setKeepTaskScheduled(boolean keepTaskScheduled) {
-        this.keepTaskScheduled = keepTaskScheduled;
     }
 }

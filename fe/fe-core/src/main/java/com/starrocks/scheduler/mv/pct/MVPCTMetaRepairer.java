@@ -77,11 +77,7 @@ public class MVPCTMetaRepairer {
                 toRepairTables.stream().filter(p -> !isSupportedPCTRepairer(p.first, p.second)).findFirst();
         if (nonSupportedTableOpt.isPresent()) {
             Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
-<<<<<<< HEAD
             mv.setInactiveAndReason(
-=======
-            AlterMVJobExecutor.inactiveMvFromRefresh(mv,
->>>>>>> 9e1ef52b494... [BugFix][RB-374] Keep the task of an MV a refresh inactivated scheduled, and fix two follow-ups of the planner lock and Hive INSERT changes (#65717)
                     MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
             throw new DmlException(String.format("Materialized view %s.%s set inactive: base table '%s' " +
                             "(catalog=%s, db=%s) was recreated but its table type is not supported for automatic meta repair. " +
