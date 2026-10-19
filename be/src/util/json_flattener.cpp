@@ -1292,7 +1292,8 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
 #ifdef NDEBUG
                 break; // must only one
 #endif
-            } else if (_src_paths[j].starts_with(_dst_paths[i] + ".")) {
+            } else if (_dst_paths[i].empty() || _src_paths[j].starts_with(_dst_paths[i] + ".")) {
+                // the root ("$") contains every flat path
                 merges.emplace_back(j);
             }
         }
@@ -1312,7 +1313,8 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
                 mk.cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(_src_types[equals[0]]),
                                                                     TypeDescriptor(_dst_types[i]), col_ref, &_pool);
             }
-        } else if (!merges.empty()) {
+        } else if (!merges.empty() || (_dst_paths[i].empty() && has_remain)) {
+            // the root is rebuilt from every flat path and the remain, even when only the remain was read
             check_dst.emplace(i);
             if (_dst_types[i] != TYPE_JSON && !is_string_type(_dst_types[i])) {
                 continue;
@@ -1401,7 +1403,10 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
                 mk.src_index.emplace_back(paths.size());
             }
             mk.merger = std::make_unique<JsonMerger>(p, t, has_remain);
-            mk.merger->set_root_path(_dst_paths[mk.dst_index]);
+            // set_root_path("") would mark the root a new root and drop the keys only the remain holds
+            if (!_dst_paths[mk.dst_index].empty()) {
+                mk.merger->set_root_path(_dst_paths[mk.dst_index]);
+            }
             mk.merger->set_output_nullable(true);
         }
     }
