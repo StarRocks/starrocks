@@ -14,8 +14,6 @@
 
 #pragma once
 
-<<<<<<< HEAD:be/src/util/jvm_metrics.h
-=======
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -23,8 +21,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/metrics.h"
->>>>>>> 48498a0 ([Enhancement] Collect BE JVM metrics only after a JVM exists instead of starting one (#81074)):be/src/runtime/java/jvm_metrics.h
 #include "common/status.h"
 #include "jni.h"
 #include "udf/java/java_udf.h"
