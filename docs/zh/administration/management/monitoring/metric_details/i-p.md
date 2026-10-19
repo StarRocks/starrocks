@@ -204,6 +204,20 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：INT8 列池使用的内存。
 
+## `internal_service_rpc_request_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`method` (BE 内部服务 bRPC 方法的名称，例如 `transmit_chunk`)
+- 描述：BE 内部服务接收的请求负载总大小，即请求消息的大小加上其附件的大小。
+
+## `internal_service_rpc_response_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`method` (BE 内部服务 bRPC 方法的名称，例如 `transmit_chunk`)
+- 描述：BE 内部服务发送的响应负载总大小，即响应消息的大小加上其附件的大小。
+
 ## `jemalloc_active_bytes`
 
 - 单位：字节

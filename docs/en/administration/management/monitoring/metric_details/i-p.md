@@ -204,6 +204,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the INT8 column pool.
 
+## `internal_service_rpc_request_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `method` (the name of the BE internal service bRPC method, for example, `transmit_chunk`)
+- Description: Total size of the request payloads that the BE internal service received, that is, the size of the request message plus the size of its attachment.
+
+## `internal_service_rpc_response_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `method` (the name of the BE internal service bRPC method, for example, `transmit_chunk`)
+- Description: Total size of the response payloads that the BE internal service sent, that is, the size of the response message plus the size of its attachment.
+
 ## `jemalloc_active_bytes`
 
 - Unit: Bytes

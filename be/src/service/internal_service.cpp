@@ -105,6 +105,36 @@ using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
 static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
 
+namespace {
+
+class RpcResponseBytesClosure : public google::protobuf::Closure {
+public:
+    RpcResponseBytesClosure(IntCounter* counter, brpc::Controller* cntl, const google::protobuf::Message* response,
+                            google::protobuf::Closure* done)
+            : _counter(counter), _cntl(cntl), _response(response), _done(done) {}
+    ~RpcResponseBytesClosure() override = default;
+
+    void Run() override {
+        std::unique_ptr<RpcResponseBytesClosure> self_guard(this);
+        int64_t bytes = _response != nullptr ? static_cast<int64_t>(_response->ByteSizeLong()) : 0;
+        if (_cntl != nullptr) {
+            bytes += static_cast<int64_t>(_cntl->response_attachment().size());
+        }
+        _counter->increment(bytes);
+        if (_done != nullptr) {
+            _done->Run();
+        }
+    }
+
+private:
+    IntCounter* _counter;
+    brpc::Controller* _cntl;
+    const google::protobuf::Message* _response;
+    google::protobuf::Closure* _done;
+};
+
+} // namespace
+
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
                                                       orchestration::OrchestrationEnv* orchestration_env,
@@ -113,6 +143,32 @@ PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
+
+template <typename T>
+void PInternalServiceImplBase<T>::CallMethod(const google::protobuf::MethodDescriptor* method,
+                                             google::protobuf::RpcController* controller,
+                                             const google::protobuf::Message* request,
+                                             google::protobuf::Message* response, google::protobuf::Closure* done) {
+    auto* metrics = ServiceMetrics::instance()->internal_service_rpc_metrics(method);
+    if (metrics == nullptr) {
+        T::CallMethod(method, controller, request, response, done);
+        return;
+    }
+
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    int64_t request_bytes = request != nullptr ? static_cast<int64_t>(request->ByteSizeLong()) : 0;
+    if (cntl != nullptr) {
+        request_bytes += static_cast<int64_t>(cntl->request_attachment().size());
+    }
+    metrics->request_bytes.increment(request_bytes);
+
+    // bRPC passes a non-null `done` for every successful method call. `done` is null only when
+    // 1. the method doesn't exist; 2. a handler is called directly in the process without network.
+    if (done != nullptr) {
+        done = new RpcResponseBytesClosure(&metrics->response_bytes, cntl, response, done);
+    }
+    T::CallMethod(method, controller, request, response, done);
+}
 
 template <typename T>
 void PInternalServiceImplBase<T>::transmit_data(google::protobuf::RpcController* cntl_base,
