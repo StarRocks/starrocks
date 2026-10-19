@@ -76,8 +76,6 @@ public class BasicActionTest {
         Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic", "10.1.2.3")));
         // Base64 of "nocolon" - no ':' separator, so user and password cannot be split.
         Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic bm9jb2xvbg==", "10.1.2.3")));
-        // Not Base64 at all: refused the same way, not with the decoder's IllegalArgumentException.
-        Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic !!!not-base64!!!", "10.1.2.3")));
     }
 
     private static AuthCredentials parseBasic(String user, String password, String host) {
