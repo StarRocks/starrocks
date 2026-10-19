@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
@@ -332,8 +333,16 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                         lockFailedTimes, DebugUtil.getStackTrace(e));
                 lastException = e;
             } catch (Throwable e) {
-                refreshFailedTimes += 1;
-                logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
+                // A lock timeout raised where a checked exception cannot propagate arrives wrapped, e.g. from the
+                // non-ref base table check of change detection; it is still lock contention.
+                if (Throwables.getCausalChain(e).stream().anyMatch(t -> t instanceof LockTimeoutException)) {
+                    lockFailedTimes += 1;
+                    logger.warn("refresh mv failed at {}th time because try lock failed: {}",
+                            lockFailedTimes, DebugUtil.getStackTrace(e));
+                } else {
+                    refreshFailedTimes += 1;
+                    logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
+                }
                 lastException = e;
             }
 

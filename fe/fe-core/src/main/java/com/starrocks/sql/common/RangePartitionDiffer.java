@@ -241,7 +241,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
-                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, isQueryRewrite(),
+                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, readsBaseTablesUnlocked(),
                         () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
                                 mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
                 if (mapping.cells() == null) {

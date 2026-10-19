@@ -27,6 +27,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -143,12 +144,13 @@ public class MvRefreshArbiter {
             Set<String> baseUpdatedPartitionNames;
             try {
                 baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
-                        queryRewriteParams.isQueryRewrite(),
+                        queryRewriteParams.readsBaseTablesUnlocked(),
                         () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
             } catch (LockTimeoutException e) {
-                logMVPrepare(mv, "Failed to check updated partitions of base table {}: {}",
-                        olapBaseTable.getName(), e.getMessage());
-                return Optional.empty();
+                // Fail this refresh, as a lock timeout on a ref base table does: an empty result would read as
+                // "changed" and refresh every partition of the mv.
+                throw new DmlException("Failed to check updated partitions of base table %s of mv %s: %s", e,
+                        olapBaseTable.getName(), mv.getName(), e.getMessage());
             }
             if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
@@ -200,7 +202,7 @@ public class MvRefreshArbiter {
             PCellSortedSet updatedPCellSet;
             try {
                 updatedPCellSet = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
-                        queryRewriteParams.isQueryRewrite(), readUpdatedPartitions);
+                        queryRewriteParams.readsBaseTablesUnlocked(), readUpdatedPartitions);
             } catch (LockTimeoutException e) {
                 logMVPrepare(mv, "Failed to get updated partitions of base table {}: {}",
                         olapBaseTable.getName(), e.getMessage());
