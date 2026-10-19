@@ -10,6 +10,12 @@ displayed_sidebar: docs
 
 从 2.4 版本开始支持将 Array 字符串 和 JSON array 转换为 ARRAY 类型。
 
+:::note
+
+`CAST(input AS CHAR(N))` 会将结果截断为前 `N` 个字符，与 MySQL 一致。例如 `CAST(1775580223839 AS CHAR(10))` 返回 `1775580223`。不带长度的 `CAST(input AS CHAR)` 以及 `CAST(input AS VARCHAR(N))` 不会被截断。
+
+:::
+
 ## 语法
 
 ```plaintext
