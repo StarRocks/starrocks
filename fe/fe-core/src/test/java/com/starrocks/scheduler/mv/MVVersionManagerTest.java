@@ -184,8 +184,7 @@ public class MVVersionManagerTest {
     @Test
     public void confirmFreshnessSkipsAnMvDroppedBeforeTheLock() {
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
-                MaterializedView.RefreshMode.PCT);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
         mvInCatalog = false;
 
         manager.confirmFreshness();

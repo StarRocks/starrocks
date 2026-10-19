@@ -21,6 +21,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
@@ -313,8 +315,10 @@ public class FrontendServiceImplImmutablePartitionMultiNodeWriteTest {
                 .map(f -> f.getMethodName().equals("updateImmutablePartitionInternal"))
                 .orElse(false));
         if (calledByTheRpc) {
-            lockHeld.add(GlobalStateMgr.getCurrentState().getLockManager()
-                    .isReadOrWriteOwnedByCurrentThread(((OlapTable) table).getId()));
+            long tableId = ((OlapTable) table).getId();
+            LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+            lockHeld.add(lockManager.isOwnedByCurrentThread(tableId, LockType.READ)
+                    || lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
         }
     }
 
