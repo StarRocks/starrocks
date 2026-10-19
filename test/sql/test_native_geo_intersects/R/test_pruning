@@ -16,5 +16,5 @@ WITH p AS (SELECT 0 id, 'POLYGON ((0 0,1 0,1 1,0 1,0 0))' lhs, 'POLYGON ((3 0,4 
 -- !result
 SELECT ST_Intersects(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))','EPSG:3857'),NULL), ST_Intersects(ST_GeomFromText('POLYGON EMPTY','EPSG:3857'),ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))','EPSG:3857'));
 -- result:
-NULL	0
+None	0
 -- !result
