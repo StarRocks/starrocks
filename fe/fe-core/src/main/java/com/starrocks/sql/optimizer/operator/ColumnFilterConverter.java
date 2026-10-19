@@ -240,7 +240,10 @@ public class ColumnFilterConverter {
             if (mapped != predicate && optPartitionExprs.get().size() == 1
                     && predicate.getChild(0) instanceof ColumnRefOperator columnRef
                     && predicate.getChild(1) instanceof ConstantOperator) {
-                plateaus = plateausAt(optPartitionExprs.get().get(0), columnRef,
+                // A bound widened across time zones stands for a window, not for the constant, so it
+                // can prune but must never license dropping the predicate it came from.
+                plateaus = partitionValueDependsOnEvaluatorZone(optPartitionExprs.get().get(0))
+                        || plateausAt(optPartitionExprs.get().get(0), columnRef,
                         (ConstantOperator) predicate.getChild(1));
             }
             predicate = mapped;
@@ -390,6 +393,7 @@ public class ColumnFilterConverter {
         // Currently only one partition column is supported
         Expr firstPartitionExpr = partitionExprs.get(0);
 
+
         // only support binary predicate
         if (predicate instanceof BinaryPredicateOperator
                 && predicate.getChild(0) instanceof ColumnRefOperator
@@ -409,13 +413,23 @@ public class ColumnFilterConverter {
             if (!binaryType.isEqual() && constantInsideClockRollback(firstPartitionExpr, constant, binaryType)) {
                 return predicate;
             }
+            // An expression whose value depends on who evaluates it is folded from a constant pushed
+            // far enough out that no evaluator could disagree with the bound. See widenAcrossZones().
+            ConstantOperator foldConstant = constant;
+            if (partitionValueDependsOnEvaluatorZone(firstPartitionExpr)) {
+                Optional<ConstantOperator> widened = widenAcrossZones(firstPartitionExpr, constant, binaryType);
+                if (widened.isEmpty()) {
+                    return predicate;
+                }
+                foldConstant = widened.get();
+            }
             Optional<ConstantOperator> mapped =
-                    evaluatePartitionExpr(firstPartitionExpr, columnRef, constant, !binaryType.isEqual());
+                    evaluatePartitionExpr(firstPartitionExpr, columnRef, foldConstant, !binaryType.isEqual());
             if (mapped.isEmpty()) {
                 return predicate;
             }
             BinaryPredicateOperator rewritten = (BinaryPredicateOperator) predicate.clone();
-            rewritten.setBinaryType(relaxStrictComparison(binaryType, firstPartitionExpr, columnRef, constant,
+            rewritten.setBinaryType(relaxStrictComparison(binaryType, firstPartitionExpr, columnRef, foldConstant,
                     mapped.get()));
             rewritten.setChild(1, mapped.get());
             return rewritten;
@@ -625,6 +639,56 @@ public class ColumnFilterConverter {
             return false;
         }
         return call.getChildren().size() < 3 || !(call.getChild(2) instanceof StringLiteral);
+    }
+
+    /**
+     * The widest a time zone can move a partition value, plus room for a daylight-saving step.
+     *
+     * <p>Real zone offsets run from UTC-12:00 to UTC+14:00, so two evaluators can place the same
+     * epoch 26 hours apart. Shifting the epoch rather than the rendered value means the session's
+     * own offset can also change inside the shifted window, which adds at most an hour; two hours
+     * of slack covers that and costs only a little extra scanning.
+     */
+    private static final long ZONE_SPAN_SECONDS = 28 * 3600L;
+
+    /**
+     * The constant to fold instead, so the bound holds whichever zone routed the row.
+     *
+     * <p>{@code f} is increasing in the epoch and {@code f_Z(c) - f_S(c)} is the two zones' offset
+     * difference, which lies inside {@link #ZONE_SPAN_SECONDS}. A lower bound therefore folds
+     * {@code c - span}: every row satisfying {@code ts >= c} carries {@code f_Z(ts) >= f_Z(c)},
+     * which cannot be below it. An upper bound folds {@code c + span} for the mirror reason.
+     *
+     * <p>Equality and inequality get nothing: they would need a window, and the filter this feeds
+     * carries one constant per comparison. They are declined by the caller instead, which costs the
+     * pruning and keeps the answer.
+     */
+    private static Optional<ConstantOperator> widenAcrossZones(Expr partitionExpr, ConstantOperator constant,
+                                                               BinaryType binaryType) {
+        FunctionCallExpr call = unwrapPartitionCall(partitionExpr);
+        if (call == null || constant.isNull() || !constant.getType().isFixedPointType()) {
+            return Optional.empty();
+        }
+        long span = FunctionSet.FROM_UNIXTIME_MS.equals(call.getFunctionName().toLowerCase())
+                ? ZONE_SPAN_SECONDS * 1000L : ZONE_SPAN_SECONDS;
+        long epoch;
+        try {
+            epoch = constant.getType().isLargeIntType() ? constant.getLargeInt().longValueExact()
+                    : constant.getBigint();
+        } catch (ArithmeticException | ClassCastException e) {
+            return Optional.empty();
+        }
+        try {
+            if (binaryType == BinaryType.GE || binaryType == BinaryType.GT) {
+                return Optional.of(ConstantOperator.createBigint(Math.subtractExact(epoch, span)));
+            }
+            if (binaryType == BinaryType.LE || binaryType == BinaryType.LT) {
+                return Optional.of(ConstantOperator.createBigint(Math.addExact(epoch, span)));
+            }
+        } catch (ArithmeticException e) {
+            return Optional.empty();
+        }
+        return Optional.empty();
     }
 
     /**

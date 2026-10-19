@@ -601,10 +601,27 @@ public class PartitionPruneTest extends PlanTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
                 "PROPERTIES (\"replication_num\" = \"1\");");
-        starRocksAssert.query("select * from t_unix_range where dt < 1609689600")
-                .explainContains("partitions=3/9");
-        starRocksAssert.query("select * from t_unix_range where dt = 1609689600")
-                .explainContains("partitions=1/9");
+        // from_unixtime() written without a zone is a different function at load time than at query
+        // time, so the bound is folded from a constant pushed out far enough that no evaluator could
+        // disagree: two more partitions than the session's own rendering would give, and the answer
+        // no longer depends on which zone loaded the row.
+        //
+        // The session zone is pinned because the count a zone-less table gives still depends on it,
+        // and the class shares one session: without this the expectation would read differently
+        // depending on which test ran first.
+        String savedZone = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("UTC");
+        try {
+            starRocksAssert.query("select * from t_unix_range where dt < 1609689600")
+                    .explainContains("partitions=4/9");
+            // equality has no bound to widen -- one constant cannot stand for the window the zone
+            // leaves open -- so it gives up the pruning rather than naming a partition the row need
+            // not be in
+            starRocksAssert.query("select * from t_unix_range where dt = 1609689600")
+                    .explainContains("partitions=9/9");
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(savedZone);
+        }
 
         starRocksAssert.withTable("CREATE TABLE `t_unix_ms_range` (\n" +
                 "    `dt` bigint NOT NULL,\n" +
@@ -616,8 +633,13 @@ public class PartitionPruneTest extends PlanTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
                 "PROPERTIES (\"replication_num\" = \"1\");");
-        starRocksAssert.query("select * from t_unix_ms_range where dt < 1609689600000")
-                .explainContains("partitions=3/9");
+        connectContext.getSessionVariable().setTimeZone("UTC");
+        try {
+            starRocksAssert.query("select * from t_unix_ms_range where dt < 1609689600000")
+                    .explainContains("partitions=4/9");
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(savedZone);
+        }
     }
 
     @Test
@@ -638,14 +660,25 @@ public class PartitionPruneTest extends PlanTestBase {
         // 1609689600000 and 1609689600500 both truncate to 2021-01-04 00:00:00, so the rows at
         // 1609689600000 satisfy "dt < 1609689600500" and live on the partition the constant maps to.
         // Mapping "<" onto "<" would prune that partition and lose them; the bound has to widen.
-        starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600500")
-                .explainContains("partitions=4/9");
-        starRocksAssert.query("select * from t_plateau_ms where dt = 1609689600000")
-                .explainContains("partitions=1/9");
-        // a constant on a whole second is not inside a plateau -- nothing below it shares its
-        // partition value -- so it keeps the tighter bound
-        starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600000")
-                .explainContains("partitions=3/9");
+        // from_unixtime_ms() has no overload that takes a time zone, so its bound is widened across
+        // every zone an evaluator could carry and the plateau's own one-partition widening is no
+        // longer visible in the count. What the widening hides here is only the reporting of it:
+        // relaxStrictComparison still runs, and t_plateau_s below -- which does write the zone out --
+        // keeps the strict bound itself under test.
+        String savedZone = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("UTC");
+        try {
+            starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600500")
+                    .explainContains("partitions=4/9");
+            starRocksAssert.query("select * from t_plateau_ms where dt = 1609689600000")
+                    .explainContains("partitions=9/9");
+            // a constant on a whole second is not inside a plateau -- nothing below it shares its
+            // partition value -- so it keeps the tighter bound
+            starRocksAssert.query("select * from t_plateau_ms where dt < 1609689600000")
+                    .explainContains("partitions=4/9");
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(savedZone);
+        }
 
         // from_unixtime() on seconds is strictly increasing -- a second is the finest value it maps --
         // so no constant sits inside a plateau and the strict bound always stands
@@ -654,15 +687,18 @@ public class PartitionPruneTest extends PlanTestBase {
                 "    `id` int(11) NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`dt`, `id`)\n" +
-                "PARTITION BY RANGE(from_unixtime(dt))(\n" +
+                "PARTITION BY RANGE(from_unixtime(dt, \"%Y-%m-%d %H:%i:%s\", \"UTC\"))(\n" +
                 " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
                 "PROPERTIES (\"replication_num\" = \"1\");");
-        starRocksAssert.query("select * from t_plateau_s where dt < 1609689601")
+        // 1609718400 is midnight on 2021-01-04 in the zone the expression writes out, which is what
+        // puts the constant exactly on a partition edge; the session zone no longer decides that.
+        starRocksAssert.query("select * from t_plateau_s where dt < 1609718401")
                 .explainContains("partitions=4/9");
-        starRocksAssert.query("select * from t_plateau_s where dt < 1609689600")
+        starRocksAssert.query("select * from t_plateau_s where dt < 1609718400")
                 .explainContains("partitions=3/9");
+
     }
 
     @Test

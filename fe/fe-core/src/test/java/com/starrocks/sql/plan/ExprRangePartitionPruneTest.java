@@ -70,6 +70,18 @@ public class ExprRangePartitionPruneTest extends PlanTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(ts) BUCKETS 1\n" +
                 "PROPERTIES (\"replication_num\" = \"1\")");
+
+        // the same table with the zone written out: nothing is left for the evaluator to decide
+        starRocksAssert.withTable("CREATE TABLE `test_unixtime_tz` (\n" +
+                "  `ts` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`ts`)\n" +
+                "PARTITION BY RANGE(from_unixtime(ts, \"%Y-%m-%d %H:%i:%s\", \"UTC\"))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(ts) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")");
     }
 
     @Test
@@ -181,12 +193,30 @@ public class ExprRangePartitionPruneTest extends PlanTestBase {
      * on who evaluates it, so an IN list over it must not be mapped.
      */
     @Test
-    public void testInListOnZonelessFromUnixtimeKeepsEveryPartition() throws Exception {
+    public void testZonelessFromUnixtimeWidensRatherThanGuessing() throws Exception {
         assertCContains(getFragmentPlan(
                 "select * from test_unixtime where ts in (1609689600, 1609776000)"), "partitions=9/9");
-        // the equality that PartitionPruneTest pins down is untouched by this change: narrowing it
-        // disables pruning for every zone-less from_unixtime table and is a decision of its own
+        // equality is declined for the same reason: one constant cannot stand for the window the
+        // zone leaves open
         assertCContains(getFragmentPlan(
-                "select * from test_unixtime where ts = 1609689600"), "partitions=1/9");
+                "select * from test_unixtime where ts = 1609689600"), "partitions=9/9");
+        // a range still prunes, from a bound pushed out far enough that no zone could disagree.
+        // The zone is pinned: a zone-less table's count still depends on it, and the class shares
+        // one session.
+        String savedZone = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("UTC");
+        String widened;
+        try {
+            widened = getFragmentPlan("select * from test_unixtime where ts < 1609689600");
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(savedZone);
+        }
+        assertCContains(widened, "partitions=4/9");
+        // and the predicate stays in the plan: the widened bound stands for a window, not the value
+        assertCContains(widened, "PREDICATES");
+
+        // writing the zone out leaves nothing to guess, so the exact bound is used
+        assertCContains(getFragmentPlan(
+                "select * from test_unixtime_tz where ts < 1609689600"), "partitions=3/9");
     }
 }
