@@ -224,6 +224,7 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
+            implementation("org.apache.ranger:ranger-audit-dest-solr:${project.ext["ranger.version"]}")
             implementation("org.apache.ranger:ranger-plugins-common:${project.ext["ranger.version"]}")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
