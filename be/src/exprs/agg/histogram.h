@@ -14,15 +14,18 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
-#include <map>
 #include <string>
 #include <type_traits>
 #include <utility>
 
+#include "base/phmap/phmap.h"
 #include "base/stats/ndv_estimator.h"
+#include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
@@ -30,6 +33,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "runtime/type_info_allocator_adapter.h"
@@ -113,18 +117,39 @@ struct HistogramState {
     using ValueType = AggDataValueType<LT>;
     using Traits = AggDataTypeTraits<LT>;
 
+    struct ValueHash {
+        size_t operator()(const ValueType& value) const {
+            return PhmapDefaultHashFunc<LT, PhmapSeed1>()(Traits::get_ref(value));
+        }
+    };
+
+    using FrequencyMap = phmap::flat_hash_map<ValueType, int64_t, ValueHash, std::equal_to<ValueType>,
+                                              AggregateStateAllocator<std::pair<const ValueType, int64_t>>>;
+    using Entry = typename FrequencyMap::value_type;
+
     void add(const typename Traits::RefType& value, int64_t count = 1) {
         CHECK_GT(count, 0);
         CHECK_LE(count, std::numeric_limits<int64_t>::max() - non_null_row_count);
         ValueType value_copy;
         Traits::assign_value(value_copy, value);
-        auto it = ordered_map.try_emplace(std::move(value_copy), 0).first;
+        auto it = frequency_map.try_emplace(std::move(value_copy), 0).first;
         CHECK_LE(count, std::numeric_limits<int64_t>::max() - it->second);
         it->second += count;
         non_null_row_count += count;
     }
 
-    std::map<ValueType, int64_t> ordered_map;
+    VectorWithAggStateAllocator<const Entry*> sorted_entries() const {
+        VectorWithAggStateAllocator<const Entry*> entries;
+        entries.reserve(frequency_map.size());
+        for (const auto& entry : frequency_map) {
+            entries.push_back(&entry);
+        }
+        std::sort(entries.begin(), entries.end(),
+                  [](const Entry* lhs, const Entry* rhs) { return lhs->first < rhs->first; });
+        return entries;
+    }
+
+    FrequencyMap frequency_map;
     // Preserve the original bucket threshold, which includes NULL input rows.
     int64_t row_count = 0;
     // Number of non-NULL input rows
@@ -185,7 +210,7 @@ public:
             ctx->set_error("Invalid histogram intermediate state: row count overflow", false);
             return;
         }
-        for (const auto& [value, count] : source.ordered_map) {
+        for (const auto& [value, count] : source.frequency_map) {
             target.add(AggDataTypeTraits<LT>::get_ref(value), count);
         }
         target.row_count += source.row_count;
@@ -195,14 +220,14 @@ public:
                              Column* to) const override {
         std::string serialized;
         const auto& histogram_state = this->data(state);
-        const uint64_t value_count = histogram_state.ordered_map.size();
+        const uint64_t value_count = histogram_state.frequency_map.size();
         // All input rows, non-NULL rows, distinct values, then (frequency, size, encoded value).
         append_binary_value(&serialized, histogram_state.row_count);
         append_binary_value(&serialized, histogram_state.non_null_row_count);
         append_binary_value(&serialized, value_count);
 
         auto value_column = ColumnType::create();
-        for (const auto& [value, count] : histogram_state.ordered_map) {
+        for (const auto& [value, count] : histogram_state.frequency_map) {
             append_binary_value(&serialized, count);
             value_column->resize(0);
             value_column->append_datum(Datum(AggDataTypeTraits<LT>::get_ref(value)));
@@ -340,7 +365,8 @@ private:
         const int64_t bucket_size = histogram_state.row_count / bucket_num;
 
         std::vector<Bucket<LT>> buckets;
-        for (const auto& [v, count] : histogram_state.ordered_map) {
+        for (const auto* entry : histogram_state.sorted_entries()) {
+            const auto& [v, count] = *entry;
             const auto value = AggDataTypeTraits<LT>::get_ref(v);
             if (buckets.empty()) {
                 Bucket<LT> bucket(value, value, count, count);
@@ -403,7 +429,8 @@ private:
         int64_t count_once = 0;
         // Build bucket
         std::vector<Bucket<LT>> buckets;
-        for (const auto& [v, count] : histogram_state.ordered_map) {
+        for (const auto* entry : histogram_state.sorted_entries()) {
+            const auto& [v, count] = *entry;
             const auto value = AggDataTypeTraits<LT>::get_ref(v);
             if (buckets.empty()) {
                 Bucket<LT> bucket(value, value, count, count);
