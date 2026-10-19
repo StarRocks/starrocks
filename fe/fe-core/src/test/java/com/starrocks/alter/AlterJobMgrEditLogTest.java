@@ -14,15 +14,20 @@
 
 package com.starrocks.alter;
 
+import com.google.gson.JsonObject;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -32,6 +37,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -334,6 +340,26 @@ public class AlterJobMgrEditLogTest {
         AlterViewInfo infoOfDroppedDb = new AlterViewInfo(db.getId() + 1000, 12345L, "SELECT 2 as c1", columns, 0L,
                 "test comment", "SELECT 2 as c1");
         Assertions.assertDoesNotThrow(() -> alterJobMgr.replayAlterView(infoOfDroppedDb));
+    }
+
+    private static AlterMaterializedViewStatusLog withoutClearVersionMap(AlterMaterializedViewStatusLog log) {
+        JsonObject json = GsonUtils.GSON.toJsonTree(log).getAsJsonObject();
+        json.remove("clearVersionMap");
+        return GsonUtils.GSON.fromJson(json, AlterMaterializedViewStatusLog.class);
+    }
+
+    // Entries written before the version map clear was journaled carry no flag.
+    @Test
+    public void testReplayClearOfInactiveEntriesWithAndWithoutTheFlag() {
+        String columnChanged = MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("c1"));
+        AlterMaterializedViewStatusLog inactive = new AlterMaterializedViewStatusLog(96000L, 96001L,
+                AlterMaterializedViewStatusClause.INACTIVE, columnChanged);
+        Assertions.assertFalse(AlterJobMgr.clearsOnInactivation(inactive, columnChanged));
+        inactive.setClearVersionMap(true);
+        Assertions.assertTrue(AlterJobMgr.clearsOnInactivation(inactive, columnChanged));
+        AlterMaterializedViewStatusLog oldInactive = withoutClearVersionMap(inactive);
+        Assertions.assertTrue(AlterJobMgr.clearsOnInactivation(oldInactive, columnChanged));
+        Assertions.assertFalse(AlterJobMgr.clearsOnInactivation(oldInactive, AlterJobMgr.MANUAL_INACTIVE_MV_REASON));
     }
 }
 
