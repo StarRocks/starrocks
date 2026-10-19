@@ -14,11 +14,14 @@
 
 #include "connector/hive/scanner/hdfs_scanner.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
 
 #include "base/compression/compression_utils.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/runtime_range_pruner.hpp"
@@ -31,6 +34,11 @@
 #include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
+
+// Files whose corrupted datacache is dropped.
+static bvar::Adder<int64_t> g_datacache_corruption_removed("datacache_corruption_removed_files");
+// Files read again bypassing their corrupted datacache.
+static bvar::Adder<int64_t> g_datacache_corruption_retried("datacache_corruption_retried_files");
 
 Status HdfsScanner::init(RuntimeState* runtime_state, HdfsScannerContext* scanner_ctx) {
     SCOPED_RAW_TIMER(&_total_running_time);
@@ -236,6 +244,18 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
+    if (!status.ok() && !status.is_end_of_file()) {
+        status = _handle_datacache_error(runtime_state, status, [&]() {
+            // Only empty chunks were returned before the error, so read until some rows or EOF to pass it.
+            Status st;
+            do {
+                RETURN_IF_CANCELLED(_runtime_state);
+                (*chunk)->reset();
+                st = do_get_next(runtime_state, chunk);
+            } while (st.ok() && (*chunk)->num_rows() == 0);
+            return st;
+        });
+    }
     if (status.ok()) {
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -259,7 +279,12 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(do_open(runtime_state));
+    Status status = do_open(runtime_state);
+    if (!status.ok()) {
+        // Reopening runs do_open() again, nothing else to redo.
+        status = _handle_datacache_error(runtime_state, status, [] { return Status::OK(); });
+    }
+    RETURN_IF_ERROR(status);
     VLOG_FILE << "open file success: " << _scanner_ctx->file_path << ", scan range = ["
               << _scanner_ctx->scan_range->offset << ","
               << (_scanner_ctx->scan_range->length + _scanner_ctx->scan_range->offset)
@@ -304,6 +329,83 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_peer_cache_node(_scanner_ctx->scan_range->candidate_node);
     }
     return Status::OK();
+}
+
+bool HdfsScanner::_may_be_caused_by_datacache(const Status& status) {
+    if (!config::external_table_clear_corrupted_cache_data || _datacache_error_handled) {
+        return false;
+    }
+    if (_cache_input_stream == nullptr || _scanner_ctx->datacache_options.enable_cache_select) {
+        return false;
+    }
+    // Errors of decoding a corrupted copy, e.g. InvalidArgument of a failed decompression.
+    if (!status.is_corruption() && !status.is_internal_error() && !status.is_not_supported() &&
+        !status.is_invalid_argument()) {
+        return false;
+    }
+    // Some content must come from the datacache, peers included since their blocks are populated locally.
+    const auto& stats = _cache_input_stream->stats();
+    return stats.read_block_cache_bytes + stats.read_peer_cache_bytes > 0;
+}
+
+Status HdfsScanner::_handle_datacache_error(RuntimeState* runtime_state, const Status& status,
+                                            const std::function<Status()>& redo) {
+    if (!_may_be_caused_by_datacache(status)) {
+        return status;
+    }
+    _datacache_error_handled = true;
+    std::shared_ptr<CacheInputStream> cache_input_stream = _cache_input_stream;
+    // A reopened file is read from its start, so reopen only if no row is returned yet.
+    if (!support_reopen_without_datacache() || _app_stats.rows_read > 0) {
+        // The corruption cannot be verified, drop the copy anyway so that the next read recovers.
+        _drop_datacache(cache_input_stream.get(), status, false);
+        return status;
+    }
+    Status st = _reopen_without_datacache(runtime_state);
+    if (st.ok()) {
+        st = redo();
+    }
+    if (st.ok() || st.is_end_of_file()) {
+        // The file is read correctly bypassing the datacache, so its cached copy is corrupted.
+        _drop_datacache(cache_input_stream.get(), status, true);
+        return st;
+    }
+    // Not caused by the datacache, keep it. Return the new error, e.g. a 404 lets the FE refresh and retry.
+    LOG(WARNING) << "read file again bypassing datacache still fails, keep its datacache: " << _scanner_ctx->file_path
+                 << ", error: " << st << ", datacache read error: " << status;
+    return st;
+}
+
+void HdfsScanner::_drop_datacache(CacheInputStream* cache_input_stream, const Status& status, bool verified) {
+    size_t removed_blocks = cache_input_stream->remove_cached_blocks();
+    if (removed_blocks > 0) {
+        g_datacache_corruption_removed << 1;
+    }
+    const auto& stats = cache_input_stream->stats();
+    LOG(WARNING) << "drop corrupted datacache of file: " << _scanner_ctx->file_path
+                 << ", file_size: " << _scanner_ctx->file_size
+                 << ", modification_time: " << _scanner_ctx->datacache_options.modification_time
+                 << ", verified: " << verified << ", removed_blocks: " << removed_blocks
+                 << ", read_local_cache_bytes: " << stats.read_block_cache_bytes
+                 << ", read_peer_cache_bytes: " << stats.read_peer_cache_bytes
+                 << ", rows_read: " << _app_stats.rows_read << ", error: " << status;
+}
+
+Status HdfsScanner::_reopen_without_datacache(RuntimeState* runtime_state) {
+    // Close the reader first, it holds raw pointers to the file and streams.
+    do_close(runtime_state);
+    _file.reset();
+    _shared_buffered_input_stream.reset();
+    // Keep the first stream for its profile counters.
+    _bypassed_cache_input_stream = std::move(_cache_input_stream);
+    // Bypass all caches of the file, and rebuild the context changed by the first open.
+    _scanner_ctx->datacache_options.enable_datacache = false;
+    _scanner_ctx->format_scan_context.options.use_file_metacache = false;
+    _scanner_ctx->format_scan_context.options.use_file_pagecache = false;
+    RETURN_IF_ERROR(_build_scanner_context());
+    g_datacache_corruption_retried << 1;
+    LOG(WARNING) << "read file again bypassing datacache: " << _scanner_ctx->file_path;
+    return do_open(runtime_state);
 }
 
 void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
@@ -429,8 +531,10 @@ void HdfsScanner::update_counter() {
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);
 
-    if (_scanner_ctx->datacache_options.enable_datacache && _cache_input_stream) {
-        const CacheInputStream::Stats& stats = _cache_input_stream->stats();
+    // Report the datacache counters of the first read if the file is read again.
+    const auto& cache_input_stream = _cache_input_stream ? _cache_input_stream : _bypassed_cache_input_stream;
+    if (cache_input_stream) {
+        const CacheInputStream::Stats& stats = cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);

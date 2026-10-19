@@ -130,7 +130,8 @@
         "datacache_persistence_enable",
         "datacache_inline_item_count_limit",
         "datacache_eviction_policy",
-        "block_cache_enable"
+        "block_cache_enable",
+        "external_table_clear_corrupted_cache_data"
       ]
     },
     {
