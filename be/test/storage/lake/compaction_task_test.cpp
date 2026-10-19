@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <numeric>
 #include <random>
 
 #include "base/testutil/assert.h"
@@ -25,8 +26,11 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
@@ -40,6 +44,7 @@
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/init_test_env.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -897,6 +902,187 @@ INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCom
                                                            .vertical_compaction_max_columns_per_group = 1,
                                                            .enable_size_tiered_compaction_strategy = false}),
                          to_string_param_name);
+
+// A flat JSON compactor that cannot stream -- some input is plain JSON, e.g. loaded before flat JSON was enabled
+// -- buffers the whole output segment as JSON. Vertical compaction caps the rows per output segment so that
+// buffer stays within its share of compaction_memory_limit_per_worker; inputs that are all flat stream and are
+// left uncapped.
+class LakeFlatJsonCompactionTest : public TestBase {
+public:
+    LakeFlatJsonCompactionTest() : TestBase(kTestDirectory) {}
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_flat_json_compaction";
+    constexpr static int kRowsPerLoad = 3000;
+
+    void SetUp() override {
+        config::enable_size_tiered_compaction_strategy = true;
+        config::min_cumulative_compaction_num_singleton_deltas = 1;
+        config::vertical_compaction_max_columns_per_group = 1;
+        clear_and_init_test_dir();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_cumulative_point(0);
+        _tablet_metadata->set_next_rowset_id(1);
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto c1 = schema->add_column();
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("JSON");
+        c1->set_is_key(false);
+        c1->set_is_nullable(true);
+        c1->set_aggregation("NONE");
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        config::enable_json_flat = _enable_json_flat;
+        config::compaction_memory_limit_per_worker = _compaction_memory_limit_per_worker;
+        config::vertical_compaction_max_columns_per_group = _vertical_compaction_max_columns_per_group;
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered_compaction_strategy;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
+        remove_test_dir_ignore_error();
+    }
+
+    static std::string json_of(int key) {
+        return fmt::format(R"({{"a": {}, "b": "value_{}", "c": {}, "d": {{"e": {}}}}})", key, key % 97, key * 1.5,
+                           key % 13);
+    }
+
+    // Loads one rowset of kRowsPerLoad rows with keys [first, first + kRowsPerLoad).
+    void load(int first, int64_t* version) {
+        auto c0 = Int32Column::create();
+        auto json = JsonColumn::create();
+        for (int i = 0; i < kRowsPerLoad; i++) {
+            c0->append(first + i);
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json_of(first + i)));
+            json->append(&jv);
+        }
+        Chunk chunk({std::move(c0), NullableColumn::create(std::move(json), NullColumn::create(kRowsPerLoad, 0))},
+                    _schema);
+        std::vector<uint32_t> indexes(kRowsPerLoad);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(_tablet_metadata->id())
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), *version + 1, txn_id).status());
+        (*version)++;
+    }
+
+    // Compacts every rowset and returns the stats of the task.
+    CompactionTaskStats compact(int64_t* version) {
+        auto txn_id = next_id();
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), *version, false,
+                                                                    false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        EXPECT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
+        EXPECT_OK(task->execute(CompactionTask::kNoCancelFn));
+        EXPECT_OK(publish_single_version(_tablet_metadata->id(), *version + 1, txn_id).status());
+        (*version)++;
+        return *task_context->stats;
+    }
+
+    // Every key in [0, num_rows) is read back once with its JSON.
+    void check(int64_t version, int num_rows) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        std::vector<bool> seen(num_rows, false);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                const int key = chunk->get_column_by_index(0)->get(i).get_int32();
+                ASSERT_GE(key, 0);
+                ASSERT_LT(key, num_rows);
+                ASSERT_FALSE(seen[key]) << key;
+                seen[key] = true;
+                const auto* got = chunk->get_column_by_index(1)->get(i).get_json();
+                ASSIGN_OR_ABORT(auto want, JsonValue::parse(json_of(key)));
+                ASSERT_EQ(want.to_string_uncheck(), got->to_string_uncheck()) << key;
+            }
+            chunk->reset();
+        }
+        EXPECT_EQ(num_rows, std::count(seen.begin(), seen.end(), true));
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = next_id();
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+
+private:
+    bool _enable_json_flat = config::enable_json_flat;
+    int64_t _compaction_memory_limit_per_worker = config::compaction_memory_limit_per_worker;
+    int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
+    int64_t _min_cumulative_compaction_num_singleton_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+};
+
+TEST_F(LakeFlatJsonCompactionTest, test_mixed_plain_and_flat_inputs_cap_rows_per_segment) {
+    int64_t version = 1;
+    // Loaded before flat JSON was enabled: plain JSON.
+    config::enable_json_flat = false;
+    load(0, &version);
+    config::enable_json_flat = true;
+    load(kRowsPerLoad, &version);
+    load(2 * kRowsPerLoad, &version);
+
+    // About 100 bytes held per row: a budget of 1MB lets the compactor buffer ~1300 rows per segment.
+    config::compaction_memory_limit_per_worker = 1024 * 1024;
+    auto stats = compact(&version);
+    EXPECT_EQ(1, stats.flat_json_rows_capped);
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_GT(metadata->rowsets(0).segment_metas_size(), 1);
+    check(version, 3 * kRowsPerLoad);
+}
+
+TEST_F(LakeFlatJsonCompactionTest, test_flat_inputs_are_not_capped) {
+    config::enable_json_flat = true;
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        load(i * kRowsPerLoad, &version);
+    }
+
+    config::compaction_memory_limit_per_worker = 1024 * 1024;
+    auto stats = compact(&version);
+    EXPECT_EQ(0, stats.flat_json_rows_capped);
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_EQ(1, metadata->rowsets(0).segment_metas_size());
+    check(version, 3 * kRowsPerLoad);
+}
 
 } // namespace starrocks::lake
 

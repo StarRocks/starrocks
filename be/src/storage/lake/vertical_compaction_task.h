@@ -42,7 +42,15 @@ public:
     Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
 
 private:
+    // A flat JSON compactor that cannot stream may buffer 1/kBufferedFlatJsonShare of
+    // compaction_memory_limit_per_worker per output segment: what one that can stream buffers before it starts
+    // streaming. See cap_rows_for_buffered_flat_json().
+    static constexpr int64_t kBufferedFlatJsonShare = 8;
+
     StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);
+    // Lowers max_rows_per_segment so that the JSON a flat JSON compactor buffers for one output segment, when it
+    // cannot stream, stays within its share of compaction_memory_limit_per_worker.
+    StatusOr<uint32_t> cap_rows_for_buffered_flat_json(uint32_t max_rows_per_segment);
 
     // When `pk_in_key_group` is true (separate-sort-key PK table with eager index build), the key
     // column group has been widened to [sort-key columns, then PK columns]; the key-group schema is

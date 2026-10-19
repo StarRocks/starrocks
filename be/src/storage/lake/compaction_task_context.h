@@ -109,6 +109,9 @@ struct CompactionTaskStats {
     // Read passes whose per-stream read buffer was shrunk below lake_compaction_stream_buffer_size_bytes
     // because the input fan-in would otherwise outgrow compaction_memory_limit_per_worker.
     int64_t stream_buffer_shrunk_passes = 0;
+    // Tasks whose rows per output segment were lowered so a flat JSON compactor that cannot stream (some input is
+    // plain JSON) buffers at most its share of compaction_memory_limit_per_worker.
+    int64_t flat_json_rows_capped = 0;
     // Nested wall-clock totals for vertical compaction groups. They overlap
     // with the high-level reader/writer phases and are not part of accounting.
     int64_t vertical_key_group_ns = 0;

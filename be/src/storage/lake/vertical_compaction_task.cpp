@@ -26,6 +26,7 @@
 #include "column/chunk_schema_helper.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
@@ -44,7 +45,9 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/row_source_mask_buffer.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -87,6 +90,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
+    ASSIGN_OR_RETURN(max_rows_per_segment, cap_rows_for_buffered_flat_json(max_rows_per_segment));
     std::unique_ptr<TabletWriter> writer;
     {
         SCOPED_RAW_TIMER(&_context->stats->writer_create_ns);
@@ -204,6 +208,94 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     }
 
     return Status::OK();
+}
+
+StatusOr<uint32_t> VerticalCompactionTask::cap_rows_for_buffered_flat_json(uint32_t max_rows_per_segment) {
+    const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (mem_limit <= 0 || _total_num_rows <= 0) {
+        return max_rows_per_segment;
+    }
+    bool flattens_json = config::enable_json_flat;
+    if (const auto& metadata = _tablet.metadata(); metadata != nullptr && metadata->has_flat_json_config()) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(metadata->flat_json_config());
+        flattens_json = flat_json_config.is_flat_json_enabled();
+    }
+    std::vector<int32_t> json_uids;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        if (_tablet_schema->column(i).type() == TYPE_JSON) {
+            json_uids.emplace_back(_tablet_schema->column(i).unique_id());
+        }
+    }
+    if (!flattens_json || json_uids.empty()) {
+        return max_rows_per_segment;
+    }
+
+    // The flat JSON compactor streams its output only when every input is flat (the reader then hands it one
+    // layout derived from their metadata). Any plain JSON input -- e.g. data loaded before flat JSON was enabled
+    // -- makes it buffer the whole output segment as JSON to derive the layout at finish(). A segment's rows are
+    // sized from its compressed bytes on disk, so that buffer grows with the compression ratio, outside the
+    // budget the read chunks are sized from. Bound it by the size of the JSON the compactor holds per row.
+    //
+    // It holds every row as a whole JSON value: flat inputs are merged back into JSON on read. A plain input's
+    // footprint is exactly those serialized bytes. A flat input's is the size of its typed sub-columns, which
+    // leaves out the key names every JSON value repeats, so it underestimates the buffer; the plain inputs of the
+    // same column stand for all its rows instead. Each value also costs a JsonValue object.
+    struct JsonInputs {
+        int64_t plain_bytes = 0;
+        int64_t plain_rows = 0;
+        int64_t flat_bytes = 0;
+        int64_t flat_rows = 0;
+    };
+    std::vector<JsonInputs> inputs(json_uids.size());
+    for (auto& rowset : _input_rowsets) {
+        LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = !_hold_input_segments,
+                                   .hold_segments = _hold_input_segments};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
+        for (auto& segment : segments) {
+            if (segment == nullptr) {
+                continue;
+            }
+            for (size_t i = 0; i < json_uids.size(); i++) {
+                const auto* column_reader = segment->column_with_uid(json_uids[i]);
+                if (column_reader == nullptr) {
+                    continue;
+                }
+                const auto bytes = static_cast<int64_t>(column_reader->total_mem_footprint());
+                if (column_reader->is_flat_json()) {
+                    inputs[i].flat_bytes += bytes;
+                    inputs[i].flat_rows += segment->num_rows();
+                } else {
+                    inputs[i].plain_bytes += bytes;
+                    inputs[i].plain_rows += segment->num_rows();
+                }
+            }
+        }
+    }
+    int64_t bytes_per_row = 0;
+    for (const auto& in : inputs) {
+        if (in.plain_rows > 0) {
+            bytes_per_row += in.plain_bytes / in.plain_rows + static_cast<int64_t>(sizeof(JsonValue));
+        }
+    }
+    if (bytes_per_row <= 0) {
+        // Every JSON column streams.
+        return max_rows_per_segment;
+    }
+    constexpr int64_t kMinRowsPerSegment = 1024;
+    const int64_t capped = std::max(kMinRowsPerSegment, mem_limit / kBufferedFlatJsonShare / bytes_per_row);
+    if (capped >= static_cast<int64_t>(max_rows_per_segment)) {
+        return max_rows_per_segment;
+    }
+    _context->stats->flat_json_rows_capped = 1;
+    LOG(INFO) << "Cap rows per segment of vertical compaction for buffered flat json, tablet: " << _tablet.id()
+              << ", txn: " << _txn_id << ", buffered json bytes per row: " << bytes_per_row
+              << " (plain input bytes/rows: " << inputs[0].plain_bytes << "/" << inputs[0].plain_rows
+              << ", flat input bytes/rows: " << inputs[0].flat_bytes << "/" << inputs[0].flat_rows
+              << "), rows per segment " << max_rows_per_segment << " -> " << capped;
+    return static_cast<uint32_t>(capped);
 }
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
