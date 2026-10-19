@@ -518,7 +518,7 @@ public class ExpressionStatisticCalculator {
                     notFoundMatchListValues, 0.0, 1.0);
             nonMatchingFraction -= notFoundMatchListRowFractionEstimation;
             final long estimatedMatchedValues = foundMCVRowsSum + 
-                    Math.round(notFoundMatchListRowFractionEstimation * histogramTotalRows);
+                    Math.round(notFoundMatchListRowFractionEstimation * rowCount);
             if (matchListContainsNull) {
                 // Anything that does not match becomes NULL
                 final double nullsFraction = (1 - inputNullsFraction) * nonMatchingFraction + inputNullsFraction;
@@ -527,7 +527,7 @@ public class ExpressionStatisticCalculator {
                 nonMatchingFraction = 0;
             }
 
-            final long remainingValues = (long) (nonMatchingFraction * histogramTotalRows);
+            final long remainingValues = (long) (nonMatchingFraction * rowCount);
             final var mcvs = operator.isNotIn() 
                     ? makeBooleanMCVs(remainingValues, estimatedMatchedValues) 
                     : makeBooleanMCVs(estimatedMatchedValues, remainingValues);
