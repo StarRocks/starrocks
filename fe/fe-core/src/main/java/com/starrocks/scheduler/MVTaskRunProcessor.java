@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.MVInactiveException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
@@ -145,7 +146,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
                     Constants.TaskRunState.FAILED, runWarehouse(context));
-            throw new DmlException(errorMsg);
+            throw new MVInactiveException(errorMsg);
         }
 
         // wait util transaction is visible for mv refresh task
