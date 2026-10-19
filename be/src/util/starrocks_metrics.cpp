@@ -36,6 +36,8 @@
 
 #include <unistd.h>
 
+#include <cstdlib>
+
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "util/metrics/catalog_scan_metrics.h"
@@ -314,11 +316,12 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {
-        auto status = _jvm_metrics.init();
-        if (!status.ok()) {
-            LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+        if (std::getenv("JAVA_HOME") == nullptr) {
+            LOG(WARNING) << "JAVA_HOME is not set, skip installing jvm metrics";
             return;
         }
+        // Only registers the gauges and the collect hook. The JNI side is initialized lazily by the
+        // hook once a JVM exists, so enabling jvm metrics does not start a JVM on its own.
         _jvm_metrics.install(&_metrics);
     }
 #endif

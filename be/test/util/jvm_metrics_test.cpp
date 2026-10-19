@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <cstdlib>
+
 #include "testutil/assert.h"
 #include "udf/java/java_udf.h"
 #include "util/metrics.h"
@@ -77,6 +80,79 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_GE(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_used_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
+}
+
+TEST_F(JVMMetricsTest, InstallCollectsOnceJvmExists) {
+    MetricRegistry registry("install_test");
+    JVMMetrics jvm_metrics;
+    jvm_metrics.install(&registry);
+
+    auto type_label = [](const std::string& type) { return MetricLabels().add("type", type); };
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes", type_label("used")));
+    // Once a JVM exists, the hook initializes the JNI side and collects.
+    ASSERT_NE(nullptr, getJNIEnv());
+    registry.trigger_hook();
+    ASSERT_GT(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
+}
+
+// Runs in a fresh process that has no JVM. Exits with 0 when every check passes; a failed check
+// prints why and exits with its own non-zero code. std::_Exit skips static destructors, which
+// would otherwise release Java global refs while the process is tearing down.
+[[noreturn]] static void run_lazy_init_scenario() {
+    auto fail = [](int code, const char* message) {
+        fprintf(stderr, "%s\n", message);
+        std::_Exit(code);
+    };
+    auto jvm_created = [&fail]() {
+        auto created = JVMMetrics::is_jvm_created();
+        if (!created.ok()) {
+            fail(1, "JNI_GetCreatedJavaVMs failed");
+        }
+        return created.value();
+    };
+
+    if (jvm_created()) {
+        fail(2, "a JVM exists before jvm metrics are installed");
+    }
+
+    MetricRegistry registry("lazy_init_test");
+    JVMMetrics jvm_metrics;
+    jvm_metrics.install(&registry);
+    if (jvm_created()) {
+        fail(3, "installing jvm metrics created a JVM");
+    }
+
+    registry.trigger_hook();
+    if (jvm_created()) {
+        fail(4, "the first jvm metrics hook created a JVM");
+    }
+    if (jvm_metrics.jvm_heap_committed_bytes.value() != 0) {
+        fail(5, "jvm metrics were collected without a JVM");
+    }
+
+    if (getJNIEnv() == nullptr) {
+        fail(6, "failed to create a JVM");
+    }
+    registry.trigger_hook();
+    if (jvm_metrics.jvm_heap_committed_bytes.value() <= 0) {
+        fail(7, "heap committed is not collected after the JVM is created");
+    }
+    if (jvm_metrics.jvm_non_heap_committed_bytes.value() <= 0) {
+        fail(8, "non-heap committed is not collected after the JVM is created");
+    }
+    std::_Exit(0);
+}
+
+// No fixture: JVMMetricsTest::SetUp creates the JVM, and the child process runs the fixture too.
+// The "threadsafe" style re-executes the test binary for the child, so the scenario starts in a
+// process where no earlier test has created a JVM.
+TEST(JVMMetricsLazyInitTest, CollectOnlyAfterJvmIsCreated) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    ASSERT_EXIT(run_lazy_init_scenario(), testing::ExitedWithCode(0), "");
 }
 
 } // namespace starrocks
