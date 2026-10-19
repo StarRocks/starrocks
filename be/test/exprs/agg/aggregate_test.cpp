@@ -1560,9 +1560,8 @@ TEST_F(AggregateTest, test_histogram_multi_stage) {
                               Datum(int64_t{3}), Datum(), Datum(int64_t{4})}) {
         data_column->append_datum(value);
     }
-    local_ctx->set_constant_columns(
-            {nullptr, ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size()),
-             ColumnHelper::create_const_column<TYPE_DOUBLE>(1.0, data_column->size())});
+    local_ctx->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size()),
+                                     ColumnHelper::create_const_column<TYPE_DOUBLE>(1.0, data_column->size())});
     const Column* raw_columns[] = {data_column.get()};
 
     auto single_state = ManagedAggrState::create(local_ctx.get(), func);
