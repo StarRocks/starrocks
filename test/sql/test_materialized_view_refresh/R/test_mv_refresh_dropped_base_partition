@@ -1,0 +1,316 @@
+-- name: test_mv_refresh_dropped_base_partition
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_f VALUES ('2026-08-10 00:00:00', 1, 20), ('2026-08-11 00:00:00', 2, 10), ('2026-09-09 00:00:00', 3, 50);
+-- result:
+-- !result
+create materialized view mv_rollup
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+create materialized view mv_unpartitioned
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+create materialized view mv_same_grain
+partition by (date_trunc('day', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+refresh materialized view mv_rollup with sync mode;
+refresh materialized view mv_unpartitioned with sync mode;
+refresh materialized view mv_same_grain with sync mode;
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select sum(imp) from base_f where event_day < '2026-09-01';
+-- result:
+30
+-- !result
+select sum(imp) from mv_rollup where event_day < '2026-09-01';
+-- result:
+30
+-- !result
+select sum(imp) from mv_unpartitioned where event_day < '2026-09-01';
+-- result:
+30
+-- !result
+select sum(imp) from mv_same_grain where event_day < '2026-09-01';
+-- result:
+30
+-- !result
+ALTER TABLE base_f DROP PARTITION p20260810;
+-- result:
+-- !result
+refresh materialized view mv_rollup with sync mode;
+refresh materialized view mv_unpartitioned with sync mode;
+refresh materialized view mv_same_grain with sync mode;
+select sum(imp) from base_f where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select sum(imp) from mv_rollup where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select sum(imp) from mv_unpartitioned where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select sum(imp) from mv_same_grain where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_rollup';
+-- result:
+2
+-- !result
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_same_grain';
+-- result:
+2
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+select sum(imp) from base_f;
+-- result:
+60
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select sum(imp) from base_f;
+-- result:
+60
+-- !result
+drop materialized view mv_rollup;
+-- result:
+-- !result
+drop materialized view mv_unpartitioned;
+-- result:
+-- !result
+drop materialized view mv_same_grain;
+-- result:
+-- !result
+CREATE TABLE fact_d (d date NOT NULL, id bigint NOT NULL, imp bigint SUM NOT NULL DEFAULT "0")
+AGGREGATE KEY(d, id)
+PARTITION BY date_trunc('day', d)
+DISTRIBUTED BY HASH(d, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO fact_d VALUES ('2026-08-10', 1, 10), ('2026-08-11', 2, 20);
+-- result:
+-- !result
+CREATE TABLE dim_d (d date NOT NULL, label int NOT NULL)
+DUPLICATE KEY(d)
+PARTITION BY date_trunc('day', d)
+DISTRIBUTED BY HASH(d) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO dim_d VALUES ('2026-08-10', 7), ('2026-08-11', 8);
+-- result:
+-- !result
+create materialized view mv_fact_dim
+partition by (date_trunc('day', fd))
+REFRESH DEFERRED MANUAL
+distributed by hash(fd) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select f.d as fd, f.id as fid, f.imp as fimp, dm.label as dlabel
+   from fact_d f left join dim_d dm on f.d = dm.d;
+-- result:
+-- !result
+refresh materialized view mv_fact_dim with sync mode;
+select fd, dlabel from mv_fact_dim order by fd;
+-- result:
+2026-08-10	7
+2026-08-11	8
+-- !result
+ALTER TABLE dim_d DROP PARTITION p20260810;
+-- result:
+-- !result
+refresh materialized view mv_fact_dim with sync mode;
+select fd, dlabel from mv_fact_dim order by fd;
+-- result:
+2026-08-10	None
+2026-08-11	8
+-- !result
+drop materialized view mv_fact_dim;
+-- result:
+-- !result
+create materialized view mv_rollup_year
+partition by (date_trunc('year', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+create materialized view mv_bare_column
+partition by (event_day)
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+refresh materialized view mv_rollup_year with sync mode;
+refresh materialized view mv_bare_column with sync mode;
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select sum(imp) from base_f where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select sum(imp) from mv_rollup_year where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+select sum(imp) from mv_bare_column where event_day < '2026-09-01';
+-- result:
+10
+-- !result
+ALTER TABLE base_f DROP PARTITION p20260811;
+-- result:
+-- !result
+refresh materialized view mv_rollup_year with sync mode;
+refresh materialized view mv_bare_column with sync mode;
+select sum(imp) from base_f where event_day < '2026-09-01';
+-- result:
+None
+-- !result
+select sum(imp) from mv_rollup_year where event_day < '2026-09-01';
+-- result:
+None
+-- !result
+select sum(imp) from mv_bare_column where event_day < '2026-09-01';
+-- result:
+None
+-- !result
+drop materialized view mv_rollup_year;
+-- result:
+-- !result
+drop materialized view mv_bare_column;
+-- result:
+-- !result
+CREATE TABLE base_monthly (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_monthly VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-08-10 00:00:00', 2, 20);
+-- result:
+-- !result
+create materialized view mv_finer_day
+partition by (date_trunc('day', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_monthly group by event_day, id;
+-- result:
+-- !result
+refresh materialized view mv_finer_day with sync mode;
+select sum(imp) from mv_finer_day where event_day < '2026-08-01';
+-- result:
+10
+-- !result
+ALTER TABLE base_monthly DROP PARTITION p202607;
+-- result:
+-- !result
+refresh materialized view mv_finer_day with sync mode;
+select sum(imp) from base_monthly where event_day < '2026-08-01';
+-- result:
+None
+-- !result
+select sum(imp) from mv_finer_day where event_day < '2026-08-01';
+-- result:
+None
+-- !result
+drop materialized view mv_finer_day;
+-- result:
+-- !result
+CREATE TABLE base_list (
+  province varchar(64) NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(province, id)
+PARTITION BY LIST (province) (
+  PARTITION pbj VALUES IN ("beijing"),
+  PARTITION pgd VALUES IN ("guangdong")
+)
+DISTRIBUTED BY HASH(province, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_list VALUES ('beijing', 1, 10), ('guangdong', 2, 20);
+-- result:
+-- !result
+create materialized view mv_list
+partition by (province)
+REFRESH DEFERRED MANUAL
+distributed by hash(province, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select province, id, sum(imp) as imp from base_list group by province, id;
+-- result:
+-- !result
+refresh materialized view mv_list with sync mode;
+select sum(imp) from mv_list;
+-- result:
+30
+-- !result
+ALTER TABLE base_list DROP PARTITION pgd;
+-- result:
+-- !result
+refresh materialized view mv_list with sync mode;
+select sum(imp) from base_list;
+-- result:
+10
+-- !result
+select sum(imp) from mv_list;
+-- result:
+10
+-- !result
+select province from mv_list order by province;
+-- result:
+beijing
+-- !result
+drop materialized view mv_list;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

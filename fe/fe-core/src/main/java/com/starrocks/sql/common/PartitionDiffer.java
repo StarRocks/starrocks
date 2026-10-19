@@ -48,8 +48,6 @@ public abstract class PartitionDiffer {
                 ? Collections.emptyMap() : pinnedRangeByTableIdentifier;
     }
 
-<<<<<<< HEAD
-=======
     protected boolean isQueryRewrite() {
         return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
     }
@@ -58,7 +56,6 @@ public abstract class PartitionDiffer {
         return queryRewriteParams != null && queryRewriteParams.readsBaseTablesUnlocked();
     }
 
->>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
     protected TvrVersionRange pinnedRangeFor(Table table) {
         return pinnedRangeByTableIdentifier.get(table.getUUID());
     }

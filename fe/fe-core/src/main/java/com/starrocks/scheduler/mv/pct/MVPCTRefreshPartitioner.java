@@ -71,7 +71,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.catalog.MvRefreshArbiter.tracksPartitionVersions;
@@ -488,6 +490,13 @@ public abstract class MVPCTRefreshPartitioner {
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
             }
 
+            // Partition sync only drops an mv partition that lost every base partition it covered; a coarser one
+            // survives still holding the dropped partition's rows.
+            PCellSortedSet affectedByDrops = PCellSortedSet.of(toRefreshPartitions);
+            affectedByDrops.retainAllNames(getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, pinnedRangeFor(baseTable))));
+            result.addAll(affectedByDrops);
+
             PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPCells();
             if (refBaseTablePartitionNames.isEmpty()) {
                 logger.info("The ref base table {} has no updated partitions, and no update related mv partitions: {}",
@@ -535,6 +544,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
+            // A non-ref base table is not partition-aligned with the mv, so losing a partition invalidates all of it.
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRangeFor(snapshotTable))) {
+                return true;
+            }
         }
         return false;
     }
@@ -556,8 +569,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
+            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
                 return true;
             }
         }

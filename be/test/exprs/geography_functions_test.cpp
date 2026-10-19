@@ -22,6 +22,7 @@
 #include <atomic>
 #include <bit>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <random>
 #include <thread>
@@ -673,6 +674,93 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorPreservesCanoni
     input->reset_column();
     input->append("changed source bytes");
     EXPECT_EQ(expected[0], (*result)->get(0).get_slice().to_string());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyCanonicalPointDecoderRetainsAcceptedInputs) {
+    // Reference fast-path predicate from before the shared POINT decoder.
+    auto previous = [](Slice wkb) {
+        constexpr std::array<uint8_t, 5> header = {1, 1, 0, 0, 0};
+        if (wkb.size != header.size() + 2 * sizeof(double) ||
+            std::memcmp(wkb.data, header.data(), header.size()) != 0) {
+            return false;
+        }
+        std::array<uint64_t, 2> coordinates;
+        std::memcpy(coordinates.data(), wkb.data + header.size(), sizeof(coordinates));
+        if constexpr (std::endian::native != std::endian::little) {
+            coordinates[0] = std::byteswap(coordinates[0]);
+            coordinates[1] = std::byteswap(coordinates[1]);
+        }
+        return is_valid_crs84_coordinate(std::bit_cast<double>(coordinates[0]), std::bit_cast<double>(coordinates[1]));
+    };
+    auto values = geometry_point_wkb_cases();
+    auto append_point = [&](double x, double y) {
+        std::string bytes(21, '\0');
+        bytes[0] = bytes[1] = 1;
+        const std::array<double, 2> coordinates = {x, y};
+        for (size_t axis = 0; axis < coordinates.size(); ++axis) {
+            const uint64_t bits = std::bit_cast<uint64_t>(coordinates[axis]);
+            for (size_t i = 0; i < sizeof(bits); ++i) {
+                bytes[5 + axis * sizeof(bits) + i] = static_cast<char>(bits >> (8 * i));
+            }
+        }
+        values.push_back(bytes);
+        bytes[0] = 0;
+        std::reverse(bytes.begin() + 1, bytes.begin() + 5);
+        std::reverse(bytes.begin() + 5, bytes.begin() + 13);
+        std::reverse(bytes.begin() + 13, bytes.end());
+        values.push_back(bytes);
+    };
+    const double inf = std::numeric_limits<double>::infinity();
+    for (double x : {-180.0, 180.0, std::nextafter(-180.0, -inf), std::nextafter(180.0, inf)}) {
+        for (double y : {-90.0, 90.0, std::nextafter(-90.0, -inf), std::nextafter(90.0, inf)}) {
+            append_point(x, y);
+        }
+    }
+    for (double value : {0.0, -0.0, std::numeric_limits<double>::quiet_NaN(), inf, -inf}) {
+        append_point(value, 0);
+        append_point(0, value);
+    }
+    append_point(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+    std::mt19937_64 random(20261019);
+    std::uniform_real_distribution<double> longitude(-180, 180);
+    std::uniform_real_distribution<double> latitude(-90, 90);
+    for (size_t i = 0; i < 256; ++i) {
+        const double x = longitude(random);
+        const double y = latitude(random);
+        append_point(x, y);
+    }
+    for (size_t i = 0; i < 256; ++i) {
+        auto malformed = values[0];
+        for (size_t byte = 0; byte < 5; ++byte) {
+            malformed[byte] = static_cast<char>(random());
+        }
+        values.push_back(std::move(malformed));
+    }
+    auto input = BinaryColumn::create();
+    for (const auto& bytes : values) input->append(Slice(bytes));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARBINARY)}, geography_type()));
+    auto output = GeoFunctions::st_geog_from_wkb(context.get(), {input});
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_EQ(values.size(), (*output)->size());
+    size_t canonical = 0;
+    for (size_t row = 0; row < values.size(); ++row) {
+        SCOPED_TRACE(row);
+        const auto& bytes = values[row];
+        if (previous(Slice(bytes))) {
+            ++canonical;
+            ASSERT_FALSE((*output)->is_null(row));
+            EXPECT_EQ(bytes, (*output)->get(row).get_slice().to_string());
+        } else {
+            WkbGeometry point;
+            auto status = WkbCodec::parse_wkb(Slice(bytes), &point);
+            std::string expected;
+            if (status.ok()) status = WkbCodec::to_wkb(point, &expected);
+            ASSERT_EQ(!status.ok(), (*output)->is_null(row));
+            if (status.ok()) EXPECT_EQ(expected, (*output)->get(row).get_slice().to_string());
+        }
+    }
+    EXPECT_GE(canonical, 256);
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorRetainsNormalizationAndValidation) {
@@ -1755,6 +1843,76 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
     EXPECT_FALSE(spherical.value(4));
     EXPECT_TRUE(spherical.value(5));
     EXPECT_TRUE(spherical.value(6));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsFiltersRoundedOrientation) {
+    // PostGIS 3.6.4: SELECT ST_Intersects(ST_GeomFromText(lhs), ST_GeomFromText(rhs)) is false.
+    // Multiplication by powers of two preserves the counterexample, even below unit coordinates.
+    constexpr const char* wkts[] = {"POLYGON ((0 0,1048576 1048577,0 1,0 0))",
+                                    "POLYGON ((2097151.999999925 2097153.999999925,3145727.999999865 3145730.999999865,"
+                                    "2097151.999999925 2097154.999999925,2097151.999999925 2097153.999999925))"};
+    for (int exponent : {-1000, -300, -22, 0, 300, 990}) {
+        for (double offset : {0.0, 1e7}) {
+            if (offset != 0 && exponent != 0) continue;
+            for (int reflection : {1, -1}) {
+                Columns inputs;
+                for (const auto* wkt : wkts) {
+                    WkbGeometry polygon;
+                    ASSERT_TRUE(WkbCodec::parse_wkt(wkt, &polygon, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                    for (auto& ring : polygon.rings) {
+                        for (auto& point : ring) {
+                            point.x = reflection * std::ldexp(point.x, exponent) + offset;
+                            point.y = std::ldexp(point.y, exponent) + offset;
+                        }
+                    }
+                    std::string bytes;
+                    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                    auto column = GeoColumn::create(GeoColumnDescriptor{
+                            geometry_type().geo_type.value(),
+                            {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+                    column->append_wkb(Slice(bytes));
+                    inputs.emplace_back(std::move(column));
+                }
+                for (int form = 0; form < 4; ++form) {
+                    Columns columns = {form & 1 ? ConstColumn::create(inputs[0], 1) : inputs[0],
+                                       form & 2 ? ConstColumn::create(inputs[1], 1) : inputs[1]};
+                    auto forward = GeoFunctions::st_geometry_intersects(nullptr, columns);
+                    ASSERT_TRUE(forward.ok()) << forward.status();
+                    ColumnViewer<TYPE_BOOLEAN> result(forward.value());
+                    EXPECT_FALSE(result.value(0)) << exponent << ":" << reflection << ":" << offset << ":" << form;
+                    std::swap(columns[0], columns[1]);
+                    auto reverse = GeoFunctions::st_geometry_intersects(nullptr, columns);
+                    ASSERT_TRUE(reverse.ok()) << reverse.status();
+                    ColumnViewer<TYPE_BOOLEAN> reversed(reverse.value());
+                    EXPECT_FALSE(reversed.value(0)) << exponent << ":" << reflection << ":" << offset << ":" << form;
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsKeepsTolerantEndpointContacts) {
+    auto left = geometry({"POLYGON ((0 0,1 1,0 1,0 0))"});
+    for (int ulps : {0, 1, 16, 32, 64}) {
+        const double p = 1 + ulps * std::numeric_limits<double>::epsilon();
+        const double q = 2 + ulps * std::numeric_limits<double>::epsilon();
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        polygon.rings = {{{p, p}, {q, p}, {p, q}, {p, p}}};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        auto right = GeoColumn::create(
+                GeoColumnDescriptor{geometry_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+        right->append_wkb(Slice(bytes));
+        auto forward = GeoFunctions::st_geometry_intersects(nullptr, {left, right});
+        auto reverse = GeoFunctions::st_geometry_intersects(nullptr, {right, left});
+        ASSERT_TRUE(forward.ok()) << forward.status();
+        ASSERT_TRUE(reverse.ok()) << reverse.status();
+        ColumnViewer<TYPE_BOOLEAN> result(forward.value()), reversed(reverse.value());
+        EXPECT_EQ(ulps <= 32, result.value(0)) << ulps;
+        EXPECT_EQ(ulps <= 32, reversed.value(0)) << ulps;
+    }
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIsTranslationInvariant) {

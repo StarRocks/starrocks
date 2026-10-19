@@ -18,11 +18,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-import com.google.common.collect.Lists;
-=======
 import com.google.common.base.Throwables;
->>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -126,8 +123,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // refresh mv until mv is reloaded.
         mv.waitForReloaded();
         // Before the run reads the MV's definition or any base table: a reset after this point means the data
-        // this run writes may come from a definition that no longer holds.
-        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
+        // this run writes may come from a definition that no longer holds. A later batch of a refresh job takes the
+        // epoch its first run read instead, so that a reset since the job started fences it too: the job's partition
+        // range and freshness baseline were decided before that reset.
+        String inheritedEpoch = properties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH);
+        final long versionMapResetEpoch = inheritedEpoch != null
+                ? Long.parseLong(inheritedEpoch) : mv.getVersionMapResetEpoch();
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating

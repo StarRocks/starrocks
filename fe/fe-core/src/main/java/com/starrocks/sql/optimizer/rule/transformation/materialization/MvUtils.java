@@ -35,6 +35,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.util.DateUtils;
@@ -42,6 +43,9 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -138,6 +142,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1545,8 +1550,6 @@ public class MvUtils {
         }
     }
 
-<<<<<<< HEAD
-=======
     @FunctionalInterface
     public interface BaseTableRead<T, E extends Exception> {
         T read() throws E;
@@ -1593,7 +1596,6 @@ public class MvUtils {
         }
     }
 
->>>>>>> 70e35da51d5... [BugFix][RB-374] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#65835)
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
         partitionExpr.collect(expr -> isStr2Date(expr), matches);
