@@ -15,12 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Range;
-<<<<<<< HEAD
-=======
 import com.google.gson.JsonObject;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
->>>>>>> d87c2c9 ([BugFix] Let a table opt out of automatic statistics collection (#81027))
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
