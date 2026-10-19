@@ -49,7 +49,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -187,6 +190,9 @@ public abstract class MVTimelinessArbiter {
             if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
                 return true;
             }
+            if (hasDeletedPartitions(mv, baseTable, /* pinnedVersionRange */ null)) {
+                return true;
+            }
         }
         return false;
     }
@@ -239,7 +245,21 @@ public abstract class MVTimelinessArbiter {
             }
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
+<<<<<<< HEAD
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
+=======
+            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPCells());
+
+            // An mv partition that outlived a dropped base partition still holds its rows, so it must not answer a
+            // query until it is recomputed.
+            Set<String> affectedByDrops = getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, /* pinnedVersionRange */ null));
+            if (!affectedByDrops.isEmpty()) {
+                PCellSortedSet affectedCells = mv.getPartitionCells(Optional.empty());
+                affectedCells.retainAllNames(affectedByDrops);
+                mvUpdateInfo.addMVToRefreshPartitionNames(affectedCells);
+            }
+>>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
         }
         return baseChangedPartitionNames;
     }
