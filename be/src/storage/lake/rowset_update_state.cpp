@@ -267,7 +267,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
     // Before init(), which eagerly loads the first chunk: the selection is built inside _load().
     result->set_row_selector(_row_selector.get());
-    RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
+    RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type, false,
+                                 should_enable_lazy_load(params) ? params.pk_input_chunk_rows : 0));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
 
@@ -1019,6 +1020,16 @@ void RowsetUpdateState::release_segment_partial_state(uint32_t segment_id) {
 }
 
 Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
+    const size_t rows = should_enable_lazy_load(params) ? params.pk_input_chunk_rows : 0;
+    if (rows != _pk_input_chunk_rows) {
+        // A preload may have retained full-width chunks before this index's mandatory working
+        // set was known. Drop and reload it before starting this publish; do not keep both copies.
+        const auto schema_version = _schema_version;
+        _reset();
+        _schema_version = schema_version;
+        _pk_input_chunk_rows = rows;
+        TRACE_COUNTER_INCREMENT("pindex_bounded_pk_input_rows", rows);
+    }
     // Initialize shared state: rowset, per-segment vectors, segment iterators, column expr values.
     // Must be called once on the main thread before any load_segment call.
     if (_rowset_ptr == nullptr) {
@@ -1047,7 +1058,8 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         // is what lets it hold its encode buffer across chunks.
         ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
                                                 *params.metadata, params.tablet_schema, params.op_write.rowset()));
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters,
+                         _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats, _pk_input_chunk_rows));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {

@@ -16,10 +16,30 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+
 #include "base/testutil/assert.h"
 #include "storage/lake/persistent_index_sstable.h"
 
 namespace starrocks::lake {
+
+TEST(PersistentIndexMemtableTest, test_flush_wait_cancellation_does_not_poison_the_flush) {
+    PersistentIndexMemtable memtable;
+    std::atomic<bool> cancelled{false};
+    std::thread cancel([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        cancelled.store(true);
+    });
+    const auto begin = std::chrono::steady_clock::now();
+    const auto status = memtable.wait_for_flush(30'000'000, [&] { return cancelled.load(); });
+    cancel.join();
+    EXPECT_TRUE(status.is_cancelled()) << status;
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(1));
+    EXPECT_TRUE(memtable.wait_for_flush(1000).is_time_out());
+    EXPECT_TRUE(memtable.flush_status().ok());
+}
 
 TEST(PersistentIndexMemtableTest, test_basic_api) {
     using Key = uint64_t;

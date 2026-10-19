@@ -14,12 +14,18 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
 #include "base/phmap/btree.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/mem_tracker.h"
+#include "storage/lake/pk_index_publish_limiter.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -42,6 +48,71 @@ namespace lake {
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
+class SstReadStateReadCredit;
+
+struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadStateMemoryContext> {
+    struct WaitScope {
+        int64_t deadline_ms = -1;
+        std::function<bool()> cancelled;
+        mutable std::atomic<int64_t> memory_wait_us{0};
+    };
+    explicit SstReadStateMemoryContext(MemTracker* parent, std::shared_ptr<const WaitScope> scope = nullptr)
+            : tracker(-1, scope ? "lake_pk_index_pressure_merge" : "lake_pk_index_sst_read_state", parent),
+              wait_scope(std::move(scope)) {}
+    Status check_cancelled() const;
+    class Reservation {
+    public:
+        explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context,
+                             std::function<void(size_t)> reclaim_self = {},
+                             std::shared_ptr<SstReadStateReadCredit> credit = {})
+                : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)), _credit(std::move(credit)) {}
+        ~Reservation();
+        Status add(size_t bytes, bool wait, const std::function<bool()>& cancelled = {}, int64_t wait_timeout_ms = -1);
+        bool try_add(size_t bytes);
+        void shrink_to(size_t bytes);
+        size_t bytes() const { return _bytes; }
+        int64_t parent_limit() const { return _context->tracker.parent()->limit(); }
+
+    private:
+        MemTracker* _try_add(size_t bytes);
+        std::shared_ptr<SstReadStateMemoryContext> _context;
+        std::function<void(size_t)> _reclaim_self;
+        std::shared_ptr<SstReadStateReadCredit> _credit;
+        size_t _bytes = 0;
+        size_t _credit_bytes = 0;
+    };
+    MemTracker tracker;
+    const std::shared_ptr<const WaitScope> wait_scope;
+    PkIndexPublishLimiter limiter;
+    // Try-lock eviction only; called without any cache lock before retrying a byte reservation.
+    std::function<void(size_t)> reclaim;
+    // Refresh optional-cache charges before assessing headroom; no IO or index-cache lock.
+    std::function<void()> refresh_usage;
+    std::mutex memory_mutex;
+    std::condition_variable memory_cv;
+    std::atomic<size_t> active_read_credits{0};
+};
+
+// Root-charged once for a mutation and its joined old-value lookups. SST reservations borrow
+// and return bytes without releasing ancestors; sibling reservations cannot steal the gap.
+class SstReadStateReadCredit {
+public:
+    explicit SstReadStateReadCredit(std::shared_ptr<SstReadStateMemoryContext> context)
+            : _context(std::move(context)) {}
+    ~SstReadStateReadCredit();
+    bool try_reserve(size_t bytes);
+    size_t borrow(size_t bytes);
+    void give_back(size_t bytes);
+    size_t capacity() const { return _capacity; }
+    static constexpr size_t object_reserve() { return 256; }
+    const SstReadStateMemoryContext* context() const { return _context.get(); }
+
+private:
+    std::shared_ptr<SstReadStateMemoryContext> _context;
+    std::mutex _mutex;
+    size_t _capacity = 0;
+    size_t _available = 0;
+};
 
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
 // Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
@@ -54,7 +125,9 @@ public:
 
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
-                TabletManager* tablet_mgr = nullptr);
+                TabletManager* tablet_mgr = nullptr,
+                const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr,
+                bool defer_read_state = false, std::function<void(size_t)> reclaim_self = {});
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
@@ -76,17 +149,60 @@ public:
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
                      KeyIndexSet* found_key_indexes) const;
 
-    sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
+    sstable::Iterator* new_iterator(const sstable::ReadOptions& options);
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
     // Full path of the underlying sstable file. Only valid after a successful init().
-    std::string filename() const { return _rf->filename(); }
+    std::string filename() const { return _filename; }
+
+    // Release the SST's index/filter blocks and file handle, preserving metadata and the delete vector.
+    // Returns bytes actually freed, or zero if a reader/iterator pins the read state or an open is in
+    // progress. Subsequent reads reopen the file on demand; concurrent opens share one read state.
+    size_t evict_read_state() const;
+
+    size_t metadata_memory_usage() const;
+
+    // Caller holds the tablet index lock; used only between joined index operations.
+    void set_read_state_cacheable(bool cacheable, const std::shared_ptr<SstReadStateMemoryContext>& context) const;
+    void set_read_state_memory_context(const std::shared_ptr<SstReadStateMemoryContext>& context) const {
+        std::lock_guard<std::mutex> lock(_read_state_mutex);
+        _memory_context = context;
+    }
+    // Owner holds its tablet lock and has joined readers before changing this callback.
+    void set_read_state_reclaimer(const std::function<void(size_t)>& reclaimer) const {
+        std::lock_guard<std::mutex> lock(_read_state_mutex);
+        _reclaim_self = reclaimer;
+    }
+    // Changed only at a joined tablet-owner boundary. Tiny tail SSTs must not populate an
+    // optional data-block cache when a mandatory index already occupies most of update.
+    void set_skip_data_block_cache(bool skip) const { _skip_data_block_cache.store(skip); }
+    void set_read_credit(const std::shared_ptr<SstReadStateReadCredit>& credit) const;
+    Status reopen_read_state() const;
+    StatusOr<size_t> probe_minimum_read_memory() const;
+
+    // Last known full read-state size, retained after eviction for cache share calculation.
+    size_t read_state_memory_demand() const { return _read_state_memory_demand.load(); }
+    // A resident reopen also reserves the objects that own the table, file and filter policy.
+    size_t read_state_reservation_demand() const {
+        const size_t demand = read_state_memory_demand();
+        return demand == 0 ? 0 : demand + kReadStateObjectMemoryReserve;
+    }
 
     // Resident bytes of the index block and bloom filter; memory_usage() is their sum.
     size_t index_block_memory_usage() const;
     size_t filter_memory_usage() const;
     size_t memory_usage() const;
+    // Resident table and read-state object bytes reserved directly on update, excluded from cache tracker charge.
+    size_t directly_accounted_memory_usage() const;
+    size_t reserved_read_state_overhead() const;
+    struct ReadStateMemoryUsage {
+        size_t index = 0;
+        size_t filter = 0;
+        size_t direct = 0;
+        size_t objects = 0;
+    };
+    ReadStateMemoryUsage read_state_memory_usage() const;
 
     // Bytes of the delete vector attached to this sstable, if any. Not part of memory_usage().
     size_t delvec_memory_usage() const;
@@ -110,17 +226,41 @@ public:
         _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
     }
 
-    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
-                                                                 const std::string& location, Cache* cache,
-                                                                 bool need_filter = true,
-                                                                 const DelVectorPtr& delvec = nullptr,
-                                                                 const TabletMetadataPtr& metadata = nullptr,
-                                                                 TabletManager* tablet_mgr = nullptr);
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(
+            const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache,
+            bool need_filter = true, const DelVectorPtr& delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
+            TabletManager* tablet_mgr = nullptr,
+            const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr, bool defer_read_state = false,
+            std::function<void(size_t)> reclaim_self = {});
 
 private:
-    std::unique_ptr<sstable::Table> _sst{nullptr};
-    std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
-    std::unique_ptr<RandomAccessFile> _rf{nullptr};
+    static constexpr size_t kReadStateObjectMemoryReserve = 4096;
+    struct ReadState;
+    StatusOr<std::unique_ptr<RandomAccessFile>> _open_file() const;
+    StatusOr<std::shared_ptr<ReadState>> _open_read_state(
+            std::unique_ptr<RandomAccessFile> rf, const std::shared_ptr<SstReadStateMemoryContext>& context,
+            const std::function<void(size_t)>& reclaim_self,
+            const std::shared_ptr<SstReadStateReadCredit>& credit = {}) const;
+    StatusOr<std::shared_ptr<ReadState>> _get_read_state() const;
+
+    // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
+    // state, so its return value never counts memory that a reader still owns.
+    mutable std::atomic<bool> _skip_data_block_cache{false};
+    mutable std::atomic<size_t> _minimum_read_memory{0};
+    mutable std::atomic<size_t> _read_state_memory_demand{0};
+    mutable std::mutex _read_state_mutex;
+    mutable std::condition_variable _read_state_cv;
+    mutable bool _read_state_opening = false;
+    mutable std::function<void(size_t)> _reclaim_self;
+    mutable std::shared_ptr<ReadState> _read_state;
+    mutable std::weak_ptr<ReadState> _transient_read_state;
+    mutable std::shared_ptr<SstReadStateMemoryContext> _memory_context;
+    mutable std::weak_ptr<SstReadStateReadCredit> _read_credit;
+    mutable bool _read_state_cacheable = true;
+    std::string _filename;
+    Cache* _cache = nullptr;
+    bool _need_filter = true;
+    uint64_t _block_cache_id = 0;
     PersistentIndexSstablePB _sstable_pb;
     DelVectorPtr _delvec;
 };

@@ -16,7 +16,10 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <set>
@@ -58,6 +61,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -123,6 +127,11 @@ public:
     }
 
     void TearDown() override {
+        // Pressure can evict an owner while its shared memtable flush task is
+        // still running. Keep the fixture's TabletManager and files alive until
+        // that global pool drains, including on an assertion failure.
+        ASSERT_TRUE(
+                RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
         // check primary index cache's ref
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         (void)fs::remove_all(kTestGroupPath);
@@ -1908,6 +1917,480 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_pressure_prepare_discards_preloaded_wide_pk_chunks) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    constexpr size_t rows = 8192;
+    auto metadata = new_cloud_native_pk_tablet();
+    auto [chunk, indexes] = gen_data_and_index(rows, 0, false, true);
+    const auto txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(metadata->id(), txn));
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    RssidFileInfoContainer container;
+    auto schema = TabletSchema::create(metadata->schema());
+    RowsetUpdateStateParams params{.op_write = log->op_write(),
+                                   .tablet_schema = schema,
+                                   .metadata = metadata,
+                                   .tablet = &tablet,
+                                   .container = container};
+    RowsetUpdateState state;
+    state.init(params);
+    ASSERT_OK(state.prepare(params));
+    ASSERT_OK(state.load_segment(0, params, 1, false, false));
+    ASSERT_NE(nullptr, state.upserts(0));
+    const auto preloaded_bytes = state.memory_usage();
+    ASSERT_GT(preloaded_bytes, 0);
+    params.pk_input_chunk_rows = 7;
+    ASSERT_OK(state.prepare(params));
+    EXPECT_EQ(nullptr, state.upserts(0));
+    EXPECT_LT(state.memory_usage(), preloaded_bytes);
+    ASSERT_OK(state.load_segment(0, params, 1, false, false));
+    const auto& iterator = state.upserts(0);
+    size_t seen = 0;
+    for (; !iterator->done(); iterator->next()) {
+        const auto ref = iterator->current();
+        ASSERT_LE(ref.chunk->num_rows(), 7);
+        EXPECT_EQ(seen, ref.physical_rowid_offset);
+        seen += ref.chunk->num_rows();
+    }
+    ASSERT_OK(iterator->status());
+    EXPECT_EQ(rows, seen);
+    state.release_segment(0);
+    EXPECT_EQ(0, state.memory_usage());
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_excludes_optional_compaction_preload_from_publish) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<bool> light(&config::enable_light_pk_compaction_publish, false);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 1000);
+    const auto old_limit = _mem_tracker->limit();
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore_limit([&] { _mem_tracker->set_limit(old_limit); });
+    auto metadata = new_cloud_native_pk_tablet();
+    auto [chunk, indexes] = gen_data_and_index(8192, 0, true, true);
+    const auto txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSIGN_OR_ABORT(auto written, _tablet_mgr->get_txn_log(metadata->id(), txn));
+    TxnLogPB compaction;
+    compaction.set_tablet_id(metadata->id());
+    compaction.set_txn_id(next_id());
+    compaction.mutable_op_compaction()->mutable_output_rowset()->CopyFrom(written->op_write().rowset());
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    auto schema = TabletSchema::create(metadata->schema());
+    const auto skipped = StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value();
+    ASSIGN_OR_ABORT(auto publish, _primary_key_mgr->acquire_publish_slot());
+    _primary_key_mgr->preload_compaction_state(compaction, tablet, schema);
+    EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+    EXPECT_EQ(skipped + 1, StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value());
+    publish.reset();
+    _primary_key_mgr->preload_compaction_state(compaction, tablet, schema);
+    EXPECT_FALSE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+    EXPECT_GT(_primary_key_mgr->compaction_state_mem_tracker()->consumption(), 0);
+    {
+        // Real preloaded columns carry a direct child-tracker charge while their
+        // DynamicCache entry size is zero. Pressure must still reclaim idle state.
+        MemTracker sibling(-1, "preload_reclaim_pressure", _mem_tracker.get());
+        const auto bytes = std::max<int64_t>(0, _mem_tracker->limit() * 3 / 4 + 1 - _mem_tracker->consumption());
+        ASSERT_EQ(nullptr, sibling.try_consume(bytes));
+        DeferOp release([&] { sibling.release(bytes); });
+        ASSIGN_OR_ABORT(auto next_publish, _primary_key_mgr->acquire_publish_slot());
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+        EXPECT_EQ(0, _primary_key_mgr->compaction_state_mem_tracker()->consumption());
+    }
+    // Queue behind a preload after its first real chunk. Both an ON preload and
+    // an OFF preload followed by ON must discard the partial column and yield.
+    for (bool initially_partial : {true, false}) {
+        config::lake_pk_index_partial_eviction = initially_partial;
+        std::promise<void> first_chunk, resume_preload, queued;
+        auto resume = resume_preload.get_future().share();
+        std::atomic<bool> saw_chunk{false}, saw_queue{false};
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("PrimaryKeyCompactionState::_load_segments:chunk_loaded", [&](void*) {
+            if (!saw_chunk.exchange(true)) {
+                first_chunk.set_value();
+                resume.wait();
+            }
+        });
+        sync->SetCallBack("PkIndexPublishLimiter::queued", [&](void*) {
+            if (!saw_queue.exchange(true)) queued.set_value();
+        });
+        sync->EnableProcessing();
+        auto preload = std::async(std::launch::async,
+                                  [&] { _primary_key_mgr->preload_compaction_state(compaction, tablet, schema); });
+        std::future<Status> publisher;
+        bool resumed = false;
+        auto drain = [&] {
+            if (!resumed) {
+                resume_preload.set_value();
+                resumed = true;
+            }
+            if (preload.valid()) preload.get();
+        };
+        DeferOp cleanup([&] {
+            drain();
+            if (publisher.valid()) publisher.get();
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+            _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
+        });
+        ASSERT_EQ(std::future_status::ready, first_chunk.get_future().wait_for(std::chrono::seconds(2)));
+        config::lake_pk_index_partial_eviction = true;
+        publisher = std::async(std::launch::async, [&]() -> Status {
+            auto permit = _primary_key_mgr->acquire_publish_slot();
+            return permit.status();
+        });
+        ASSERT_EQ(std::future_status::ready, queued.get_future().wait_for(std::chrono::seconds(2)));
+        drain();
+        ASSERT_EQ(std::future_status::ready, publisher.wait_for(std::chrono::seconds(2)));
+        ASSERT_OK(publisher.get());
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+        EXPECT_EQ(0, _primary_key_mgr->compaction_state_mem_tracker()->consumption());
+    }
+    EXPECT_EQ(skipped + 3, StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value());
+    // Required publish can still load the same rowset after speculative work was
+    // discarded; cancellation is not a failed transaction or a poisoned cache hit.
+    ASSERT_OK(publish_single_version(metadata->id(), 2, txn).status());
+    EXPECT_EQ(8192, read_rows(metadata->id(), 2));
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_legacy_compaction_reload_preserves_conflicts_and_deletes) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<bool> light(&config::enable_light_pk_compaction_publish, false);
+    ConfigResetGuard<int64_t> min_segments(&config::lake_pk_compaction_min_input_segments, 1);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 1000);
+    const auto old_limit = _mem_tracker->limit();
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore_limit([&] { _mem_tracker->set_limit(old_limit); });
+    constexpr int kRows = 8192;
+    constexpr int kTotalRows = 3 * kRows;
+    auto metadata = new_cloud_native_pk_tablet();
+    const auto tablet_id = metadata->id();
+    auto schema = TabletSchema::create(metadata->schema());
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto write = [&](const ChunkPtr& chunk) -> int64_t {
+        const auto txn_id = next_id();
+        auto indexes = std::vector<uint32_t>(chunk->num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        CHECK_OK(writer->open());
+        CHECK_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(writer->finish_with_txnlog());
+        writer->close();
+        return txn_id;
+    };
+    int64_t version = 1;
+    for (int i = 0; i < 3; ++i) {
+        const auto txn = write(gen_data(kRows, i, false, true));
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn).status());
+    }
+    ASSERT_EQ(kTotalRows, read_rows(tablet_id, version));
+    const auto compact_txn = next_id();
+    auto context = std::make_unique<CompactionTaskContext>(compact_txn, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get()));
+    // Build a real op_compaction at the old version while suppressing its initial
+    // optional preload; the later cancelled preload must not be needed by publish.
+    ASSIGN_OR_ABORT(auto permit, _primary_key_mgr->acquire_publish_slot());
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    permit.reset();
+    ASSIGN_OR_ABORT(auto compact_log, _tablet_mgr->get_txn_log(tablet_id, compact_txn));
+    ASSERT_TRUE(compact_log->has_op_compaction());
+    ASSERT_GT(compact_log->op_compaction().input_rowsets_size(), 0);
+    ASSERT_GT(compact_log->op_compaction().output_rowset().num_rows(), 0);
+    ASSERT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet_id, compact_txn));
+
+    auto changed = gen_data(kTotalRows, 0, false, true);
+    auto values = Int32Column::create();
+    auto ops = Int8Column::create();
+    for (int i = 0; i < kTotalRows; ++i) {
+        values->append(i * 3 + 100000);
+        ops->append(i % 3 == 0 ? TOpType::DELETE : TOpType::UPSERT);
+    }
+    changed->get_column_by_index(1) = std::move(values);
+    changed->get_column_by_index(2) = std::move(ops);
+    const auto write_txn = write(changed);
+    std::promise<void> first_chunk, resume_preload, queued;
+    auto resume = resume_preload.get_future().share();
+    std::atomic<bool> saw_chunk{false}, saw_queue{false};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PrimaryKeyCompactionState::_load_segments:chunk_loaded", [&](void*) {
+        if (!saw_chunk.exchange(true)) {
+            first_chunk.set_value();
+            resume.wait();
+        }
+    });
+    sync->SetCallBack("PkIndexPublishLimiter::queued", [&](void*) {
+        if (!saw_queue.exchange(true)) queued.set_value();
+    });
+    sync->EnableProcessing();
+    auto preload = std::async(std::launch::async,
+                              [&] { _primary_key_mgr->preload_compaction_state(*compact_log, tablet, schema); });
+    std::future<Status> publisher;
+    bool resumed = false;
+    auto drain = [&] {
+        if (!resumed) {
+            resume_preload.set_value();
+            resumed = true;
+        }
+        if (preload.valid()) preload.get();
+    };
+    DeferOp cleanup([&] {
+        drain();
+        if (publisher.valid()) publisher.get();
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+        _primary_key_mgr->TEST_remove_compaction_cache(tablet_id, compact_txn);
+    });
+    ASSERT_EQ(std::future_status::ready, first_chunk.get_future().wait_for(std::chrono::seconds(2)));
+    publisher = std::async(std::launch::async, [&]() -> Status {
+        return publish_single_version(tablet_id, version + 1, write_txn).status();
+    });
+    ASSERT_EQ(std::future_status::ready, queued.get_future().wait_for(std::chrono::seconds(2)));
+    drain();
+    ASSERT_EQ(std::future_status::ready, publisher.wait_for(std::chrono::seconds(5)));
+    ASSERT_OK(publisher.get());
+    ++version;
+    sync->DisableProcessing();
+    sync->ClearAllCallBacks();
+    ASSERT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet_id, compact_txn));
+    ASSERT_EQ(0, _primary_key_mgr->compaction_state_mem_tracker()->consumption());
+    EXPECT_EQ(kTotalRows - (kTotalRows + 2) / 3, read_rows(tablet_id, version));
+
+    // This is the actual old-version compaction transaction, not op_write. Its
+    // required load must restart from row zero and preserve newer physical rowids
+    // and DELETEs when trying to replace the stale output rows.
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, compact_txn).status());
+    }
+    ++version;
+    EXPECT_NE(std::string::npos, trace->MetricsAsJSON().find("load_segments_latency_us"));
+    EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet_id, compact_txn));
+    EXPECT_EQ(0, _primary_key_mgr->compaction_state_mem_tracker()->consumption());
+    ASSIGN_OR_ABORT(auto result, read(tablet_id, version));
+    ASSERT_EQ(kTotalRows - (kTotalRows + 2) / 3, result->num_rows());
+    std::set<int32_t> seen;
+    for (size_t i = 0; i < result->num_rows(); ++i) {
+        const auto key = result->get_column_by_index(0)->get(i).get_int32();
+        EXPECT_NE(0, key % 3);
+        EXPECT_TRUE(seen.insert(key).second);
+        EXPECT_EQ(key * 3 + 100000, result->get_column_by_index(1)->get(i).get_int32());
+    }
+    _primary_key_mgr->unload_primary_index(tablet_id);
+    const auto delete_txn = write(gen_data(kTotalRows, 0, false, false));
+    ASSERT_OK(publish_single_version(tablet_id, ++version, delete_txn).status());
+    EXPECT_EQ(0, read_rows(tablet_id, version));
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growth_before_tablet_locks) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const bool old_strict = config::enable_pk_strict_memcheck;
+    const int64_t old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = true;
+    config::enable_pk_strict_memcheck = true;
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::enable_pk_strict_memcheck = old_strict;
+        _mem_tracker->set_limit(old_limit);
+    });
+    DeferOp finish_flushes([&] {
+        EXPECT_TRUE(
+                RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+        // Keep the original all-lifetime bound, including async work retiring
+        // after the logical publish, before restoring this test's hard limit.
+        EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    });
+    constexpr int kPublishers = 4;
+    constexpr int kRows = 40000;
+    auto log_memory = [&](const char* phase, int publisher) {
+        LOG(INFO) << "partial eviction growth phase=" << phase << " publisher=" << publisher
+                  << " consumption=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption()
+                  << " limit=" << _mem_tracker->limit()
+                  << " index=" << _primary_key_mgr->index_mem_tracker()->consumption()
+                  << " update_state=" << _primary_key_mgr->update_state_mem_tracker()->consumption()
+                  << " compaction=" << _primary_key_mgr->compaction_state_mem_tracker()->consumption()
+                  << " sst=" << _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption();
+    };
+    log_memory("before_setup", -1);
+    std::vector<TabletMetadataPtr> metadata;
+    std::vector<int64_t> txns;
+    auto [chunk, indexes] = gen_data_and_index(kRows, 0, true, true);
+    for (int i = 0; i < kPublishers; ++i) {
+        metadata.push_back(new_cloud_native_pk_tablet());
+        txns.push_back(next_id());
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(metadata.back()->id())
+                                             .set_txn_id(txns.back())
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        log_memory("writer_write", i);
+        ASSERT_OK(writer->finish_with_txnlog());
+        log_memory("writer_finish", i);
+        writer->close();
+        log_memory("writer_close", i);
+    }
+    log_memory("before_publish", -1);
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    std::promise<void> first_prepared;
+    std::promise<void> all_queued;
+    std::promise<void> grow;
+    auto growth = grow.get_future().share();
+    std::atomic<int> queued{0};
+    std::atomic<int> entered{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PkIndexPublishLimiter::queued", [&](void*) {
+        if (++queued == kPublishers) all_queued.set_value();
+    });
+    sync->SetCallBack("PrimaryKeyManager::prepare_primary_index:before_load", [&](void*) {
+        const int current = ++entered;
+        log_memory("before_load", current);
+        if (current == 1) {
+            first_prepared.set_value();
+            growth.wait();
+        }
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    const int64_t loads_before = StorageMetrics::instance()->lake_pk_index_load_total.value();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    std::vector<std::future<Status>> publishes;
+    for (int i = 0; i < kPublishers; ++i) {
+        publishes.push_back(std::async(std::launch::async, [&, i] {
+            auto status = publish_single_version(metadata[i]->id(), 2, txns[i]).status();
+            log_memory("publish_finished", i);
+            return status;
+        }));
+    }
+    EXPECT_EQ(std::future_status::ready, first_prepared.get_future().wait_for(std::chrono::seconds(5)));
+    EXPECT_EQ(std::future_status::ready, all_queued.get_future().wait_for(std::chrono::seconds(5)));
+    // Four requests see low initial usage, but only the oldest may start growing its index.
+    EXPECT_EQ(1, entered.load());
+    grow.set_value();
+    for (auto& publish : publishes) {
+        EXPECT_EQ(std::future_status::ready, publish.wait_until(deadline));
+        ASSERT_OK(publish.get()); // any update-memory error / FE-style retry fails this test
+    }
+    EXPECT_EQ(kPublishers, entered.load());
+    EXPECT_EQ(loads_before + kPublishers, StorageMetrics::instance()->lake_pk_index_load_total.value());
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    for (const auto& meta : metadata) {
+        ASSIGN_OR_ABORT(auto actual, read(meta->id(), 2));
+        ASSERT_EQ(kRows, actual->num_rows());
+        const auto& keys = down_cast<const Int32Column*>(actual->get_column_by_index(0).get())->get_data();
+        const auto& values = down_cast<const Int32Column*>(actual->get_column_by_index(1).get())->get_data();
+        int64_t key_sum = 0;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            EXPECT_EQ(keys[i] * 3, values[i]);
+            key_sum += keys[i];
+        }
+        EXPECT_EQ(int64_t{kRows} * (kRows - 1) / 2, key_sum);
+    }
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_streams_a_tablet_larger_than_update_budget) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const bool old_strict = config::enable_pk_strict_memcheck;
+    const int64_t old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = true;
+    config::enable_pk_strict_memcheck = true;
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::enable_pk_strict_memcheck = old_strict;
+        _mem_tracker->set_limit(old_limit);
+    });
+    DeferOp finish_flushes([&] {
+        EXPECT_TRUE(
+                RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+        // Keep the original all-lifetime bound, including async work retiring
+        // after the logical publish, before restoring this test's hard limit.
+        EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    });
+    constexpr int kRows = 200000;
+    // The btree value bytes alone exceed this unchanged budget; the index must flush in batches.
+    static_assert(kRows * (sizeof(std::string) + 2 * sizeof(uint64_t)) > 6 * 1024 * 1024);
+    auto metadata = new_cloud_native_pk_tablet();
+    auto txn = next_id();
+    auto [chunk, indexes] = gen_data_and_index(kRows, 0, true, true);
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    auto published =
+            std::async(std::launch::async, [&] { return publish_single_version(metadata->id(), 2, txn).status(); });
+    EXPECT_EQ(std::future_status::ready, published.wait_until(deadline));
+    ASSERT_OK(published.get());
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    ASSIGN_OR_ABORT(auto committed, _tablet_mgr->get_tablet_metadata(metadata->id(), 2));
+    EXPECT_GT(committed->sstable_meta().sstables_size(), 0);
+    ASSIGN_OR_ABORT(auto actual, read(metadata->id(), 2));
+    ASSERT_EQ(kRows, actual->num_rows());
+    const auto& keys = down_cast<const Int32Column*>(actual->get_column_by_index(0).get())->get_data();
+    const auto& values = down_cast<const Int32Column*>(actual->get_column_by_index(1).get())->get_data();
+    int64_t key_sum = 0;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_EQ(keys[i] * 3, values[i]);
+        key_sum += keys[i];
+    }
+    EXPECT_EQ(int64_t{kRows} * (kRows - 1) / 2, key_sum);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {

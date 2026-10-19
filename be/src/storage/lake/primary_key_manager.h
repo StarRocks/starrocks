@@ -21,6 +21,7 @@
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/pk_index_publish_limiter.h"
 #include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
@@ -34,6 +35,7 @@ class TxnLogPB_OpWrite;
 namespace lake {
 
 class LocationProvider;
+struct SstReadStateMemoryContext;
 class LakePersistentIndexParallelCompactMgr;
 class Tablet;
 class MetaFileBuilder;
@@ -163,7 +165,7 @@ public:
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
-    void unload_primary_index(int64_t tablet_id);
+    void unload_primary_index(int64_t tablet_id, bool need_lock = true);
 
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
@@ -176,6 +178,8 @@ public:
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+    void refresh_index_cache_eviction_policy();
+    StatusOr<std::unique_ptr<PkIndexPublishLimiter::Permit>> acquire_publish_slot();
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
@@ -202,7 +206,7 @@ public:
 
     // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
     // Caller holds the index lock.
-    void update_index_cache_size(IndexEntry* index_entry);
+    void update_index_cache_size(IndexEntry* index_entry, bool finish_growth = false, size_t keep_workspace = 0);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -247,12 +251,31 @@ public:
     Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+    const std::shared_ptr<SstReadStateMemoryContext>& sst_read_state_memory_context() const {
+        return _sst_memory_context;
+    }
 
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
     int64_t get_index_memory_size(int64_t tablet_id) const;
 
 private:
+    // Both synchronous resize and background pressure enter here, outside the cache lock.
+    void _evict_index_cache(size_t target_bytes);
+    size_t _index_cache_target() const;
+    void _relieve_update_pressure();
+    void _maybe_refresh_index_cache_eviction_policy();
+    void _reclaim_active_index_read_state(IndexEntry* entry, size_t bytes);
+    void _bind_index_growth_reservation(IndexEntry* entry);
+    Status _reserve_index_growth(IndexEntry* entry, size_t bytes);
+    // Index lock -> accounting lock -> cache lock. Mode transition uses snapshots under the
+    // accounting lock and never waits for a tablet lock or performs SST IO.
+    std::mutex _index_accounting_mutex;
+    std::atomic<bool> _accounted_partial_mode{false};
+    std::mutex _index_eviction_mutex;
+    PkIndexPublishLimiter _publish_limiter;
+    std::shared_ptr<SstReadStateMemoryContext> _sst_memory_context;
+
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,

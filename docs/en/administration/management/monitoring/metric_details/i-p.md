@@ -297,11 +297,15 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the delete vectors attached to the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. Only SST files ingested together with a delete vector, such as compaction output, carry one. This memory is not charged to the Primary Key index cache, so `INDEX_MEM` in `information_schema.be_tablets` does not include it.
 
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory.
+
 ## `lake_pk_index_cache_filter_bytes`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the Bloom filters of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_index_block_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory.
 
 ## `lake_pk_index_cache_hit_total`
 
@@ -315,11 +319,29 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the index blocks of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
 
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory.
+
 ## `lake_pk_index_cache_memtable_bytes`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory. The index cache tracker also temporarily includes prepaid MemTable mutation bytes. Resident cache gauges and `INDEX_MEM` exclude unused reservations.
+
+Unused reusable SST read credit is also charged to the update tracker until its mutation batch and lookups finish. Resident gauges and `INDEX_MEM` exclude this credit; loan counters do not represent additional root allocations.
+
+## `lake_pk_index_cache_overhead_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Estimated object, protobuf, path and fileset overhead of cached shared-data Primary Key indexes, including the reserved allowance for resident SST read-state objects. Included in the cache charge when `lake_pk_index_partial_eviction` is enabled. Delete vectors have their own metric.
+
+## `lake_pk_index_compaction_preload_skipped_total`
+
+- Unit: Requests
+- Type: Counter
+- Description: Shared-data only. Optional legacy Primary Key compaction preloads skipped because the partial-eviction publish lane was busy, or discarded between chunks to yield to a queued publish. This is an optimization skip, not a failed publish; publish can load the state on demand. OFF permits concurrent preloading as before. An in-flight OFF preload also yields after the flag is enabled. A synchronous IO already in progress completes before the next yield check.
 
 ## `lake_pk_index_load_duration_us`
 

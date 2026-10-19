@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -36,7 +37,7 @@ public:
     PrimaryKeyCompactionState& operator=(const PrimaryKeyCompactionState&) = delete;
 
     Status load_segments(Rowset* rowset, PrimaryKeyManager* primary_key_manager, const TabletSchemaCSPtr& tablet_schema,
-                         uint32_t segment_id);
+                         uint32_t segment_id, const std::function<Status()>& check_preload = {});
     void release_segments(uint32_t segment_id);
 
     std::size_t memory_usage() const { return _memory_usage; }
@@ -46,7 +47,8 @@ public:
     MutableColumns pk_cols;
 
 private:
-    Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
+    Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id,
+                          const std::function<Status()>& check_preload);
 
     PrimaryKeyManager* _primary_key_manager = nullptr;
     size_t _memory_usage = 0;

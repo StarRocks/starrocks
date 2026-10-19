@@ -35,7 +35,11 @@ public:
     // that "file" remains live for the duration of the returned table's
     // lifetime.
     static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size,
-                       std::unique_ptr<Table>& table);
+                       std::unique_ptr<Table>& table, uint64_t cache_id = 0);
+
+    // Reopening the same immutable file with the same block cache may reuse this ID so its cached
+    // data blocks remain reachable. An ID must never be reused for a different file or cache.
+    uint64_t cache_id() const;
 
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;

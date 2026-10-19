@@ -42,7 +42,8 @@ struct Table::Rep {
     Block* index_block = nullptr;
 };
 
-Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table) {
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table,
+                   uint64_t cache_id) {
     if (size < Footer::kEncodedLength) {
         return Status::Corruption("file is too short to be an sstable");
     }
@@ -60,6 +61,12 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     // Read the index block
     BlockContents index_block_contents;
     ReadOptions opt;
+    if (options.reserve_read_state_memory) {
+        opt.reserve_memory = [&](size_t bytes) { return options.reserve_read_state_memory(bytes, true); };
+        opt.try_reserve_memory = options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = options.check_read_state_cancelled;
+        opt.is_index_block = true;
+    }
     ReadIOStat iostat;
     opt.stat = &iostat;
     if (options.paranoid_checks) {
@@ -76,7 +83,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->file = file;
         rep->metaindex_handle = footer.metaindex_handle();
         rep->index_block = index_block;
-        rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
+        rep->cache_id = options.block_cache ? (cache_id != 0 ? cache_id : options.block_cache->new_id()) : 0;
         rep->filter_data = nullptr;
         rep->filter = nullptr;
         table.reset(new Table(rep));
@@ -84,6 +91,10 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     }
 
     return s;
+}
+
+uint64_t Table::cache_id() const {
+    return rep_->cache_id;
 }
 
 Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
@@ -172,13 +183,20 @@ void Table::ReadMeta(const Footer& footer) {
     // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
     // it is an empty block.
     ReadOptions opt;
+    if (rep_->options.reserve_read_state_memory) {
+        opt.reserve_memory = [&](size_t bytes) { return rep_->options.reserve_read_state_memory(bytes, false); };
+        opt.try_reserve_memory = rep_->options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = rep_->options.check_read_state_cancelled;
+    }
     ReadIOStat iostat;
     opt.stat = &iostat;
     if (rep_->options.paranoid_checks) {
         opt.verify_checksums = true;
     }
     BlockContents contents;
-    if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
+    auto meta_status = ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents);
+    if (!meta_status.ok()) {
+        if (meta_status.is_mem_limit_exceeded()) TRACE_COUNTER_INCREMENT("sst_filter_memory_fallback_count", 1);
         // Do not propagate errors since meta info is not needed for operation
         return;
     }
@@ -205,11 +223,18 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
     // We might want to unify with ReadBlock() if we start
     // requiring checksum verification in Table::Open.
     ReadOptions opt;
+    if (rep_->options.reserve_read_state_memory) {
+        opt.reserve_memory = [&](size_t bytes) { return rep_->options.reserve_read_state_memory(bytes, false); };
+        opt.try_reserve_memory = rep_->options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = rep_->options.check_read_state_cancelled;
+    }
     if (rep_->options.paranoid_checks) {
         opt.verify_checksums = true;
     }
     BlockContents block;
-    if (!ReadBlock(rep_->file, opt, filter_handle, &block).ok()) {
+    auto filter_status = ReadBlock(rep_->file, opt, filter_handle, &block);
+    if (!filter_status.ok()) {
+        if (filter_status.is_mem_limit_exceeded()) TRACE_COUNTER_INCREMENT("sst_filter_memory_fallback_count", 1);
         return;
     }
     if (block.heap_allocated) {

@@ -202,4 +202,22 @@ TEST_F(SegmentPKIteratorTest, LazyLoadAcrossNextCalls_BaseUnchangedAndChunkBaseA
     EXPECT_EQ(expected_physical_offsets.size(), emit_index);
 }
 
+TEST_F(SegmentPKIteratorTest, BudgetedChunksPreservePhysicalOffsetsAndEof) {
+    auto source = make_iter({{2, 200}, {2, 202}, {1, 204}});
+    SegmentPKIterator iter;
+    ASSERT_TRUE(
+            iter.init(source, make_pkey_schema(), true, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, false, 2).ok());
+    size_t total = 0;
+    while (!iter.done()) {
+        auto current = iter.current();
+        EXPECT_LE(current.chunk->num_rows(), 2);
+        EXPECT_EQ(200 + total, current.physical_rowid_offset);
+        EXPECT_EQ(200, iter.physical_rowid_base());
+        total += current.chunk->num_rows();
+        iter.next();
+    }
+    EXPECT_TRUE(iter.status().ok());
+    EXPECT_EQ(5, total);
+}
+
 } // namespace starrocks::lake

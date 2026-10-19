@@ -983,6 +983,12 @@ CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+
+// Preserve hot shared-data PK index memtables and evict SST read state by decayed frequency.
+// Experimental; keep disabled until pressure and publish-latency validation is complete.
+CONF_mBool(lake_pk_index_partial_eviction, "false");
+// Maximum admission wait before taking tablet or shard locks; a timeout is reported separately.
+CONF_mInt32(lake_pk_index_publish_wait_timeout_ms, "30000");
 // Metadata cache limit for shared-nothing mode. Not working for PK table now.
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%

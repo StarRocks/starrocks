@@ -27,7 +27,8 @@
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
+    const size_t rows = _max_chunk_rows > 0 ? _max_chunk_rows : 4096;
+    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, rows));
     auto chunk_container = _pk_column_chunk->clone_empty();
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (_iter != nullptr) {
@@ -58,8 +59,9 @@ Status SegmentPKIterator::_load() {
                 return st;
             }
             TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
-            if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                               _pk_column_chunk->num_rows() >= min_rows_per_task)) {
+            if (_lazy_load &&
+                (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
+                 _pk_column_chunk->num_rows() >= (_max_chunk_rows > 0 ? _max_chunk_rows : min_rows_per_task))) {
                 break;
             }
         }
@@ -88,10 +90,11 @@ Status SegmentPKIterator::_load() {
 }
 
 Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                               PrimaryKeyEncodingType encoding_type, bool defer_data_load) {
+                               PrimaryKeyEncodingType encoding_type, bool defer_data_load, size_t max_chunk_rows) {
     _iter = iter;
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
+    _max_chunk_rows = max_chunk_rows;
     _defer_data_load = defer_data_load;
     _begin_rowid_offsets.push_back(0);
     RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
