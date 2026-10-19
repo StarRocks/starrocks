@@ -335,7 +335,13 @@ public abstract class BaseAction implements IAction {
             ByteBuf decodeBuf = null;
             try {
                 buf = Unpooled.copiedBuffer(ByteBuffer.wrap(parts[1].getBytes()));
-                decodeBuf = Base64.decode(buf);
+                try {
+                    decodeBuf = Base64.decode(buf);
+                } catch (IllegalArgumentException e) {
+                    // Not Base64 at all: as unusable as a missing header, so the caller answers
+                    // 401 rather than letting the decoder's exception surface as a 500.
+                    return null;
+                }
                 String authString = decodeBuf.toString(CharsetUtil.UTF_8);
                 if (authString.isEmpty()) {
                     return null;
