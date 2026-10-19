@@ -1579,6 +1579,76 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
     EXPECT_TRUE(spherical.value(6));
 }
 
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsFiltersRoundedOrientation) {
+    // PostGIS 3.6.4: SELECT ST_Intersects(ST_GeomFromText(lhs), ST_GeomFromText(rhs)) is false.
+    // Multiplication by powers of two preserves the counterexample, even below unit coordinates.
+    constexpr const char* wkts[] = {"POLYGON ((0 0,1048576 1048577,0 1,0 0))",
+                                    "POLYGON ((2097151.999999925 2097153.999999925,3145727.999999865 3145730.999999865,"
+                                    "2097151.999999925 2097154.999999925,2097151.999999925 2097153.999999925))"};
+    for (int exponent : {-1000, -300, -22, 0, 300, 990}) {
+        for (double offset : {0.0, 1e7}) {
+            if (offset != 0 && exponent != 0) continue;
+            for (int reflection : {1, -1}) {
+                Columns inputs;
+                for (const auto* wkt : wkts) {
+                    WkbGeometry polygon;
+                    ASSERT_TRUE(WkbCodec::parse_wkt(wkt, &polygon, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                    for (auto& ring : polygon.rings) {
+                        for (auto& point : ring) {
+                            point.x = reflection * std::ldexp(point.x, exponent) + offset;
+                            point.y = std::ldexp(point.y, exponent) + offset;
+                        }
+                    }
+                    std::string bytes;
+                    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+                    auto column = GeoColumn::create(GeoColumnDescriptor{
+                            geometry_type().geo_type.value(),
+                            {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+                    column->append_wkb(Slice(bytes));
+                    inputs.emplace_back(std::move(column));
+                }
+                for (int form = 0; form < 4; ++form) {
+                    Columns columns = {form & 1 ? ConstColumn::create(inputs[0], 1) : inputs[0],
+                                       form & 2 ? ConstColumn::create(inputs[1], 1) : inputs[1]};
+                    auto forward = GeoFunctions::st_geometry_intersects(nullptr, columns);
+                    ASSERT_TRUE(forward.ok()) << forward.status();
+                    ColumnViewer<TYPE_BOOLEAN> result(forward.value());
+                    EXPECT_FALSE(result.value(0)) << exponent << ":" << reflection << ":" << offset << ":" << form;
+                    std::swap(columns[0], columns[1]);
+                    auto reverse = GeoFunctions::st_geometry_intersects(nullptr, columns);
+                    ASSERT_TRUE(reverse.ok()) << reverse.status();
+                    ColumnViewer<TYPE_BOOLEAN> reversed(reverse.value());
+                    EXPECT_FALSE(reversed.value(0)) << exponent << ":" << reflection << ":" << offset << ":" << form;
+                }
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsKeepsTolerantEndpointContacts) {
+    auto left = geometry({"POLYGON ((0 0,1 1,0 1,0 0))"});
+    for (int ulps : {0, 1, 16, 32, 64}) {
+        const double p = 1 + ulps * std::numeric_limits<double>::epsilon();
+        const double q = 2 + ulps * std::numeric_limits<double>::epsilon();
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        polygon.rings = {{{p, p}, {q, p}, {p, q}, {p, p}}};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        auto right = GeoColumn::create(
+                GeoColumnDescriptor{geometry_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+        right->append_wkb(Slice(bytes));
+        auto forward = GeoFunctions::st_geometry_intersects(nullptr, {left, right});
+        auto reverse = GeoFunctions::st_geometry_intersects(nullptr, {right, left});
+        ASSERT_TRUE(forward.ok()) << forward.status();
+        ASSERT_TRUE(reverse.ok()) << reverse.status();
+        ColumnViewer<TYPE_BOOLEAN> result(forward.value()), reversed(reverse.value());
+        EXPECT_EQ(ulps <= 32, result.value(0)) << ulps;
+        EXPECT_EQ(ulps <= 32, reversed.value(0)) << ulps;
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIsTranslationInvariant) {
     const auto type = geometry_type("EPSG:3857", 3857);
     auto left = geometry({"POLYGON ((0 0, 1 1, 0 1, 0 0))",

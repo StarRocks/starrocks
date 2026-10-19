@@ -27,6 +27,10 @@
 #include <string_view>
 #include <vector>
 
+#define BOOST_MATH_DISABLE_FLOAT128
+#define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -40,6 +44,7 @@
 #include "geo/geo_topology_simplify.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "gutil/compiler_util.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -521,9 +526,48 @@ PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, 
     return result;
 }
 
-long double planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
-    return (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y) -
-           (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+ALWAYS_NOINLINE int exact_planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    // Finite binary64 coordinates scaled by 2^1074 have magnitude <2^2098.
+    // Differences need at most 2099 bits and the determinant 4199, so
+    // 4224 fixed bits suffice without heap allocations.
+    using Integer = boost::multiprecision::number<
+            boost::multiprecision::cpp_int_backend<4224, 4224, boost::multiprecision::signed_magnitude,
+                                                   boost::multiprecision::unchecked, void>,
+            boost::multiprecision::et_off>;
+    const auto scaled = [](double value) -> Integer {
+        const uint64_t bits = std::bit_cast<uint64_t>(value);
+        const uint64_t exponent = (bits >> 52) & 0x7ff;
+        Integer result = bits & ((uint64_t{1} << 52) - 1);
+        if (exponent != 0) {
+            result += uint64_t{1} << 52;
+            result <<= exponent - 1;
+        }
+        return bits >> 63 ? -result : result;
+    };
+    const Integer ax = scaled(a.x), ay = scaled(a.y);
+    const Integer bx = scaled(b.x), by = scaled(b.y);
+    const Integer cx = scaled(c.x), cy = scaled(c.y);
+    const Integer determinant = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    return (determinant > 0) - (determinant < 0);
+}
+
+int planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    const long double left = (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y);
+    const long double right = (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+    const long double determinant = left - right;
+    // Eight epsilons bound the rounding of differences, products and subtraction.
+    constexpr long double kErrorBound = 8 * std::numeric_limits<long double>::epsilon();
+    const long double error = kErrorBound * (std::abs(left) + std::abs(right));
+    bool certain = std::abs(determinant) > error;
+    // A wide long double exponent range also covers the smallest binary64
+    // product's error bound. Narrower platforms must check for underflow.
+    if constexpr (std::numeric_limits<long double>::min_exponent >
+                  2 * (std::numeric_limits<double>::min_exponent - std::numeric_limits<double>::digits) -
+                          std::numeric_limits<long double>::digits) {
+        certain &= error >= std::numeric_limits<long double>::min();
+    }
+    if (!certain) [[unlikely]] return exact_planar_orientation(a, b, c);
+    return determinant > 0 ? 1 : -1;
 }
 
 bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c,
@@ -532,11 +576,10 @@ bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, c
         planar_point_on_segment(d, a, b)) {
         return true;
     }
-    const auto abc = planar_orientation(a, b, c);
-    const auto abd = planar_orientation(a, b, d);
-    const auto cda = planar_orientation(c, d, a);
-    const auto cdb = planar_orientation(c, d, b);
-    return (abc > 0) != (abd > 0) && (cda > 0) != (cdb > 0);
+    const int abc = planar_orientation(a, b, c);
+    const int abd = planar_orientation(a, b, d);
+    if (abc * abd >= 0) return false;
+    return planar_orientation(c, d, a) * planar_orientation(c, d, b) < 0;
 }
 
 bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
