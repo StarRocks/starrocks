@@ -1054,7 +1054,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.STR_TO_DATE:
                 case FunctionSet.STR2DATE:
                     minValue = Utils.MIN_DATETIME_EPOCH_SECOND;
-                    maxValue = callOperator.getFnName().equalsIgnoreCase(FunctionSet.STR2DATE) ?
+                    maxValue = callOperator.getType().isDate() ?
                             Utils.MAX_DATE_EPOCH_SECOND : Utils.MAX_DATETIME_EPOCH_SECOND;
                     distinctValues = Math.min(rowCount * (1 - nullsFraction),
                             left.getDistinctValuesCount() * right.getDistinctValuesCount());

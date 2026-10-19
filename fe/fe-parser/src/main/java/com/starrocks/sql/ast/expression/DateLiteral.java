@@ -29,7 +29,7 @@ import java.util.TimeZone;
 public class DateLiteral extends LiteralExpr {
 
     private static final DateLiteral MIN_DATE = new DateLiteral(0, 1, 1);
-    private static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
+    public static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
     private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0, 0);
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59, 999999);
     // The default precision of datetime is 0
