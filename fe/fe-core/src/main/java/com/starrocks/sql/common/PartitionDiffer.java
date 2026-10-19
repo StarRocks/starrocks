@@ -42,6 +42,10 @@ public abstract class PartitionDiffer {
         this.queryRewriteParams = queryRewriteParams;
     }
 
+    protected boolean isQueryRewrite() {
+        return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
+    }
+
     /**
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>

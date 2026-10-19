@@ -79,6 +79,9 @@ public class TaskRun implements Comparable<TaskRun> {
     // The MV's version map reset epoch as the job's first run read it, propagated across batch runs so that a reset
     // since the job started fences every later batch too, see MVVersionManager#publishRefreshScheme.
     public static final String MV_VERSION_MAP_RESET_EPOCH = "MV_VERSION_MAP_RESET_EPOCH";
+    // Fingerprints of the non-ref olap base tables as the job's first run read them, propagated across batch runs so
+    // that the last run records their versions only if no batch read a different state, see MVVersionManager.
+    public static final String MV_NON_REF_TABLE_FINGERPRINT = "MV_NON_REF_TABLE_FINGERPRINT";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -96,8 +99,11 @@ public class TaskRun implements Comparable<TaskRun> {
     //  the task run's result.
     // - `MV_VERSION_MAP_RESET_EPOCH` keeps a run started after a version map reset from merging into a batch of a job
     //   started before it, whose versions the reset fences.
+    // - `MV_NON_REF_TABLE_FINGERPRINT` keeps a batch from merging into one of a job whose batches read another state of
+    //   the non-ref tables, whose fingerprint would then be lost.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, MV_VERSION_MAP_RESET_EPOCH);
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, MV_VERSION_MAP_RESET_EPOCH,
+            MV_NON_REF_TABLE_FINGERPRINT);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
