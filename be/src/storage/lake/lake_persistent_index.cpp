@@ -20,6 +20,7 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -43,13 +44,14 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
 #include "storage/lake/pk_index_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -63,11 +65,26 @@ LakePersistentIndex::~LakePersistentIndex() {
     _reset_index_state();
 }
 
+// Move the lake_pk_index_cache_* gauges by the difference between two snapshots of one index.
+static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from,
+                                      const LakePersistentIndexMemoryStats& to) {
+    auto delta = [](size_t old_bytes, size_t new_bytes) {
+        return static_cast<int64_t>(new_bytes) - static_cast<int64_t>(old_bytes);
+    };
+    auto* metrics = StorageMetrics::instance();
+    metrics->lake_pk_index_cache_memtable_bytes.increment(delta(from.memtable_bytes, to.memtable_bytes));
+    metrics->lake_pk_index_cache_index_block_bytes.increment(delta(from.index_block_bytes, to.index_block_bytes));
+    metrics->lake_pk_index_cache_filter_bytes.increment(delta(from.filter_bytes, to.filter_bytes));
+    metrics->lake_pk_index_cache_delvec_bytes.increment(delta(from.delvec_bytes, to.delvec_bytes));
+}
+
 // unload() used to be free: LakePrimaryIndex held this class behind a shared_ptr and reset it, so the
 // destructor did the work and a reload always started from a fresh object. Merged, unload() has to
 // put the members back by hand, which makes the destructor the specification -- and the order in it
 // load-bearing. Cancel the flushes still in flight BEFORE dropping the memtables they write through.
 void LakePersistentIndex::_reset_index_state() {
+    move_cache_memory_metrics(_reported_memory_stats, {});
+    _reported_memory_stats = {};
     if (_memtable) {
         _memtable->clear();
     }
@@ -118,7 +135,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
 Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -185,7 +202,7 @@ bool LakePersistentIndex::is_memtable_full() const {
     const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
-            _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+            _tablet_mgr->primary_key_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
     return mem_size_exceed || mem_tracker_exceed;
 }
@@ -231,7 +248,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -647,7 +664,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     //    ignore. max_rss_rowid = del_rssid<<32|UINT32_MAX (delete-row sentinel; del_rssid uses this
     //    publish's largest rowset id) makes the tombstone sstable the newest fileset layer so it shadows
     //    the existing rows -- ordering identical to a memtable-flushed tombstone.
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -802,7 +819,7 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
     if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -949,7 +966,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         }
     }
     // generation_version == 0 means "use this publish's version"; a non-zero override is passed by
-    // the reshard flush (see UpdateManager::flush_pk_memtable). The builder still holds the
+    // the reshard flush (see PrimaryKeyManager::flush_pk_memtable). The builder still holds the
     // previous persisted sstable_meta here (before finalize_sstable_meta below), which
     // assign_generation_versions uses to carry existing versions forward.
     if (generation_version == 0) {
@@ -1728,6 +1745,34 @@ size_t LakePersistentIndex::memory_usage() const {
     return mem_usage;
 }
 
+LakePersistentIndexMemoryStats LakePersistentIndex::memory_stats() const {
+    LakePersistentIndexMemoryStats stats;
+    if (_memtable != nullptr) {
+        stats.memtable_bytes += _memtable->memory_usage();
+    }
+    for (const auto& inactive_memtable : _inactive_memtables) {
+        stats.memtable_bytes += inactive_memtable->memory_usage();
+    }
+    for (const auto& fileset_ptr : _sstable_filesets) {
+        if (fileset_ptr == nullptr) {
+            continue;
+        }
+        fileset_ptr->for_each_sstable([&](const PersistentIndexSstable& sstable) {
+            stats.index_block_bytes += sstable.index_block_memory_usage();
+            stats.filter_bytes += sstable.filter_memory_usage();
+            stats.delvec_bytes += sstable.delvec_memory_usage();
+        });
+    }
+    return stats;
+}
+
+size_t LakePersistentIndex::refresh_cache_memory_metrics() {
+    const auto stats = memory_stats();
+    move_cache_memory_metrics(_reported_memory_stats, stats);
+    _reported_memory_stats = stats;
+    return stats.charged_bytes();
+}
+
 // ---- Row-oriented publish API ------------------------------------------------------------------
 //
 // The batch methods above take encoded keys as a Slice array. These take a rowset's primary-key
@@ -2135,13 +2180,19 @@ Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMet
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_load_lock);
     if (_loaded) {
+        if (_status.ok()) {
+            StorageMetrics::instance()->lake_pk_index_cache_hit_total.increment(1);
+        }
         return _status;
     }
     // The index cache default-constructs its entries, so the tablet arrives with the first load
     // rather than with the object. Set both before loading, so init() does not read a default 0.
     _tablet_mgr = tablet_mgr;
     _tablet_id = metadata->id();
+    const int64_t load_start_us = MonotonicMicros();
     _status = _do_lake_load(metadata, base_version, builder);
+    StorageMetrics::instance()->lake_pk_index_load_total.increment(1);
+    StorageMetrics::instance()->lake_pk_index_load_duration_us.increment(MonotonicMicros() - load_start_us);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
     if (_status.ok()) {
         // update data version when persistent index load finish.

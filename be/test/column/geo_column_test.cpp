@@ -56,12 +56,10 @@ TEST(GeoColumnTest, RawBytesAndDistinctSemantics) {
         EXPECT_EQ(bytes, column->get_wkb(0).to_string());
         EXPECT_EQ(kind, column->descriptor().type.logical_type);
         EXPECT_FALSE(column->is_binary());
-        EXPECT_FALSE(column->has_wkb_cache());
         auto info = column->inspect_wkb(0);
         ASSERT_TRUE(info.ok());
         EXPECT_EQ(1, info->geometry_type);
         EXPECT_FALSE(info->empty);
-        EXPECT_TRUE(column->has_wkb_cache());
         EXPECT_EQ(GEO_VALIDATION_STATE_UNKNOWN, column->descriptor().storage.validation_state);
     }
 }
@@ -76,16 +74,13 @@ TEST(GeoColumnTest, BatchIngestionAndCopyOnWrite) {
     ColumnPtr shared = column;
     auto changed = Column::mutate(shared);
     auto& changed_geo = static_cast<GeoColumn&>(*changed);
-    EXPECT_FALSE(changed_geo.has_wkb_cache());
     changed_geo.append_wkb_batch(values, 3);
     EXPECT_EQ(3, column->size());
     EXPECT_EQ(6, changed_geo.size());
-    EXPECT_TRUE(column->has_wkb_cache());
     EXPECT_EQ(e, changed_geo.get_wkb(4).to_string());
-    column->reserve(100, 8192); // Cached info owns no pointers to the reallocated bytes.
+    column->reserve(100, 8192); // Inspection results own no pointers to the reallocated bytes.
     EXPECT_TRUE(column->inspect_wkb(0).ok());
     column->append_wkb_batch(values, 3);
-    EXPECT_FALSE(column->has_wkb_cache());
 }
 
 TEST(GeoColumnTest, NullAndEmptyAreDifferent) {
@@ -138,7 +133,7 @@ TEST(GeoColumnTest, CopyFilterReplicateAndConst) {
     EXPECT_EQ(5, constant->size());
 }
 
-TEST(GeoColumnTest, CacheOwnershipCloneAndBufferLifetime) {
+TEST(GeoColumnTest, InspectionCloneAndBufferLifetime) {
     auto column = GeoColumn::create(descriptor());
     {
         auto bytes = point();
@@ -150,17 +145,15 @@ TEST(GeoColumnTest, CacheOwnershipCloneAndBufferLifetime) {
     const auto usage = column->memory_usage();
     EXPECT_GT(usage, column->byte_size());
     EXPECT_TRUE(column->inspect_wkb(0).ok());
-    EXPECT_EQ(usage, column->memory_usage()); // fixed-size cache, no growth per lookup
+    EXPECT_EQ(usage, column->memory_usage()); // Inspection does not retain memory.
     auto copy = column->clone();
-    EXPECT_FALSE(static_cast<const GeoColumn&>(*copy).has_wkb_cache());
     column->reset_column();
-    EXPECT_FALSE(column->has_wkb_cache());
     EXPECT_EQ(point(), copy->get(0).get_slice().to_string());
     copy.reset();
     EXPECT_EQ(1, info->geometry_type); // no borrowed WKB pointers
 }
 
-TEST(GeoColumnTest, EveryMutationInvalidatesCache) {
+TEST(GeoColumnTest, InspectionAndDescriptorAfterMutations) {
     auto column = GeoColumn::create(descriptor());
     auto source = GeoColumn::create(descriptor());
     source->append_wkb(Slice(empty_collection()));
@@ -168,49 +161,35 @@ TEST(GeoColumnTest, EveryMutationInvalidatesCache) {
         column->reset_column();
         column->append_wkb(Slice(point()));
         ASSERT_TRUE(column->inspect_wkb(0).ok());
-        ASSERT_TRUE(column->has_wkb_cache());
     };
     prepare();
     column->append_wkb(Slice(point()));
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->append(*source);
-    EXPECT_FALSE(column->has_wkb_cache());
     const uint32_t index[] = {0};
     prepare();
     column->append_selective(*source, index, 0, 1);
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->append_value_multiple_times(*source, 0, 2);
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->append_default();
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->resize(0);
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->assign(2, 0);
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->remove_first_n_values(1);
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->fill_default(Filter{1});
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->filter(Filter{0});
-    EXPECT_FALSE(column->has_wkb_cache());
     prepare();
     column->update_rows(*source, index);
-    EXPECT_FALSE(column->has_wkb_cache());
     EXPECT_TRUE(column->inspect_wkb(0)->empty);
     auto other = GeoColumn::create(descriptor(GEO_LOGICAL_TYPE_GEOMETRY));
     other->append_wkb(Slice(empty_collection()));
     ASSERT_TRUE(other->inspect_wkb(0).ok());
     column->swap_column(*other);
-    EXPECT_FALSE(column->has_wkb_cache());
-    EXPECT_FALSE(other->has_wkb_cache());
     EXPECT_EQ(GEO_LOGICAL_TYPE_GEOMETRY, column->descriptor().type.logical_type);
 }
 
@@ -306,16 +285,10 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
     EXPECT_EQ(explicit_desc, explicit_column->descriptor());
 }
 
-TEST(GeoColumnTest, BoundedInspectionDoesNotTrustProducerFlag) {
+TEST(GeoColumnTest, InspectionDoesNotTrustProducerFlag) {
     auto desc = descriptor();
     desc.storage.validation_state = GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED;
-    GeoWkbLimits limits;
-    limits.max_bytes = 20;
-    auto column = GeoColumn::create(desc, limits);
-    column->append_wkb(Slice(point()));
-    EXPECT_FALSE(column->inspect_wkb(0).ok());
-    EXPECT_FALSE(column->has_wkb_cache());
-    column->reset_column();
+    auto column = GeoColumn::create(desc);
     column->append_wkb(Slice("invalid"));
     EXPECT_FALSE(column->inspect_wkb(0).ok());
     EXPECT_FALSE(column->inspect_wkb(1).ok());
@@ -385,7 +358,6 @@ TEST(GeoColumnTest, MysqlWkbUsesExistingBinaryEncoding) {
             }
         }
     }
-    EXPECT_FALSE(column->has_wkb_cache());
 }
 
 TEST(GeoColumnTest, GenericCreationPreservesTypedPayload) {

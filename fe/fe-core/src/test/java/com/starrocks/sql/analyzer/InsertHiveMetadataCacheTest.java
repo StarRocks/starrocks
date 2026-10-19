@@ -25,9 +25,8 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 /**
- * Whether an INSERT reading Hive bypasses the connector metadata cache. With the auto refresh every source is
- * refreshed for the statement, so the cache is current and used; without it the cache is bypassed (#22272) unless
- * enable_hive_metadata_cache_with_insert allows it.
+ * Whether an INSERT reading Hive bypasses the connector metadata cache. It does, with the auto refresh or without it
+ * (#22272), unless enable_hive_metadata_cache_with_insert allows the cache.
  */
 public class InsertHiveMetadataCacheTest extends ConnectorPlanTestBase {
 
@@ -47,8 +46,17 @@ public class InsertHiveMetadataCacheTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testAutoRefreshKeepsMetadataCache() throws Exception {
-        UtFrameUtils.parseStmtWithNewParser(INSERT_FROM_HIVE, connectContext);
+    public void testAutoRefreshBypassesMetadataCache() throws Exception {
+        // Dropping a refreshed Hive source from the cache is not enough: a background refresh could write back what
+        // it read before the drop. Planned in full, so the source refresh runs too.
+        UtFrameUtils.getPlanAndFragment(connectContext, INSERT_FROM_HIVE);
+        Assertions.assertEquals(Optional.of(false), connectContext.getUseConnectorMetadataCache());
+    }
+
+    @Test
+    public void testAutoRefreshKeepsMetadataCacheWhenAllowed() throws Exception {
+        connectContext.getSessionVariable().setEnableHiveMetadataCacheWithInsert(true);
+        UtFrameUtils.getPlanAndFragment(connectContext, INSERT_FROM_HIVE);
         Assertions.assertEquals(Optional.empty(), connectContext.getUseConnectorMetadataCache());
     }
 

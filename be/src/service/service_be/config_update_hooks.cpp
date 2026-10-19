@@ -67,8 +67,8 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
@@ -334,7 +334,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                 config::update_memory_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        st = StorageEnv::GetInstance()->lake_update_manager()->update_primary_index_memory_limit(
+        st = StorageEnv::GetInstance()->lake_primary_key_manager()->update_primary_index_memory_limit(
                 config::update_memory_limit_percent);
 #endif
         return st;
@@ -343,6 +343,16 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(config::dictionary_cache_refresh_threadpool_size);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("load_sink_close_thread_pool_num_max", [=]() -> Status {
+        if (config::load_sink_close_thread_pool_num_max <= 0) {
+            return Status::InvalidArgument("load_sink_close_thread_pool_num_max must be greater than 0");
+        }
+        auto* thread_pool = runtime_env_ptr->load_sink_close_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::load_sink_close_thread_pool_num_max);
         }
         return Status::OK();
     });

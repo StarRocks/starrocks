@@ -129,6 +129,32 @@ TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, _runtime_env->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(registry->update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     auto* executor =
             static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());

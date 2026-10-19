@@ -143,8 +143,8 @@ public abstract class LakeOnlineRewriteJobBase
     //     the window in roughly the configured time instead of spinning until the job's own deadline.
     //
     // Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is already durable, so a
-    // replayed job simply starts its window over - which is the right behavior, since a failover re-runs
-    // the partition anyway.
+    // replayed job simply starts its window over for unfinished partitions, which may be re-run after
+    // failover. Durably completed partitions keep their progress.
     private final transient Map<Long, Long> rewriteRetrySpentMs = Maps.newHashMap();
 
     @Override
@@ -161,8 +161,8 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * Durable per-partition state of the rewrite, journaled inside {@link #partitionStates}. Built
      * incrementally: shadowIndex/tabletCount/boundaries in PENDING, watershedVersion in WAITING_TXN,
-     * rewriteTxnId in RUNNING, commitVersion at the flip. The version/txn fields are boxed (null = not
-     * yet set) to preserve the absent-key semantics the six maps had.
+     * rewriteTxnId/rewriteFinished/sourceEmpty in RUNNING, commitVersion at the flip. The version/txn fields
+     * are boxed (null = not yet set) to preserve the absent-key semantics the six maps had.
      */
     static final class PartitionRewriteState {
         @SerializedName(value = "shadowIndex")
@@ -178,10 +178,13 @@ public abstract class LakeOnlineRewriteJobBase
         @SerializedName(value = "commitVersion")
         Long commitVersion;
         // True when the rewrite INSERT wrote no source op_write because the partition was empty at the
-        // watershed (zero tablet commit infos). Drives the flip's shadow_rewrite_source_empty so BE
+        // watershed (zero loaded rows). Drives the flip's shadow_rewrite_source_empty so BE
         // synthesizes an empty op_schema_change@W for ANY W (null = not yet determined).
         @SerializedName(value = "sourceEmpty")
         Boolean sourceEmpty;
+        // Set only after a matching VISIBLE rewrite and its empty-source fact are durably journaled.
+        @SerializedName(value = "rewriteFinished")
+        boolean rewriteFinished;
 
         PartitionRewriteState() {}
 
@@ -193,6 +196,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.rewriteTxnId = other.rewriteTxnId;
             this.commitVersion = other.commitVersion;
             this.sourceEmpty = other.sourceEmpty;
+            this.rewriteFinished = other.rewriteFinished;
         }
     }
 
@@ -779,8 +783,7 @@ public abstract class LakeOnlineRewriteJobBase
      * <p>On the first run ({@code watershedTxnId == -1}) it allocates the watershed transaction id,
      * exposes each partition's shadow {@link MaterializedIndex} to the catalog with
      * {@code visibleTxnId = watershedTxnId} (so loads after the watershed double-write base+shadow
-     * while loads before it ignore the shadow), runs the next-txn guard, and re-journals
-     * {@code WAITING_TXN}.
+     * while loads before it ignore the shadow) and re-journals {@code WAITING_TXN}.
      *
      * <p>On each subsequent run it waits until every transaction before the watershed has finished;
      * only then does it capture each physical partition's visible version as the per-partition
@@ -837,10 +840,11 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * First {@code WAITING_TXN} run: allocate the watershed transaction id and expose every
      * partition's shadow index to the catalog so post-watershed loads double-write it. Mirrors the
-     * standard lake schema-change watershed, including the next-txn guard that detects a transaction
-     * sneaking in between allocating the watershed and exposing the shadow.
+     * standard lake schema-change watershed; a writer that resolved tablets before the exposure is
+     * rejected at commit by LakeTableTxnStateListener rather than detected here.
      */
     private void allocateWatershedAndExposeShadow() throws AlterCancelException {
+        long nextTxnId;
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == jobTableState(), table.getState());
@@ -848,17 +852,15 @@ public abstract class LakeOnlineRewriteJobBase
             watershedGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
 
-            // Getting the watershed and exposing the shadow are not atomic. A transaction beginning in
-            // between is safe as long as it gets the tablet list (under the database lock) after
-            // beginTransaction(), so it sees the shadow and writes to it; all import transactions do
-            // this. beginTransaction()-first is a convention not a requirement, so guard against a new
-            // beginTransaction() succeeding in the window, which would let a txn > watershedTxnId miss
-            // the shadow.
-            long nextTxnId = peekNextTransactionId();
-            if (nextTxnId != watershedTxnId + 1) {
-                throw new AlterCancelException(
-                        "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-            }
+            // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
+            // by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+            // check here: a writer that begins its transaction before resolving tablets does so under the
+            // table READ lock, which this WRITE lock excludes, so any such transaction with an id above the
+            // watershed sees the shadow and writes it. A writer that resolves tablets first (replication, a
+            // bypass-write client with cached metadata) is rejected at commit by
+            // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the shadow and commits before
+            // this job makes the shadow NORMAL. The next id is kept only as a breadcrumb for the log line below.
+            nextTxnId = peekNextTransactionId();
 
             // Re-journal WAITING_TXN so the allocated watershed and the exposure are durable; the
             // exposure is idempotent, so a leader transfer re-runs it harmlessly.
@@ -869,8 +871,8 @@ public abstract class LakeOnlineRewriteJobBase
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("exposeShadow");
         }
-        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index",
-                jobId, watershedTxnId);
+        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index, next txn id"
+                + " after exposing it: {}", jobId, watershedTxnId, nextTxnId);
     }
 
     /**
@@ -895,6 +897,7 @@ public abstract class LakeOnlineRewriteJobBase
             Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                     shadowIndex.getState());
             shadowIndex.setVisibleTxnId(watershedTxnId);
+            shadowIndex.setShadowWatershedTxnId(watershedTxnId);
             physicalPartition.createRollupIndex(shadowIndex);
         }
     }
@@ -971,7 +974,7 @@ public abstract class LakeOnlineRewriteJobBase
         }
 
         for (RewritePlan plan : plans) {
-            switch (classifyRewrite(plan.physicalPartitionId)) {
+            switch (recordRewriteProgress(plan.physicalPartitionId)) {
                 case DONE:
                     // This partition's rewrite has published. Drop its failure streak and its retry
                     // diagnostic: errMsg is persisted, so a message journaled before a leader failover
@@ -996,34 +999,8 @@ public abstract class LakeOnlineRewriteJobBase
             }
         }
 
-        // All partitions' rewrites have published (every partition's rewrite txn is VISIBLE here).
-        // Record whether each rewrite produced a source op_write: a partition empty at the watershed
-        // rewrites zero rows, so there is no source op_write on object storage. The flip passes this to BE
-        // (shadow_rewrite_source_empty) so it synthesizes an empty op_schema_change@W instead of 404ing on
-        // the absent source -- this is the empty-at-W>1 case (a repeat online rewrite of an empty range
-        // partition; W==1 empty is already handled by BE). Read from the rewrite txn's (persisted)
-        // InsertTxnCommitAttachment, the same attachment classifyRewrite already relies on, so a leader
-        // failover that re-runs this recovers it; and journaled by the persist below.
-        for (long physicalPartitionId : partitionStates.keySet()) {
-            PartitionRewriteState state = partitionStates.get(physicalPartitionId);
-            if (state.sourceEmpty == null && state.rewriteTxnId != null) {
-                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionState(dbId, state.rewriteTxnId);
-                if (txnState != null) {
-                    state.sourceEmpty = rewriteSourceEmpty(txnState);
-                } else {
-                    // The rewrite txn just went VISIBLE (classifyRewrite returned DONE this tick), so it is
-                    // normally still present; a replay that finds it evicted re-runs the rewrite instead of
-                    // reaching here. If it is nonetheless unavailable, leave sourceEmpty unset (treated as
-                    // false at the flip -> BE loads the source). That is safe for a non-empty partition; an
-                    // empty-at-W>1 partition would fall back to the pre-fix flip-publish retry until
-                    // recovered. Log it so the rare degradation is diagnosable rather than silent.
-                    LOG.warn("online rewrite job {}: rewrite txn {} state unavailable while recording "
-                            + "sourceEmpty for partition {}; leaving it unset", jobId, state.rewriteTxnId,
-                            physicalPartitionId);
-                }
-            }
-        }
+        // Every partition has durably recorded completion and its empty-source fact. The flip uses
+        // those saved flags even if transaction history has since been evicted.
         this.finishedTimeMs = System.currentTimeMillis();
         persistStateChange(this, JobState.FINISHED_REWRITING);
 
@@ -1035,15 +1012,16 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     protected enum RewriteStatus {
-        DONE,        // the journaled rewrite txn published (op_schema_change@W converted) -> skip
+        DONE,        // durably completed or a verified published rewrite (op_schema_change@W converted) -> skip
         IN_FLIGHT,   // committed but not yet visible -> wait for the next tick
         NEEDS_RUN    // never started / dropped / aborted -> (re-)run the watershed-pinned INSERT
     }
 
     /**
-     * Classify a partition's rewrite by the status of its journaled rewrite txn id. A missing journaled
-     * id, a txn the manager no longer knows about, or an ABORTED txn all mean "(re-)run". Never reuse an
-     * aborted txn id (BE forbids it), so the next attempt journals a fresh id.
+     * Classify a partition's rewrite without changing progress. Durable completion remains DONE after
+     * transaction-history eviction. Otherwise a missing journaled id, a txn the manager no longer knows
+     * about, or an ABORTED txn all mean "(re-)run". Never reuse an aborted txn id (BE forbids it), so the
+     * next attempt journals a fresh id.
      *
      * <p>The journaled id is the next-txn-id <em>peeked</em> before the INSERT began, then reconciled to
      * the actual id only after {@code execute()} returns. A concurrent txn slipping into the peek-&gt;begin
@@ -1060,14 +1038,24 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     private RewriteStatus classifyRewrite(PartitionRewriteState partitionState) {
+        if (partitionState != null && partitionState.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
         Long txnId = (partitionState == null) ? null : partitionState.rewriteTxnId;
         if (txnId == null) {
             return RewriteStatus.NEEDS_RUN;
         }
         TransactionState txnState =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        return classifyRewrite(partitionState, txnState);
+    }
+
+    private RewriteStatus classifyRewrite(PartitionRewriteState partitionState, TransactionState txnState) {
+        if (partitionState != null && partitionState.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
         if (txnState == null) {
-            // The manager no longer has this txn (never committed, or expired before publish): re-run.
+            // Completion was never observed durably before txn eviction: safely re-run.
             return RewriteStatus.NEEDS_RUN;
         }
         TransactionStatus status = txnState.getTransactionStatus();
@@ -1089,6 +1077,36 @@ public abstract class LakeOnlineRewriteJobBase
         }
         // PREPARE / PREPARED / COMMITTED: in flight, wait.
         return RewriteStatus.IN_FLIGHT;
+    }
+
+    /** Record newly verified completion before yielding to an unfinished sibling. */
+    private RewriteStatus recordRewriteProgress(long physicalPartitionId) {
+        PartitionRewriteState state = partitionStates.get(physicalPartitionId);
+        if (state.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
+        TransactionState txnState = state.rewriteTxnId == null ? null
+                : GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, state.rewriteTxnId);
+        RewriteStatus status = classifyRewrite(state, txnState);
+        if (status != RewriteStatus.DONE) {
+            return status;
+        }
+
+        // Verify identity and capture loadedRows from the SAME transaction snapshot: a second lookup
+        // could lose the empty-at-W>1 fact to transaction-history eviction.
+        boolean sourceEmpty = rewriteSourceEmpty(txnState);
+        LakeOnlineRewriteJobBase snapshot = (LakeOnlineRewriteJobBase) copyForPersist();
+        PartitionRewriteState persistedState = snapshot.partitionStates.get(physicalPartitionId);
+        persistedState.sourceEmpty = sourceEmpty;
+        persistedState.rewriteFinished = true;
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(snapshot, wal -> {
+            // Publish completion last, and only after durable commit. A rejected write leaves both live
+            // fields untouched, allowing the next scheduler tick to retry recording progress.
+            state.sourceEmpty = sourceEmpty;
+            state.rewriteFinished = true;
+        });
+        return RewriteStatus.DONE;
     }
 
     /**
@@ -2115,10 +2133,9 @@ public abstract class LakeOnlineRewriteJobBase
      * once the watershed has been allocated, the catalog exposure of the shadow index. Every step is
      * guarded so a second replay is a no-op (no double-add of meta, tablets or the exposed index).
      *
-     * <p>The catalog state in RUNNING is identical to WAITING_TXN; the only RUNNING-specific state is
-     * the in-flight rewrite txns, which are resumed by the live scheduler's three-state resume
-     * ({@code rewriteTxnId} is journaled) after the leader takes over — never by replay, which must not
-     * re-run the rewrite INSERT. The caller holds the database write lock.
+     * <p>The catalog state in RUNNING is identical to WAITING_TXN. RUNNING also tracks rewrite txn ids
+     * and durable partition completion, which the live scheduler resumes or skips after leader takeover.
+     * Replay must not re-run the rewrite INSERT. The caller holds the database write lock.
      */
     private void reconstructShadowCatalogState(@NotNull OlapTable table) {
         registerShadowIndexMeta(table);

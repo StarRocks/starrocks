@@ -21,12 +21,6 @@ Any `NULL` argument gives `NULL`. Array elements are unique valid cell indexes, 
 
 `H3_PolygonToCells` selects cells using H3's standard center-fill (`flags = 0`), rather than exact spherical `ST_Contains`/`ST_Covers`. A nonempty polygon may return `[]`; the result is neither conservative coverage nor a safe replacement for exact spatial predicates. H3's longitude/latitude fill model has limitations near the antimeridian, poles, and for large polygons. A center on a boundary follows H3 4.5.0 rules. The array can be used as an approximate index, followed by the appropriate exact predicate when correctness needs it.
 
-H3 4.5.0 does not expose cancellation inside a single `polygonToCells` call. StarRocks checks query state (cancellation and memory limits) before and after H3 calls whose work depends on the input, and between rows.
-
-The `WITH_H3` BE build option is enabled by default. A BE built with `WITH_H3=OFF` returns a controlled unsupported error for these functions.
-
-The `WITH_H3` BE build option is enabled by default. A BE built with `WITH_H3=OFF` returns a controlled unsupported error for these functions.
-
 ## Examples
 
 ```sql

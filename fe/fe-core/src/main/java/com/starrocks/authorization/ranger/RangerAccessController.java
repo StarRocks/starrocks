@@ -17,6 +17,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
@@ -42,6 +43,12 @@ import static java.util.Locale.ENGLISH;
 public abstract class RangerAccessController extends ExternalAccessController implements AccessTypeConverter {
     private static final Logger LOG = LoggerFactory.getLogger(RangerAccessController.class);
     protected final RangerBasePlugin rangerPlugin;
+
+    // Row filters and masks come from Ranger, per user and resource: any table may have one.
+    @Override
+    public boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return true;
+    }
 
     public RangerAccessController(String serviceType, String serviceName) {
         RangerPluginConfig rangerPluginContext = buildRangerPluginContext(serviceType, serviceName);

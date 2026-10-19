@@ -38,10 +38,10 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/sort_key_sampler.h"
@@ -2150,8 +2150,8 @@ protected:
         _test_dir = paths[0].path + "/sort_key_sampling_splitter_test";
         _location_provider = std::make_shared<FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
     }
 
     void TearDown() override {
@@ -2726,7 +2726,7 @@ protected:
     std::string _test_dir;
     std::shared_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
     // (first key, key count) of every segment the last write_tablet* call wrote, in write order.
     std::vector<std::pair<int64_t, int64_t>> _segment_key_runs;

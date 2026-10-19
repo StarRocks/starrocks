@@ -68,6 +68,9 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // BRPC stub cache expire configurations
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
+// The interval of the background check that resets BRPC stubs whose connection has failed, default 10 seconds.
+// A value <= 0 disables the check.
+CONF_mInt32(brpc_failed_channel_reset_interval_s, "10");
 
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
 // - true: StarRocks will attempt to resolve hostnames to IPs.
@@ -1702,6 +1705,13 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Whether a scheduled lake primary-key compaction switches to base compaction on its own once the
+// tablet's deletes reach one of the two thresholds below. Off by default: the rows threshold is an
+// absolute count, so on a large tablet whose existing keys keep being updated or deleted it is
+// reached again soon after each base compaction, and every such round rewrites up to
+// update_compaction_ratio_threshold of the tablet's data. A manual ALTER TABLE ... COMPACT runs
+// base compaction whether or not this is on.
+CONF_mBool(lake_pk_compaction_base_enable_delete_trigger, "false");
 // Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
 // tablet from cumulative selection (the size-tiered small-file merge, which favors small
 // freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
@@ -1714,6 +1724,7 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 //      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
 // Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
 // deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+// Both thresholds are checked only while lake_pk_compaction_base_enable_delete_trigger is on.
 CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
 CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
@@ -2131,6 +2142,12 @@ CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
+// Memory limit of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.
+// A shuffle keeps one partial chunk per destination pipeline driver and only sends it once it holds
+// vector_chunk_size rows; with many destinations x dop and wide rows those partial chunks can retain the whole
+// input. When their total size exceeds this limit they are all sent and cleared; if the capacity they keep is
+// still above half of the limit, partial chunks are released until it is not. A value <= 0 disables the limit.
+CONF_mInt64(exchange_sink_buffer_flush_threshold_bytes, "67108864");
 
 CONF_mInt64(wait_apply_time, "6000"); // 6s
 
@@ -2542,6 +2559,11 @@ CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
+// Maximum number of threads that run the final close of load sinks, which writes the combined txn log to object
+// storage in shared-data. Running it here keeps a slow PUT off the pipeline poller and the pipeline executor threads.
+// When all threads are busy, further closes wait in the pool's queue, which is unbounded: no close is dropped.
+// Must be positive. Runtime changes resize the existing pool without interrupting running closes.
+CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
 // shard info of one tablet it owns per partition along with them, and the coordinator uses it to

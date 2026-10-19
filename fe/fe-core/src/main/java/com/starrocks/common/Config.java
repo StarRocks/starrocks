@@ -671,7 +671,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
-    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`,
+    // and in the task run definitions archived to `_statistics_.task_run_history`
     // if task count is big, mask process can be time consuming
     @ConfField(mutable = true)
     public static boolean enable_task_info_mask_credential = true;
@@ -4709,7 +4710,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
             "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
-            "Combine values for multiple types.")
+            "Combine values for multiple types. Does not apply to a materialized view whose "
+            + "refresh_mode is INCREMENTAL, which is maintained from base table changes by definition.")
     public static int mv_refresh_force_partition_type = 0;
 
     /**

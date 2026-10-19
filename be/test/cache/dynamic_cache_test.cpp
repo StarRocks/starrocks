@@ -97,6 +97,25 @@ TEST(DynamicCacheTest, release_last_pin_evicts_if_over_capacity) {
     EXPECT_EQ(0, cache.object_size());
 }
 
+// peek_object_size() is for monitoring: it must neither pin an entry nor move it in the LRU list, or reading
+// sizes would change which entry gets evicted next.
+TEST(DynamicCacheTest, peek_object_size_keeps_lru_order) {
+    DynamicCache<int32_t, int64_t> cache(/*capacity=*/2);
+    for (int i = 0; i < 2; i++) {
+        auto* e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        cache.release(e);
+    }
+    // 0 is the least recently used entry. get() would have made it the most recently used.
+    EXPECT_EQ(1, cache.peek_object_size(0));
+    EXPECT_EQ(1, cache.peek_object_size(1));
+    EXPECT_EQ(0, cache.peek_object_size(2));
+
+    cache.set_capacity(1);
+    EXPECT_EQ(0, cache.peek_object_size(0));
+    EXPECT_EQ(1, cache.peek_object_size(1));
+}
+
 // Default tracker accounting is additive: a plain consume() walks the ancestor
 // chain, so the cache tracker AND its root (process) tracker both grow. This is the
 // long-standing behavior other DynamicCache users rely on.

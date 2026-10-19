@@ -2525,9 +2525,9 @@ public class GlobalStateMgr {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
-                    loadMgr.cancelResidualJob();
+                    loadMgr.endResidualInsertJobs();
                 } catch (Throwable t) {
-                    LOG.warn("load manager cancel residual job failed", t);
+                    LOG.warn("load manager end residual insert jobs failed", t);
                 }
             }
         };
@@ -3414,6 +3414,10 @@ public class GlobalStateMgr {
      */
     public Function getFunction(Function desc, Function.CompareMode mode) {
         return functionSet.getFunction(desc, mode);
+    }
+
+    public String getGrantableAIFunctionFamily(String name) {
+        return functionSet.getGrantableAIFunctionFamily(name);
     }
 
     public boolean isAggregateFunction(String functionName) {

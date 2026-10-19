@@ -1914,6 +1914,10 @@ public class SchemaChangeHandler extends AlterHandler {
         if (bfColumns == null) {
             bfFpp = 0;
         }
+        // Removing an absent filter is a no-op after empty-set normalization.
+        if (bfColumns == null && (oriBfColumns == null || oriBfColumns.isEmpty())) {
+            hasBfChange = false;
+        }
 
         Set<ColumnId> bfColumnIds = null;
         if (bfColumns != null) {
@@ -3170,12 +3174,14 @@ public class SchemaChangeHandler extends AlterHandler {
 
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
                 modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
-        if (schemaChangeData.isShortKeyChanged()) {
+        if (schemaChangeData.isShortKeyChanged() || schemaChangeData.isBloomFilterColumnsChanged()) {
             fastSchemaEvolution = false;
         }
 
         // After finalAnalyze, so a statement it already rejects keeps its own message.
         checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
+        checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(),
+                indexMetaIdToSchema);
 
         if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
@@ -3267,6 +3273,37 @@ public class SchemaChangeHandler extends AlterHandler {
                         throw new DdlException(e.getDetailMsg());
                     }
                 }
+            }
+        }
+    }
+
+    // A cast can skip reading an old filter, but future writes still build one from the new schema.
+    // Check only changed types: legacy metadata on an untouched column must not block other ALTERs.
+    // DecimalV3 is writable by the BE for an inherited filter even though CREATE uses a stricter policy.
+    private static void checkBloomFilterColumnsForTypeChange(OlapTable table, Set<ColumnId> bfColumns,
+                                                             Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+            throws DdlException {
+        if (bfColumns == null || bfColumns.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (ColumnId columnId : bfColumns) {
+                Column newColumn = newColumns.get(columnId);
+                Column oldColumn = oldColumns.get(columnId);
+                if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                    continue;
+                }
+                Type type = newColumn.getType();
+                if ((type.isFixedPointType() && !type.isTinyint()) || type.isDecimalOfAnyVersion()
+                        || type.isDateType() || type.isStringType()) {
+                    continue;
+                }
+                String columnName = oldColumn != null ? oldColumn.getName()
+                        : Column.removeNamePrefix(newColumn.getName());
+                throw new DdlException("Invalid bloom filter column '" + columnName
+                        + "': unsupported type " + newColumn.getPrimitiveType());
             }
         }
     }
@@ -4526,9 +4563,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Translate a catalog {@link Index} to the thrift payload consumed by
-     * BE's do_process_add_index_only. BE re-resolves column names via the
-     * new tablet schema, so we pass names, not unique ids.
+     * Build the persisted fast-path index definition. Keep column display names
+     * for compatibility with existing journaled jobs; LakeTableAddIndexJob
+     * converts a copy to stable ColumnIds before sending it to BE.
      */
     private static com.starrocks.thrift.TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
         com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();

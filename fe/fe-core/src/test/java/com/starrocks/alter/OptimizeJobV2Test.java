@@ -36,7 +36,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -52,10 +54,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +76,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @BeforeAll
     public static void beforeAll() {
         DDLTestBase.beforeAll();
+        // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
+        // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
+        // the spy, so its failure cancels the job and drops the spy's temp partitions.
+        try {
+            UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         UtFrameUtils.setUpForPersistTest();
     }
 
@@ -758,9 +770,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
-        // Detach the job from schema change handler to prevent the background scheduler
-        // from mutating its state in parallel with the UT driven state machine, which
-        // occasionally drops temp partitions and leads to flaky failures.
+        // The test drives the spy from here on, so the handler must not hold the original. Detaching alone does
+        // not keep the scheduler away from it, which is why beforeAll() stops the scheduler.
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
 
@@ -848,6 +859,33 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testFollowerReplayOfFinishedJobKeepsLiveTabletsUnmarked() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_follower_force_delete");
+        // The follower starts from the catalog as it was before the optimize.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        OptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        OptimizeJobV2 finishedEntry =
+                (OptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        // The swap already made the temp partitions of the entry the live partitions of the table.
+        Assertions.assertEquals(new HashSet<>(finishedEntry.getTmpPartitionIds()),
+                partitionIds(followerTable.getPartitions()));
+        List<Long> liveTabletIds = tabletIds(followerTable.getPartitions());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
     public void testFollowerReplayDropsTempPartitionsOfCancelledJob() throws Exception {
         OlapTable table = createPartitionedTable("t_optimize_follower_cancelled");
         // The follower starts from the catalog as it was before the optimize.
@@ -905,6 +943,97 @@ public class OptimizeJobV2Test extends DDLTestBase {
         restored.getInfo(restoredRows);
         Assertions.assertFalse(expectedRows.isEmpty());
         Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
+
+    @Test
+    public void testRewriteTasksOutliveJobDeadline() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_task_expiry");
+        OptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        // Read the names now: a done job drops its rewrite task list.
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(2, taskNames.size());
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.removeExpiredTasks();
+        long deadline = job.createTimeMs + job.getTimeoutMs();
+        Map<String, Long> expireTimes = new HashMap<>();
+        for (String taskName : taskNames) {
+            Task task = taskManager.getTask(taskName);
+            Assertions.assertNotNull(task, taskName);
+            Assertions.assertTrue(task.getExpireTime() >= deadline + Config.task_ttl_second * 1000L,
+                    taskName + " expires at " + task.getExpireTime() + ", less than a task TTL after the job deadline "
+                            + deadline);
+            expireTimes.put(taskName, task.getExpireTime());
+        }
+        assertExpireTimesPersisted(expireTimes);
+    }
+
+    @Test
+    public void testExpiredRewriteTasksAreRemoved() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_task_expired");
+        OptimizeJobV2 job = submitOptimize(table);
+        try (MockedStatic<TaskBuilder> ignored = backdateRewriteTasks(job.getTimeoutMs())) {
+            runToRunning(job);
+        }
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(2, taskNames.size());
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        for (String taskName : taskNames) {
+            Assertions.assertNotNull(taskManager.getTask(taskName), taskName);
+        }
+
+        taskManager.removeExpiredTasks();
+
+        for (String taskName : taskNames) {
+            Assertions.assertNull(taskManager.getTask(taskName), taskName);
+        }
+    }
+
+    private static List<String> rewriteTaskNames(OptimizeJobV2 job) {
+        return job.getOptimizeTasks().stream().map(Task::getName).collect(Collectors.toList());
+    }
+
+    /**
+     * Makes the rewrite tasks built in the calling thread look as if they were created so long ago that the job
+     * timeout and the task TTL have both elapsed since.
+     */
+    private static MockedStatic<TaskBuilder> backdateRewriteTasks(long timeoutMs) {
+        long ageMs = timeoutMs + Config.task_ttl_second * 1000L + 1000L;
+        return Mockito.mockStatic(TaskBuilder.class, invocation -> {
+            Object result = invocation.callRealMethod();
+            if (result instanceof OptimizeTask) {
+                OptimizeTask task = (OptimizeTask) result;
+                task.setCreateTime(task.getCreateTime() - ageMs);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * A follower gets the expiry of each task from the task creation journal entry, and keeps it across an image
+     * save and load.
+     */
+    private static void assertExpireTimesPersisted(Map<String, Long> expireTimes) throws Exception {
+        TaskManager follower = new TaskManager();
+        for (int i = 0; i < expireTimes.size(); i++) {
+            follower.replayCreateTask(
+                    (Task) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TASK));
+        }
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        follower.saveTasksV2(image.getImageWriter());
+        TaskManager restored = new TaskManager();
+        restored.loadTasksV2(image.getMetaBlockReader());
+
+        for (Map.Entry<String, Long> entry : expireTimes.entrySet()) {
+            for (TaskManager taskManager : List.of(follower, restored)) {
+                Task task = taskManager.getTask(entry.getKey());
+                Assertions.assertNotNull(task, entry.getKey());
+                Assertions.assertEquals(entry.getValue(), task.getExpireTime(), entry.getKey());
+            }
+        }
     }
 
     private static OlapTable createPartitionedTable(String tableName) throws Exception {
@@ -1093,6 +1222,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : tabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
+        }
+    }
+
+    private static void assertNotMarkedForceDelete(List<Long> tabletIds) {
+        Assertions.assertFalse(tabletIds.isEmpty());
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long tabletId : tabletIds) {
+            Assertions.assertFalse(invertedIndex.getForceDeleteTablets().containsKey(tabletId), "tablet " + tabletId);
         }
     }
 

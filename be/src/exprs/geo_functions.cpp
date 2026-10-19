@@ -16,8 +16,10 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -115,6 +117,24 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     return GeoInput{geo, nullable, constant};
 }
 
+bool decode_canonical_geometry_point(Slice wkb, WkbCoordinate* point) {
+    // Finite canonical XY POINTs survive parse/write without normalization.
+    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
+    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
+        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
+        return false;
+    }
+    std::array<uint64_t, 2> coordinates;
+    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
+    if constexpr (std::endian::native != std::endian::little) {
+        coordinates[0] = std::byteswap(coordinates[0]);
+        coordinates[1] = std::byteswap(coordinates[1]);
+    }
+    point->x = std::bit_cast<double>(coordinates[0]);
+    point->y = std::bit_cast<double>(coordinates[1]);
+    return std::isfinite(point->x) && std::isfinite(point->y);
+}
+
 template <LogicalType Type, bool X>
 StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -128,6 +148,13 @@ StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
         if (input.is_null(row)) {
             result.append_null();
             continue;
+        }
+        if constexpr (Type == TYPE_GEOMETRY) {
+            WkbCoordinate point;
+            if (decode_canonical_geometry_point(input.wkb(row), &point)) {
+                result.append(X ? point.x : point.y);
+                continue;
+            }
         }
         WkbGeometry geometry;
         RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, semantics));
@@ -1124,6 +1151,26 @@ StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& column
     return result;
 }
 
+bool is_valid_canonical_geography_point(Slice wkb) {
+    // A finite XY POINT in canonical little-endian WKB needs no normalization.
+    // Checking its complete structure and CRS84 coordinates here avoids a
+    // geometry allocation and a decode/encode round trip at the SQL boundary.
+    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
+    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
+        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
+        return false;
+    }
+    std::array<uint64_t, 2> coordinates;
+    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
+    if constexpr (std::endian::native != std::endian::little) {
+        coordinates[0] = std::byteswap(coordinates[0]);
+        coordinates[1] = std::byteswap(coordinates[1]);
+    }
+    const double longitude = std::bit_cast<double>(coordinates[0]);
+    const double latitude = std::bit_cast<double>(coordinates[1]);
+    return is_valid_crs84_coordinate(longitude, latitude);
+}
+
 template <LogicalType InputType>
 StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns& columns, bool text) {
     const size_t size = columns[0]->size();
@@ -1139,8 +1186,12 @@ StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns&
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        if (!text && is_valid_canonical_geography_point(value)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry)
                              : WkbCodec::parse_wkb(value, &geometry);
         std::string wkb;
@@ -1180,8 +1231,13 @@ StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& 
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        WkbCoordinate point;
+        if (!text && decode_canonical_geometry_point(value, &point)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry, semantics)
                              : WkbCodec::parse_wkb(value, &geometry, semantics);
         std::string wkb;

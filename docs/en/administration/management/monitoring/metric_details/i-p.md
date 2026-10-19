@@ -291,6 +291,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_pk_index_cache_delvec_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the delete vectors attached to the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. Only SST files ingested together with a delete vector, such as compaction output, carry one. This memory is not charged to the Primary Key index cache, so `INDEX_MEM` in `information_schema.be_tablets` does not include it.
+
+## `lake_pk_index_cache_filter_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the Bloom filters of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_index_block_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table found the tablet's Primary Key index already loaded in the Primary Key index cache. Together with `lake_pk_index_load_total`, the hit ratio of the cache is `hit / (hit + load)`.
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the index blocks of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_load_duration_us`
+
+- Unit: us
+- Type: Cumulative
+- Description: Shared-data only. Total time spent on the Primary Key index loads counted by `lake_pk_index_load_total`. Divide it by `lake_pk_index_load_total` to get the average time to load the index of one tablet.
+
+## `lake_pk_index_load_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
+
 ## `lake_tablet_location_handoff_entries`
 
 - Unit: Count
@@ -339,6 +381,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The current size of the RPC thread pool, which is used for handling Routine Load and loading via table functions. The default value is 10, with a maximum value of 1000. This value is dynamically adjusted based on the usage of the thread pool.
+
+## `load_sink_close_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes that are running in the load sink close thread pool. In a shared-data cluster, each close writes the combined transaction log of a load to object storage.
+
+## `load_sink_close_execute_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total execution time of completed load sink close tasks, including waits and object-storage writes performed during close. Updated when each task finishes.
+
+## `load_sink_close_executed_tasks_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of load sink close tasks completed by the thread pool, including closes that return an error.
+
+## `load_sink_close_pending_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total time completed load sink close tasks spent waiting in the thread pool queue. Updated when each task finishes; currently queued tasks are not yet included.
+
+## `load_sink_close_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes waiting in the queue of the load sink close thread pool. A value that keeps growing means object-storage writes are slower than loads finish.
+
+## `load_sink_close_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the load sink close thread pool.
+
+## `load_sink_close_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
 
 ## `local_column_pool_bytes (Deprecated)`
 
@@ -573,6 +657,18 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Count
 - Description: Current length of the block queue of PipelineDriverPoller in the pipeline engine.
+
+## `pipe_poller_max_driver_check`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by the slowest single driver check in one pass of PipelineDriverPoller. A large value means that checking one blocked driver held up the whole pass.
+
+## `pipe_poller_pass`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by one pass of PipelineDriverPoller over its blocked drivers. Each executor set has a single poller thread, so a long pass delays every driver that waits on it. The maximum in the recent window is exposed as `pipe_poller_pass_max_latency`.
 
 ## `pipe_prepare_pool_queue_len`
 

@@ -15,7 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <span>
 
 #include "column/binary_column.h"
@@ -43,7 +42,7 @@ public:
     // Untyped physical placeholders, not an inferred CRS or a native SQL value.
     explicit GeoColumn(size_t size = 0);
     GeoColumn(const TypeDescriptor& type, size_t size);
-    explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
+    explicit GeoColumn(GeoColumnDescriptor descriptor);
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
@@ -56,16 +55,13 @@ public:
     void append_wkb_batch(const Slice* values, size_t count);
     // Copies source bytes; source and this column must not alias.
     void append_wkb_column(const BinaryColumn& source);
-    // Whole-column transport. WKB remains opaque; no parsed cache crosses the wire.
+    // Whole-column transport. WKB remains opaque.
     int64_t serialized_column_size() const;
     StatusOr<uint8_t*> serialize_column(uint8_t* dst) const;
     StatusOr<const uint8_t*> deserialize_column(const uint8_t* src, const uint8_t* end);
     // Borrowed slices are read-only and follow Column lifetime rules: mutation may invalidate them.
-    // Inspection returns a pointer-free value. Only a mutable column can fill the cache:
-    // immutable shared columns never acquire mutable execution state through const access.
-    StatusOr<GeoWkbInfo> inspect_wkb(size_t row);
-    bool has_wkb_cache() const { return _cache.has_value(); }
-    void clear_wkb_cache() { _cache.reset(); }
+    // Inspection returns a pointer-free value without retaining execution state.
+    StatusOr<GeoWkbInfo> inspect_wkb(size_t row) const;
 
     size_t size() const override { return _data->size(); }
     size_t capacity() const override { return _data->capacity(); }
@@ -123,16 +119,9 @@ public:
 private:
     bool _is_storage_placeholder() const;
     const GeoColumn& _source(const Column& src);
-    struct CachedWkb {
-        size_t row;
-        GeoWkbInfo info;
-    };
     GeoColumnDescriptor _descriptor;
-    GeoWkbLimits _limits;
     // Exclusive ownership: no mutable BinaryColumn escape hatch or shared backing buffers.
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
-    // One fixed-size entry; no heap allocation, geometry objects or source-buffer references.
-    std::optional<CachedWkb> _cache;
 };
 
 } // namespace starrocks

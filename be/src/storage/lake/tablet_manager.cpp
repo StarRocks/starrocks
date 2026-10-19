@@ -46,12 +46,12 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
@@ -123,15 +123,15 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 }
 #endif
 
-TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
                              int64_t cache_capacity, const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
           _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
-          _update_mgr(update_mgr),
+          _primary_key_mgr(primary_key_mgr),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {
-    _update_mgr->set_tablet_mgr(this);
+    _primary_key_mgr->set_tablet_mgr(this);
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
@@ -246,8 +246,8 @@ void TabletManager::prune_metacache() {
     _metacache->prune();
 }
 
-UpdateManager* TabletManager::update_mgr() {
-    return _update_mgr;
+PrimaryKeyManager* TabletManager::primary_key_mgr() {
+    return _primary_key_mgr;
 }
 
 // NOTE: if you add a new field here, also update construct_initial_metadata() and
@@ -767,7 +767,7 @@ Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::
                          << "error: " << drop_status;
             return s; // return error so load tablet meta can be retried
         }
-        LOG(INFO) << "clear corrupted cache for " << metadata_location;
+        LOG(INFO) << "clear corrupted cache for " << metadata_location << ", re-reading after: " << s;
         return Status::OK();
     } else {
         return s;
@@ -1127,38 +1127,73 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
     }
     ASSIGN_OR_RETURN(auto serialized_string,
                      read_bundle_metadata_file_with_meter(input_fs, location, /*skip_fill_local_cache=*/true));
-
-    auto file_size = serialized_string.size();
-    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
     TabletMetadataPtrs metadatas;
-    metadatas.reserve(bundle_metadata->tablet_meta_pages().size());
-    for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
-        const PagePointerPB& page_pointer = tablet_page.second;
-        auto offset = page_pointer.offset();
-        auto size = page_pointer.size();
-        RETURN_IF(offset + size > file_size,
-                  Status::InternalError(
-                          fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
-                                      tablet_page.first, offset, size, file_size)));
-
-        auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
-        std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
-        auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_page.first);
-        RETURN_IF(crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
-                          olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second,
-                  Status::Corruption(fmt::format("mismatched checksum of tablet {} metadata in bundle metadata",
-                                                 tablet_page.first)));
-        RETURN_IF(
-                !metadata->ParseFromArray(metadata_str.data(), size),
-                Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
-                                                  tablet_page.first, offset, size)));
-        RETURN_IF(metadata->id() != tablet_page.first,
-                  Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
-                                                    tablet_page.first, metadata->id())));
-        normalize_tablet_metadata_after_load(metadata.get());
-        metadatas.push_back(std::move(metadata));
-    }
+    RETURN_IF_ERROR(parse_bundle_metadata_with_reread(
+            input_fs, location, /*skip_fill_local_cache=*/true, std::move(serialized_string),
+            [&](const std::string& content, const BundleTabletMetadataPtr& footer) -> Status {
+                metadatas.clear();
+                metadatas.reserve(footer->tablet_meta_pages().size());
+                for (const auto& [tablet_id, _] : footer->tablet_meta_pages()) {
+                    ASSIGN_OR_RETURN(auto metadata, parse_bundle_tablet_page(location, content, *footer, tablet_id));
+                    RETURN_IF(metadata->id() != tablet_id,
+                              Status::InternalError(
+                                      fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
+                                                  tablet_id, metadata->id())));
+                    metadatas.push_back(std::move(metadata));
+                }
+                return Status::OK();
+            }));
     return metadatas;
+}
+
+Status TabletManager::parse_bundle_metadata_with_reread(
+        FileSystem* fs, const std::string& path, bool skip_fill_local_cache, std::string content,
+        const std::function<Status(const std::string& content, const BundleTabletMetadataPtr& footer)>& consume) {
+    auto parse = [&]() -> Status {
+        ASSIGN_OR_RETURN(auto footer, parse_bundle_tablet_metadata(path, content));
+        return consume(content, footer);
+    };
+    auto st = parse();
+    if (!st.is_corruption()) {
+        return st;
+    }
+    RETURN_IF_ERROR(corrupted_tablet_meta_handler(st, path));
+    TRACE("re-read bundle metadata $0 after: $1", path, st.to_string());
+    // Read the file directly rather than through a read shared with concurrent callers, which may have
+    // started before the drop and would return the same bytes.
+    ASSIGN_OR_RETURN(content, read_bundle_metadata_file_with_meter(fs, path, skip_fill_local_cache));
+    return parse();
+}
+
+StatusOr<MutableTabletMetadataPtr> TabletManager::parse_bundle_tablet_page(const std::string& path,
+                                                                           const std::string& content,
+                                                                           const BundleTabletMetadataPB& footer,
+                                                                           int64_t tablet_id) {
+    auto page_it = footer.tablet_meta_pages().find(tablet_id);
+    if (page_it == footer.tablet_meta_pages().end()) {
+        return Status::NotFound(strings::Substitute("can not find tablet $0 from shared tablet metadata", tablet_id));
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint64_t size = page_it->second.size();
+    // Two comparisons, since offset + size can wrap around when a footer without a checksum holds garbage.
+    if (offset > content.size() || size > content.size() - offset) {
+        return Status::Corruption(
+                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small($2/$3)", path,
+                                    content.size(), offset, size));
+    }
+    const char* page = content.data() + offset;
+    auto crc_it = footer.tablet_meta_page_checksum().find(tablet_id);
+    if (crc_it != footer.tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page, size) != crc_it->second) {
+        return Status::Corruption(
+                strings::Substitute("mismatched checksum of tablet $0 metadata in shared metadata", tablet_id));
+    }
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page, size)) {
+        return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+    return metadata;
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
@@ -1207,53 +1242,16 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
                      _bundle_tablet_metadata_group.Do(real_path, read_bundle_metadata_from_remote));
     g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
-    auto file_size = serialized_string.size();
     BundleTabletMetadataPtr bundle_metadata;
-    auto bundle_metadata_status = parse_bundle_tablet_metadata(path, serialized_string);
-    if (!bundle_metadata_status.ok()) {
-        RETURN_IF_ERROR(corrupted_tablet_meta_handler(bundle_metadata_status.status(), path));
-        // read bundle metadata again
-        ASSIGN_OR_RETURN(serialized_string, read_bundle_metadata_from_remote());
-        file_size = serialized_string.size();
-        ASSIGN_OR_RETURN(bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
-    } else {
-        bundle_metadata = bundle_metadata_status.value();
-    }
-
-    auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
-    size_t offset = 0;
-    size_t size = 0;
-    if (meta_it == bundle_metadata->tablet_meta_pages().end()) {
-        return Status::NotFound(strings::Substitute("can not find tablet $0 from shared tablet metadata", tablet_id));
-    } else {
-        const PagePointerPB& page_pointer = meta_it->second;
-        offset = page_pointer.offset();
-        size = page_pointer.size();
-    }
-
-    if (file_size < offset + size) {
-        return Status::Corruption(
-                strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small($2/$3)", path,
-                                    file_size, offset, size));
-    }
-
-    auto metadata = std::make_shared<TabletMetadataPB>();
-    std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
-    auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_id);
-    if (crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
-        olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second) {
-        auto corrupted_status = Status::Corruption(
-                strings::Substitute("mismatched checksum of tablet $0 metadata in shared metadata", tablet_id));
-        (void)corrupted_tablet_meta_handler(corrupted_status, path);
-        return corrupted_status;
-    }
-    if (!metadata->ParseFromArray(metadata_str.data(), size)) {
-        auto corrupted_status =
-                Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
-        (void)corrupted_tablet_meta_handler(corrupted_status, path);
-        return corrupted_status;
-    }
-    normalize_tablet_metadata_after_load(metadata.get());
+    MutableTabletMetadataPtr metadata;
+    RETURN_IF_ERROR(parse_bundle_metadata_with_reread(
+            file_system.get(), path, /*skip_fill_local_cache=*/!cache_opts.fill_data_cache,
+            std::move(serialized_string),
+            [&](const std::string& content, const BundleTabletMetadataPtr& footer) -> Status {
+                ASSIGN_OR_RETURN(metadata, parse_bundle_tablet_page(path, content, *footer, tablet_id));
+                bundle_metadata = footer;
+                return Status::OK();
+            }));
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
     auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
