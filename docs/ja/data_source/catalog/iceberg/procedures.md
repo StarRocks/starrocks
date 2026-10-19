@@ -327,6 +327,60 @@ ALTER TABLE iceberg.sales.order
 EXECUTE add_files(location = 's3://bucket/data/order/data.parquet', file_format = 'parquet');
 ```
 
+### Equality Delete ファイルの追加
+
+既存のファイルを Equality Delete ファイルとして Iceberg テーブルに追加します。ファイル内の各行は、Equality 列の値が同じテーブルの行を削除します。ファイルは新しいスナップショットでコミットされるため、テーブルにすでにあるデータに適用されます。このプロシージャは、Parquet および ORC ファイル形式をサポートしており、フォーマットバージョン 2 以降の Iceberg テーブルが必要です。
+
+ファイルは `add_files` と同じ方法で検出されます。パーティションテーブルの場合、各ファイルのパーティションはパス内の `<column>=<value>` ディレクトリから取得され、削除はそのパーティションのデータファイルにのみ適用されます。いずれかのパーティション列のディレクトリがパスにないファイルは拒否されます。Identity パーティション変換のみサポートされています。非パーティションテーブルの場合、削除はテーブル全体に適用されます。現在のパーティション仕様がパーティション化されていて、古いパーティション仕様で書き込まれたデータファイルがテーブルに残っている場合、削除はそれらのファイルに適用されないため、このプロシージャはエラーになります。現在以外のパーティション仕様で書き込まれた Equality Delete ファイルがテーブルに残っている場合も、クエリエンジンはデフォルトで複数のパーティション仕様にまたがる Equality Delete を読み取れないため、このプロシージャはエラーになります。セッション変数 `enable_read_iceberg_equality_delete_with_partition_evolution` が `true` の場合、このチェックはスキップされます。ファイル内のいずれかの列が Iceberg フィールド ID を持つ場合、そのファイルのすべての Equality 列がテーブルと同じフィールド ID を持つ必要があり、そうでない場合はファイルが拒否されます。Equality 列の型をテーブル列の型として損失なく読み取れないファイル（例: テーブル列が `INT` でファイルの列が文字列）も拒否されます。フィールド ID を持たないファイルは列名でテーブルと照合されるため、ファイルの追加後にその Equality 列の名前を変更しないでください。変更すると削除が適用されなくなります。このプロシージャは `WHERE` 句をサポートしていません。
+
+#### `add_equality_delete_files` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE add_equality_delete_files(
+    location = '<location>',
+    file_format = '<format>',
+    equality_columns = '<column>[, <column> ...]'
+    [, recursive = <boolean>]
+)
+```
+
+#### パラメータ
+
+##### `location`
+
+- 説明: Equality Delete ファイルの追加元となるディレクトリパスまたはファイルパス。
+- タイプ: String
+- 必須: はい
+
+##### `file_format`
+
+- 説明: Equality Delete ファイルの形式。サポートされている値: 'parquet'、'orc'。
+- タイプ: String
+- 必須: はい
+
+##### `equality_columns`
+
+- 説明: 削除時に照合するテーブル列のカンマ区切りリスト。各列は `INT`、`BIGINT`、`STRING`、`DATE` のいずれかの型のトップレベル列である必要があり、すべてのファイルがこれらの列をすべて含んでいる必要があります。
+- タイプ: String
+- 必須: はい
+
+##### `recursive`
+
+- 説明: `location` のサブディレクトリを再帰的にスキャンするかどうか。
+- タイプ: Boolean
+- デフォルト: true
+- 必須: いいえ
+
+#### 例
+
+`s3://bucket/deletes/order/` 配下のファイル（例: `s3://bucket/deletes/order/dt=2024-01-01/delete.parquet`）のいずれかの行と `id` が一致する行を削除します。
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE add_equality_delete_files(location = 's3://bucket/deletes/order/', file_format = 'parquet', equality_columns = 'id');
+```
+
 ### テーブルの登録
 
 メタデータファイルを使用して Iceberg テーブルを登録します。このプロシージャを使用すると、データを移行せずに既存の Iceberg テーブルを catalog に追加できます。

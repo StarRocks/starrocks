@@ -1992,6 +1992,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         clause.setAnalyzedArgs(constantArgs);
 
+        // add_equality_delete_files registers every file under its location; a WHERE clause would be silently ignored
+        if (clause.getWhere() != null &&
+                icebergTableProcedure.getOperation() == IcebergTableOperation.ADD_EQUALITY_DELETE_FILES) {
+            throw new SemanticException("WHERE is not supported for %s", icebergTableProcedure.getProcedureName());
+        }
+
         if (clause.getWhere() != null && icebergTableProcedure.getOperation() == IcebergTableOperation.REWRITE_DATA_FILES) {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             List<ColumnRefOperator> columnRefOperators = table.getBaseSchema()
