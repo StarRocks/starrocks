@@ -284,16 +284,11 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
-        loadCommittedTimestamp = System.currentTimeMillis();
-=======
-    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         loadCommittedTimestamp = txnState.getCommitTime();
->>>>>>> 44fbc30 ([BugFix] Finish or cancel residual INSERT jobs according to their transactions (#80711))
         if (txnCallback != null) {
             txnCallback.afterCommitted(txnState, txnOperated);
         }

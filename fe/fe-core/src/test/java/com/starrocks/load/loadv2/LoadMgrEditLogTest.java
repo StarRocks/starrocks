@@ -466,8 +466,7 @@ public class LoadMgrEditLogTest {
         if (status.isFinalStatus()) {
             txnState.setFinishTime(System.currentTimeMillis());
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logInsertTransactionState(txnState, wal -> {
-        });
+        GlobalStateMgr.getCurrentState().getEditLog().logInsertTransactionState(txnState);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState((TransactionState)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPSERT_TRANSACTION_STATE_V2));
     }
