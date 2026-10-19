@@ -599,6 +599,8 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
+            analyzeStatus.setCancelled(GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .isAnalyzeCancelled(analyzeStatus.getId()));
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             MetricRepo.COUNTER_FAILED_STATS_COLLECT_JOB.getMetric(statsJob.getName()).increase(1L);
             return analyzeStatus;
