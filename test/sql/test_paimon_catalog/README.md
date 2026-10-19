@@ -132,9 +132,11 @@ uses the StarRocks file reader. Native execution is also checked through the BE
 `PaimonNativeReader` profile. Global-index and system-table mode checks share one
 case each.
 
-AUTO keeps the StarRocks raw-file fast path and uses paimon-cpp for other ordinary
-data splits. System tables remain on JNI; global-index splits remain native even
-when JNI is requested. Explicit JNI is preserved for ordinary data splits.
+AUTO prefers compatible StarRocks raw-file reads, then compatible paimon-cpp reads,
+and otherwise selects JNI. System tables remain on JNI; global-index splits remain
+native even when JNI is requested. Explicit JNI is preserved for ordinary data splits.
+See the [reader routing README](../../../fe/fe-core/src/main/java/com/starrocks/connector/paimon/README.md)
+for the verified versions, compatibility boundaries and fallback reasons.
 
 The merge fixtures distinguish full-row replacement from partial updates using
 NULL inputs. Aggregation covers `sum` and `max`; first-row covers the compacted
