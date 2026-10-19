@@ -786,8 +786,10 @@ public class ExpressionStatisticsCalculatorTest {
         // test str_to_date function
         callOperator = new CallOperator(FunctionSet.STR_TO_DATE, DateType.DATETIME, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Utils.getLongFromDateTime(ConstantOperator.MIN_DATETIME),
+                columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Utils.getLongFromDateTime(ConstantOperator.MAX_DATETIME),
+                columnStatistic.getMaxValue(), 0.001);
         Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
 
         callOperator = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT, Lists.newArrayList(left, right));
