@@ -341,6 +341,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.nextVersion = this.visibleVersion + 1;
         this.dataVersion = this.visibleVersion;
         this.nextDataVersion = this.nextVersion;
+        // The restored history may reuse versions that row counts were proven at before the restore.
+        for (MaterializedIndex index : getAllMaterializedIndices(IndexExtState.ALL)) {
+            index.clearProvenRowCount();
+        }
         LOG.info("update partition {} version for restore: visible: {}, next: {}, dataVersion: {}, nextDataVersion: {}",
                 id, visibleVersion, nextVersion, dataVersion, nextDataVersion);
     }

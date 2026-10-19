@@ -219,9 +219,6 @@ public class TabletStatMgr extends FrontendDaemon {
                                 } // end for tablets
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
-                                if (!olapTable.isTempPartition(partition.getId())) {
-                                    totalRowCount += indexRowCount;
-                                }
                             } // end for indices
                         } // end for physical partitions
                     } // end for partitions
@@ -241,7 +238,11 @@ public class TabletStatMgr extends FrontendDaemon {
                                 Long indexRowCount =
                                         indexRowCountMap.get(Pair.create(physicalPartition.getId(), index.getId()));
                                 if (indexRowCount != null) {
-                                    index.setRowCount(indexRowCount);
+                                    long keptRowCount = updateIndexRowCount(index, indexRowCount,
+                                            physicalPartition.getVisibleVersion());
+                                    if (!olapTable.isTempPartition(partition.getId())) {
+                                        totalRowCount += keptRowCount;
+                                    }
                                 }
                             }
                         }
@@ -340,6 +341,18 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
             }
         }
+    }
+
+    /**
+     * Set the index count this round computed, unless the index holds a count the publish of the visible version
+     * proved: this round's BE snapshots may predate it, and every FE got that count from the same edit log.
+     *
+     * @return the count the index holds now, which is what BasicStatsMeta.totalRows must add up, so that a kept
+     *         proven count isn't undone there by this round's older one
+     */
+    static long updateIndexRowCount(MaterializedIndex index, long indexRowCount, long visibleVersion) {
+        index.setRowCountUnlessProven(indexRowCount, visibleVersion);
+        return index.getRowCount();
     }
 
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {

@@ -715,6 +715,9 @@ public class LeaderImpl {
         if (request.isSetFinish_tablet_infos()) {
             publishVersionTask.collectFirstLoadTabletStats(request.getFinish_tablet_infos());
         }
+        if (request.isSetTablet_versions()) {
+            publishVersionTask.collectPublishedTabletRowCounts(request.getTablet_versions());
+        }
         TransactionState txnState = publishVersionTask.getTxnState();
         if (txnState != null) {
             txnState.updatePublishTaskFinishTime();

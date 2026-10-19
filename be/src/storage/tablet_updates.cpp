@@ -390,7 +390,8 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     StorageEngine::instance()->update_manager()->clear_cached_delta_column_group(tsids_vec);
     StorageEngine::instance()->update_manager()->index_cache().try_remove_by_key(_tablet.tablet_id());
 
-    _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+    _reset_total_stats(_edit_version_infos[_apply_version_idx]->rowsets,
+                       _edit_version_infos[_apply_version_idx]->version);
     VLOG(2) << "load tablet " << _debug_string(false, true);
     _try_commit_pendings_unlocked();
     _check_for_apply();
@@ -508,6 +509,29 @@ int64_t TabletUpdates::max_version() const {
 int64_t TabletUpdates::min_readable_version() const {
     std::lock_guard rl(_lock);
     return _edit_version_infos.empty() ? 0 : _edit_version_infos.front()->version.major_number();
+}
+
+std::pair<int64_t, int64_t> TabletUpdates::num_live_rows_and_version() const {
+    std::lock_guard rl(_lock);
+    if (_edit_version_infos.empty() || _apply_version_idx + 1 != _edit_version_infos.size()) {
+        return {-1, -1};
+    }
+    std::lock_guard lg(_rowset_stats_lock);
+    const auto& last = _edit_version_infos.back();
+    // The apply index moves before the apply adds the rows it replaced to num_dels: until that is done too
+    // (_stats_version), the count would include them.
+    if (_stats_inconsistent || !_stats_version.has_value() || !(*_stats_version == last->version)) {
+        return {-1, -1};
+    }
+    int64_t live_rows = 0;
+    for (uint32_t rowsetid : last->rowsets) {
+        auto itr = _rowset_stats.find(rowsetid);
+        if (itr == _rowset_stats.end()) {
+            return {-1, -1};
+        }
+        live_rows += static_cast<int64_t>(itr->second->num_rows - itr->second->num_dels);
+    }
+    return {live_rows, last->version.major_number()};
 }
 
 int64_t TabletUpdates::max_readable_version() const {
@@ -990,6 +1014,7 @@ DEFINE_FAIL_POINT(tablet_apply_load_segments_failed);
 DEFINE_FAIL_POINT(tablet_delvec_inconsistent);
 DEFINE_FAIL_POINT(tablet_internal_error_code_but_memory_limit);
 DEFINE_FAIL_POINT(inconsistent_rowset_stats_not_found);
+DEFINE_FAIL_POINT(rowset_num_deletes_read_failed);
 DEFINE_FAIL_POINT(inconsistent_rowset_stats_out_bound);
 
 void TabletUpdates::do_apply() {
@@ -1273,7 +1298,7 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
                   fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
-    _update_total_stats(version_info.rowsets, nullptr, nullptr);
+    _update_total_stats(version_info.rowsets, nullptr, nullptr, version_info.version);
     return apply_st;
 }
 
@@ -1832,6 +1857,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         _apply_version_changed.notify_all();
     }
 
+    // Whether the replaced rows were all counted into num_dels; if not, the live row count isn't known.
+    bool stats_complete = true;
     {
         // Update the stats of affected rowsets.
         std::lock_guard lg(_rowset_stats_lock);
@@ -1846,10 +1873,12 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rssid=$1",
                                                  _tablet.tablet_id(), rssid);
                 LOG(ERROR) << msg;
+                stats_complete = false;
             } else if (rssid >= iter->first + iter->second->num_segments) {
                 string msg = strings::Substitute("inconsistent rowset_stats, tablet=$0 rssid=$1 >= $2",
                                                  _tablet.tablet_id(), rssid, iter->first + iter->second->num_segments);
                 LOG(ERROR) << msg;
+                stats_complete = false;
             } else {
                 iter->second->num_dels += new_delete.second.size();
                 _calc_compaction_score(iter->second.get());
@@ -1879,7 +1908,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     } else {
         manager->index_cache().release(index_entry);
     }
-    _update_total_stats(version_info.rowsets, nullptr, nullptr);
+    _update_total_stats(version_info.rowsets, nullptr, nullptr,
+                        stats_complete ? std::make_optional(version_info.version) : std::nullopt);
     int64_t t_write = MonotonicMillis();
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
@@ -2617,6 +2647,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                   fmt::format("primary index on commited failed, tablet: {}", _tablet.tablet_id()));
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(*index_meta));
 
+    // Whether the output rowset's deletes were counted into num_dels; if not, the live row count isn't known.
+    bool stats_complete = true;
     {
         // Update the stats of affected rowsets.
         std::lock_guard lg(_rowset_stats_lock);
@@ -2626,6 +2658,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                                              _tablet.tablet_id(), rowset_id);
             DCHECK(false) << msg;
             LOG(ERROR) << msg;
+            stats_complete = false;
         } else {
             DCHECK_EQ(iter->second->num_dels, 0);
             iter->second->num_dels += total_deletes;
@@ -2637,7 +2670,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     size_t row_before = 0;
     size_t row_after = 0;
-    _update_total_stats(version_info.rowsets, &row_before, &row_after);
+    _update_total_stats(version_info.rowsets, &row_before, &row_after,
+                        stats_complete ? std::make_optional(version_info.version) : std::nullopt);
     int64_t t_write = MonotonicMillis();
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
 
@@ -3629,7 +3663,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(uint32_t rowsetid) {
     return (rowset == nullptr) ? 0 : _get_rowset_num_deletes(*rowset);
 }
 
-size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
+size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset, bool* complete) {
     size_t num_dels = 0;
     auto rowsetid = rowset.rowset_meta()->get_rowset_seg_id();
     for (int i = 0; i < rowset.num_segments(); i++) {
@@ -3637,8 +3671,13 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
         DelVector delvec;
         auto st = TabletMetaManager::get_del_vector(_tablet.data_dir()->get_meta(), _tablet.tablet_id(), rowsetid + i,
                                                     INT64_MAX, &delvec, &dummy);
+        FAIL_POINT_TRIGGER_EXECUTE(rowset_num_deletes_read_failed,
+                                   { st = Status::InternalError("inject rowset_num_deletes_read_failed"); });
         if (!st.ok()) {
             LOG(WARNING) << "_refresh_rowset_stats: error get del vector " << st;
+            if (complete != nullptr) {
+                *complete = false;
+            }
             continue;
         }
         num_dels += delvec.cardinality();
@@ -5136,12 +5175,13 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             return Status::InternalError("fail to put write batch");
         }
 
+        bool stats_complete = true;
         for (const auto& [rid, rowset] : _rowsets) {
             auto stats = std::make_unique<RowsetStats>();
             stats->num_segments = rowset->num_segments();
             stats->num_rows = rowset->num_rows();
             stats->byte_size = rowset->data_disk_size();
-            stats->num_dels = _get_rowset_num_deletes(*rowset);
+            stats->num_dels = _get_rowset_num_deletes(*rowset, &stats_complete);
             stats->partial_update_by_column = rowset->is_column_mode_partial_update();
             _calc_compaction_score(stats.get());
             _rowset_stats.emplace(rid, std::move(stats));
@@ -5151,7 +5191,9 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         l2.unlock();                     // _rowsets_lock
         _try_commit_pendings_unlocked(); // may acquire |_rowset_stats_lock| and |_rowsets_lock|
 
-        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+        _reset_total_stats(
+                _edit_version_infos[_apply_version_idx]->rowsets,
+                stats_complete ? std::make_optional(_edit_version_infos[_apply_version_idx]->version) : std::nullopt);
         _apply_version_changed.notify_all();
         // The function `unload` of index_entry in the following code acquire `_lock` in PrimaryIndex.
         // If there are other thread to do rowset commit, it will load PrimaryIndex first which hold `_lock` in
@@ -5252,9 +5294,23 @@ Status TabletUpdates::clear_meta() {
     return Status::OK();
 }
 
+void TabletUpdates::_reset_total_stats(const std::vector<uint32_t>& rowsets,
+                                       const std::optional<EditVersion>& version) {
+    if (version.has_value()) {
+        std::lock_guard l(_rowset_stats_lock);
+        _stats_inconsistent = false;
+    }
+    _update_total_stats(rowsets, nullptr, nullptr, version);
+}
+
 void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before,
-                                        size_t* row_count_after) {
+                                        size_t* row_count_after, const std::optional<EditVersion>& version) {
     std::lock_guard l(_rowset_stats_lock);
+    if (version.has_value()) {
+        _stats_version = version;
+    } else {
+        _stats_inconsistent = true;
+    }
     if (row_count_before != nullptr) {
         *row_count_before = _cur_total_rows - _cur_total_dels;
     }
@@ -5810,16 +5866,26 @@ Status TabletUpdates::recover() {
 
     // rebuild rowset stats
     std::unique_lock l2(_rowsets_lock);
+    bool stats_complete = true;
     for (auto& [rsid, rowset] : _rowsets) {
         auto stats = std::make_unique<RowsetStats>();
         stats->num_segments = rowset->num_segments();
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
-        stats->num_dels = _get_rowset_num_deletes(*rowset);
+        stats->num_dels = _get_rowset_num_deletes(*rowset, &stats_complete);
         stats->partial_update_by_column = rowset->is_column_mode_partial_update();
         DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         _calc_compaction_score(stats.get());
         _rowset_stats[rsid] = std::move(stats);
+    }
+    l2.unlock();
+    {
+        // The rowset stats were just rebuilt from the delete vectors, so earlier missed deletes are counted again,
+        // unless some delete vector couldn't be read.
+        std::lock_guard l(_lock);
+        _reset_total_stats(
+                _edit_version_infos[_apply_version_idx]->rowsets,
+                stats_complete ? std::make_optional(_edit_version_infos[_apply_version_idx]->version) : std::nullopt);
     }
     LOG(INFO) << "Primary tablet rebuild rowset stats finish. tablet_id: " << _tablet.tablet_id();
 

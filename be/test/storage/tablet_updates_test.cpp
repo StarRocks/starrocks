@@ -598,6 +598,168 @@ void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index)
     ASSERT_EQ(N, read_tablet(_tablet, 4));
 }
 
+TEST_F(TabletUpdatesTest, num_live_rows_and_version) {
+    _tablet = create_tablet(rand(), rand());
+    const int N = 1000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    // Reading can finish before the apply worker updates the rowset statistics.
+    _tablet->updates()->wait_apply_done();
+    auto [rows, version] = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N, rows);
+    ASSERT_EQ(2, version);
+
+    // upserting every key keeps the live row count, unlike num_rows() which counts the replaced rows too
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    _tablet->updates()->wait_apply_done();
+    std::tie(rows, version) = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N, rows);
+    ASSERT_EQ(3, version);
+    ASSERT_EQ(2 * N, _tablet->updates()->num_rows());
+
+    // deleting half of the keys
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, {}, &deletes)).ok());
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 4));
+    _tablet->updates()->wait_apply_done();
+    std::tie(rows, version) = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N / 2, rows);
+    ASSERT_EQ(4, version);
+
+    // The apply index moves before the apply counts the rows it replaced: no count is proven in between.
+    _tablet->updates()->TEST_set_stats_version(EditVersion(3, 0));
+    std::tie(rows, version) = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(-1, rows);
+    ASSERT_EQ(-1, version);
+
+    // Nor for a compaction's edit version, which keeps the major number: complete stats of 4.0 don't vouch
+    // for 4.1.
+    _tablet->updates()->TEST_set_stats_version(EditVersion(4, 1));
+    std::tie(rows, version) = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(-1, rows);
+
+    _tablet->updates()->TEST_set_stats_version(EditVersion(4, 0));
+    std::tie(rows, version) = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N / 2, rows);
+    ASSERT_EQ(4, version);
+}
+
+// An apply that fails to count the rows it replaced into num_dels must not let any later version prove a count:
+// the missed rows stay counted as live.
+TEST_F(TabletUpdatesTest, num_live_rows_not_proven_after_inconsistent_stats) {
+    _tablet = create_tablet(rand(), rand());
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, _tablet->updates()->num_live_rows_and_version().first);
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("inconsistent_rowset_stats_not_found");
+    fp->setMode(trigger_mode);
+    // upserting every key: the apply has replaced rows to count, and the failpoint makes it miss them
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    _tablet->updates()->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(_tablet->updates()->TEST_stats_inconsistent());
+    ASSERT_EQ(-1, _tablet->updates()->num_live_rows_and_version().first);
+
+    // a later successful apply still proves nothing: version 3's replaced rows are counted as live
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(-1, _tablet->updates()->num_live_rows_and_version().first);
+
+    // loading the tablet from its stored metadata rebuilds the rowset stats from the delete vectors: proven again
+    _tablet->save_meta();
+    {
+        auto reloaded = load_same_tablet_from_store(_tablet);
+        auto [rows, version] = reloaded->updates()->num_live_rows_and_version();
+        ASSERT_EQ(N, rows);
+        ASSERT_EQ(4, version);
+    }
+
+    // recover() rebuilds the rowset stats from the delete vectors: counts are proven again, and exact
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_OK(_tablet->updates()->recover());
+    ASSERT_FALSE(_tablet->updates()->TEST_stats_inconsistent());
+    auto [rows, version] = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N, rows);
+    ASSERT_EQ(4, version);
+}
+
+TEST_F(TabletUpdatesTest, num_live_rows_not_proven_after_rebuild_misses_delvec) {
+    _tablet = create_tablet(rand(), rand());
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    // upserting every key: version 2's rows are deleted, so the rebuild has deletes to read
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, _tablet->updates()->num_live_rows_and_version().first);
+
+    // recover() rebuilds the rowset stats, but can't read the delete vectors: they miss the deletes
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("rowset_num_deletes_read_failed");
+    fp->setMode(trigger_mode);
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_OK(_tablet->updates()->recover());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(_tablet->updates()->TEST_stats_inconsistent());
+    ASSERT_EQ(-1, _tablet->updates()->num_live_rows_and_version().first);
+
+    // a rebuild that reads every delete vector proves the count again
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_OK(_tablet->updates()->recover());
+    ASSERT_FALSE(_tablet->updates()->TEST_stats_inconsistent());
+    auto [rows, version] = _tablet->updates()->num_live_rows_and_version();
+    ASSERT_EQ(N, rows);
+    ASSERT_EQ(3, version);
+}
+
+TEST_F(TabletUpdatesTest, num_live_rows_not_proven_after_out_of_bound_stats) {
+    _tablet = create_tablet(rand(), rand());
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    _tablet->updates()->wait_apply_done();
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("inconsistent_rowset_stats_out_bound");
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    _tablet->updates()->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(_tablet->updates()->TEST_stats_inconsistent());
+    ASSERT_EQ(-1, _tablet->updates()->num_live_rows_and_version().first);
+}
+
 TEST_F(TabletUpdatesTest, writeread_with_delete) {
     test_writeread_with_delete(false);
 }

@@ -103,7 +103,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "state")
     private IndexState state;
     @SerializedName(value = "rowCount")
-    private long rowCount;
+    private volatile long rowCount;
+    // The row count together with the partition version it was proven at (every tablet's count was computed from
+    // exactly that version), or null if unknown. Set and read as one immutable pair, so readers need no lock. Not
+    // persisted: an FE that restarts treats the count as of unknown version until the next load proves one.
+    private volatile ProvenRowCount provenRowCount = null;
+
+    private record ProvenRowCount(long rowCount, long version) {
+    }
 
     private Map<Long, Tablet> idToTablets;
     @SerializedName(value = "tablets")
@@ -284,8 +291,48 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return rowCount;
     }
 
-    public void setRowCount(long rowCount) {
+    // A count of unknown version.
+    public synchronized void setRowCount(long rowCount) {
+        this.provenRowCount = null;
         this.rowCount = rowCount;
+    }
+
+    // A count every tablet proved was computed from exactly the partition version {@code version}.
+    public synchronized void setRowCount(long rowCount, long version) {
+        this.rowCount = rowCount;
+        this.provenRowCount = new ProvenRowCount(rowCount, version);
+    }
+
+    // Keeps the row count, but no longer as proven at any version.
+    public synchronized void clearProvenRowCount() {
+        this.provenRowCount = null;
+    }
+
+    /**
+     * Set a count of unknown version, unless the current count is proven at {@code visibleVersion} or a later
+     * version: a tablet stat round reads BE snapshots that can predate that version's publish, so it must not replace
+     * a count the publish proved. A later version: replay makes a version visible and proves its count without the
+     * table lock, so it can do so after the round read {@code visibleVersion}. Once a newer version than the proven
+     * one is visible, the proven count no longer covers it and is replaced.
+     *
+     * @return whether the row count was set
+     */
+    public synchronized boolean setRowCountUnlessProven(long rowCount, long visibleVersion) {
+        ProvenRowCount proven = provenRowCount;
+        if (proven != null && proven.version() > 0 && proven.version() >= visibleVersion) {
+            return false;
+        }
+        setRowCount(rowCount);
+        return true;
+    }
+
+    /**
+     * The index row count, but only if it was proven at exactly {@code version}; -1 otherwise. Exact
+     * equality for the same reason as {@link Replica#getRowCountAtVersion}.
+     */
+    public long getRowCountAtVersion(long version) {
+        ProvenRowCount proven = provenRowCount;
+        return proven != null && proven.version() > 0 && proven.version() == version ? proven.rowCount() : -1L;
     }
 
     public long getDataSize() {

@@ -74,13 +74,16 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import mockit.Invocation;
@@ -545,6 +548,76 @@ public class DatabaseTransactionMgrTest {
         assertEquals(3, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(8, masterDbTransMgr.getTransactionNum());
         assertEquals(TransactionStatus.ABORTED, masterDbTransMgr.getTxnState(txnId3).getStatus());
+    }
+
+    private static MaterializedIndex baseIndexOf(GlobalStateMgr globalStateMgr) {
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore()
+                .getTable(GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+        return table.getPartition(GlobalStateMgrTestUtil.testPartition1).getDefaultPhysicalPartition()
+                .getLatestBaseIndex();
+    }
+
+    private static void reportRowCount(TransactionState txnState, long backendId, long version, long rowCount) {
+        PublishVersionTask task = new PublishVersionTask(backendId,
+                txnState.getTransactionId(), txnState.getTransactionId(), GlobalStateMgrTestUtil.testDbId1, 0L,
+                Lists.newArrayList(), null, null, 0L, txnState, false, TransactionType.TXN_NORMAL);
+        TTabletVersionPair pair = new TTabletVersionPair();
+        pair.setTablet_id(GlobalStateMgrTestUtil.testTabletId1);
+        pair.setVersion(version);
+        pair.setRow_count(rowCount);
+        task.collectPublishedTabletRowCounts(Lists.newArrayList(pair));
+        task.setIsFinished(true);
+        txnState.addPublishVersionTask(backendId, task);
+    }
+
+    @Test
+    public void testPublishedRowCountsReachEveryFe() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        TransactionState txnState = masterDbTransMgr.getTransactionState(txnId);
+        long version = txnState.getTableCommitInfo(GlobalStateMgrTestUtil.testTableId1)
+                .getPartitionCommitInfo(GlobalStateMgrTestUtil.testPartitionId1 + 100).getVersion();
+
+        // every replica's backend reports the same count for exactly the commit version
+        for (long backendId : new long[] {GlobalStateMgrTestUtil.testBackendId1, GlobalStateMgrTestUtil.testBackendId2,
+                GlobalStateMgrTestUtil.testBackendId3}) {
+            reportRowCount(txnState, backendId, version, 1000L);
+        }
+
+        masterDbTransMgr.finishTransaction(txnId, null, 0);
+        TransactionState visible = masterDbTransMgr.getTransactionState(txnId);
+        assertEquals(TransactionStatus.VISIBLE, visible.getTransactionStatus());
+        assertEquals(1000L, baseIndexOf(masterGlobalStateMgr).getRowCountAtVersion(version));
+
+        // a follower replays the persisted visible transaction and gets the same count with the version. A count
+        // for an index the follower doesn't have (e.g. dropped since) is ignored.
+        TransactionState replayed = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(visible), TransactionState.class);
+        PartitionCommitInfo replayedInfo = replayed.getTableCommitInfo(GlobalStateMgrTestUtil.testTableId1)
+                .getPartitionCommitInfo(GlobalStateMgrTestUtil.testPartitionId1 + 100);
+        Map<Long, Long> counts = new HashMap<>(replayedInfo.getIndexIdToRowCount());
+        counts.put(999_999L, 5L);
+        replayedInfo.setIndexIdToRowCount(counts);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        slaveTransMgr.replayUpsertTransactionState(replayed);
+        MaterializedIndex slaveIndex = baseIndexOf(slaveGlobalStateMgr);
+        assertEquals(1000L, slaveIndex.getRowCountAtVersion(version));
+
+        // a version-overwrite transaction for a version below the visible one doesn't move the partition to it, so
+        // its count isn't applied over the newer state
+        OlapTable slaveTable = (OlapTable) slaveGlobalStateMgr.getLocalMetastore()
+                .getTable(GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+        slaveTable.getPartition(GlobalStateMgrTestUtil.testPartition1).getDefaultPhysicalPartition()
+                .updateVisibleVersion(version + 1);
+        slaveIndex.setRowCount(2000L, version + 1);
+        replayedInfo.setIndexIdToRowCount(Map.of(slaveIndex.getId(), 1000L));
+        replayed.setTxnCommitAttachment(new InsertTxnCommitAttachment(0L, version));
+        assertTrue(replayed.isVersionOverwrite());
+        new OlapTableTxnLogApplier(slaveTable).applyVisibleLog(replayed,
+                replayed.getTableCommitInfo(GlobalStateMgrTestUtil.testTableId1),
+                slaveGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1));
+        assertEquals(2000L, slaveIndex.getRowCountAtVersion(version + 1));
     }
 
     @Test

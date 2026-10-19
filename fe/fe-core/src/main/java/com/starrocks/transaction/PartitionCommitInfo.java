@@ -41,6 +41,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.TabletStatPB;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,6 +105,13 @@ public class PartitionCommitInfo implements Writable {
     // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
     private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
+    // Row count of each loaded index at exactly `version`, summed from counts the BEs proved on publish.
+    // Persisted with the visible transaction, so every FE sets the index row counts when the version becomes
+    // visible instead of after its next TabletStatMgr round. An index is present only if every tablet had a
+    // healthy replica proving its count at `version`.
+    @SerializedName(value = "indexRowCounts")
+    private Map<Long, Long> indexIdToRowCount;
+
     private boolean isDoubleWrite = false;
 
     // Paces the "fail to publish partition" error log for this partition. Deliberately not
@@ -159,6 +167,9 @@ public class PartitionCommitInfo implements Writable {
                 ? null
                 : new Quantiles(partitionCommitInfo.compactionScore);
         this.tabletStats.putAll(partitionCommitInfo.tabletStats);
+        this.indexIdToRowCount = partitionCommitInfo.indexIdToRowCount == null
+                ? null
+                : new HashMap<>(partitionCommitInfo.indexIdToRowCount);
         this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
     }
 
@@ -251,6 +262,14 @@ public class PartitionCommitInfo implements Writable {
 
     public Map<Long, TabletStatPB> getTabletStats() {
         return tabletStats;
+    }
+
+    public Map<Long, Long> getIndexIdToRowCount() {
+        return indexIdToRowCount == null ? Collections.emptyMap() : indexIdToRowCount;
+    }
+
+    public void setIndexIdToRowCount(@Nullable Map<Long, Long> indexIdToRowCount) {
+        this.indexIdToRowCount = indexIdToRowCount;
     }
 
     // Single entry point for adding stats, so every writer of tabletStats is greppable and can be

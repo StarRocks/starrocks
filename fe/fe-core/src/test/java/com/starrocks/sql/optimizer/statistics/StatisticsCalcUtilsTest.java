@@ -17,17 +17,26 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -35,9 +44,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -247,4 +258,237 @@ public class StatisticsCalcUtilsTest {
         // When all partitions are dropped, selectedPartitions is empty, row count should be 1 (minimum)
         Assertions.assertEquals(1, rowCount);
     }
+
+    @Test
+    public void testProvenBaseRowCount() {
+        MaterializedIndex baseIndex = new MaterializedIndex(10L);
+        Partition partition = new Partition(1L, 3L, "p", baseIndex, null);
+        MaterializedIndex rollup = new MaterializedIndex(11L, MaterializedIndex.IndexState.NORMAL);
+        partition.getDefaultPhysicalPartition().createRollupIndex(rollup);
+        long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+
+        // nothing proven
+        baseIndex.setRowCount(100L);
+        Assertions.assertEquals(-1L, StatisticsCalcUtils.provenBaseRowCount(partition));
+
+        // proven at the visible version: the base index count, without the rollup Partition#getRowCount adds
+        baseIndex.setRowCount(100L, visibleVersion);
+        rollup.setRowCount(100L);
+        Assertions.assertEquals(100L, StatisticsCalcUtils.provenBaseRowCount(partition));
+        Assertions.assertEquals(200L, partition.getRowCount());
+
+        // a newer version became visible without a proven count for it
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(visibleVersion + 1);
+        Assertions.assertEquals(-1L, StatisticsCalcUtils.provenBaseRowCount(partition));
+    }
+
+    @Test
+    public void testProvenBaseRowCountRejectsVersionPublishedWhileReading() {
+        MaterializedIndex baseIndex = new MaterializedIndex(10L);
+        Partition partition = new Partition(1L, 3L, "p", baseIndex, null);
+        long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+        baseIndex.setRowCount(100L, visibleVersion);
+
+        // a publish makes the next version visible between reading the version and reading its proven count
+        new MockUp<PhysicalPartition>() {
+            private int reads = 0;
+
+            @Mock
+            public long getVisibleVersion() {
+                return reads++ == 0 ? visibleVersion : visibleVersion + 1;
+            }
+        };
+        Assertions.assertEquals(-1L, StatisticsCalcUtils.provenBaseRowCount(partition));
+    }
+
+    private long rowCountOfAllPartitions(OlapTable table) {
+        return rowCountOfPartitions(table, Lists.newArrayList(table.getPartitions()));
+    }
+
+    // The scan selects these partitions, in this order, which is also the order the estimate reads them.
+    private long rowCountOfPartitions(OlapTable table, List<Partition> partitions) {
+        Column column = table.getColumns().get(0);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        ColumnRefOperator ref = new ColumnRefOperator(0, column.getType(), column.getName(), true);
+        refToColumn.put(ref, column);
+        columnToRef.put(column, ref);
+        List<Long> partitionIds = partitions.stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+        LogicalOlapScanOperator scan = new LogicalOlapScanOperator(table, refToColumn, columnToRef, null, -1, null,
+                table.getBaseIndexMetaId(), partitionIds, null, false, Lists.newArrayList(), Lists.newArrayList(),
+                Lists.newArrayList(), false);
+        return StatisticsCalcUtils.getTableRowCount(table, scan, optimizerContext);
+    }
+
+    // Proves each partition's base index count at its visible version.
+    private static void proveBaseRowCounts(OlapTable table, long provenRowCount) {
+        for (Partition partition : table.getPartitions()) {
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+            physicalPartition.getLatestBaseIndex().setRowCount(provenRowCount, physicalPartition.getVisibleVersion());
+        }
+    }
+
+    private static void setBasicStats(OlapTable table, StatsConstants.AnalyzeType type, long totalRows) {
+        BasicStatsMeta meta = new BasicStatsMeta(table.getId() + 1, table.getId(), Lists.newArrayList(), type,
+                LocalDateTime.now(), StatsConstants.buildInitStatsProp(), totalRows);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), meta);
+    }
+
+    private static void setSampleStats(OlapTable table, long totalRows) {
+        setBasicStats(table, StatsConstants.AnalyzeType.SAMPLE, totalRows);
+    }
+
+    // No TabletStatMgr round has finished yet, so the stats and every partition's last load are newer than it,
+    // whatever the background daemon does while the test runs.
+    private static void pinLastTabletStatRound() {
+        new MockUp<TabletStatMgr>() {
+            @Mock
+            public LocalDateTime getLastWorkTimestamp() {
+                return LocalDateTime.MIN;
+            }
+        };
+    }
+
+    // No partition has an analyzed row count, whatever the asynchronously loaded statistics cache holds. Mocks the
+    // class of the storage actually installed, so it holds even if another test installed a different one.
+    private static <T extends StatisticStorage> void noAnalyzedRowCounts() {
+        @SuppressWarnings("unchecked")
+        Class<T> storageClass = (Class<T>) GlobalStateMgr.getCurrentState().getStatisticStorage().getClass();
+        new MockUp<T>(storageClass) {
+            @Mock
+            public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+                return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+            }
+        };
+    }
+
+    @Test
+    public void testProvenRowCountsForBaseIndexOnlyTable() throws Exception {
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getLocalMetastore().getDb("statistics_calc_utils_test")
+                .getTable("test_partition_table");
+        Assertions.assertTrue(StatisticsCalcUtils.isBaseIndexOnly(table));
+        pinLastTabletStatRound();
+        try {
+            // SAMPLE stats whose totalRows counts rows written: ignored while every partition is proven
+            proveBaseRowCounts(table, 1000L);
+            setSampleStats(table, 90000L);
+            Assertions.assertEquals(3000, rowCountOfAllPartitions(table));
+
+            // not proven any more: the previous estimate, totalRows adjustment included, comes back
+            for (Partition partition : table.getPartitions()) {
+                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000L);
+            }
+            Assertions.assertEquals(90000, rowCountOfAllPartitions(table));
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(table.getId());
+        }
+    }
+
+    @Test
+    public void testProvenRowCountsNotUsedWithRollup() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_rollup_table` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `v1` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "ROLLUP (r1 (k2, k1))\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                    .getLocalMetastore().getDb("statistics_calc_utils_test")
+                    .getTable("test_rollup_table");
+            Assertions.assertFalse(StatisticsCalcUtils.isBaseIndexOnly(table));
+            pinLastTabletStatRound();
+            proveBaseRowCounts(table, 1000L);
+            for (Partition partition : table.getPartitions()) {
+                for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    if (index != partition.getDefaultPhysicalPartition().getLatestBaseIndex()) {
+                        index.setRowCount(1000L);
+                    }
+                }
+            }
+            // Partition#getRowCount adds the rollup, so its totalRows adjustment isn't skipped for the proven count
+            setSampleStats(table, 90000L);
+            Assertions.assertEquals(90000, rowCountOfAllPartitions(table));
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(
+                    ((OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                            .getDb("statistics_calc_utils_test").getTable("test_rollup_table")).getId());
+            starRocksAssert.dropTable("test_rollup_table");
+        }
+    }
+
+    @Test
+    public void testProvenRowCountSkipsDeltaForUnanalyzedPartitions() throws Exception {
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getLocalMetastore().getDb("statistics_calc_utils_test")
+                .getTable("test_partition_table");
+        pinLastTabletStatRound();
+        noAnalyzedRowCounts();
+        try {
+            // FULL stats whose totalRows is far above the table's partitions, none of them analyzed: every one
+            // changed since the last tablet stat round, so each gets a share of the difference as an estimated delta
+            setBasicStats(table, StatsConstants.AnalyzeType.FULL, 90000L);
+            for (Partition partition : table.getPartitions()) {
+                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000L);
+            }
+            Assertions.assertEquals(90000, rowCountOfAllPartitions(table));
+
+            // proven at their visible version: no change to estimate
+            proveBaseRowCounts(table, 1000L);
+            Assertions.assertEquals(3000, rowCountOfAllPartitions(table));
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(table.getId());
+        }
+    }
+
+    @Test
+    public void testSampleAdjustmentWithSomePartitionsUnproven() throws Exception {
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getLocalMetastore().getDb("statistics_calc_utils_test")
+                .getTable("test_partition_table");
+        pinLastTabletStatRound();
+        try {
+            setSampleStats(table, 90000L);
+            proveBaseRowCounts(table, 1000L);
+            // one partition's count is not proven: the totalRows adjustment applies to the whole estimate. It is put
+            // last in the scan's partition list, which fixes the order the estimate reads them in, so that the
+            // proven checks of the other partitions all run before it.
+            List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+            Partition unproven = partitions.remove(0);
+            partitions.add(unproven);
+            unproven.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000L);
+            Assertions.assertEquals(90000, rowCountOfPartitions(table, partitions));
+
+            // A publish proving that partition lands right after its count was read for the sum. The estimate must
+            // still treat it as unproven: the sum holds the count read before the publish. A second read for the
+            // proven check would see it proven, skip the adjustment and leave the older sum, 3000.
+            long unprovenId = unproven.getId();
+            new MockUp<Partition>() {
+                private boolean published = false;
+
+                @Mock
+                public long getRowCount(Invocation invocation) {
+                    Partition partition = invocation.getInvokedInstance();
+                    long rowCount = invocation.proceed();
+                    if (partition.getId() == unprovenId && !published) {
+                        published = true;
+                        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+                        physicalPartition.getLatestBaseIndex().setRowCount(rowCount,
+                                physicalPartition.getVisibleVersion());
+                    }
+                    return rowCount;
+                }
+            };
+            Assertions.assertEquals(90000, rowCountOfPartitions(table, partitions));
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(table.getId());
+        }
+    }
 }
+

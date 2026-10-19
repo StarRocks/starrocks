@@ -31,6 +31,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class OlapTableTxnLogApplier implements TransactionLogApplier {
@@ -193,6 +194,19 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
                 }
                 partition.setVersionTxnType(txnState.getTransactionType());
+            }
+
+            // Row counts the BEs proved for this version on publish. Set here, together with the version, so that
+            // they take effect on every FE when the version becomes visible rather than after each FE's next
+            // TabletStatMgr round. Skipped if the partition did not move to this version, e.g. a version-overwrite
+            // transaction older than the visible version.
+            if (partition.getVisibleVersion() == version) {
+                for (Map.Entry<Long, Long> entry : partitionCommitInfo.getIndexIdToRowCount().entrySet()) {
+                    MaterializedIndex index = partition.getIndex(entry.getKey());
+                    if (index != null) {
+                        index.setRowCount(entry.getValue(), version);
+                    }
+                }
             }
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
