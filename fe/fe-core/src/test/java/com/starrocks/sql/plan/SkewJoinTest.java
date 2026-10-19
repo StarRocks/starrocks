@@ -414,7 +414,7 @@ public class SkewJoinTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
             connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
 
-            // LEFT JOIN here to keep consistent with siblink tests; Only MCVs are skewed
+            // LEFT JOIN here to keep consistent with sibling tests; Only MCVs are skewed
             String sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
             String plan = getFragmentPlan(sql);
 

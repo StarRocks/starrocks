@@ -195,7 +195,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
             List<ScalarOperator> skewValues = Lists.newArrayList();
             if (skewInfo.hasNullSkew()) {
-                // Add a special NULL skew value for NULL-only skew cases
+                // Add a special skew value for NULLs
                 skewValues.add(ConstantOperator.createNull(skewJoinColumn.getType()));
             }
             // Add MCV-based skew values, if any
