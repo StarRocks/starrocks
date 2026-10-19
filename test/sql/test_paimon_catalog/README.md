@@ -7,7 +7,7 @@ paimon-cpp.
 ## Test data
 
 These cases read fixed tables from
-`oss://${oss_bucket}/catalog/paimon/paimon_test.db/`:
+`oss://${oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`:
 `scalar_types`, `variant_basic`, `image_blob`, `image_blob_desc`,
 `image_blob_view`, and `pk_merge_v1`, plus:
 
@@ -28,12 +28,12 @@ These cases read fixed tables from
 | `global_index_v1` | Two rows with a B-tree global index and one later row outside index coverage |
 | `pk_dv_{parquet,orc,avro}_v1` | 1,000 initial rows followed by update/delete/insert; actual deletion vectors retained |
 
-The persistent warehouse is `oss://${oss_bucket}/catalog/paimon/`. Upload the
+The persistent warehouse is `oss://${oss_bucket}/ci_catalog_test_data/paimon/`. Upload the
 complete `paimon_test.db` directory before running these cases, preserving all
 schema, snapshot, manifest and data files:
 
 ```text
-catalog/paimon/
+ci_catalog_test_data/paimon/
 └── paimon_test.db/
     ├── scalar_types/
     ├── pk_merge_v1/

@@ -3,7 +3,7 @@ create external catalog paimon_static_${uuid0}
 properties (
 "type" = "paimon",
 "paimon.catalog.type" = "filesystem",
-"paimon.catalog.warehouse" = "oss://${oss_bucket}/catalog/paimon/",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
 "enable_get_stats_from_external_metadata" = "true",
 "aws.s3.access_key" = "${oss_ak}",
 "aws.s3.secret_key" = "${oss_sk}",
