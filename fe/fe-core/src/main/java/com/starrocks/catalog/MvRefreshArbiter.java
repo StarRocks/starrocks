@@ -30,7 +30,13 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PCell;
+=======
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
+>>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -148,12 +154,13 @@ public class MvRefreshArbiter {
             Set<String> baseUpdatedPartitionNames;
             try {
                 baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
-                        queryRewriteParams.isQueryRewrite(),
+                        queryRewriteParams.readsBaseTablesUnlocked(),
                         () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
             } catch (LockTimeoutException e) {
-                logMVPrepare(mv, "Failed to check updated partitions of base table {}: {}",
-                        olapBaseTable.getName(), e.getMessage());
-                return Optional.empty();
+                // Fail this refresh, as a lock timeout on a ref base table does: an empty result would read as
+                // "changed" and refresh every partition of the mv.
+                throw new DmlException("Failed to check updated partitions of base table %s of mv %s: %s", e,
+                        olapBaseTable.getName(), mv.getName(), e.getMessage());
             }
             if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
@@ -198,9 +205,14 @@ public class MvRefreshArbiter {
             OlapTable olapBaseTable = (OlapTable) baseTable;
             Set<String> baseUpdatedPartitionNames;
             try {
+<<<<<<< HEAD
                 baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
                         queryRewriteParams.isQueryRewrite(),
                         () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
+=======
+                updatedPCellSet = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
+                        queryRewriteParams.readsBaseTablesUnlocked(), readUpdatedPartitions);
+>>>>>>> c29f529 ([BugFix] Fail an mv refresh on a non-ref base table lock timeout and keep inspect_mv_refresh_info off base table locks under a held lock (#81036))
             } catch (LockTimeoutException e) {
                 logMVPrepare(mv, "Failed to get updated partitions of base table {}: {}",
                         olapBaseTable.getName(), e.getMessage());
