@@ -114,8 +114,38 @@ TEST_F(JVMMetricsTest, JavaEnvInstallsJvmMetrics) {
     auto type_label = [](const std::string& type) { return MetricLabels().add("type", type); };
     ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("used")));
     ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes", type_label("used")));
+    // The fixture already created the JVM, so the hook initializes the JNI side and collects.
     registry.trigger_hook();
+    ASSERT_GT(JVMMetrics::instance()->jvm_heap_committed_bytes.value(), 0);
 #endif
+}
+
+// No fixture: JVMMetricsTest::SetUp creates the JVM, which is what this test must avoid.
+TEST(JVMMetricsLazyInitTest, CollectOnlyAfterJvmIsCreated) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+
+    MetricRegistry registry("lazy_init_test");
+    JVMMetrics jvm_metrics;
+    jvm_metrics.install(&registry);
+
+    // Another test in this binary may have created the JVM already; only then is the
+    // "no JVM yet" phase skipped.
+    ASSIGN_OR_ABORT(bool created_before, JVMMetrics::is_jvm_created());
+    if (!created_before) {
+        registry.trigger_hook();
+        ASSIGN_OR_ABORT(bool created_after, JVMMetrics::is_jvm_created());
+        ASSERT_FALSE(created_after) << "collecting jvm metrics must not create a JVM";
+        ASSERT_EQ(0, jvm_metrics.jvm_heap_committed_bytes.value());
+    }
+
+    if (getJNIEnv() == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+    registry.trigger_hook();
+    ASSERT_GT(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
+    ASSERT_GT(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
 }
 
 } // namespace starrocks

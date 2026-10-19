@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <future>
 #include <limits>
@@ -75,13 +76,14 @@ Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metri
         return Status::OK();
     }
 
-    auto* jvm_metrics = JVMMetrics::instance();
-    auto status = jvm_metrics->init();
-    if (!status.ok()) {
-        LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        LOG(WARNING) << "JAVA_HOME is not set, skip installing jvm metrics";
         return Status::OK();
     }
-    jvm_metrics->install(metrics);
+
+    // Only registers the gauges and the collect hook. The JNI side is initialized lazily by the
+    // hook once a JVM exists, so enabling jvm metrics does not start a JVM on its own.
+    JVMMetrics::instance()->install(metrics);
     _jvm_metrics_registry = metrics;
 #endif
     return Status::OK();
