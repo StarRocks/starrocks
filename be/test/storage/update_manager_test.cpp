@@ -19,8 +19,8 @@
 #include <memory>
 
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
@@ -275,7 +275,7 @@ TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
 }
 
 TEST_F(UpdateManagerTest, test_update_primary_index_memory_limit) {
-    const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+    const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     ASSERT_GT(process_mem_limit, 0);
     ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(30).ok());
     ASSERT_EQ(process_mem_limit * 30 / 100, _update_manager->index_cache().capacity());

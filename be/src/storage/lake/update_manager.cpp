@@ -2317,18 +2317,7 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
     return 0;
 }
 
-<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
 void UpdateManager::_print_memory_stats() {
-=======
-Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
-    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
-    return Status::OK();
-}
-
-void PrimaryKeyManager::_print_memory_stats() {
->>>>>>> 9008576 ([BugFix] Divide by 100 when resizing primary index cache by update_memory_limit_percent (#81067)):be/src/storage/lake/primary_key_manager.cpp
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
         LOG(INFO) << strings::Substitute(

@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "fs/fs_util.h"
-#include "runtime/runtime_env.h"
+#include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -357,15 +357,15 @@ TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
 }
 
 TEST_F(LakeDelvecLoaderTest, test_update_primary_index_memory_limit) {
-    const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+    const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     ASSERT_GT(process_mem_limit, 0);
-    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(30).ok());
-    ASSERT_EQ(process_mem_limit * 30 / 100, _primary_key_manager->index_cache().capacity());
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(30).ok());
+    ASSERT_EQ(process_mem_limit * 30 / 100, _update_manager->index_cache().capacity());
     // out-of-range values are clamped to [0, 100]
-    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(200).ok());
-    ASSERT_EQ(process_mem_limit, _primary_key_manager->index_cache().capacity());
-    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(-1).ok());
-    ASSERT_EQ(0, _primary_key_manager->index_cache().capacity());
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(200).ok());
+    ASSERT_EQ(process_mem_limit, _update_manager->index_cache().capacity());
+    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(-1).ok());
+    ASSERT_EQ(0, _update_manager->index_cache().capacity());
 }
 
 } // namespace starrocks::lake
