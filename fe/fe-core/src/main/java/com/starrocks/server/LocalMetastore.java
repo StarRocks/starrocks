@@ -4315,6 +4315,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterEnableStatisticAutoCollect(OlapTable table,
+                                                 Map<String, String> properties,
+                                                 List<Runnable> appliers) {
+        boolean enable = PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, true);
+        appliers.add(() -> table.setEnableStatisticAutoCollect(enable));
+    }
+
     private void alterCloudNativeFastSchemaEvolutionV2(OlapTable table,
                                                        Map<String, String> properties,
                                                        List<Runnable> appliers) {
@@ -4391,6 +4399,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             alterEnableStatisticCollectOnFirstLoad(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            alterEnableStatisticAutoCollect(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             alterCloudNativeFastSchemaEvolutionV2(table, properties, appliers);
