@@ -55,6 +55,16 @@ Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, u
     return StorageEngine::instance()->get_delta_column_group(_meta, tablet_id, rowsetid, segment_id, INT64_MAX, pdcgs);
 }
 
+<<<<<<< HEAD
+=======
+Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
+    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
+    return Status::OK();
+}
+
+>>>>>>> 9008576 ([BugFix] Divide by 100 when resizing primary index cache by update_memory_limit_percent (#81067))
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
