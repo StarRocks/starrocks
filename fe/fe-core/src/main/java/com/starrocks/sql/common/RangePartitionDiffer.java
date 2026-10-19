@@ -34,8 +34,19 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.connector.MVPartitionCellBuilder;
+>>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.Type;
+>>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -232,10 +243,17 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
+<<<<<<< HEAD
                 Map<String, Range<PartitionKey>> refTablePartitionKeyMap =
                         PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
                                 mvPartitionExprOpt.get());
                 if (refTablePartitionKeyMap == null) {
+=======
+                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, isQueryRewrite(),
+                        () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
+                if (mapping.cells() == null) {
+>>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
                     return null;
                 }
                 Map<String, PCell> refTableRangeCellMap = Maps.newHashMap();
@@ -243,7 +261,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                                 .forEach(e -> refTableRangeCellMap.put(e.getKey(), new PRangeCell(e.getValue())));
                 refBaseTablePartitionMap.put(refBT, refTableRangeCellMap);
             }
-        } catch (StarRocksException | SemanticException e) {
+        } catch (StarRocksException | SemanticException | LockTimeoutException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
         }

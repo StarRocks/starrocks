@@ -45,11 +45,15 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -129,6 +133,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.SortedSet;
+import java.util.concurrent.TimeUnit;
+>>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1506,6 +1515,52 @@ public class MvUtils {
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(new ConnectContext(), baseTableInfo);
+    }
+
+    @FunctionalInterface
+    public interface BaseTableRead<T, E extends Exception> {
+        T read() throws E;
+    }
+
+    /**
+     * Run {@code read} over an internal base table of {@code mv} under the base table's READ lock, for an mv refresh.
+     * <p>
+     * An olap table's partition maps are mutated in place under its WRITE lock (automatic partition creation, TTL
+     * drops, INSERT OVERWRITE), so walking the live table without the lock fails with a
+     * ConcurrentModificationException, or looks up a partition that was dropped after its name was listed. An
+     * external base table, or one the mv does not name, is read as before: no FE lock protects it.
+     * <p>
+     * A freshness check for query rewrite ({@code isQueryRewrite}) reads unlocked, as before: it runs while the
+     * planner may already hold other tables' locks, so taking a base table's lock there could wait out of order,
+     * and its staleness check may reach a connector.
+     *
+     * @throws LockTimeoutException if the lock is not acquired within {@code mv_refresh_try_lock_timeout_ms}
+     */
+    public static <T, E extends Exception> T readBaseTableUnderLock(MaterializedView mv, Table baseTable,
+                                                                    boolean isQueryRewrite,
+                                                                    BaseTableRead<T, E> read)
+            throws E, LockTimeoutException {
+        Optional<BaseTableInfo> baseTableInfo = isQueryRewrite || !baseTable.isNativeTableOrMaterializedView()
+                ? Optional.empty()
+                : mv.getBaseTableInfos().stream()
+                        .filter(info -> info.isInternalCatalog() && info.getTableId() == baseTable.getId())
+                        .findFirst();
+        if (baseTableInfo.isEmpty()) {
+            return read.read();
+        }
+        long dbId = baseTableInfo.get().getDbId();
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(dbId, baseTable.getId(), LockType.READ,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new LockTimeoutException(String.format("Materialized view %s failed to acquire read lock on " +
+                    "base table %s within %d ms", mv.getName(), baseTable.getName(),
+                    Config.mv_refresh_try_lock_timeout_ms));
+        }
+        try {
+            return read.read();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, baseTable.getId(), LockType.READ);
+        }
     }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {

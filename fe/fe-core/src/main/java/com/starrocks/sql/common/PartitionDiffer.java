@@ -42,6 +42,22 @@ public abstract class PartitionDiffer {
         this.queryRewriteParams = queryRewriteParams;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPinnedRanges(Map<String, TvrVersionRange> pinnedRangeByTableIdentifier) {
+        this.pinnedRangeByTableIdentifier = pinnedRangeByTableIdentifier == null
+                ? Collections.emptyMap() : pinnedRangeByTableIdentifier;
+    }
+
+    protected boolean isQueryRewrite() {
+        return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
+    }
+
+    protected TvrVersionRange pinnedRangeFor(Table table) {
+        return pinnedRangeByTableIdentifier.get(table.getUUID());
+    }
+
+>>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
     /**
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
