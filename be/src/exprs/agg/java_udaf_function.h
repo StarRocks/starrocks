@@ -307,7 +307,8 @@ public:
             return;
         }
 
-        auto buffer_array_or = helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
+        auto buffer_array_or =
+                helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
         if (!buffer_array_or.ok()) {
             ctx->set_error(std::string(buffer_array_or.status().message()).c_str());
             return;
