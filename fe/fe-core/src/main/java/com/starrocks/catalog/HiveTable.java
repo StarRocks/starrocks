@@ -416,7 +416,7 @@ public class HiveTable extends Table {
      * Not a lock target, even when it lives in an internal database (ENGINE=HIVE from a resource). The data is
      * in the metastore, and the definition held here is never written in place once published: ALTER TABLE
      * rejects the table, and a schema refresh swaps in new collections ({@link #modifyTableSchemaInternal}).
-     * A query plans on a private copy taken in one step ({@link #forQueryPlanning}), so it sees one schema from
+     * A query plans on a private copy taken in one step ({@link #copyForQuery}), so it sees one schema from
      * analysis to the scan descriptor, and planning -- which reaches the metastore for statistics and
      * partitions -- runs without the lock, as it does for a catalog table.
      */
@@ -439,21 +439,10 @@ public class HiveTable extends Table {
         HiveTable table = new HiveTable(id, name, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
                 tableLocation, comment, createTime, partColumnNames, dataColumnNames, hiveProperties,
                 serdeProperties, storageFormat, hiveTableType);
-        table.avroSchemaJson = avroSchemaJson;
         table.relatedMaterializedViews = relatedMaterializedViews;
         table.setUniqueConstraints(getUniqueConstraints());
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         return table;
-    }
-
-    /**
-     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
-     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
-     * resolved per query already.
-     */
-    @Override
-    public Table forQueryPlanning() {
-        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
     }
 
     @Override

@@ -18,12 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorProperties;
-import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
@@ -53,13 +53,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * An INSERT ... SELECT refreshes its Hive sources for the statement (InsertSourceRefresher), and used to do it by
- * dropping them from the catalog-level cache. A background refresh takes no lock: it reads the source, then writes
- * what it read into that cache. One that read before the drop wrote the old file list or partition names back after
- * it, the INSERT planned and scanned on them, and the rows it missed were missing from the target for good. The
- * INSERT now also reads the partition names and file lists of its Hive sources past the catalog-level cache (the
- * session's useConnectorMetadataCache, set by InsertAnalyzer), which lasts until the scan lists its files at
- * scheduling time -- after planning has already dropped the query-level metadata the refresh went through.
+ * An INSERT ... SELECT reads its Hive sources past the catalog-level cache (the session's useConnectorMetadataCache,
+ * set by InsertAnalyzer), which lasts until the scan lists its files at scheduling time. Reading past the cache used
+ * to mean dropping the entry and loading through the cache. A background refresh takes no lock: it reads the source,
+ * then writes what it read into that cache. One that read before the drop wrote the old file list or partition names
+ * back after it, the INSERT planned and scanned on them, and the rows it missed were missing from the target for
+ * good. The INSERT now reads them from the source itself and caches nothing.
  */
 public class HiveReadPastCatalogCacheTest {
     private static final String TABLE_LOCATION = "hdfs://nn/warehouse/t";
@@ -94,11 +93,12 @@ public class HiveReadPastCatalogCacheTest {
         ConnectContext.remove();
     }
 
-    /** What an INSERT reading a Hive source leaves on the session (InsertAnalyzer), then its source refresh. */
+    /**
+     * What an INSERT reading a Hive source leaves on the session (InsertAnalyzer). Its source refresh is left out:
+     * whatever it leaves in the catalog-level cache, the background refresh writes back over it afterwards.
+     */
     private void refreshForInsert() {
         session.setUseConnectorMetadataCache(Optional.of(false));
-        // The refresh goes through the query-level metadata of planning.
-        queryMetadata().invalidateTableForRead("db", hmsTable());
     }
 
     @Test
@@ -202,16 +202,6 @@ public class HiveReadPastCatalogCacheTest {
                 executor, executor, false, true, new Configuration());
     }
 
-    private HiveMetadata queryMetadata() {
-        HiveMetastoreOperations hmsOps = queryHmsOps();
-        RemoteFileOperations fileOps = queryFileOps();
-        return new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps,
-                new HiveStatisticsProvider(hmsOps, fileOps),
-                Optional.of(new HiveCacheUpdateProcessor("hive_catalog", catalogMetastore, catalogFileIO, executor,
-                        false, false)),
-                executor, new ConnectorProperties(ConnectorType.HIVE));
-    }
-
     private Thread startBackground(Runnable refresh) throws InterruptedException {
         Thread thread = new Thread(refresh, "background-refresh");
         background = thread;
@@ -283,13 +273,17 @@ public class HiveReadPastCatalogCacheTest {
     }
 
     private static Table hmsTable() {
-        Table table = Mockito.mock(Table.class);
-        Mockito.when(table.isHMSTable()).thenReturn(true);
-        Mockito.when(table.isHiveTable()).thenReturn(true);
-        Mockito.when(table.isUnPartitioned()).thenReturn(false);
-        Mockito.when(table.getCatalogDBName()).thenReturn("db");
-        Mockito.when(table.getCatalogTableName()).thenReturn("t");
-        Mockito.when(table.getTableLocation()).thenReturn(TABLE_LOCATION);
-        return table;
+        return HiveTable.builder()
+                .setId(1)
+                .setTableName("t")
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("db")
+                .setHiveTableName("t")
+                .setTableLocation(TABLE_LOCATION)
+                .setFullSchema(List.of(new Column("c1", Type.INT), new Column("p", Type.STRING)))
+                .setDataColumnNames(List.of("c1"))
+                .setPartitionColumnNames(List.of("p"))
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .build();
     }
 }

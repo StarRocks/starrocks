@@ -46,15 +46,10 @@ import org.mockito.Mockito;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.INT;
-=======
-
-import static com.starrocks.type.IntegerType.BIGINT;
-import static com.starrocks.type.IntegerType.INT;
->>>>>>> c0a76cd ([BugFix] Stop INSERT missing Hive source rows and SELECT * dropping resource-mapping Hive columns (#81032))
 
 /**
  * Tables that live in an internal database but keep their data elsewhere -- FILE, and HIVE / ICEBERG / HUDI
