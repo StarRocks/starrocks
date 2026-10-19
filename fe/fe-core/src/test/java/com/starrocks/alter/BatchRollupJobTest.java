@@ -82,10 +82,12 @@ public class BatchRollupJobTest {
     // The rollup scheduler runs every 10 ms and the jobs finish quickly, so a job can finish
     // before CANCEL reaches it. Keep the scheduler from running jobs for the rest of the test.
     // Must be called before the rollup jobs are created.
+    // On this branch the scheduler runs the jobs in runAfterCatalogReady(). JMockit silently ignores a @Mock
+    // that matches no method, so a wrong name leaves the scheduler running without any error.
     private static void pauseRollupScheduler() {
         new MockUp<MaterializedViewHandler>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
     }
