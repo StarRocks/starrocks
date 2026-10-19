@@ -45,7 +45,7 @@ jobs:
           contains(github.event.pull_request.head.ref, '-cd-contributed-pr-')) && (
           contains(fromJSON('["opened","reopened"]'), github.event.action) ||
           (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
-            contains(fromJSON('["ERROR","conflict","conflicts","pending","no-merge-needed"]'), github.event.label.name)) ||
+            contains(fromJSON('["ERROR","conflict","conflicts","pending","SKIP MERGE"]'), github.event.label.name)) ||
           (github.event.action == 'edited' && github.event.changes.title != null) ||
           (contains(fromJSON('["ready_for_review","converted_to_draft"]'), github.event.action) &&
             github.event.pull_request.base.ref != 'main'))))) ||
