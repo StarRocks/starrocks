@@ -34,6 +34,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
@@ -65,7 +66,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IvmBrokenException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.common.DmlException;
@@ -677,11 +678,20 @@ public abstract class MVRefreshProcessor {
             if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
                 logger.info("table {} changed after refreshing materialized view, old id: {}, new id: {}",
                         baseTableInfo.getTableInfoStr(), table.getTableIdentifier(), newTable.getTableIdentifier());
+<<<<<<< HEAD
                 if (currentRefreshMode.isIncremental()) {
                     throw new SemanticException("Materialized view %s.%s refresh failed: base table %s schema " +
                             "or identity changed, cannot do incremental refresh in %s mode. " +
                             "Please drop and re-create the materialized view.",
                             db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr(), currentRefreshMode);
+=======
+                if (runRefreshMode.isIncremental()) {
+                    recordRefreshModeReason(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE,
+                            baseTableInfo.getReadableString());
+                    throw breakingError(RefreshFailureKind.BASELINE_UNREACHABLE,
+                            String.format("base table %s was dropped and re-created", baseTableInfo.getReadableString()),
+                            null);
+>>>>>>> a770cd5d292... [BugFix][RB-528] Inactivate an INCREMENTAL MV whose Iceberg base table was dropped and re-created (#65530)
                 }
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
             }
@@ -841,6 +851,59 @@ public abstract class MVRefreshProcessor {
         return tables;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * True for the run that leads a batch. A later batch of the same job inherits the lead run's mode
+     * decision rather than making its own, so it must not overwrite the reason that decision recorded.
+     */
+    @VisibleForTesting
+    static boolean isBatchLeadRun(String startTaskRunId, String taskRunId) {
+        return startTaskRunId == null || startTaskRunId.equals(taskRunId);
+    }
+
+    /**
+     * Record why this run is not refreshing incrementally. Call it where the cause is known: the
+     * exception that carries it upward is formatted for humans and cannot be classified back.
+     */
+    protected void recordRefreshModeReason(MaterializedView.RefreshModeReason reason, String baseTableName) {
+        updateTaskRunStatus(status ->
+                status.getMvTaskRunExtraMessage().setRefreshModeReason(reason, baseTableName));
+    }
+
+    protected IvmBrokenException breakingError(RefreshFailureKind kind, String reasonFragment, Exception cause) {
+        String message = String.format(
+                "Cannot incrementally refresh materialized view %s: %s. "
+                        + "INCREMENTAL materialized views %s "
+                        + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). %s",
+                mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER,
+                MaterializedViewExceptions.recoverByActivateHint(db.getFullName(), mv.getName()));
+        return cause == null ? new IvmBrokenException(kind, message) : new IvmBrokenException(kind, message, cause);
+    }
+
+    /**
+     * Drop any reason an earlier attempt of this task run left behind. Retries reuse one TaskRunStatus, so
+     * an attempt that falls back and then fails would otherwise leave its reason on a later attempt that
+     * succeeds incrementally -- a row pairing INCREMENTAL with a reason for not being incremental.
+     */
+    public void clearRefreshModeReason() {
+        updateTaskRunStatus(status -> status.getMvTaskRunExtraMessage().setRefreshModeReason(null, null));
+    }
+
+    /**
+     * Record a reason only if no more specific one was recorded for this run. The fallback catches any
+     * exception, so without this backstop a path nobody annotated degrades and reports no reason at all.
+     */
+    protected void recordRefreshModeReasonIfAbsent(MaterializedView.RefreshModeReason reason) {
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            if (Strings.isNullOrEmpty(extraMessage.getRefreshModeReason())) {
+                extraMessage.setRefreshModeReason(reason, null);
+            }
+        });
+    }
+
+>>>>>>> a770cd5d292... [BugFix][RB-528] Inactivate an INCREMENTAL MV whose Iceberg base table was dropped and re-created (#65530)
     public void updatePCTMVToRefreshInfoIntoTaskRun(PCellSortedSet finalMvToRefreshedPartitions,
                                                     PCellSetMapping finalRefTablePartitionNames) {
         updateTaskRunStatus(status -> {
