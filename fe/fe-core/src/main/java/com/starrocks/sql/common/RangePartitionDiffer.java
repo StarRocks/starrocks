@@ -31,11 +31,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
-import com.starrocks.connector.MVPartitionCellBuilder;
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -243,17 +239,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
-<<<<<<< HEAD
-                PCellSortedSet refTablePartitionKeyMap =
-                        PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
-                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT));
-                if (refTablePartitionKeyMap == null) {
-=======
-                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, isQueryRewrite(),
-                        () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                PCellSortedSet refTablePartitionKeyMap = MvUtils.readBaseTableUnderLock(mv, refBT, isQueryRewrite(),
+                        () -> PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
                                 mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
-                if (mapping.cells() == null) {
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
+                if (refTablePartitionKeyMap == null) {
                     return null;
                 }
                 refBaseTablePartitionMap.put(refBT, refTablePartitionKeyMap);

@@ -80,13 +80,9 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String SUBMIT_USER_SYSTEM = "system";
     // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
     public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
-<<<<<<< HEAD
-=======
     // Fingerprints of the non-ref olap base tables as the job's first run read them, propagated across batch runs so
     // that the last run records their versions only if no batch read a different state, see MVVersionManager.
     public static final String MV_NON_REF_TABLE_FINGERPRINT = "MV_NON_REF_TABLE_FINGERPRINT";
-    public static final String SUBMIT_USER_SYSTEM = "system";
->>>>>>> d75e81f ([BugFix] Fix MV refresh and freshness under base table partition churn and batched refresh (#81034))
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
