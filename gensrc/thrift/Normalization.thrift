@@ -24,6 +24,7 @@ struct TNormalOlapScanNode {
   12: optional list<string> unused_output_column_name;
   13: optional list<i64> selected_partition_ids;
   14: optional list<i64> selected_partition_versions;
+  15: optional PlanNodes.TTableSampleOptions sample_options;
   // The ANN search spec. RewriteToVectorPlanRule replaces the distance function in the scan's
   // projection with an opaque __vector_* column ref and moves the query vector, the folded
   // distance-range bound and the ordering into TVectorSearchOptions, so none of them survive
@@ -59,7 +60,7 @@ struct TNormalAggregationNode {
   6: optional bool use_streaming_preaggregation
   7: optional i32 agg_func_set_version = 1
   8: optional bool has_outer_join_child
-  9: optional PlanNodes.TStreamingPreaggregationMode streaming_preaggregation_mode 
+  9: optional PlanNodes.TStreamingPreaggregationMode streaming_preaggregation_mode
 }
 
 struct TNormalDecodeNode {

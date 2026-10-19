@@ -691,6 +691,8 @@ struct TLakeScanNode {
   43: optional Descriptors.TTableSchemaKey schema_key
 
   46: optional i32 next_uniq_id
+
+  63: optional TTableSampleOptions sample_options
 }
 
 struct TEqJoinCondition {
