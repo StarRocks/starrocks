@@ -1,0 +1,510 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/lake_delvec_loader.h"
+
+#include <gtest/gtest.h>
+
+#include <atomic>
+#include <chrono>
+#include <new>
+#include <thread>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "fs/fs_util.h"
+#include "runtime/runtime_env.h"
+#include "storage/del_vector.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+
+namespace starrocks::lake {
+
+class LakeDelvecLoaderTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
+
+        _location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+    }
+
+    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+
+protected:
+    constexpr static const char* const kTestDir = "./lake_delvec_loader_test";
+    std::shared_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
+};
+
+// Test load_from_meta with empty pdelvec pointer
+TEST_F(LakeDelvecLoaderTest, test_load_from_meta_with_empty_pdelvec) {
+    const int64_t tablet_id = 10001;
+    const uint32_t segment_id = 100;
+    const int64_t version = 10;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // 1. Create metadata and write delvec
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {1, 2, 3, 5, 8, 13};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    Status st = builder.finalize(next_id());
+    ASSERT_TRUE(st.ok());
+
+    // 2. Read metadata and get delvec page
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    ASSERT_TRUE(iter != metadata2->delvec_meta().delvecs().end());
+    DelvecPagePB delvec_page = iter->second;
+
+    // 3. Test load_from_meta with empty pdelvec pointer
+    DelVectorPtr pdelvec;  // This is an empty shared_ptr
+    ASSERT_FALSE(pdelvec); // Verify it's null
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true, lake_io_opts);
+
+    // This should not crash even when pdelvec is empty, because the fix initializes it
+    st = loader.load_from_meta(metadata2, delvec_page, &pdelvec);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(pdelvec != nullptr); // Should be initialized now
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test load_from_meta with normal usage
+TEST_F(LakeDelvecLoaderTest, test_load_from_meta_normal) {
+    const int64_t tablet_id = 10002;
+    const uint32_t segment_id = 200;
+    const int64_t version = 11;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // 1. Create metadata and write delvec
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {10, 20, 30, 40, 50};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    Status st = builder.finalize(next_id());
+    ASSERT_TRUE(st.ok());
+
+    // 2. Read metadata and get delvec page
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    ASSERT_TRUE(iter != metadata2->delvec_meta().delvecs().end());
+    DelvecPagePB delvec_page = iter->second;
+
+    // 3. Test load_from_meta
+    DelVectorPtr pdelvec;
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true, lake_io_opts);
+
+    st = loader.load_from_meta(metadata2, delvec_page, &pdelvec);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test load_from_file with empty pdelvec pointer
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_empty_pdelvec) {
+    const int64_t tablet_id = 10003;
+    const uint32_t segment_id = 300;
+    const int64_t version = 12;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // 1. Create metadata and write delvec
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {100, 200, 300};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    Status st = builder.finalize(next_id());
+    ASSERT_TRUE(st.ok());
+
+    // 2. Test load_from_file with empty pdelvec
+    DelVectorPtr pdelvec; // Empty shared_ptr
+    ASSERT_FALSE(pdelvec);
+
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    tsid.segment_id = segment_id;
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true, lake_io_opts);
+
+    st = loader.load_from_file(tsid, version, &pdelvec);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test load_from_file with normal usage
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_normal) {
+    const int64_t tablet_id = 10004;
+    const uint32_t segment_id = 400;
+    const int64_t version = 13;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // 1. Create metadata and write delvec
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {1, 3, 5, 7, 9, 11};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    Status st = builder.finalize(next_id());
+    ASSERT_TRUE(st.ok());
+
+    // 2. Test load_from_file
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    tsid.segment_id = segment_id;
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true, lake_io_opts);
+
+    st = loader.load_from_file(tsid, version, &pdelvec);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test that load_from_file reuses the cached metadata when (tablet_id, version) matches.
+// The on-disk tablet metadata file and the metacache entry are both removed before loading, so
+// a fallback to get_tablet_metadata would fail with NotFound. Successful load therefore proves
+// the cached-metadata fast path is taken.
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_cached_metadata) {
+    const int64_t tablet_id = 10006;
+    const uint32_t segment_id = 600;
+    const int64_t version = 15;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {7, 14, 21};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    ASSIGN_OR_ABORT(auto cached_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto meta_path = _tablet_manager->tablet_metadata_location(tablet_id, version);
+    ASSERT_TRUE(FileSystem::Default()->delete_file(meta_path).ok());
+    _tablet_manager->metacache()->erase(meta_path);
+
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid(tablet_id, segment_id);
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, cached_metadata);
+
+    ASSERT_TRUE(loader.load_from_file(tsid, version, &pdelvec).ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// Test that load_from_file ignores the cached metadata when its (tablet_id, version) does not
+// match the request, and still succeeds by falling back to get_tablet_metadata from disk.
+TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_mismatched_cached_metadata) {
+    const int64_t tablet_id = 10007;
+    const uint32_t segment_id = 700;
+    const int64_t version = 16;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {11, 22, 33};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    // Cached metadata is for a different version; the loader must fall back to disk read.
+    auto stale_metadata = std::make_shared<TabletMetadata>();
+    stale_metadata->set_id(tablet_id);
+    stale_metadata->set_version(version + 1);
+
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid(tablet_id, segment_id);
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), nullptr, true /* fill_cache */, lake_io_opts, stale_metadata);
+
+    ASSERT_TRUE(loader.load_from_file(tsid, version, &pdelvec).ok());
+    ASSERT_TRUE(pdelvec != nullptr);
+    EXPECT_EQ(expected_delvec, pdelvec->save());
+}
+
+// CompactionDelvecHolder is what keeps a vertical compaction from reloading every delvec once per
+// column-group pass: the pass loop keeps re-inserting the (much larger) segment objects over them in
+// the metadata cache, so the cache does not keep them alive. Pins the contract every pass relies on:
+// a (segment, version) already loaded is served from the holder -- the same instance, no file read --
+// while a different segment or a different version is not.
+TEST_F(LakeDelvecLoaderTest, test_load_with_compaction_delvec_holder) {
+    const int64_t tablet_id = 10008;
+    const uint32_t segment_id = 800;
+    const int64_t version = 17;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {2, 4, 8, 16};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    TabletSegmentId tsid(tablet_id, segment_id);
+    LakeIOOptions lake_io_opts;
+
+    DelVectorPtr first;
+    {
+        LakeDelvecLoader loader(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+        ASSERT_TRUE(loader.load(tsid, version, &first).ok());
+        ASSERT_TRUE(first != nullptr);
+        EXPECT_EQ(expected_delvec, first->save());
+    }
+
+    // Make every path to the file fail, so only the holder can still answer.
+    ASSERT_TRUE(FileSystem::Default()->delete_file(_tablet_manager->tablet_metadata_location(tablet_id, version)).ok());
+    _tablet_manager->metacache()->prune();
+
+    // A later pass builds its own loader but shares the holder: same (segment, version), same
+    // instance handed back, no file read.
+    LakeDelvecLoader next_pass(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+    DelVectorPtr second;
+    ASSERT_TRUE(next_pass.load(tsid, version, &second).ok());
+    ASSERT_EQ(first.get(), second.get());
+
+    // Neither the segment id nor the version may be dropped from the key: a different one must miss
+    // the holder and go to the (now missing) file rather than silently reusing this delvec.
+    DelVectorPtr other;
+    EXPECT_FALSE(next_pass.load(TabletSegmentId(tablet_id, segment_id + 1), version, &other).ok());
+    EXPECT_FALSE(next_pass.load(tsid, version + 1, &other).ok());
+}
+
+// Range-split parallel compaction shares one holder across concurrent PK subtasks; get_or_load
+// must be single-flight per key: concurrent callers that miss together produce exactly one load,
+// everyone shares that instance, and a failed load releases the key for a retry instead of
+// caching the error or leaving waiters stuck.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_single_flight) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10009, 900);
+    const int64_t version = 7;
+
+    std::atomic<int> loads{0};
+    constexpr int kThreads = 4;
+    std::vector<DelVectorPtr> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            DelVectorPtr dv;
+            auto st = holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                loads++;
+                // Keep the elected load in flight long enough for every other thread to arrive.
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                *out = std::make_shared<DelVector>();
+                return Status::OK();
+            });
+            EXPECT_TRUE(st.ok());
+            results[t] = std::move(dv);
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_TRUE(results[t] != nullptr);
+        EXPECT_EQ(results[0].get(), results[t].get());
+    }
+
+    // A failed load must release the in-flight key: the next caller retries and can succeed.
+    const TabletSegmentId failing(10009, 901);
+    DelVectorPtr dv;
+    EXPECT_FALSE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) {
+                           return Status::InternalError("boom");
+                       }).ok());
+    EXPECT_TRUE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr* out) {
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
+    EXPECT_TRUE(dv != nullptr);
+}
+
+// Same contract as the segment election: |load| reads a remote file and deserializes a roaring
+// bitmap, so it can throw std::bad_alloc when the mem-tracker hook makes the allocator return
+// nullptr. The in-flight key must be given back on the unwind, or every later caller asking for the
+// same (segment, version) waits on the condition variable for good.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_releases_key_on_exception) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10010, 950);
+    const int64_t version = 3;
+
+    DelVectorPtr dv;
+    EXPECT_THROW((void)holder->get_or_load(tsid, version, &dv, [](DelVectorPtr*) -> Status { throw std::bad_alloc(); }),
+                 std::bad_alloc);
+
+    // The key was released, so this call loads instead of blocking on a mark nobody will clear.
+    int loads = 0;
+    ASSERT_TRUE(holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                          loads++;
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
+    EXPECT_EQ(1, loads);
+    EXPECT_TRUE(dv != nullptr);
+}
+
+// Test load with pk_builder
+TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
+    const int64_t tablet_id = 10005;
+    const uint32_t segment_id = 500;
+    const int64_t version = 14;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // 1. Create metadata and write delvec
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {2, 4, 6, 8};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    // Add delvec to builder
+    builder.append_delvec(ndv, segment_id);
+    Status st = builder.finalize(next_id());
+    ASSERT_TRUE(st.ok());
+
+    // 2. Create a new version with MetaFileBuilder
+    metadata->set_version(version + 1);
+    MetaFileBuilder builder2(*tablet, metadata);
+
+    // 3. Test load with pk_builder (MetaFileBuilder)
+    DelVectorPtr pdelvec;
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    tsid.segment_id = segment_id;
+
+    LakeIOOptions lake_io_opts;
+    LakeDelvecLoader loader(_tablet_manager.get(), &builder2, true, lake_io_opts);
+
+    st = loader.load(tsid, version, &pdelvec);
+    // The load should succeed (either found in builder or loaded from file)
+    ASSERT_TRUE(st.ok());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_update_primary_index_memory_limit) {
+    const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(30).ok());
+    ASSERT_EQ(process_mem_limit * 30 / 100, _primary_key_manager->index_cache().capacity());
+    // out-of-range values are clamped to [0, 100]
+    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(200).ok());
+    ASSERT_EQ(process_mem_limit, _primary_key_manager->index_cache().capacity());
+    ASSERT_TRUE(_primary_key_manager->update_primary_index_memory_limit(-1).ok());
+    ASSERT_EQ(0, _primary_key_manager->index_cache().capacity());
+}
+
+} // namespace starrocks::lake
