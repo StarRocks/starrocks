@@ -79,7 +79,7 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
                 return MvUpdateInfo.fullRefresh(mv);
             }
 
-            if (hasDeletedPartitions(mv, table, /* pinnedVersionRange */ null)) {
+            if (hasDeletedPartitions(mv, table)) {
                 logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }

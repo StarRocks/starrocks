@@ -14,15 +14,12 @@
 
 package com.starrocks.catalog;
 
-<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
-import com.starrocks.analysis.Expr;
-=======
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
->>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -30,7 +27,6 @@ import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.common.PCell;
@@ -39,11 +35,8 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
-import java.util.List;
-=======
 import java.util.Collections;
->>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -252,18 +245,15 @@ public class MvRefreshArbiter {
         return baseTableUpdateInfo;
     }
 
-    public static boolean hasDeletedPartitions(MaterializedView mv, Table table, TvrVersionRange pinnedVersionRange) {
-        return !getDroppedTrackedPartitions(mv, table, pinnedVersionRange).isEmpty();
+    public static boolean hasDeletedPartitions(MaterializedView mv, Table table) {
+        return !getDroppedTrackedPartitions(mv, table).isEmpty();
     }
 
     /**
      * The base table partitions the mv still tracks a refreshed version for, but which no longer exist in the base
      * table.
-     *
-     * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
      */
-    public static Set<String> getDroppedTrackedPartitions(MaterializedView mv, Table table,
-                                                          TvrVersionRange pinnedVersionRange) {
+    public static Set<String> getDroppedTrackedPartitions(MaterializedView mv, Table table) {
         Map<String, MaterializedView.BasePartitionInfo> versionMap = getTrackedPartitionVersions(mv, table);
         if (MapUtils.isEmpty(versionMap)) {
             return Sets.newHashSet();
@@ -276,7 +266,7 @@ public class MvRefreshArbiter {
                         .filter(name -> olapTable.getPartition(name) == null)
                         .collect(Collectors.toSet());
             } else {
-                ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table, pinnedVersionRange);
+                ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
                 Set<String> livePartitions = traits.getPartitionNameWithPartitionInfo().keySet();
                 dropped = Sets.difference(versionMap.keySet(), livePartitions).immutableCopy();
             }
@@ -292,6 +282,22 @@ public class MvRefreshArbiter {
             logMVPrepare(mv, String.format("Base table %s partitions %s have been dropped", table.getName(), dropped));
         }
         return dropped;
+    }
+
+    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
+    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
+            MaterializedView mv, Table table) {
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (table.isNativeTableOrMaterializedView()) {
+            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
+        }
+        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
+        // hand back another table's version map.
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(context::getBaseTableRefreshInfo)
+                .orElseGet(Maps::newHashMap);
     }
 
     /**

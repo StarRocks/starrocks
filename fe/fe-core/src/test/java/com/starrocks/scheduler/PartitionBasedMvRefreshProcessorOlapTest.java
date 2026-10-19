@@ -3054,11 +3054,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             // Nothing changed, so the second run has nothing to refresh.
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
 
             dropDailyBasePartition("p20220301");
             initAndExecuteTaskRun(taskRun);
-            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
 
             // 2022-03-02 survives, so the March mv partition survives with it and still holds the 2022-03-01 row.
             Assertions.assertEquals(mvPartitionsBeforeDrop, mv.getVisiblePartitionNames());
@@ -3066,7 +3067,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             String marchMvPartition = mvPartitionsBeforeDrop.stream()
                     .filter(name -> name.contains("202203")).findFirst().orElseThrow();
             Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
-                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+                    processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
         } finally {
             starRocksAssert.dropMaterializedView("mv_rollup_month");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3100,7 +3101,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             initAndExecuteTaskRun(taskRun);
 
             Assertions.assertEquals(2, mv.getVisiblePartitionNames().size());
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_same_day");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3128,16 +3129,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             Set<String> mvPartitions = mv.getVisiblePartitionNames();
             Assertions.assertEquals(1, mvPartitions.size());
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
 
             dropDailyBasePartition("p20220301");
             initAndExecuteTaskRun(taskRun);
-            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
 
             Assertions.assertEquals(mvPartitions, mv.getVisiblePartitionNames());
             Assertions.assertNotNull(mvContext.getExecPlan());
             Assertions.assertEquals(mvPartitions,
-                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+                    processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
         } finally {
             starRocksAssert.dropMaterializedView("mv_rollup_year");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3193,13 +3195,13 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 new StmtExecutor(connectContext, SqlParser.parseSingleStatement(
                         sql, connectContext.getSessionVariable().getSqlMode())).execute();
                 initAndExecuteTaskRun(taskRun);
-                MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+                PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
 
                 // A range partition is named after both bounds, so match the lower bound rather than any occurrence.
                 String covering = allMvPartitions.stream()
                         .filter(name -> name.startsWith("p" + round.getValue() + "_")).findFirst().orElseThrow();
                 Assertions.assertEquals(Sets.newHashSet(covering),
-                        mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames(),
+                        processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh(),
                         "dropping " + round.getKey() + " must recompute only " + covering);
                 Assertions.assertEquals(allMvPartitions, mv.getVisiblePartitionNames());
             }
@@ -3366,11 +3368,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             dropDailyBasePartition("p20220301");
             initAndExecuteTaskRun(taskRun);
-            MvTaskRunContext mvContext = getPartitionBasedRefreshProcessor(taskRun).getMvContext();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
 
             Assertions.assertNotNull(mvContext.getExecPlan());
             Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
-                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+                    processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
         } finally {
             starRocksAssert.dropMaterializedView("mv_partial_map");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3395,12 +3398,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             initAndExecuteTaskRun(taskRun);
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
 
             dropDailyBasePartition("p20220301");
             initAndExecuteTaskRun(taskRun);
 
-            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_unpartitioned_daily");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3441,14 +3444,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             initAndExecuteTaskRun(taskRun);
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
 
             String sql = "ALTER TABLE test.dim_daily DROP PARTITION p20220301";
             new StmtExecutor(connectContext,
                     SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode())).execute();
             initAndExecuteTaskRun(taskRun);
 
-            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
+            Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_fact_dim");
             starRocksAssert.dropTable("test.dim_daily");

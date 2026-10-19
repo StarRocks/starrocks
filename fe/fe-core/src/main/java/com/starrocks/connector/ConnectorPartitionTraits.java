@@ -132,33 +132,7 @@ public abstract class ConnectorPartitionTraits {
         return buildWithCache(ctx, null, table);
     }
 
-<<<<<<< HEAD
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
-=======
-    /**
-     * Build traits with a pinned version range. Subclasses that support snapshot-aware partition
-     * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
-     * Other connectors store the range but ignore it in their partition methods.
-     */
-    public static ConnectorPartitionTraits build(MaterializedView mv, Table table,
-                                                 TvrVersionRange pinnedVersionRange) {
-        ConnectorPartitionTraits traits = build(mv, table);
-        if (pinnedVersionRange != null) {
-            traits.setPinnedVersionRange(pinnedVersionRange);
-        }
-        return traits;
-    }
-
-    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
-        return build(null, table, pinnedVersionRange);
-    }
-
-    /**
-     * Build the partition traits for the table without the query-context cache wrapper, whatever the current
-     * thread's context.
-     */
-    public static ConnectorPartitionTraits buildWithoutCache(Table table) {
->>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;

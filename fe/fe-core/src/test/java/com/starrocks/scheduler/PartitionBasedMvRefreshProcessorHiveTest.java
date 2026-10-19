@@ -987,7 +987,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             // part_tbl1 partition that is gone: it must be recomputed, and the join now yields nothing.
             Assertions.assertNotNull(execPlan);
             Assertions.assertEquals(Sets.newHashSet("p20200105"),
-                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+                    processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
             PlanTestBase.assertContains(execPlan.getExplainString(TExplainLevel.NORMAL), "0:EMPTYSET");
         }
 

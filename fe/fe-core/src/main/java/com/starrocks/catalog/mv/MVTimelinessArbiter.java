@@ -190,7 +190,7 @@ public abstract class MVTimelinessArbiter {
             if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
                 return true;
             }
-            if (hasDeletedPartitions(mv, baseTable, /* pinnedVersionRange */ null)) {
+            if (hasDeletedPartitions(mv, baseTable)) {
                 return true;
             }
         }
@@ -245,21 +245,12 @@ public abstract class MVTimelinessArbiter {
             }
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
-<<<<<<< HEAD
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
-=======
-            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPCells());
 
             // An mv partition that outlived a dropped base partition still holds its rows, so it must not answer a
             // query until it is recomputed.
-            Set<String> affectedByDrops = getMvPartitionsAffectedByDrops(mv, baseTable,
-                    getDroppedTrackedPartitions(mv, baseTable, /* pinnedVersionRange */ null));
-            if (!affectedByDrops.isEmpty()) {
-                PCellSortedSet affectedCells = mv.getPartitionCells(Optional.empty());
-                affectedCells.retainAllNames(affectedByDrops);
-                mvUpdateInfo.addMVToRefreshPartitionNames(affectedCells);
-            }
->>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
+            mvUpdateInfo.addMvToRefreshPartitionNames(getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable)));
         }
         return baseChangedPartitionNames;
     }
