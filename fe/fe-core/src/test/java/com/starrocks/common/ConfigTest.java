@@ -682,4 +682,78 @@ public class ConfigTest {
             Files.deleteIfExists(confFile);
         }
     }
+
+    private static class ConfigForEnv extends ConfigBase {
+        @ConfField
+        public static String prop_substituted = "";
+        @ConfField
+        public static String prop_escaped = "";
+        @ConfField
+        public static String prop_mixed = "";
+    }
+
+    @Test
+    public void testEnvSubstitutionEscape(@TempDir Path dir) throws Exception {
+        System.setProperty("SR_CONFIG_TEST_VAR", "substituted");
+        try {
+            Path conf = dir.resolve("env.conf");
+            Files.writeString(conf, String.join("\n",
+                    "prop_substituted = a=${SR_CONFIG_TEST_VAR}",
+                    "prop_escaped = uid=$${USER},ou=$${SR_CONFIG_TEST_UNDEFINED_VAR}",
+                    "prop_mixed = uid=$${SR_CONFIG_TEST_VAR},ou=${SR_CONFIG_TEST_VAR}"));
+            new ConfigForEnv().init(conf.toString());
+            Assertions.assertEquals("a=substituted", ConfigForEnv.prop_substituted);
+            Assertions.assertEquals("uid=${USER},ou=${SR_CONFIG_TEST_UNDEFINED_VAR}", ConfigForEnv.prop_escaped);
+            Assertions.assertEquals("uid=${SR_CONFIG_TEST_VAR},ou=substituted", ConfigForEnv.prop_mixed);
+        } finally {
+            System.clearProperty("SR_CONFIG_TEST_VAR");
+        }
+    }
+
+    @Test
+    public void testEnvSubstitutionMissingVariable(@TempDir Path dir) throws Exception {
+        Path conf = dir.resolve("env.conf");
+        Files.writeString(conf, "prop_substituted = ${SR_CONFIG_TEST_UNDEFINED_VAR}");
+        InvalidConfException e = Assertions.assertThrows(InvalidConfException.class,
+                () -> new ConfigForEnv().init(conf.toString()));
+        Assertions.assertTrue(e.getMessage().contains("no such env variable: SR_CONFIG_TEST_UNDEFINED_VAR"));
+        Assertions.assertTrue(e.getMessage().contains("referenced by prop_substituted"));
+        Assertions.assertTrue(e.getMessage().contains("write $${SR_CONFIG_TEST_UNDEFINED_VAR}"));
+    }
+
+    @Test
+    public void testLdapBindDnPatternEscaped(@TempDir Path dir) throws Exception {
+        Path conf = dir.resolve("fe.conf");
+        Files.writeString(conf,
+                "authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=a,dc=example;uid=$${USER},ou=b,dc=example");
+        try {
+            new Config().init(conf.toString());
+            Assertions.assertEquals("uid=${USER},ou=a,dc=example;uid=${USER},ou=b,dc=example",
+                    Config.authentication_ldap_simple_bind_dn_pattern);
+        } finally {
+            Config.authentication_ldap_simple_bind_dn_pattern = "";
+        }
+    }
+
+    @Test
+    public void testPersistedValueKeepsPlaceholder(@TempDir Path dir) throws Exception {
+        Path conf = dir.resolve("fe.conf");
+        Files.writeString(conf, "authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=a,dc=example\n");
+        try {
+            new Config().init(conf.toString());
+            Assumptions.assumeTrue(ConfigBase.isIsPersisted(),
+                    "the config file is not writable, skipping");
+
+            Config.setMutableConfig("authentication_ldap_simple_bind_dn_pattern",
+                    "uid=${USER},ou=b,dc=example", true, "root");
+            Assertions.assertEquals("uid=${USER},ou=b,dc=example", Config.authentication_ldap_simple_bind_dn_pattern);
+            Assertions.assertTrue(Files.readString(conf)
+                    .contains("authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=b,dc=example"));
+
+            new Config().init(conf.toString());
+            Assertions.assertEquals("uid=${USER},ou=b,dc=example", Config.authentication_ldap_simple_bind_dn_pattern);
+        } finally {
+            Config.authentication_ldap_simple_bind_dn_pattern = "";
+        }
+    }
 }
