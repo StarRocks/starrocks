@@ -619,6 +619,53 @@ TEST_P(LakePrimaryKeyPublishTest, test_interleaved_delete_then_reupsert) {
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_del_tombstone_sstable_requires_cloud_native_index) {
+    if (GetParam().enable_transparent_data_encryption) {
+        GTEST_SKIP() << "covered by the unencrypted index-type parameterizations";
+    }
+    ConfigResetGuard<int64_t> eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> load_spill(&config::enable_load_spill, false);
+    const auto tablet_id = _tablet_metadata->id();
+    auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, false);
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
+
+    // Keep the index type while toggling its enable flag, including disabled CLOUD_NATIVE metadata.
+    for (bool enabled : {false, true}) {
+        SCOPED_TRACE(enabled);
+        _tablet_metadata->set_enable_persistent_index(enabled);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        const auto& op_write = txn_log->op_write();
+        ASSERT_GT(op_write.dels_meta_size(), 0);
+        ASSERT_EQ(op_write.dels_meta_size(), op_write.del_ssts_size());
+        const bool expect_sst = enabled && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE;
+        for (int i = 0; i < op_write.dels_meta_size(); ++i) {
+            EXPECT_FALSE(op_write.dels_meta(i).name().empty());
+            EXPECT_EQ(expect_sst, !op_write.del_ssts(i).name().empty());
+        }
+        std::vector<std::string> files;
+        ASSERT_OK(fs->get_children(join_path(kTestGroupPath, kSegmentDirectoryName), &files));
+        EXPECT_EQ(expect_sst ? op_write.del_ssts_size() : 0,
+                  std::count_if(files.begin(), files.end(), [](const auto& name) { return is_sst(name); }));
+    }
+}
+
 // A transaction whose FIRST flush is delete-only (empty upsert chunk) must still produce a real
 // (0-row) segment for that flush. That empty segment takes the leading rssid slot so the delete
 // (op_offset = its index) is ordered before a later-flush re-upsert of the same key, which then

@@ -248,15 +248,15 @@ public:
     void try_enable_pk_index_eager_build();
     // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
     // when this del file has no sstable). Built when the serialized del-file size reaches
-    // pk_index_eager_build_threshold_bytes; shared-data primary-key tablets always use the cloud-native
-    // persistent index, so publish can ingest it directly.
+    // pk_index_eager_build_threshold_bytes when the load's publish path can ingest it directly.
     std::vector<FileInfo> _del_ssts;
     std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
 
-    // Set by DeltaWriter for the column partial-update modes, whose publish path
+    // Set by DeltaWriter when the tablet does not use the cloud-native persistent index, or for the
+    // column partial-update modes, whose publish path
     // (UpdateManager::_handle_delete_files) applies every del file with index.erase and never consults
     // op_write.del_ssts(). A tombstone sstable built for such a load is therefore never ingested, so it
     // never enters sstable_meta() and only a full vacuum's orphan scan reclaims it -- pure waste on both

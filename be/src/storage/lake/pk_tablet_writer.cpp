@@ -183,10 +183,9 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     // accumulating every tombstone in the persistent-index memtable. This avoids oversized memtables and
     // repeated flushes across large del files; reverse lookup is independently parallelized in both erase
     // paths. Use the eager-build byte threshold, but do not depend on the upsert-side eager writer being
-    // enabled: a pure delete has no upsert spill to enable it. Shared-data primary-key tablets always use the
-    // cloud-native persistent index, so publish can ingest this sstable unconditionally -- except in the
-    // column partial-update modes, whose publish path cannot (see skip_del_tombstone_sstable()). Built
-    // outside the lock (I/O heavy).
+    // enabled: a pure delete has no upsert spill to enable it. DeltaWriter skips the build for non-cloud-native
+    // indexes and column partial-update modes, whose publish paths cannot ingest it (see
+    // skip_del_tombstone_sstable()). Built outside the lock (I/O heavy).
     const int64_t eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
     const bool should_build_del_sst =
             !deletes.empty() && !skip_del_tombstone_sstable() &&
