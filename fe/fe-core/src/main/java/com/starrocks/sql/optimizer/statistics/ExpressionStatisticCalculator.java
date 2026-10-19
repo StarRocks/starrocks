@@ -327,20 +327,10 @@ public class ExpressionStatisticCalculator {
             long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
             long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
             long falseRows = nonNullRows - trueRows;
-            Map<String, Long> mcvs = new HashMap<>();
-            if (trueRows > 0) {
-                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
-                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
-            }
-            if (falseRows > 0) {
-                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
-                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
-            }
-
+            final var mcvs = makeBooleanMCVs(trueRows, falseRows);
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
             }
-
             return builder.build();
         }
 
@@ -522,8 +512,7 @@ public class ExpressionStatisticCalculator {
                     : inputColumnStatistics.getHistogram().getMCV().size();
             final double uniformDistributionFractionPerNonMatching = Math.clamp((nonMatchingFraction - knownNonMatchingFraction) 
                     / clampedNumDistinctValues, 0.0, 1.0);
-            final long notFoundMatchListValues = constantOperatorMatchList.size() - foundMatchListRows.size()
-                    -  (matchListContainsNull ? 1 : 0);
+            final long notFoundMatchListValues = matchListMcvKeys.size() - foundMatchListRows.size();
 
             final double notFoundMatchListRowFractionEstimation = Math.clamp(uniformDistributionFractionPerNonMatching * 
                     notFoundMatchListValues, 0.0, 1.0);
@@ -564,12 +553,7 @@ public class ExpressionStatisticCalculator {
                 long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
                 long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
                 // Add MCV for each branch
-                if (trueRows > 0) {
-                    mcvs.put(booleanToMcvValue(true), trueRows);
-                }
-                if (falseRows > 0) {
-                    mcvs.put(booleanToMcvValue(false), falseRows);
-                }
+                mcvs = makeBooleanMCVs(trueRows, falseRows);
             }
 
             final var builder = ColumnStatistic.builder() //
