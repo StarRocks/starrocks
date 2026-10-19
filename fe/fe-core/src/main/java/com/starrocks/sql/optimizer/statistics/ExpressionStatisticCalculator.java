@@ -1054,7 +1054,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.STR_TO_DATE:
                     minValue = Double.NEGATIVE_INFINITY;
                     maxValue = Double.POSITIVE_INFINITY;
-                    distinctValues = Math.min(rowCount,
+                    distinctValues = Math.min(rowCount * (1 - nullsFraction),
                             left.getDistinctValuesCount() * right.getDistinctValuesCount());
                     break;
                 case FunctionSet.LTRIM:
