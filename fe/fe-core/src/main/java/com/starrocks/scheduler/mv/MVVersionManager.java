@@ -133,8 +133,19 @@ public class MVVersionManager {
             return;
         }
         try {
+<<<<<<< HEAD
             MaterializedView.MvRefreshScheme scheme = mv.getRefreshScheme();
             if (scheme.getLastFreshnessConfirmedAt() >= confirmTime) {
+=======
+            // A DROP that ran before the lock was taken leaves nothing to confirm; logging for it would only
+            // journal an entry no follower can apply.
+            if (!mv.isInCatalog()) {
+                logger.info("skip freshness confirm, mv {} is no longer in the catalog", mv.getName());
+                return;
+            }
+            MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+            if (copiedScheme.getLastFreshnessConfirmedAt() >= confirmTime) {
+>>>>>>> c13d26d ([BugFix] Fix three small pre-existing FE metadata concurrency issues (#81037))
                 return;
             }
             scheme.setLastFreshnessConfirmedAt(confirmTime);

@@ -50,9 +50,27 @@ import static org.mockito.Mockito.when;
 
 public class MVVersionManagerTest {
 
+<<<<<<< HEAD
     @BeforeEach
     public void setUp() {
         new MockUp<MVVersionManager>() {
+=======
+    private final AtomicInteger editLogCount = new AtomicInteger();
+    // The test MVs live in no catalog; this stands in for whether a DROP has removed the MV.
+    private boolean mvInCatalog;
+
+    @BeforeEach
+    public void setUp() {
+        editLogCount.set(0);
+        mvInCatalog = true;
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean isInCatalog() {
+                return mvInCatalog;
+            }
+        };
+        new MockUp<Locker>() {
+>>>>>>> c13d26d ([BugFix] Fix three small pre-existing FE metadata concurrency issues (#81037))
             @Mock
             public void updateEditLogAfterVersionMetaChanged(MaterializedView mv, long maxChangedTableRefreshTime) {
             }
@@ -64,6 +82,137 @@ public class MVVersionManagerTest {
         };
     }
 
+<<<<<<< HEAD
+=======
+    private static MaterializedView buildMv(long lastFreshnessConfirmedAt) {
+        List<Column> columns = new LinkedList<>();
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(lastFreshnessConfirmedAt);
+        return new MaterializedView(1000, 100, "mv_version_manager_test", columns, KeysType.AGG_KEYS,
+                partitionInfo, distributionInfo, refreshScheme);
+    }
+
+    private static MvTaskRunContext buildContext(Map<String, String> properties, TaskRunStatus status) {
+        MvTaskRunContext context = new MvTaskRunContext(new TaskRunContext());
+        context.setProperties(properties);
+        context.setStatus(status);
+        return context;
+    }
+
+    private static TaskRunStatus statusWithProcessStartTime(long processStartTime) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProcessStartTime(processStartTime);
+        return status;
+    }
+
+    @Test
+    public void confirmFreshnessAdvancesAndLogsOnce() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(1, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessIsNoopWhenAlreadyConfirmed() {
+        MaterializedView mv = buildMv(2000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessUsesBatchBaselineProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "1500");
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1500L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(1, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessFallsBackOnMalformedBaseline() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "not-a-number");
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(1, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessSkipsAnMvDroppedBeforeTheLock() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        mvInCatalog = false;
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessSkipsWhenLockTimedOut() {
+        new MockUp<Locker>() {
+            @Mock
+            public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
+                                                           long timeout, TimeUnit unit) {
+                return false;
+            }
+        };
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessIsNoopWhenBaselineMarksIneligible() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "0");
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    @Test
+    public void confirmFreshnessIsNoopWithoutRunStatus() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, null));
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+>>>>>>> c13d26d ([BugFix] Fix three small pre-existing FE metadata concurrency issues (#81037))
     // A base table can be processed by a run without any of its partitions being refreshed: the run is not
     // skipped (isOlapTableRefreshed is set unconditionally), but the derived max is 0.
     @Test
