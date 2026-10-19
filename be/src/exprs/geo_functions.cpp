@@ -39,6 +39,7 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "geo/geo_buffer.h"
+#include "geo/geo_exact_arithmetic.h"
 #include "geo/geo_measurements.h"
 #include "geo/geo_overlay.h"
 #include "geo/geo_topology_simplify.h"
@@ -559,21 +560,12 @@ ALWAYS_NOINLINE int exact_planar_orientation(const WkbCoordinate& a, const WkbCo
             boost::multiprecision::cpp_int_backend<4224, 4224, boost::multiprecision::signed_magnitude,
                                                    boost::multiprecision::unchecked, void>,
             boost::multiprecision::et_off>;
-    const auto scaled = [](double value) -> Integer {
-        const uint64_t bits = std::bit_cast<uint64_t>(value);
-        const uint64_t exponent = (bits >> 52) & 0x7ff;
-        Integer result = bits & ((uint64_t{1} << 52) - 1);
-        if (exponent != 0) {
-            result += uint64_t{1} << 52;
-            result <<= exponent - 1;
-        }
-        return bits >> 63 ? -result : result;
-    };
+    const auto scaled = [](double value) -> Integer { return geo_exact::scaled_binary64<Integer>(value); };
     const Integer ax = scaled(a.x), ay = scaled(a.y);
     const Integer bx = scaled(b.x), by = scaled(b.y);
     const Integer cx = scaled(c.x), cy = scaled(c.y);
-    const Integer determinant = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-    return (determinant > 0) - (determinant < 0);
+    const Integer determinant = geo_exact::orientation(ax, ay, bx, by, cx, cy);
+    return geo_exact::sign(determinant);
 }
 
 int planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
