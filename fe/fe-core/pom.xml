@@ -133,6 +133,13 @@ under the License.
     </profiles>
 
     <dependencies>
+        <!-- Parquet's own shaded Jackson cannot be overridden by jackson.version. -->
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>parquet-jackson</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>fe-grammar</artifactId>

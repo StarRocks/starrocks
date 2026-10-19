@@ -36,9 +36,26 @@ under the License.
 
     <properties>
         <starrocks.home>${basedir}/../../../../</starrocks.home>
+        <!-- Keep embedded Jackson aligned with java-extensions/parquet-jackson. -->
+        <jackson.version>2.22.3</jackson.version>
+        <jackson-annotations.version>2.22</jackson-annotations.version>
     </properties>
 
     <dependencies>
+        <!-- Replace cos_api-bundle's embedded Jackson 2.14.1 with the managed fixed version. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
@@ -90,19 +107,50 @@ under the License.
 
     <build>
         <plugins>
+            <!-- Do not reuse the previous shaded JAR as input to an incremental rebuild. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <forceCreation>true</forceCreation>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
                     <relocations>
+                        <relocation>
+                            <pattern>com.fasterxml.jackson</pattern>
+                            <shadedPattern>com.qcloud.cos.thirdparty.com.fasterxml.jackson</shadedPattern>
+                        </relocation>
                          <relocation>
                              <!-- org.apache.hadoop.security.proto.SecurityProtos conflicts in hadoop-ranger-client-for-hadoop and hadoop-common-3.3 -->
                              <pattern>org.apache.hadoop.security.proto</pattern>
                              <shadedPattern>shaded.starrocks.org.apache.hadoop.security.proto</shadedPattern>
                          </relocation>
                     </relocations>
+                    <transformers>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                            <manifestEntries>
+                                <Multi-Release>true</Multi-Release>
+                            </manifestEntries>
+                        </transformer>
+                    </transformers>
                     <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>module-info.class</exclude>
+                                <exclude>META-INF/versions/**/module-info.class</exclude>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                            </excludes>
+                        </filter>
                         <filter>
                             <artifact>com.qcloud:hadoop-ranger-client-for-hadoop</artifact>
                             <excludes>
@@ -112,7 +160,9 @@ under the License.
                         <filter>
                             <artifact>com.qcloud:cos_api-bundle</artifact>
                             <excludes>
-                                <exclude>META-INF/maven/com.fasterxml.jackson.core/jackson-core/**</exclude>
+                                <exclude>com/qcloud/cos/thirdparty/com/fasterxml/jackson/**</exclude>
+                                <exclude>META-INF/versions/**/com/qcloud/cos/thirdparty/com/fasterxml/jackson/**</exclude>
+                                <exclude>META-INF/maven/com.fasterxml.jackson.core/**</exclude>
                             </excludes>
                         </filter>
                     </filters>

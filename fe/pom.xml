@@ -29,6 +29,7 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
+        <module>../java-extensions/parquet-jackson</module>
         <module>fe-grammar</module>
         <module>fe-type</module>
         <module>fe-parser</module>
@@ -988,6 +989,13 @@ under the License.
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-hadoop</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-common -->
@@ -995,6 +1003,13 @@ under the License.
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-common</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
@@ -1002,6 +1017,13 @@ under the License.
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-column</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
@@ -1009,6 +1031,13 @@ under the License.
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-avro</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-core -->

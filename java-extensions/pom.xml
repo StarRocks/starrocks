@@ -9,6 +9,7 @@
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
+        <module>parquet-jackson</module>
         <module>jdbc-bridge</module>
         <module>udf-extensions</module>
         <module>java-utils</module>
@@ -662,20 +663,28 @@
 
             <dependency>
                 <groupId>org.apache.parquet</groupId>
-                <artifactId>parquet-hadoop-bundle</artifactId>
-                <version>${parquet.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-avro</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-hadoop</artifactId>
                 <version>${parquet.version}</version>
+                <!-- Use the locally rebuilt, security-patched Jackson namespace. -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>parquet-jackson</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
