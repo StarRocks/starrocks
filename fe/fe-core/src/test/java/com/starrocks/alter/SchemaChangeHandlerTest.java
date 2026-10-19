@@ -56,9 +56,12 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.utframe.TestWithFeService;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
@@ -66,6 +69,7 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -1091,5 +1095,74 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private boolean hasAlterJobOf(SchemaChangeHandler handler, OlapTable table) {
         return handler.getAlterJobsV2().values().stream().anyMatch(job -> job.getTableId() == table.getId());
+    }
+
+    @Test
+    public void testFastSchemaEvolutionInvalidatesGlobalDict() throws Exception {
+        // A schema change does not bump the partition visible version that a global dict's validity is
+        // checked against, so after a fast ADD/DROP COLUMN the collected dicts stayed "valid" while new
+        // rowsets were encoded independently, and decoding them failed with "Dict Decode failed". Both the
+        // leader and a follower replaying the change go through modifyTableAddOrDrop, so both must
+        // invalidate the dict of every varchar column, including ones the change did not touch.
+        createTable("CREATE TABLE test.t_fast_dict_invalidate (\n"
+                + "  k1 INT NOT NULL,\n"
+                + "  name VARCHAR(50),\n"
+                + "  v1 INT\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(k1)\n"
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES (\n"
+                + "  \"replication_num\" = \"1\",\n"
+                + "  \"fast_schema_evolution\" = \"true\"\n"
+                + ");");
+
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<CacheDictManager>() {
+            @Mock
+            public void removeGlobalDict(OlapTable table, ColumnId columnName) {
+                invalidated.add(columnName.getId());
+            }
+        };
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) globalStateMgr.getLocalMetastore().getTable(db.getFullName(),
+                "t_fast_dict_invalidate");
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), globalStateMgr.getNextId());
+        }
+        List<Index> newIndexes = tbl.getCopiedIndexes();
+        SchemaChangeHandler handler = globalStateMgr.getAlterJobMgr().getSchemaChangeHandler();
+        try {
+            assertFastSchemaEvolutionInvalidatesGlobalDict(handler, db, tbl, indexSchemaMap, newIndexes,
+                    indexToNewSchemaId, invalidated);
+        } finally {
+            // the other tests count every alter job the handler holds
+            handler.getAlterJobsV2().values().removeIf(job -> job.getTableId() == tbl.getId());
+        }
+    }
+
+    private void assertFastSchemaEvolutionInvalidatesGlobalDict(SchemaChangeHandler handler, Database db,
+                                                                OlapTable tbl,
+                                                                Map<Long, List<Column>> indexSchemaMap,
+                                                                List<Index> newIndexes,
+                                                                Map<Long, Long> indexToNewSchemaId,
+                                                                List<String> invalidated) throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        // leader
+        handler.modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, globalStateMgr.getNextId(),
+                indexToNewSchemaId, false, -1);
+        Assertions.assertTrue(invalidated.contains("name"), "varchar column must be invalidated: " + invalidated);
+        Assertions.assertFalse(invalidated.contains("k1"), "non-varchar column must not be invalidated");
+        Assertions.assertFalse(invalidated.contains("v1"), "non-varchar column must not be invalidated");
+
+        // follower replaying the same change
+        invalidated.clear();
+        handler.modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, globalStateMgr.getNextId(),
+                indexToNewSchemaId, true, 101);
+        Assertions.assertTrue(invalidated.contains("name"), "replay must invalidate too: " + invalidated);
     }
 }
