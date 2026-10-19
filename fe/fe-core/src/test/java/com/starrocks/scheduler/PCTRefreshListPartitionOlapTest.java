@@ -1872,9 +1872,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             Assertions.assertNotNull(execPlan);
         }
     }
-<<<<<<< HEAD
-}
-=======
 
     /**
      * A list-partitioned mv maps 1:1 onto its base partitions, so a dropped base partition takes the mv partition
@@ -1912,4 +1909,3 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         });
     }
 }
->>>>>>> b6a04c5 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#79057))
