@@ -913,6 +913,122 @@ TEST_F(geographyFunctionsTest, nativeGeographySerializerChecksBoundaryDescriptor
     EXPECT_TRUE(result.status().is_not_supported());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeographyPointAccessorsMatchCodec) {
+    auto values = geometry_point_wkb_cases();
+    const double inf = std::numeric_limits<double>::infinity();
+    const double tiny = std::numeric_limits<double>::denorm_min();
+    const double nan = std::bit_cast<double>(uint64_t{0xfff8000000001234});
+    const std::vector<double> longitude = {0.0,
+                                           -0.0,
+                                           -180.0,
+                                           180.0,
+                                           std::nextafter(-180.0, 0.0),
+                                           std::nextafter(180.0, 0.0),
+                                           std::nextafter(-180.0, -inf),
+                                           std::nextafter(180.0, inf),
+                                           tiny,
+                                           -tiny,
+                                           nan,
+                                           inf,
+                                           -inf};
+    const std::vector<double> latitude = {0.0,
+                                          -0.0,
+                                          -90.0,
+                                          90.0,
+                                          std::nextafter(-90.0, 0.0),
+                                          std::nextafter(90.0, 0.0),
+                                          std::nextafter(-90.0, -inf),
+                                          std::nextafter(90.0, inf),
+                                          tiny,
+                                          -tiny,
+                                          nan,
+                                          inf,
+                                          -inf};
+    for (double x : longitude) {
+        for (double y : latitude) {
+            auto bytes = values.front();
+            const std::array<double, 2> coordinates = {x, y};
+            for (size_t axis = 0; axis < coordinates.size(); ++axis) {
+                const uint64_t bits = std::bit_cast<uint64_t>(coordinates[axis]);
+                for (size_t i = 0; i < sizeof(bits); ++i) {
+                    bytes[5 + axis * sizeof(bits) + i] = static_cast<char>(bits >> (8 * i));
+                }
+            }
+            values.push_back(bytes);
+            bytes[0] = 0;
+            std::reverse(bytes.begin() + 1, bytes.begin() + 5);
+            std::reverse(bytes.begin() + 5, bytes.begin() + 13);
+            std::reverse(bytes.begin() + 13, bytes.end());
+            values.push_back(bytes);
+        }
+    }
+    const GeoColumnDescriptor descriptor{geography_type().geo_type.value(),
+                                         {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}};
+    for (size_t i = 0; i < values.size(); ++i) {
+        SCOPED_TRACE(i);
+        auto input = GeoColumn::create(descriptor);
+        input->append_wkb(Slice(values[i]));
+        WkbGeometry point;
+        const auto parsed = WkbCodec::parse_wkb(Slice(values[i]), &point, WkbCoordinateSemantics::GEOGRAPHY_CRS84);
+        for (bool x : {true, false}) {
+            Status expected = parsed;
+            if (expected.ok() && (point.type != WkbGeometryType::POINT || point.empty)) {
+                expected = Status::InvalidArgument(x ? "ST_X requires a non-empty POINT GEOGRAPHY"
+                                                     : "ST_Y requires a non-empty POINT GEOGRAPHY");
+            }
+            for (bool nullable : {false, true}) {
+                for (bool constant : {false, true}) {
+                    ColumnPtr source = input;
+                    if (nullable) source = NullableColumn::create(source, NullColumn::create(1, 0));
+                    if (constant) source = ConstColumn::create(source, 9);
+                    auto output = x ? GeoFunctions::st_geography_x(nullptr, {source})
+                                    : GeoFunctions::st_geography_y(nullptr, {source});
+                    if (!expected.ok()) {
+                        ASSERT_FALSE(output.ok());
+                        EXPECT_EQ(expected.code(), output.status().code());
+                        EXPECT_EQ(expected.message(), output.status().message());
+                    } else {
+                        ASSERT_TRUE(output.ok()) << output.status();
+                        EXPECT_EQ(constant, (*output)->is_constant());
+                        EXPECT_EQ(source->size(), (*output)->size());
+                        ColumnViewer<TYPE_DOUBLE> actual(*output);
+                        for (size_t row = 0; row < source->size(); ++row) {
+                            ASSERT_FALSE(actual.is_null(row));
+                            EXPECT_EQ(std::bit_cast<uint64_t>(x ? point.coordinates[0].x : point.coordinates[0].y),
+                                      std::bit_cast<uint64_t>(actual.value(row)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    auto data = GeoColumn::create(descriptor);
+    data->append_wkb(Slice(values[2])); // (-0.0, 0.0), little-endian.
+    data->append_wkb(Slice("invalid hidden NULL payload"));
+    data->append_wkb(Slice(values[3])); // The same point, big-endian.
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    ColumnPtr mixed = NullableColumn::create(data, nulls);
+    for (bool x : {true, false}) {
+        auto output =
+                x ? GeoFunctions::st_geography_x(nullptr, {mixed}) : GeoFunctions::st_geography_y(nullptr, {mixed});
+        ASSERT_TRUE(output.ok()) << output.status();
+        ColumnViewer<TYPE_DOUBLE> actual(*output);
+        EXPECT_TRUE(actual.is_null(1));
+        for (size_t row : {0, 2}) {
+            EXPECT_EQ(std::bit_cast<uint64_t>(x ? -0.0 : 0.0), std::bit_cast<uint64_t>(actual.value(row)));
+        }
+        auto only_null = ColumnHelper::create_const_null_column(9);
+        auto all_null = x ? GeoFunctions::st_geography_x(nullptr, {only_null})
+                          : GeoFunctions::st_geography_y(nullptr, {only_null});
+        ASSERT_TRUE(all_null.ok()) << all_null.status();
+        EXPECT_TRUE((*all_null)->only_null());
+        EXPECT_EQ(9, (*all_null)->size());
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeographyPointAccessors) {
     auto point = geography({"POINT (12.5 -8.25)"});
     ColumnViewer<TYPE_DOUBLE> x(GeoFunctions::st_geography_x(nullptr, {point}).value());
