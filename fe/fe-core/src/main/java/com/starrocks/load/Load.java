@@ -984,9 +984,10 @@ public class Load {
         }
 
         for (Map.Entry<String, Expr> entry : mvDefineExpr.entrySet()) {
+            Expr definition = ExprUtils.rewriteStructFieldSlotRefs(entry.getValue());
             ExprSubstitutionMap smap = new ExprSubstitutionMap();
             List<SlotRef> slots = Lists.newArrayList();
-            entry.getValue().collect(SlotRef.class, slots);
+            definition.collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc != null) {
@@ -1004,7 +1005,7 @@ public class Load {
                             AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey());
                 }
             }
-            Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
+            Expr expr = ExprSubstitutionVisitor.rewrite(definition, smap);
             expr = ExprUtils.analyzeAndCastFold(expr);
 
             rejectAIExpression(expr);

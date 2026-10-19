@@ -73,6 +73,11 @@ import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.StarRocksExternalTable;
+import com.starrocks.catalog.SyncMaterializedViewRecoveryException;
+>>>>>>> 8a3978f6380... [Enhancement][RB-424] Support synchronous materialized views on shared-data range tables (#65336)
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -2279,15 +2284,22 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
-        try {
-            postLoadImage();
-        } catch (Exception t) {
-            LOG.warn("there is an exception during processing after load image. exception:", t);
-        }
+        postLoadImageWithRecoveryPolicy();
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = imageLoader.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    @VisibleForTesting
+    void postLoadImageWithRecoveryPolicy() {
+        try {
+            postLoadImage();
+        } catch (SyncMaterializedViewRecoveryException e) {
+            throw e;
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
     }
 
     private void postLoadImage() {
@@ -2316,6 +2328,9 @@ public class GlobalStateMgr {
                     }
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", table, e);
+                    if (e instanceof SyncMaterializedViewRecoveryException recoveryException) {
+                        throw recoveryException;
+                    }
                 }
             }
         }
