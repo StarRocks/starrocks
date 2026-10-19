@@ -69,6 +69,8 @@ private:
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;
+    // Rows per output segment the writer was created with; read chunks are kept within it.
+    uint32_t _max_rows_per_segment = 0;
 };
 
 } // namespace starrocks::lake

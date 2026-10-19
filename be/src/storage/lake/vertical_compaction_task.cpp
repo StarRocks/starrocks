@@ -91,6 +91,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
     ASSIGN_OR_RETURN(max_rows_per_segment, cap_rows_for_buffered_flat_json(max_rows_per_segment));
+    _max_rows_per_segment = max_rows_per_segment;
     std::unique_ptr<TabletWriter> writer;
     {
         SCOPED_RAW_TIMER(&_context->stats->writer_create_ns);
@@ -210,6 +211,36 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     return Status::OK();
 }
 
+// Bytes the key names of a flat JSON column's paths take in one merged JSON value: each distinct path component
+// once, as a vpack string of its length plus a header byte.
+static int64_t flat_json_key_bytes_per_row(const ColumnReader& reader) {
+    const auto* sub_readers = reader.sub_readers();
+    if (sub_readers == nullptr) {
+        return 0;
+    }
+    // The null column comes first in a nullable column and the remain column last; neither is a path.
+    const size_t begin = reader.is_nullable() ? 1 : 0;
+    const size_t end = reader.has_remain_json() ? sub_readers->size() - 1 : sub_readers->size();
+    std::unordered_set<std::string_view> prefixes;
+    int64_t bytes = 0;
+    for (size_t i = begin; i < end; i++) {
+        std::string_view path = (*sub_readers)[i]->name();
+        size_t component_begin = 0;
+        while (component_begin <= path.size()) {
+            size_t dot = path.find('.', component_begin);
+            size_t component_end = dot == std::string_view::npos ? path.size() : dot;
+            if (prefixes.insert(path.substr(0, component_end)).second) {
+                bytes += static_cast<int64_t>(component_end - component_begin) + 1;
+            }
+            if (dot == std::string_view::npos) {
+                break;
+            }
+            component_begin = dot + 1;
+        }
+    }
+    return bytes;
+}
+
 StatusOr<uint32_t> VerticalCompactionTask::cap_rows_for_buffered_flat_json(uint32_t max_rows_per_segment) {
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;
     if (mem_limit <= 0 || _total_num_rows <= 0) {
@@ -237,10 +268,10 @@ StatusOr<uint32_t> VerticalCompactionTask::cap_rows_for_buffered_flat_json(uint3
     // sized from its compressed bytes on disk, so that buffer grows with the compression ratio, outside the
     // budget the read chunks are sized from. Bound it by the size of the JSON the compactor holds per row.
     //
-    // It holds every row as a whole JSON value: flat inputs are merged back into JSON on read. A plain input's
-    // footprint is exactly those serialized bytes. A flat input's is the size of its typed sub-columns, which
-    // leaves out the key names every JSON value repeats, so it underestimates the buffer; the plain inputs of the
-    // same column stand for all its rows instead. Each value also costs a JsonValue object.
+    // It holds every row as a whole JSON value: flat inputs are merged back into JSON on read, so every input row
+    // counts. A plain input's footprint is exactly those serialized bytes. A flat input's is the size of its typed
+    // sub-columns, which leaves out the key names every merged value repeats; add each path component's name once
+    // per row (an upper bound, as a path may be absent from a row). Each value also costs a JsonValue object.
     struct JsonInputs {
         int64_t plain_bytes = 0;
         int64_t plain_rows = 0;
@@ -265,7 +296,7 @@ StatusOr<uint32_t> VerticalCompactionTask::cap_rows_for_buffered_flat_json(uint3
                 }
                 const auto bytes = static_cast<int64_t>(column_reader->total_mem_footprint());
                 if (column_reader->is_flat_json()) {
-                    inputs[i].flat_bytes += bytes;
+                    inputs[i].flat_bytes += bytes + flat_json_key_bytes_per_row(*column_reader) * segment->num_rows();
                     inputs[i].flat_rows += segment->num_rows();
                 } else {
                     inputs[i].plain_bytes += bytes;
@@ -276,12 +307,13 @@ StatusOr<uint32_t> VerticalCompactionTask::cap_rows_for_buffered_flat_json(uint3
     }
     int64_t bytes_per_row = 0;
     for (const auto& in : inputs) {
+        // A column whose inputs are all flat streams; only a column with a plain input is buffered.
         if (in.plain_rows > 0) {
-            bytes_per_row += in.plain_bytes / in.plain_rows + static_cast<int64_t>(sizeof(JsonValue));
+            bytes_per_row += (in.plain_bytes + in.flat_bytes) / (in.plain_rows + in.flat_rows) +
+                             static_cast<int64_t>(sizeof(JsonValue));
         }
     }
     if (bytes_per_row <= 0) {
-        // Every JSON column streams.
         return max_rows_per_segment;
     }
     constexpr int64_t kMinRowsPerSegment = 1024;
@@ -375,6 +407,11 @@ Status VerticalCompactionTask::compact_column_group(
     {
         SCOPED_RAW_TIMER(&_context->stats->input_prepare_ns);
         ASSIGN_OR_RETURN(chunk_size, calculate_chunk_size_for_column_group(column_group));
+        // The writer starts a new segment only between key chunks, so a segment holds at least one of them: keep
+        // them within the rows per segment, or a capped segment would still take a whole chunk.
+        if (_max_rows_per_segment > 0) {
+            chunk_size = static_cast<int32_t>(std::min<int64_t>(chunk_size, _max_rows_per_segment));
+        }
         if (column_group_index != 0) {
             schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
         } else if (_tablet_schema->sort_key_idxes().empty()) {

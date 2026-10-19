@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <random>
@@ -914,6 +915,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_flat_json_compaction";
     constexpr static int kRowsPerLoad = 3000;
+    constexpr static int kLargeValueBytes = 120;
 
     void SetUp() override {
         config::enable_size_tiered_compaction_strategy = true;
@@ -957,23 +959,26 @@ protected:
         remove_test_dir_ignore_error();
     }
 
-    static std::string json_of(int key) {
+    // The JSON of a key: a small document, or one with a kLargeValueBytes string for keys from _large_from on.
+    std::string json_of(int key) const {
+        if (key >= _large_from) {
+            return fmt::format(R"({{"a": {}, "s": "{}"}})", key, std::string(kLargeValueBytes, 'a' + key % 26));
+        }
         return fmt::format(R"({{"a": {}, "b": "value_{}", "c": {}, "d": {{"e": {}}}}})", key, key % 97, key * 1.5,
                            key % 13);
     }
 
-    // Loads one rowset of kRowsPerLoad rows with keys [first, first + kRowsPerLoad).
-    void load(int first, int64_t* version) {
+    // Loads one rowset of num_rows rows with keys [first, first + num_rows).
+    void load(int first, int64_t* version, int num_rows = kRowsPerLoad) {
         auto c0 = Int32Column::create();
         auto json = JsonColumn::create();
-        for (int i = 0; i < kRowsPerLoad; i++) {
+        for (int i = 0; i < num_rows; i++) {
             c0->append(first + i);
             ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json_of(first + i)));
             json->append(&jv);
         }
-        Chunk chunk({std::move(c0), NullableColumn::create(std::move(json), NullColumn::create(kRowsPerLoad, 0))},
-                    _schema);
-        std::vector<uint32_t> indexes(kRowsPerLoad);
+        Chunk chunk({std::move(c0), NullableColumn::create(std::move(json), NullColumn::create(num_rows, 0))}, _schema);
+        std::vector<uint32_t> indexes(num_rows);
         std::iota(indexes.begin(), indexes.end(), 0);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -1040,6 +1045,7 @@ protected:
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+    int _large_from = std::numeric_limits<int>::max();
 
 private:
     bool _enable_json_flat = config::enable_json_flat;
@@ -1058,13 +1064,39 @@ TEST_F(LakeFlatJsonCompactionTest, test_mixed_plain_and_flat_inputs_cap_rows_per
     load(kRowsPerLoad, &version);
     load(2 * kRowsPerLoad, &version);
 
-    // About 100 bytes held per row: a budget of 1MB lets the compactor buffer ~1300 rows per segment.
+    // About 80 bytes held per row: a budget of 1MB lets the compactor buffer ~1600 rows per segment.
     config::compaction_memory_limit_per_worker = 1024 * 1024;
     auto stats = compact(&version);
     EXPECT_EQ(1, stats.flat_json_rows_capped);
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     ASSERT_EQ(1, metadata->rowsets_size());
     EXPECT_GT(metadata->rowsets(0).segment_metas_size(), 1);
+    check(version, 3 * kRowsPerLoad);
+}
+
+// The buffer counts the flat rows too, merged back into JSON: small plain documents next to larger flat ones must
+// not size the segments from the plain ones alone, and the cap holds even below one read chunk.
+TEST_F(LakeFlatJsonCompactionTest, test_cap_counts_larger_flat_rows) {
+    _large_from = kRowsPerLoad;
+    int64_t version = 1;
+    config::enable_json_flat = false;
+    load(0, &version);
+    config::enable_json_flat = true;
+    load(kRowsPerLoad, &version);
+    load(2 * kRowsPerLoad, &version);
+
+    // About 40 bytes per plain row and 140 per flat row (with its key names), plus a JsonValue each: the allowance
+    // of 256KB fits about 1900 rows. Sized from the plain rows alone it would fit about 3600.
+    config::compaction_memory_limit_per_worker = 2 * 1024 * 1024;
+    constexpr int64_t kMaxRows = 2000;
+    auto stats = compact(&version);
+    EXPECT_EQ(1, stats.flat_json_rows_capped);
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    ASSERT_GT(metadata->rowsets(0).segment_metas_size(), 1);
+    for (const auto& segment : metadata->rowsets(0).segment_metas()) {
+        EXPECT_LE(segment.num_rows(), kMaxRows);
+    }
     check(version, 3 * kRowsPerLoad);
 }
 
