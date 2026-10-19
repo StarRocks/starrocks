@@ -14,6 +14,8 @@
 
 package com.starrocks.common;
 
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.MVInactiveException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -64,6 +66,16 @@ public class MaterializedViewExceptionsTest {
                 new RuntimeException("Refresh mv s1_mv failed after 1 times",
                         new IllegalStateException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
                                 Collections.singleton("column count 6 vs 7"))))));
+    }
+
+    @Test
+    public void testARefreshOfAnInactiveViewIsNotBreaking() {
+        MVInactiveException inactive = new MVInactiveException(
+                "Materialized view: mv1/1 is not active due to base table schema changed for columns: v.");
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(inactive));
+        // the refresh retry wraps it in an exception whose message quotes it, marker included
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new DmlException("Refresh mv mv1 failed after 1 times, error-msg : " + inactive, inactive)));
     }
 
     @Test
