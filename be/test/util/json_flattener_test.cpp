@@ -729,6 +729,55 @@ TEST_F(JsonFlattenerTest, testNumericPathTypeKeepsValuesExact) {
     }
 }
 
+// Stored JSON keeps repeated keys. Each row must still add one value to every column: the value a read of the
+// whole JSON finds, and with a remain the rebuilt JSON is the stored one.
+TEST_F(JsonFlattenerTest, testRepeatedKeysFlattenOneValuePerRow) {
+    std::vector<std::string> inputs = {
+            R"({"a": 1, "b": 10, "c": 100, "x": {"y": 1, "z": 2}})",
+            R"({"a": 2, "a": 22, "b": 20, "c": 200})",
+            R"({"a": 3, "a": 33})",
+            R"({"x": {"y": 5}, "x": {"z": 6}, "a": 4})",
+            R"({"x": {"y": 7, "y": 8, "z": 9}})",
+            R"({"a": 5, "b": 50, "c": 500})",
+    };
+    std::vector<std::string> paths = {"a", "b", "c", "x.y", "x.z"};
+    std::vector<LogicalType> types(paths.size(), TYPE_BIGINT);
+    std::vector<bool> repeated_object = {false, false, false, true, false, false};
+
+    for (bool has_remain : {false, true}) {
+        auto result = test_json(inputs, paths, types, has_remain);
+        for (size_t row = 0; row < inputs.size(); row++) {
+            ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
+            auto doc = json.to_vslice();
+            for (size_t k = 0; k < paths.size(); k++) {
+                auto v = doc;
+                for (auto key : {paths[k].substr(0, 1), paths[k].size() > 2 ? paths[k].substr(2) : std::string()}) {
+                    if (key.empty()) {
+                        break;
+                    }
+                    v = v.isObject() ? v.get(key) : vpack::Slice::noneSlice();
+                }
+                std::string expected = v.isNone() ? "NULL" : std::to_string(v.getNumber<int64_t>());
+                // With a remain, the columns below a repeated object stay empty; the remain rebuilds it.
+                if (has_remain && repeated_object[row] && k >= 3) {
+                    expected = "NULL";
+                }
+                EXPECT_EQ(expected, result[k]->debug_item(row))
+                        << "remain=" << has_remain << " row=" << row << " path=" << paths[k];
+            }
+        }
+        if (has_remain) {
+            JsonMerger merger(paths, types, true);
+            auto merged = merger.merge(result);
+            ASSERT_EQ(inputs.size(), merged->size());
+            for (size_t row : {1, 2, 3, 4}) {
+                ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
+                EXPECT_EQ(json.to_string_uncheck(), merged->debug_item(row)) << "row " << row;
+            }
+        }
+    }
+}
+
 // Before numeric paths were kept exact, the deriver met negative integers with integers past INT64_MAX at
 // LARGEINT, so existing segments may hold negative LARGEINT values. Rebuilding them as JSON -- whole-JSON reads
 // (JsonMerger) and the conversion to a JSON sub-column (HyperJsonTransformer) -- must keep them negative.
