@@ -367,6 +367,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            PropertyAnalyzer.parseBooleanStrictly(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                    properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
