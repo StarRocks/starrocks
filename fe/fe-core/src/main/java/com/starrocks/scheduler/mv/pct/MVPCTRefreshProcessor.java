@@ -46,6 +46,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -369,6 +370,16 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
+        }
+        // Seeded by the first run only, later runs carry it via the property copy above.
+        if (!newProperties.containsKey(TaskRun.MV_NON_REF_TABLE_FINGERPRINT)) {
+            Set<Long> refBaseTableIds = mv.getRefBaseTablePartitionColumns().keySet().stream()
+                    .map(Table::getId)
+                    .collect(Collectors.toSet());
+            String fingerprint = MVVersionManager.nonRefTableFingerprint(snapshotBaseTables, refBaseTableIds);
+            if (fingerprint != null) {
+                newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
+            }
         }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {

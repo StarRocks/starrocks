@@ -1732,17 +1732,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
         // so we submit an async task to do this check
         if (isReloadAsync) {
+            // A status change replayed while the check runs (an INACTIVE from the leader) wins over its verdict,
+            // which was computed for the status before, as in activateOnReplay.
+            final long epoch;
+            synchronized (this) {
+                epoch = statusEpoch;
+            }
             CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
                     onReloadImplHeavy();
 
                     if (desiredActive) {
                         InactiveReason reason = checkIsActiveOnLoadBlocking();
-                        setInActiveReason(reason);
+                        setInActiveReasonUnlessChanged(reason, epoch);
                     }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
-                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
+                    setInActiveReasonUnlessChanged(
+                            InactiveReason.ofInactive("check and set active failed: " + e.getMessage()), epoch);
                 } finally {
                     changeReloadState(RELOAD_STATE_DONE);
                 }
@@ -1768,6 +1775,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         } else {
             setActive();
         }
+    }
+
+    /** Apply an asynchronous verdict only if the status it was computed for, {@code epoch}, is still current. */
+    private synchronized void setInActiveReasonUnlessChanged(InactiveReason reason, long epoch) {
+        if (statusEpoch != epoch) {
+            LOG.info("status of mv {} changed while it was being checked for activation, dropping the stale verdict",
+                    getName());
+            return;
+        }
+        setInActiveReason(reason);
     }
 
     /**

@@ -51,6 +51,10 @@ public abstract class PartitionDiffer {
                 ? Collections.emptyMap() : pinnedRangeByTableIdentifier;
     }
 
+    protected boolean isQueryRewrite() {
+        return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
+    }
+
     protected TvrVersionRange pinnedRangeFor(Table table) {
         return pinnedRangeByTableIdentifier.get(table.getUUID());
     }

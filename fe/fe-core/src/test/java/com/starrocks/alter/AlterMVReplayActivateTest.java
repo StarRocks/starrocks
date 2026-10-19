@@ -114,10 +114,12 @@ public class AlterMVReplayActivateTest extends MVTestBase {
         }
     }
 
-    // The mv-plan-cache executor also runs unrelated plan builds; park only the replayed activation's rebuild.
+    // The mv-plan-cache executor also runs unrelated plan builds; park only an asynchronous activation: the
+    // rebuild of a replayed one, or the check that follows a reload.
     private static boolean isReplayRebuild() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            if (frame.getMethodName().contains("activateOnReplay")) {
+            if (frame.getMethodName().contains("activateOnReplay")
+                    || frame.getMethodName().contains("checkAndSetActive")) {
                 return true;
             }
         }
@@ -293,6 +295,39 @@ public class AlterMVReplayActivateTest extends MVTestBase {
             mv.setInactiveAndReason("test: a later replayed INACTIVE");
             probe.gate.countDown();
             rebuild.get(30, TimeUnit.SECONDS);
+
+            Assertions.assertFalse(mv.isActive(), "the stale verdict re-activated the MV");
+            Assertions.assertEquals("test: a later replayed INACTIVE", mv.getInactiveReason());
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    /**
+     * After an image is loaded every active mv is reloaded and checked asynchronously. A follower replays the
+     * leader's INACTIVE while that check is in flight; the check's verdict, computed for the status before,
+     * must not set the mv back to active.
+     */
+    @Test
+    public void testAStaleReloadVerdictDoesNotOverrideAReplayedInactive() throws Exception {
+        String mvName = "mv_reload_activate_stale";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            Assertions.assertTrue(mv.isActive());
+
+            installProbe();
+            probe.gate = new CountDownLatch(1);
+            // as after loading an image: not reloaded yet, and reloaded asynchronously
+            mv.changeReloadState(-1);
+            mv.onReload(true);
+            Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
+                    "the activation check never reached the connector, so nothing was in flight");
+
+            mv.setInactiveAndReason("test: a later replayed INACTIVE");
+            probe.gate.countDown();
+            // the asynchronous check marks the reload done when it finishes
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).until(mv::hasReloaded);
 
             Assertions.assertFalse(mv.isActive(), "the stale verdict re-activated the MV");
             Assertions.assertEquals("test: a later replayed INACTIVE", mv.getInactiveReason());
