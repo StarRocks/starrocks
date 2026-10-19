@@ -1365,13 +1365,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     /**
-<<<<<<< HEAD
-     * Inactive the materialized view and its related materialized views.
-=======
      * Inactivates {@code mv} and the MVs above it. When {@code quiet}, a failure to inactivate {@code mv} is logged and
      * the MVs above it are inactivated all the same; the MVs above are always inactivated quietly, see
      * {@link #inactiveMaterializedViewRecursiveQuietly}.
->>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
      */
     private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
                                                             boolean isClearVersionMap,
