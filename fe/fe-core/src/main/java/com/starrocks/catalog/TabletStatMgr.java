@@ -219,7 +219,9 @@ public class TabletStatMgr extends FrontendDaemon {
                                 } // end for tablets
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
-                                if (!olapTable.isTempPartition(partition.getId())) {
+                                // The table row count is the base index's: rollups should not be counted
+                                if (!olapTable.isTempPartition(partition.getId())
+                                        && index.getMetaId() == olapTable.getBaseIndexMetaId()) {
                                     totalRowCount += indexRowCount;
                                 }
                             } // end for indices
