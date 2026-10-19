@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/config_test.cpp
+        ./common/greplog_test.cpp
         ./common/crash_watchdog_test.cpp
         ./common/logconfig_test.cpp
         ./common/process_exit_test.cpp
