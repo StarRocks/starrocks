@@ -358,7 +358,7 @@ class ChooseCase(object):
                     this_line_res.append(_line_content)
                     _line_id += 1
 
-                    if _line_content.startswith(RESULT_END_FLAT):
+                    if _line_content.lstrip().startswith(RESULT_END_FLAT):
                         break
 
             if _is_in_loop:

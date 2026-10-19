@@ -291,6 +291,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
 
+### exchange_sink_buffer_flush_threshold_bytes
+
+- Default: 67108864
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum memory that each exchange sink driver can use to buffer rows for a shuffle before they are sent. During a shuffle, the exchange sink keeps one partial chunk for each destination pipeline driver and sends it only when the chunk is full. When the total size of these partial chunks exceeds this limit, all of them are sent immediately and cleared; if the memory they still hold exceeds half of the limit, partial chunks are released until it no longer does. A value of `0` or less disables the limit.
+- Introduced in: -
+
 ### exchg_node_buffer_size_bytes
 
 - Default: 10485760
@@ -1102,6 +1111,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Hours
 - Is mutable: Yes
 - Description: The time for which data loading logs are reserved.
+- Introduced in: -
+
+### load_sink_close_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
 - Introduced in: -
 
 ### enable_rejected_record_sync

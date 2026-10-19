@@ -15,7 +15,6 @@
 #include "geo/geo_topology_simplify.h"
 
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <map>
 #include <numeric>
@@ -28,6 +27,7 @@
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
+#include "geo/geo_exact_arithmetic.h"
 #include "geo/wkb.h"
 
 namespace starrocks {
@@ -52,23 +52,16 @@ struct ExactPoint {
 };
 
 Integer scaled(double value) {
-    const uint64_t bits = std::bit_cast<uint64_t>(value);
-    const uint64_t exponent = (bits >> 52) & 0x7ff;
-    Integer result = bits & ((uint64_t{1} << 52) - 1);
-    if (exponent != 0) {
-        result += uint64_t{1} << 52;
-        result <<= exponent - 1;
-    }
-    return bits >> 63 ? -result : result;
+    return geo_exact::scaled_binary64<Integer>(value);
 }
 ExactPoint exact(WkbCoordinate p) {
     return {scaled(p.x), scaled(p.y)};
 }
 Integer orientation(const ExactPoint& a, const ExactPoint& b, const ExactPoint& c) {
-    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    return geo_exact::orientation(a.x, a.y, b.x, b.y, c.x, c.y);
 }
 int sign(const Integer& value) {
-    return (value > 0) - (value < 0);
+    return geo_exact::sign(value);
 }
 bool less(WkbCoordinate a, WkbCoordinate b) {
     return a.x < b.x || (a.x == b.x && a.y < b.y);

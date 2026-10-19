@@ -98,7 +98,6 @@ const GeoColumn& GeoColumn::_source(const Column& src) {
 }
 
 void GeoColumn::append_wkb(Slice wkb) {
-    clear_wkb_cache();
     // BinaryColumn may reallocate its buffer. Own a copy when appending a slice from ourselves.
     // External ingestion should use batch column copies once a GeoColumn exists.
     const auto begin = reinterpret_cast<uintptr_t>(_data->get_string_begin());
@@ -111,36 +110,28 @@ void GeoColumn::append_wkb(Slice wkb) {
     }
 }
 
-StatusOr<GeoWkbInfo> GeoColumn::inspect_wkb(size_t row) {
+StatusOr<GeoWkbInfo> GeoColumn::inspect_wkb(size_t row) const {
     if (row >= size()) return Status::InvalidArgument("GeoColumn row out of range");
-    if (_cache && _cache->row == row) return _cache->info;
-    ASSIGN_OR_RETURN(auto info, inspect_geo_wkb(get_wkb(row)));
-    _cache = CachedWkb{row, info};
-    return info;
+    return inspect_geo_wkb(get_wkb(row));
 }
 
 void GeoColumn::append_wkb_batch(const Slice* values, size_t count) {
-    clear_wkb_cache();
     (void)_data->append_strings(values, count);
 }
 
 void GeoColumn::append_wkb_column(const BinaryColumn& source) {
-    clear_wkb_cache();
     _data->append(source, 0, source.size());
 }
 
 void GeoColumn::resize(size_t count) {
-    clear_wkb_cache();
     _data->resize(count);
 }
 
 void GeoColumn::assign(size_t count, size_t row) {
-    clear_wkb_cache();
     _data->assign(count, row);
 }
 
 void GeoColumn::remove_first_n_values(size_t count) {
-    clear_wkb_cache();
     _data->remove_first_n_values(count);
 }
 
@@ -152,7 +143,6 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append(*geo._data, offset, count);
 }
 
@@ -164,7 +154,6 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append_selective(*geo._data, indexes, from, count);
 }
 
@@ -176,7 +165,6 @@ void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, u
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append_value_multiple_times(*geo._data, index, count);
 }
 
@@ -184,18 +172,15 @@ void GeoColumn::append_value_multiple_times(const void* value, size_t count) {
     // Own the source slice before the first append in case it aliases this column.
     const auto slice = *static_cast<const Slice*>(value);
     const std::string copy(slice.data, slice.size);
-    clear_wkb_cache();
     const Slice owned(copy);
     _data->append_value_multiple_times(&owned, count);
 }
 
 void GeoColumn::append_default(size_t count) {
-    clear_wkb_cache();
     _data->append_default(count);
 }
 
 void GeoColumn::fill_default(const Filter& filter) {
-    clear_wkb_cache();
     _data->fill_default(filter);
 }
 
@@ -207,12 +192,10 @@ void GeoColumn::update_rows(const Column& src, const uint32_t* indexes) {
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->update_rows(*geo._data, indexes);
 }
 
 size_t GeoColumn::filter_range(const Filter& filter, size_t from, size_t to) {
-    clear_wkb_cache();
     return _data->filter_range(filter, from, to);
 }
 
@@ -233,18 +216,15 @@ void GeoColumn::swap_column(Column& rhs) {
     swap(_descriptor, geo._descriptor);
     swap(_data, geo._data);
     swap(_delete_state, geo._delete_state);
-    clear_wkb_cache();
-    geo.clear_wkb_cache();
 }
 
 void GeoColumn::reset_column() {
     Column::reset_column();
-    clear_wkb_cache();
     _data->reset_column();
 }
 
 size_t GeoColumn::container_memory_usage() const {
-    return _data->memory_usage() + _descriptor.type.crs.capacity() + 1 + sizeof(_cache);
+    return _data->memory_usage() + _descriptor.type.crs.capacity() + 1;
 }
 
 GeoColumn::ImmContainer GeoColumn::immutable_data() const {
@@ -397,7 +377,6 @@ StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const
     if (bytes_size != 0) memcpy(data.data(), bytes, bytes_size);
     _data->get_offset().set_small_buffer(std::move(decoded_offsets));
     _descriptor = std::move(descriptor);
-    clear_wkb_cache();
     return src + total_size;
 }
 

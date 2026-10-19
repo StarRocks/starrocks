@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -34,6 +33,7 @@
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
+#include "geo/geo_exact_arithmetic.h"
 #include "types/geo_wkb.h"
 
 namespace starrocks {
@@ -165,24 +165,17 @@ using Integer = boost::multiprecision::number<
                                                boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
         boost::multiprecision::et_off>;
 Integer scaled(double value) {
-    const uint64_t bits = std::bit_cast<uint64_t>(value);
-    const unsigned exponent = (bits >> 52) & 2047;
-    Integer result = bits & ((uint64_t{1} << 52) - 1);
-    if (exponent) {
-        result += uint64_t{1} << 52;
-        result <<= exponent - 1;
-    }
-    return bits >> 63 ? -result : result;
+    return geo_exact::scaled_binary64<Integer>(value);
 }
 int sign(const Integer& value) {
-    return (value > 0) - (value < 0);
+    return geo_exact::sign(value);
 }
 struct Point {
     double x, y;
     Integer ex, ey;
 };
 Integer orientation(const Point& a, const Point& b, const Point& c) {
-    return (b.ex - a.ex) * (c.ey - a.ey) - (b.ey - a.ey) * (c.ex - a.ex);
+    return geo_exact::orientation(a.ex, a.ey, b.ex, b.ey, c.ex, c.ey);
 }
 Key key(uint32_t a, uint32_t b) {
     return std::minmax(a, b);

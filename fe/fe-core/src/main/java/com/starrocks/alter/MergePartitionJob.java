@@ -954,6 +954,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
+                    // A temp partition that was already swapped in keeps its id and is live now, so leave it alone.
+                    if (!targetTable.isTempPartition(pid)) {
+                        continue;
+                    }
                     LOG.info("merge partitions job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
@@ -1050,6 +1054,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         Set<Tablet> sourceTablets = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
+            // The swaps were replayed before this entry and kept the temp partition ids, which are live now.
+            if (!targetTable.isTempPartition(id)) {
+                continue;
+            }
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index :

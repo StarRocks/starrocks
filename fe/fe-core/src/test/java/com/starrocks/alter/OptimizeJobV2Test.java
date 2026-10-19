@@ -1001,6 +1001,33 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testFollowerReplayOfFinishedJobKeepsLiveTabletsUnmarked() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_follower_force_delete");
+        // The follower starts from the catalog as it was before the optimize.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        OptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        OptimizeJobV2 finishedEntry =
+                (OptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        // The swap already made the temp partitions of the entry the live partitions of the table.
+        Assertions.assertEquals(new HashSet<>(finishedEntry.getTmpPartitionIds()),
+                partitionIds(followerTable.getPartitions()));
+        List<Long> liveTabletIds = tabletIds(followerTable.getPartitions());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
     public void testFollowerReplayDropsTempPartitionsOfCancelledJob() throws Exception {
         OlapTable table = createPartitionedTable("t_optimize_follower_cancelled");
         // The follower starts from the catalog as it was before the optimize.
@@ -1337,6 +1364,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : tabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
+        }
+    }
+
+    private static void assertNotMarkedForceDelete(List<Long> tabletIds) {
+        Assertions.assertFalse(tabletIds.isEmpty());
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long tabletId : tabletIds) {
+            Assertions.assertFalse(invertedIndex.getForceDeleteTablets().containsKey(tabletId), "tablet " + tabletId);
         }
     }
 
