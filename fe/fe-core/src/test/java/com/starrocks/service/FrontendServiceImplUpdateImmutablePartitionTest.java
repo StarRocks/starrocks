@@ -18,8 +18,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -35,6 +38,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -42,6 +46,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -229,6 +234,93 @@ public class FrontendServiceImplUpdateImmutablePartitionTest {
         Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, result.getStatus().getStatus_code());
         Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("No available worker group"),
                 () -> "unexpected error: " + result.getStatus().getError_msgs());
+    }
+
+    @Test
+    public void testPartitionLookupsHoldTheTableLock() throws Exception {
+        // The RPC runs while loads keep creating partitions, which rehash the table's plain HashMaps.
+        // Every lookup it makes into them must hold the table lock.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("immutable_partition_test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "site_access_random");
+
+        // Keep a mutable sub-partition around so the RPC does not have to create one itself.
+        Partition partition = olapTable.getPartitions().iterator().next();
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addSubPartitions(database, olapTable, partition, 1, WarehouseManager.DEFAULT_RESOURCE);
+        long firstPhysicalPartitionId = olapTable.getPhysicalPartitions().iterator().next().getId();
+
+        final ComputeResource loadComputeResource = workerGroupResource(1L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long databaseId, long transactionId) {
+                TransactionState transactionState = new TransactionState();
+                transactionState.setComputeResource(loadComputeResource);
+                return transactionState;
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+
+            @Mock
+            public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
+                return LOAD_WORKER_GROUP_NODE_ID;
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Lists.newArrayList(LOAD_WORKER_GROUP_NODE_ID);
+            }
+        };
+
+        // One entry per lookup the RPC makes itself: whether the calling thread held the table lock.
+        List<Boolean> lockHeld = new ArrayList<>();
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(Invocation inv, long physicalPartitionId) {
+                recordIfCalledByTheRpc(lockHeld, inv.getInvokedInstance());
+                return inv.proceed();
+            }
+
+            @Mock
+            public Partition getPartition(Invocation inv, long partitionId) {
+                recordIfCalledByTheRpc(lockHeld, inv.getInvokedInstance());
+                return inv.proceed();
+            }
+        };
+
+        FrontendServiceImpl frontendService = new FrontendServiceImpl(executeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(database.getId());
+        request.setTable_id(olapTable.getId());
+        request.setTxn_id(1L);
+        request.setPartition_ids(Lists.newArrayList(firstPhysicalPartitionId));
+        TImmutablePartitionResult result = frontendService.updateImmutablePartition(request);
+
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(),
+                () -> "status: " + result.getStatus());
+        Assertions.assertFalse(lockHeld.isEmpty());
+        Assertions.assertFalse(lockHeld.contains(false), lockHeld::toString);
+    }
+
+    private static void recordIfCalledByTheRpc(List<Boolean> lockHeld, Object table) {
+        // Lookups made by the metadata methods the RPC calls take their own locks and are not checked here.
+        boolean calledByTheRpc = StackWalker.getInstance().walk(frames -> frames
+                .filter(f -> f.getClassName().startsWith("com.starrocks.")
+                        && !f.getClassName().startsWith("com.starrocks.catalog.")
+                        && !f.getClassName().startsWith(FrontendServiceImplUpdateImmutablePartitionTest.class.getName()))
+                .findFirst()
+                .map(f -> f.getMethodName().equals("updateImmutablePartitionInternal"))
+                .orElse(false));
+        if (calledByTheRpc) {
+            long tableId = ((OlapTable) table).getId();
+            LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+            lockHeld.add(lockManager.isOwnedByCurrentThread(tableId, LockType.READ)
+                    || lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+        }
     }
 
     private static ComputeResource workerGroupResource(long workerGroupId) {

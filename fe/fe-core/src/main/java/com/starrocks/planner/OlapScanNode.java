@@ -328,7 +328,15 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int bucketNum = distInfo.getBucketNum();
         if (getSelectedPartitionIds().size() <= 1) {
             for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+                // Scheduling runs after planning released the table lock, so a TTL or dynamic-partition
+                // drop can remove the selected partition in between.
+                Partition partition = olapTable.getPartition(pid);
+                if (partition == null) {
+                    throw new IllegalStateException(String.format(
+                            "partition %d of table %s was dropped after the query was planned, please retry",
+                            pid, olapTable.getName()));
+                }
+                bucketNum = partition.getDistributionInfo().getBucketNum();
             }
         }
         return bucketNum;
