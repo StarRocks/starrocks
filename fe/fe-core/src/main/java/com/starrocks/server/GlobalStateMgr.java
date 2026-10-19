@@ -2023,9 +2023,9 @@ public class GlobalStateMgr {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
-                    loadMgr.cancelResidualJob();
+                    loadMgr.endResidualInsertJobs();
                 } catch (Throwable t) {
-                    LOG.warn("load manager cancel residual job failed", t);
+                    LOG.warn("load manager end residual insert jobs failed", t);
                 }
             }
         };
