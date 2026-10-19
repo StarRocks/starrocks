@@ -117,7 +117,7 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     return GeoInput{geo, nullable, constant};
 }
 
-bool decode_canonical_geometry_point(Slice wkb, WkbCoordinate* point) {
+bool decode_canonical_xy_point(Slice wkb, WkbCoordinate* point) {
     // Finite canonical XY POINTs survive parse/write without normalization.
     constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
     if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
@@ -151,7 +151,7 @@ StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
         }
         if constexpr (Type == TYPE_GEOMETRY) {
             WkbCoordinate point;
-            if (decode_canonical_geometry_point(input.wkb(row), &point)) {
+            if (decode_canonical_xy_point(input.wkb(row), &point)) {
                 result.append(X ? point.x : point.y);
                 continue;
             }
@@ -1152,23 +1152,8 @@ StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& column
 }
 
 bool is_valid_canonical_geography_point(Slice wkb) {
-    // A finite XY POINT in canonical little-endian WKB needs no normalization.
-    // Checking its complete structure and CRS84 coordinates here avoids a
-    // geometry allocation and a decode/encode round trip at the SQL boundary.
-    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
-    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
-        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
-        return false;
-    }
-    std::array<uint64_t, 2> coordinates;
-    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
-    if constexpr (std::endian::native != std::endian::little) {
-        coordinates[0] = std::byteswap(coordinates[0]);
-        coordinates[1] = std::byteswap(coordinates[1]);
-    }
-    const double longitude = std::bit_cast<double>(coordinates[0]);
-    const double latitude = std::bit_cast<double>(coordinates[1]);
-    return is_valid_crs84_coordinate(longitude, latitude);
+    WkbCoordinate point;
+    return decode_canonical_xy_point(wkb, &point) && is_valid_crs84_coordinate(point.x, point.y);
 }
 
 template <LogicalType InputType>
@@ -1233,7 +1218,7 @@ StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& 
         }
         const Slice value = input.value(row);
         WkbCoordinate point;
-        if (!text && decode_canonical_geometry_point(value, &point)) {
+        if (!text && decode_canonical_xy_point(value, &point)) {
             result->append_datum(Datum(value));
             continue;
         }
