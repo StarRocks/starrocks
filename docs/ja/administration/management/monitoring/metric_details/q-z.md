@@ -66,6 +66,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: スキャンされた行の総数。
 
+## `ranger_audit_init_failed`
+
+- 単位: -
+- タイプ: Gauge
+- 説明: この FE が Ranger 監査の初期化に失敗したかどうか。`1` の場合、認可は引き続き動作しますが、監査設定を修正して再起動するまで、この FE は Ranger 監査イベントを一切出力しません。失敗した監査先は FE ログに記録されます。それ以外は `0` です。よくある原因は、FE に同梱されていない監査先を設定していることです。FE で利用できる Ranger 監査先は `file` と `solr` のみです。
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`

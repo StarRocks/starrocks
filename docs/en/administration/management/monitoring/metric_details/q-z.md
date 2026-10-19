@@ -108,6 +108,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Labels: `storage_type`
 - Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
 
+## `ranger_audit_init_failed`
+
+- Unit: -
+- Type: Gauge
+- Description: Whether this FE failed to initialize Ranger audit. `1` means authorization still works but this FE writes no Ranger audit event until it is restarted with a fixed audit configuration; the FE log names the destination that failed. `0` otherwise. A common cause is an audit destination that the FE does not ship: only the `file` and `solr` Ranger audit destinations are available.
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `recycle_bin_database_num`

@@ -21,7 +21,16 @@ Apache Ranger 提供以下核心模块：
 - 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
 - 支持 Ranger 审计日志。
 - 暂不支持 Kerberos 认证的 Ranger Server。
+- 暂不支持由 JavaScript 求值的 Ranger 策略条件，例如 `expression` 条件和 tag 策略的 `accessed-after-expiry` 条件，详见下方说明。
 - 同一个 Apache Ranger 中可以注册多个 StarRocks Service 管理不同 StarRocks 集群的权限。
+
+:::note
+
+StarRocks FE 运行在 JDK 17 及以上版本，其中不带 JavaScript 引擎。Ranger 无法对 JavaScript 条件求值时，会把该条件当作满足，并在每次求值时打印 `failed to evaluate condition '<condition>': script engine not found`。例如，带 `expression` 条件的允许项会不检查表达式而直接放行。因此，不要在作用于 StarRocks 的策略中使用这类条件。
+
+FE 加载策略时还会打印 `failed to initialize condition 'accessed-after-expiry'`。它来自 Ranger Admin 默认为 service 关联的 tag service 中的 `EXPIRES_ON` 策略。只要没有资源带 `EXPIRES_ON` 标签，这条日志就没有影响。带该标签的资源在过期日期之前也会被拒绝访问。
+
+:::
 
 本文介绍 StarRocks 与 Apache Ranger 集成后的权限控制方式以及集成过程。关于如何在 Ranger 上创建权限策略来管理数据安全，参见 [Apache Ranger 官网](https://ranger.apache.org/)。
 

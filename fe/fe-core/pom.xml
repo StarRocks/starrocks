@@ -813,6 +813,11 @@ under the License.
             <groupId>org.apache.ranger</groupId>
             <artifactId>ranger-audit-dest-solr</artifactId>
         </dependency>
+        <!-- ZooKeeper classes that solr-solrj needs on every Solr audit send; see fe/pom.xml. -->
+        <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.airlift</groupId>

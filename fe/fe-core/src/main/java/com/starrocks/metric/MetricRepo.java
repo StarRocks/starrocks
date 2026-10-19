@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -546,6 +547,15 @@ public final class MetricRepo {
                 "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
         GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
+
+        // Per-FE: each FE initializes Ranger audit in its own process.
+        STARROCKS_METRIC_REGISTER.addMetric(new GaugeMetric<Long>("ranger_audit_init_failed", MetricUnit.NOUNIT,
+                "1 if this FE failed to initialize Ranger audit and writes no Ranger audit event, otherwise 0") {
+            @Override
+            public Long getValue() {
+                return RangerAccessController.isAuditInitFailed() ? 1L : 0L;
+            }
+        });
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
