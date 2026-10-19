@@ -236,6 +236,11 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
         }
         return Status::OK();
     };
+    // Drain the buffer even when processing fails, so tests observe anything the source side could have pulled.
+    auto collect_after = [&](const Status& status) -> Status {
+        RETURN_IF_ERROR(collect());
+        return status;
+    };
     for (size_t first = 0; first < input.size(); first += chunk_rows) {
         size_t count = std::min(chunk_rows, input.size() - first);
         auto chunk = std::make_shared<Chunk>();
@@ -254,12 +259,9 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
         }
         chunk->append_column(std::move(partition), in->slots()[1]->id());
         chunk->append_column(std::move(ids), in->slots()[2]->id());
-        RETURN_IF_ERROR(processor.process(&state, chunk));
-        RETURN_IF_ERROR(collect());
+        RETURN_IF_ERROR(collect_after(processor.process(&state, chunk)));
     }
-    RETURN_IF_ERROR(processor.finish_process(&state));
-    RETURN_IF_ERROR(collect());
-    return Status::OK();
+    return collect_after(processor.finish_process(&state));
 }
 TEST(CoverageAnalytorTest, WholePartitionsAcrossAndInsideChunksKeepRowIdentity) {
     const std::vector<std::optional<std::string>> input{left, std::nullopt, right, "POLYGON EMPTY", left, right};
@@ -362,10 +364,14 @@ TEST(CoverageAnalytorTest, SpillSettingDoesNotChangeWindowResults) {
     }
 }
 TEST(CoverageAnalytorTest, LateInvalidPartitionCannotPublishItsRows) {
-    std::vector<std::pair<int32_t, std::string>> output;
-    auto status = drive_coverage_analytor(1, {1, 2, 2}, {left, left, left}, false, &output);
-    EXPECT_FALSE(status.ok());
-    for (const auto& row : output) EXPECT_EQ(row.first, 0);
+    // Partition 2 holds duplicate polygons and fails in finish_process. Only rows of the valid partition 1 that were
+    // published before the failure may reach the buffer, including when both partitions share an output chunk.
+    for (size_t rows : {size_t(1), size_t(2), size_t(3)}) {
+        std::vector<std::pair<int32_t, std::string>> output;
+        auto status = drive_coverage_analytor(rows, {1, 2, 2}, {left, left, left}, false, &output);
+        EXPECT_FALSE(status.ok());
+        for (const auto& row : output) EXPECT_EQ(row.first, 0) << "chunk rows " << rows;
+    }
 }
 TEST(CoverageAnalytorTest, BufferContractionAndCompanionWindowPreserveRowIdentity) {
     const auto previous = config::pipeline_analytic_removable_chunk_num;
