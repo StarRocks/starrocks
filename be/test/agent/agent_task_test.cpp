@@ -19,20 +19,16 @@
 #include <algorithm>
 
 #include "agent/agent_server.h"
+#include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
-<<<<<<< HEAD
+#include "gen_cpp/HeartbeatService_constants.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
-=======
-#include "gen_cpp/HeartbeatService_constants.h"
-#include "platform/store_path.h"
-#include "runtime/runtime_env.h"
->>>>>>> afb0842 ([BugFix] Match ALTER finish reports by job and stop expiring queued ALTER tasks (#81018))
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/task/engine_clone_task.h"

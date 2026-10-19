@@ -18,22 +18,10 @@
 
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
+#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
-<<<<<<< HEAD
-=======
-#include "common/system/backend_options.h"
-#include "common/system/master_info.h"
-#include "data_workflows/clone/engine_clone_task.h"
-#include "data_workflows/compaction/engine_compaction_control_task.h"
-#include "data_workflows/compaction/engine_manual_compaction_task.h"
-#include "data_workflows/consistency/engine_checksum_task.h"
-#include "data_workflows/migration/engine_storage_migration_task.h"
-#include "data_workflows/schema_change/engine_alter_tablet_task.h"
-#include "data_workflows/snapshot/snapshot_loader.h"
-#include "exec/exec_env.h"
->>>>>>> afb0842 ([BugFix] Match ALTER finish reports by job and stop expiring queued ALTER tasks (#81018))
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
