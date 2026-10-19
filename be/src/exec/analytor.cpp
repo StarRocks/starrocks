@@ -487,7 +487,7 @@ Status Analytor::finish_process(RuntimeState* state) {
     _input_eos = true;
     RETURN_IF_ERROR((this->*_process_impl)(state));
     _is_sink_complete.store(true, std::memory_order_release);
-    return Status::OK();
+    return _check_has_error();
 }
 
 std::string Analytor::debug_string() const {
@@ -1063,6 +1063,9 @@ void Analytor::_update_window_batch_removable_cumulatively() {
 }
 
 Status Analytor::_output_result_chunk(ChunkPtr* chunk) {
+    // A window function that reported an error may have left its result column short, padded, or computed from
+    // incomplete state. Never assemble such a chunk or hand it to the source side.
+    RETURN_IF_ERROR(_check_has_error());
     ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
     for (size_t i = 0; i < _result_window_columns.size(); i++) {
         output_chunk->append_column(_result_window_columns[i], _result_tuple_desc->slots()[i]->id());
