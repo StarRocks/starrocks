@@ -16,13 +16,9 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/util/raw_container_test.cpp
-#include "runtime/memory/column_allocator.h"
-=======
 #include <new>
 
-#include "common/memory/column_allocator.h"
->>>>>>> 90503a6 ([BugFix] Throw std::bad_alloc when an aligned allocation fails (#79054)):be/test/base/raw_container_test.cpp
+#include "runtime/memory/column_allocator.h"
 
 namespace starrocks {
 
