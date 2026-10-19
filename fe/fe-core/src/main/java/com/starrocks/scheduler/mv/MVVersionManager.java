@@ -161,6 +161,12 @@ public class MVVersionManager {
             return;
         }
         try {
+            // A DROP that ran before the lock was taken leaves nothing to confirm; logging for it would only
+            // journal an entry no follower can apply.
+            if (!mv.isInCatalog()) {
+                logger.info("skip freshness confirm, mv {} is no longer in the catalog", mv.getName());
+                return;
+            }
             MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
             if (copiedScheme.getLastFreshnessConfirmedAt() >= confirmTime) {
                 return;

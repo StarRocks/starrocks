@@ -1790,7 +1790,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return new StatusSnapshot(active, statusEpoch);
     }
 
-    private boolean isInCatalog() {
+    public boolean isInCatalog() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         return db != null && db.getTable(id) == this;
     }

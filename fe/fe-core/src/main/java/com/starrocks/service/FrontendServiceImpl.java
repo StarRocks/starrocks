@@ -2125,25 +2125,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
-            PhysicalPartition p = table.getPhysicalPartition(id);
-            if (p == null) {
-                LOG.warn("physical partition id {} does not exist", id);
-                continue;
-            }
-            Partition partition = olapTable.getPartition(p.getParentId());
-            if (partition == null) {
-                LOG.warn("partition id {} does not exist", p.getParentId());
-                continue;
-            }
-            updatePartitionIds.add(p.getParentId());
-            p.setImmutable(true);
-
+            Partition partition;
             List<PhysicalPartition> mutablePartitions;
-            // Reads sub-partitions of one known table; intensive table READ
+            // Reads the partition maps and sub-partitions of one known table; intensive table READ
             // (IS-on-db + READ-on-table) is enough. Acquire before try so a
             // failed acquire does not trigger an unlock of an unheld lock.
             locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
+                PhysicalPartition p = table.getPhysicalPartition(id);
+                if (p == null) {
+                    LOG.warn("physical partition id {} does not exist", id);
+                    continue;
+                }
+                partition = olapTable.getPartition(p.getParentId());
+                if (partition == null) {
+                    LOG.warn("partition id {} does not exist", p.getParentId());
+                    continue;
+                }
+                updatePartitionIds.add(p.getParentId());
+                p.setImmutable(true);
+
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
@@ -2158,15 +2159,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // return all mutable partitions
         for (Long id : updatePartitionIds) {
-            Partition partition = olapTable.getPartition(id);
-            if (partition == null) {
-                LOG.warn("partition id {} does not exist", id);
-                continue;
-            }
-
             long mutablePartitionNum = 0;
             locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
+                Partition partition = olapTable.getPartition(id);
+                if (partition == null) {
+                    LOG.warn("partition id {} does not exist", id);
+                    continue;
+                }
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
