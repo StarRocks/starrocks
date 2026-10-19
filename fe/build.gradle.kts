@@ -250,6 +250,7 @@ subprojects {
             implementation("org.jdom:jdom2:2.0.6.1")
             implementation("org.json:json:20231013")
             implementation("org.junit.jupiter:junit-jupiter:5.8.2")
+            implementation("org.junit.platform:junit-platform-launcher:1.8.2")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
             implementation("org.postgresql:postgresql:42.7.12")
