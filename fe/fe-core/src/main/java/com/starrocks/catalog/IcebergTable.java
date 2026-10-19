@@ -109,6 +109,8 @@ public class IcebergTable extends Table {
     private static final String PARQUET_FORMAT = "parquet";
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
+    // spec id plus partition values of the file a row comes from; NULL for a file of an unpartitioned spec
+    public static final String PARTITION_KEY = "$partition_key";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
     public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
