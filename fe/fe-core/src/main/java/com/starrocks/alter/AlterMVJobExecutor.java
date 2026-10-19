@@ -1620,9 +1620,61 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      */
     public static void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
                                                                Set<String> modifiedColumns) throws DdlException {
+        checkColumnsWithMaterializedViews(olapTable, modifiedColumns, false);
+    }
+
+    /** Reject renames that would leave authoritative synchronous MV definitions bound to old names. */
+    public static void checkRenamedColumnWithMaterializedViews(OlapTable olapTable,
+                                                              Set<String> renamedColumns) throws DdlException {
+        checkColumnsWithMaterializedViews(olapTable, renamedColumns, true);
+        if (renamedColumns != null && !renamedColumns.isEmpty()) {
+            Set<String> names = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            names.addAll(renamedColumns);
+            List<Column> remainingSources = olapTable.getBaseSchema().stream()
+                    .filter(column -> !names.contains(column.getName())).collect(Collectors.toList());
+            checkMaterializedViewDefinitionsWithSchema(olapTable,
+                    Map.of(olapTable.getBaseIndexMetaId(), remainingSources), "rename column");
+        }
+    }
+
+    /** Validate surviving definitions against final candidate schemas before any catalog/WAL update. */
+    public static void checkMaterializedViewDefinitionsWithSchema(OlapTable table,
+            Map<Long, ? extends List<Column>> schemas, String operation) throws DdlException {
+        List<Column> sources = schemas.get(table.getBaseIndexMetaId());
+        if (sources == null) {
+            sources = table.getBaseSchema();
+        }
+        for (MaterializedIndexMeta meta : table.getIndexMetaIdToMeta().values()) {
+            if (meta.getIndexMetaId() == table.getBaseIndexMetaId() || meta.getSyncMvDefinition() == null) {
+                continue;
+            }
+            try {
+                MaterializedIndexMeta candidate = meta.shallowCopy();
+                List<Column> schema = schemas.get(meta.getIndexMetaId());
+                candidate.setSchema(copyColumnsForDefinitionValidation(schema == null ? meta.getSchema() : schema));
+                table.analyzeRollupIndexMeta(candidate, copyColumnsForDefinitionValidation(sources));
+            } catch (SemanticException e) {
+                throw new DdlException("Can not " + operation + ": related rollup "
+                        + table.getIndexNameByMetaId(meta.getIndexMetaId())
+                        + " would have an invalid define expr or WHERE clause: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private static List<Column> copyColumnsForDefinitionValidation(List<Column> schema) {
+        return schema.stream().map(column -> {
+            Column copy = new Column(column);
+            copy.setType(column.getType().clone());
+            return copy;
+        }).collect(Collectors.toList());
+    }
+
+    private static void checkColumnsWithMaterializedViews(OlapTable olapTable, Set<String> modifiedColumns,
+                                                          boolean isRename) throws DdlException {
         if (modifiedColumns == null || modifiedColumns.isEmpty()) {
             return;
         }
+        String operation = isRename ? "rename" : "drop/modify";
 
         // If there is synchronized materialized view referring the column, throw exception.
         if (olapTable.getIndexNameToMetaId().size() > 1) {
@@ -1638,13 +1690,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // ignore agg_keys type because it's like duplicated without agg functions
                 boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
                         schema.stream().anyMatch(x -> x.isAggregated());
-                if (hasAggregateFunction) {
+                if (hasAggregateFunction || (isRename && meta.getSyncMvDefinition() != null)) {
                     for (Column rollupCol : schema) {
                         String colName = rollupCol.getName();
                         if (modifiedColumns.contains(colName)) {
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                            throw new DdlException(String.format("Can not %s the column %s, " +
                                     "because the column is used in the related rollup %s, " +
-                                    "please drop the rollup index first.", colName, indexName));
+                                    "please drop the rollup index first.", operation, colName, indexName));
                         }
                         if (rollupCol.getRefColumns() != null) {
                             for (SlotRef refColumn : rollupCol.getRefColumns()) {
@@ -1652,10 +1704,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 if (modifiedColumns.contains(refColName)) {
                                     String defineExprSql = rollupCol.getDefineExpr() == null ? "" :
                                             ExprToSql.toSql(rollupCol.getDefineExpr());
-                                    throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                                    throw new DdlException(String.format("Can not %s the column %s, " +
                                                     "because the column is used in the related rollup %s " +
                                                     "with the define expr:%s, please drop the rollup index first.",
-                                            refColName, indexName, defineExprSql));
+                                            operation, refColName, indexName, defineExprSql));
                                 }
                             }
                         }
@@ -1669,10 +1721,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         String colName = refColumn.getColumnName();
                         if (modifiedColumns.contains(colName)) {
                             String whereExprSql = ExprToSql.toSql(whereExpr);
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                            throw new DdlException(String.format("Can not %s the column %s, " +
                                             "because the column is used in the related rollup %s " +
                                             "with the where expr:%s, please drop the rollup index first.",
-                                    colName, indexName, whereExprSql));
+                                    operation, colName, indexName, whereExprSql));
                         }
                     }
                 }

@@ -73,6 +73,7 @@ import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SyncMaterializedViewRecoveryException;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -2279,15 +2280,22 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
-        try {
-            postLoadImage();
-        } catch (Exception t) {
-            LOG.warn("there is an exception during processing after load image. exception:", t);
-        }
+        postLoadImageWithRecoveryPolicy();
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = imageLoader.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    @VisibleForTesting
+    void postLoadImageWithRecoveryPolicy() {
+        try {
+            postLoadImage();
+        } catch (SyncMaterializedViewRecoveryException e) {
+            throw e;
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
     }
 
     private void postLoadImage() {
@@ -2316,6 +2324,9 @@ public class GlobalStateMgr {
                     }
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", table, e);
+                    if (e instanceof SyncMaterializedViewRecoveryException recoveryException) {
+                        throw recoveryException;
+                    }
                 }
             }
         }

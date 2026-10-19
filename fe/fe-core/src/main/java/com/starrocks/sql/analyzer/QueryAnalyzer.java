@@ -2827,6 +2827,17 @@ public class QueryAnalyzer {
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
+                        // The selected index can give same-named columns different key or aggregate properties.
+                        // Update only the query copy; catalog schema rebuilding also invalidates shared statistics.
+                        List<Column> querySchema = new ArrayList<>(materializedIndex.second.getSchema());
+                        Set<String> addedColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                        querySchema.forEach(column -> addedColumnNames.add(column.getName()));
+                        for (Column column : mvOlapTable.getFullSchema()) {
+                            if (addedColumnNames.add(column.getName())) {
+                                querySchema.add(column);
+                            }
+                        }
+                        mvOlapTable.setNewFullSchema(querySchema);
                         table = mvOlapTable;
                     }
                 }
