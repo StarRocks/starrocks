@@ -174,10 +174,10 @@ public class WebBaseAction extends BaseAction {
 
         // cookie is invalid.
         try {
-            // Authenticate onto the context the NODE check below uses, so the roles an LDAP or
-            // security-integration group maps to are present on it. Authenticating onto a throwaway
-            // context and copying only the UserIdentity across would leave that check looking at
-            // user-owned roles alone, and deny a user whose NODE privilege comes from a group.
+            // Only the authenticated UserIdentity is used below: the session keeps just that
+            // identity, and the NODE check runs on a context holding the user's own roles. A NODE
+            // privilege that comes only from a role an LDAP or security-integration group maps
+            // to is therefore not honored for the Web UI.
             ConnectContext ctx = new ConnectContext(null);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setRemoteIP(request.getHostString());
