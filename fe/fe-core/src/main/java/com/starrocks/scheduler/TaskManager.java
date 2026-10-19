@@ -352,6 +352,18 @@ public class TaskManager implements MemoryTrackable {
      * NOTE: this method is thread safe, no need to task lock again.
      */
     public void suspendTask(Task task) {
+        suspendTask(task, true);
+    }
+
+    /**
+     * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
+     * which killing them takes, and must not wait for it again.
+     */
+    public void suspendTaskLeavingRuns(Task task) {
+        suspendTask(task, false);
+    }
+
+    private void suspendTask(Task task, boolean killTaskRuns) {
         if (task == null) {
             return;
         }
@@ -369,7 +381,7 @@ public class TaskManager implements MemoryTrackable {
             }
 
             // kill running task run
-            if (!killTask(task.getName(), true)) {
+            if (killTaskRuns && !killTask(task.getName(), true)) {
                 LOG.warn("kill task failed: {}", task.getName());
             }
             // remove task from scheduler

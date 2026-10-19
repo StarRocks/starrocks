@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -152,6 +153,41 @@ public class TaskRunTest {
 
         new SqlTaskRunProcessor().postTaskRun(context);
         assertEquals(1, executedStatements.get());
+    }
+
+    @Test
+    public void testRunsFromBothSidesOfAVersionMapResetDoNotMerge() {
+        Map<String, String> range = new HashMap<>();
+        range.put(TaskRun.MV_ID, "1");
+        range.put(TaskRun.PARTITION_START, "p1");
+        range.put(TaskRun.PARTITION_END, "p2");
+        Map<String, String> beforeReset = new HashMap<>(range);
+        beforeReset.put(TaskRun.MV_VERSION_MAP_RESET_EPOCH, "2");
+        Map<String, String> afterReset = new HashMap<>(range);
+        afterReset.put(TaskRun.MV_VERSION_MAP_RESET_EPOCH, "4");
+        ExecuteOption staleBatch = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, beforeReset);
+
+        assertFalse(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, afterReset)));
+        assertFalse(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, new HashMap<>(range))));
+        // The batches of one job carry the same epoch and still merge.
+        assertTrue(staleBatch.isMergeableWith(
+                new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, new HashMap<>(beforeReset))));
+        assertFalse(TaskRun.MV_UNCOPYABLE_PROPERTIES.contains(TaskRun.MV_VERSION_MAP_RESET_EPOCH),
+                "must copy to the next batch, which is fenced by its job's epoch");
+    }
+
+    @Test
+    public void testSeedVersionMapResetEpoch() {
+        Map<String, String> newProperties = new HashMap<>();
+        TaskRun.seedVersionMapResetEpoch(newProperties, -1);
+        assertFalse(newProperties.containsKey(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
+        TaskRun.seedVersionMapResetEpoch(newProperties, 2);
+        assertEquals("2", newProperties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
+        // A later batch keeps the epoch its job's first run read.
+        TaskRun.seedVersionMapResetEpoch(newProperties, 4);
+        assertEquals("2", newProperties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH));
     }
 
     @Test
