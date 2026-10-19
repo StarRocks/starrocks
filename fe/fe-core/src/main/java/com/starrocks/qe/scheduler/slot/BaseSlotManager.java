@@ -270,43 +270,6 @@ public abstract class BaseSlotManager {
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * Query Queue V2 capacity level (see {@link Config#query_queue_v2_concurrency_level}).
-     */
-    public int getQueryQueueV2ConcurrencyLevel(long warehouseId) {
-        return Config.query_queue_v2_concurrency_level;
-    }
-
-    /**
-     * Query Queue V2 MBE per-slot memory budget in bytes.
-     */
-    public long getQueryQueueV2MemBytesPerSlot(long warehouseId) {
-        return Config.query_queue_v2_mem_bytes_per_slot;
-    }
-
-    /**
-     * Query Queue V2 CBE per-slot CPU cost.
-     */
-    public long getQueryQueueV2CpuCostsPerSlot(long warehouseId) {
-        return Config.query_queue_v2_cpu_costs_per_slot;
-    }
-
-    /**
-     * Query Queue V2 slots estimator strategy name (PBE/MBE/CBE, legacy MAX/MIN).
-     */
-    public String getQueryQueueSlotsEstimatorStrategy(long warehouseId) {
-        return Config.query_queue_slots_estimator_strategy;
-    }
-
-    /**
-     * Query Queue V2 schedule strategy name (SWRR/SJF).
-     */
-    public String getQueryQueueV2ScheduleStrategy(long warehouseId) {
-        return Config.query_queue_v2_schedule_strategy;
-    }
-
-    /**
      * The memory usage limit of the warehouse under Query Queue V2: new queries of the warehouse wait while the
      * process memory usage of any of its alive nodes reaches this fraction of the node's memory limit. Non-positive
      * means no memory gating. The global variable {@link GlobalVariable#QUERY_QUEUE_MEM_USED_PCT_LIMIT} by default.
@@ -316,7 +279,6 @@ public abstract class BaseSlotManager {
     }
 
     /**
->>>>>>> 599afa0abb3... [Feature] Apply query_queue_mem_used_pct_limit per warehouse under Query Queue V2 (#63745)
      * Return warehouse-id to slot tracker map.
      */
     public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {

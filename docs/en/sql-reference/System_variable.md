@@ -1756,7 +1756,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, it applies to the nodes of each warehouse: new queries of a warehouse wait while any of its alive nodes reaches the limit. In shared-data clusters, the warehouse property of the same name overrides it for one warehouse. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 
