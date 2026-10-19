@@ -141,45 +141,6 @@ public class PListCellTest {
             Assertions.assertEquals(-2, c1.compareTo(c2));
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void toStringReturnsEmptyStringForEmptyPartitionItems() {
-        PListCell cell = new PListCell(ImmutableList.of());
-        Assertions.assertEquals("", cell.toString());
-    }
-
-    @Test
-    public void toStringHandlesPartitionItemsWithinMaxLength() {
-        Config.max_mv_task_run_meta_message_values_length = 5;
-        PListCell cell = new PListCell(ImmutableList.of(
-                ImmutableList.of("item1"),
-                ImmutableList.of("item2"),
-                ImmutableList.of("item3")
-        ));
-        Assertions.assertEquals("(item1),(item2),(item3)", cell.toString());
-    }
-
-    @Test
-    public void toStringHandlesPartitionItemsExceedingMaxLength() {
-        Config.max_mv_task_run_meta_message_values_length = 4;
-        PListCell cell = new PListCell(ImmutableList.of(
-                ImmutableList.of("item1"),
-                ImmutableList.of("item2"),
-                ImmutableList.of("item3"),
-                ImmutableList.of("item4"),
-                ImmutableList.of("item5")
-        ));
-        Assertions.assertEquals("(item1),(item2),...,(item4),(item5)", cell.toString());
-        Config.max_mv_task_run_meta_message_values_length = 8;
-    }
-
-    @Test
-    public void toStringHandlesNullPartitionItemsGracefully() {
-        PListCell cell = new PListCell(Lists.newArrayList());
-        Assertions.assertEquals("", cell.toString());
-    }
 
     private static Set<PListCell> tenantCells(int count) {
         Set<PListCell> cells = new LinkedHashSet<>();
@@ -231,5 +192,4 @@ public class PListCellTest {
                 () -> PListCell.batchDeserialize(shrunk));
         Assertions.assertTrue(e.getMessage().contains("8 of 20"), e.getMessage());
     }
->>>>>>> 158cf60 ([BugFix] Shrink list partition values in archived MV task run history (#80944))
 }
