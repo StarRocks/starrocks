@@ -121,11 +121,11 @@ public class InsertAnalyzer {
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
             afterQueryAnalyzed.run();
 
-            // With the auto refresh, every source is refreshed for this statement (InsertSourceRefresher), so the
-            // connector cache is current and is used. Without it, nothing refreshed the Hive sources: read them
-            // past the cache, unless the session says the cache is fine.
+            // Read the partition names and file lists of the Hive sources past the cache, unless the session says the
+            // cache is fine. With the auto refresh the sources are also dropped from the cache (InsertSourceRefresher),
+            // but that alone is not enough: a background refresh that read them before the drop writes what it read
+            // back after it.
             if (session.getUseConnectorMetadataCache().isEmpty()
-                    && !InsertSourceRefresher.isEnabled(session)
                     && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
                 List<Table> tables = new ArrayList<>();
                 AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
