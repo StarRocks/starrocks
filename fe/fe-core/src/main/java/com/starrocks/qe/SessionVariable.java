@@ -695,6 +695,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
     public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
+    public static final String ENABLE_EXCHANGE_SINK_BUFFER_FLUSH =
+            "enable_exchange_sink_buffer_flush";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -2172,6 +2174,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
+
+    // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling; the
+    // threshold is the BE config exchange_sink_buffer_flush_threshold_bytes.
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_SINK_BUFFER_FLUSH)
+    private boolean enableExchangeSinkBufferFlush = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePerf = false;
@@ -5390,6 +5397,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableExchangePassThrough;
     }
 
+    public boolean isEnableExchangeSinkBufferFlush() {
+        return enableExchangeSinkBufferFlush;
+    }
+
+    public void setEnableExchangeSinkBufferFlush(boolean enable) {
+        this.enableExchangeSinkBufferFlush = enable;
+    }
+
     public boolean isEnableExchangePerf() {
         return enableExchangePerf;
     }
@@ -7021,6 +7036,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setK_factor(kFactor);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_exchange_sink_buffer_flush(enableExchangeSinkBufferFlush);
         tResult.setExchange_hash_function_version(exchangeHashFunctionVersion);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         tResult.setJit_level(jitLevel);

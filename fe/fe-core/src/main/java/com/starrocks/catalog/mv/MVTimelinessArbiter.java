@@ -54,7 +54,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
@@ -75,12 +78,19 @@ public abstract class MVTimelinessArbiter {
     // parameters for query rewrite
     public static class QueryRewriteParams {
         private final boolean isQueryRewrite;
+        // whether a refresh-mode check reads internal base tables under their READ lock, see readsBaseTablesUnlocked
+        private final boolean lockBaseTables;
         private final OptimizerContext optimizerContext;
         private final long timeLimit;
         private long loopCounter = 0;
 
         public QueryRewriteParams(boolean isQueryRewrite, OptimizerContext optimizerContext) {
+            this(isQueryRewrite, true, optimizerContext);
+        }
+
+        private QueryRewriteParams(boolean isQueryRewrite, boolean lockBaseTables, OptimizerContext optimizerContext) {
             this.isQueryRewrite = isQueryRewrite;
+            this.lockBaseTables = lockBaseTables;
             this.optimizerContext = optimizerContext;
             if (optimizerContext != null) {
                 SessionVariable sessionVariable = optimizerContext.getSessionVariable();
@@ -92,6 +102,14 @@ public abstract class MVTimelinessArbiter {
 
         public static QueryRewriteParams ofRefresh() {
             return new QueryRewriteParams(false, null);
+        }
+
+        /**
+         * A refresh-mode check that reads base tables without their locks, for a diagnostic constant-folded while
+         * a statement is planned: the planner may already hold other tables' locks there.
+         */
+        public static QueryRewriteParams ofUnlockedRefresh() {
+            return new QueryRewriteParams(false, false, null);
         }
 
         public static QueryRewriteParams ofQueryRewrite(OptimizerContext optimizerContext) {
@@ -116,6 +134,11 @@ public abstract class MVTimelinessArbiter {
 
         public boolean isQueryRewrite() {
             return isQueryRewrite;
+        }
+
+        /** Whether internal base tables are read without their READ lock: query rewrite, or an unlocked refresh. */
+        public boolean readsBaseTablesUnlocked() {
+            return isQueryRewrite || !lockBaseTables;
         }
 
         public OptimizerContext getOptimizerContext() {
@@ -192,6 +215,9 @@ public abstract class MVTimelinessArbiter {
             if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
                 return true;
             }
+            if (hasDeletedPartitions(mv, baseTable, /* pinnedVersionRange */ null)) {
+                return true;
+            }
         }
         return false;
     }
@@ -247,6 +273,16 @@ public abstract class MVTimelinessArbiter {
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPCells());
+
+            // An mv partition that outlived a dropped base partition still holds its rows, so it must not answer a
+            // query until it is recomputed.
+            Set<String> affectedByDrops = getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, /* pinnedVersionRange */ null));
+            if (!affectedByDrops.isEmpty()) {
+                PCellSortedSet affectedCells = mv.getPartitionCells(Optional.empty());
+                affectedCells.retainAllNames(affectedByDrops);
+                mvUpdateInfo.addMVToRefreshPartitionNames(affectedCells);
+            }
         }
         return baseChangedPartitionNames;
     }

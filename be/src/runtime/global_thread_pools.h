@@ -44,6 +44,7 @@ public:
     ThreadPool* load_rowset_thread_pool() const { return _load_rowset_thread_pool.get(); }
     ThreadPool* load_segment_thread_pool() const { return _load_segment_thread_pool.get(); }
     ThreadPool* put_combined_txn_log_thread_pool() const { return _put_combined_txn_log_thread_pool.get(); }
+    ThreadPool* load_sink_close_thread_pool() const { return _load_sink_close_thread_pool.get(); }
 
     PriorityThreadPool* pipeline_prepare_pool() const { return _pipeline_prepare_pool.get(); }
     PriorityThreadPool* pipeline_sink_io_pool() const { return _pipeline_sink_io_pool.get(); }
@@ -70,6 +71,7 @@ private:
     std::unique_ptr<ThreadPool> _load_rowset_thread_pool;
     std::unique_ptr<ThreadPool> _load_segment_thread_pool;
     std::unique_ptr<ThreadPool> _put_combined_txn_log_thread_pool;
+    std::unique_ptr<ThreadPool> _load_sink_close_thread_pool;
 
     std::unique_ptr<PriorityThreadPool> _pipeline_prepare_pool;
     std::unique_ptr<PriorityThreadPool> _pipeline_sink_io_pool;

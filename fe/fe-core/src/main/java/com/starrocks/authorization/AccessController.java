@@ -202,6 +202,16 @@ public interface AccessController {
     }
 
     /**
+     * Whether a row access or column masking policy may apply to {@code tableName}, answered without asking the
+     * catalog. The planner resolves an external table before the meta lock is taken when this says yes, so that the
+     * tables its policies read can be locked; a controller that serves policies must not say no for a table it may
+     * have one for. The default matches the default lookups above, which have none.
+     */
+    default boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return false;
+    }
+
+    /**
      * Called by the unlocked analysis pre-pass for each external table it resolved, before the meta lock is
      * taken. A controller whose {@link #getColumnMaskingPolicy} / {@link #getRowAccessPolicy} would otherwise
      * ask the catalog again -- under the lock, since those run during analysis -- can do that asking here. Must
