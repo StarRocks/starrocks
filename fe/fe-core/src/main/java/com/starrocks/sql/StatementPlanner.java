@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -469,8 +470,29 @@ public class StatementPlanner {
                         + "was being planned, please retry", ErrorType.INTERNAL_ERROR);
             }
             AnalyzerUtils.copyOlapTable(stmt, copies);
+            resetAllTargetPartitionIds(stmt);
         }
         return copies;
+    }
+
+    /**
+     * An INSERT into every partition of an olap table took their ids at analysis, under the lock {@link
+     * #copyOlapTablesAndUnlock} dropped before taking the whole set again. A partition dropped or replaced in between
+     * would fail the sink with an unknown partition, so take them again, under the lock now held. Partitions the
+     * statement names are left alone: one gone since is an error.
+     */
+    private static void resetAllTargetPartitionIds(StatementBase stmt) {
+        if (!(stmt instanceof InsertStmt insertStmt) || !(insertStmt.getTargetTable() instanceof OlapTable target)
+                || insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()
+                || insertStmt.isDynamicOverwrite()) {
+            return;
+        }
+        List<Long> targetPartitionIds = target.getPartitions().stream().map(Partition::getId).toList();
+        if (targetPartitionIds.isEmpty()) {
+            throw new SemanticException("data cannot be inserted into table with empty partition." +
+                    "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ", target.getName());
+        }
+        insertStmt.setTargetPartitionIds(Lists.newArrayList(targetPartitionIds));
     }
 
     /** The table a writing statement writes into, or null for anything else. */
