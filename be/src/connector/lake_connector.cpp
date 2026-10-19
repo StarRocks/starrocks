@@ -331,6 +331,13 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+    // The FE marks a column unused when only pushed-down conjuncts read it, but normalizing a conjunct can
+    // fold it away without a column predicate (`c NOT IN (.., NULL)` under OR never holds, so the OR drops it).
+    // Such a column is neither filtered on nor output, and the segment iterator's late-materialization layout
+    // has no place for it, so output it instead.
+    const auto& pushdown_cids = _params.pred_tree.column_ids();
+    std::erase_if(_unused_output_column_ids, [&](uint32_t cid) { return !pushdown_cids.contains(cid); });
+
     for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
         _unused_output_column_ids.erase(cid);
     }
