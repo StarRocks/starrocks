@@ -10,12 +10,12 @@ StarRocks は公開しているすべてのエントリポイントでクライ�
 
 | ユーザーの定義方法 | MySQL プロトコル | HTTP API | Arrow Flight SQL |
 | --- | --- | --- | --- |
-| `CREATE USER ... IDENTIFIED BY '<password>'`<br>（ネイティブパスワード） | パスワード | Basic | ユーザー名とパスワード |
-| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br>（ローカルユーザー、LDAP bind） | パスワード<br>（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
-| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br>（ローカルユーザー、JWT） | JWT<br>（`authentication_openid_connect_client` で送信） | 非対応 | 非対応 |
-| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br>（ローカルユーザー、OAuth 2.0） | ブラウザフロー | 非対応 | 非対応 |
-| セキュリティインテグレーション、`authentication_ldap_simple` | パスワード<br>（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
-| セキュリティインテグレーション、`authentication_jwt` | JWT<br>（`authentication_openid_connect_client` で送信） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+| `CREATE USER ... IDENTIFIED BY '<password>'`<br />（ネイティブパスワード） | パスワード | Basic | ユーザー名とパスワード |
+| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br />（ローカルユーザー、LDAP bind） | パスワード<br />（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
+| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br />（ローカルユーザー、JWT） | JWT<br />（`authentication_openid_connect_client` で送信） | 非対応 | 非対応 |
+| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br />（ローカルユーザー、OAuth 2.0） | ブラウザフロー | 非対応 | 非対応 |
+| セキュリティインテグレーション、`authentication_ldap_simple` | パスワード<br />（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
+| セキュリティインテグレーション、`authentication_jwt` | JWT<br />（`authentication_openid_connect_client` で送信） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
 | セキュリティインテグレーション、`authentication_oauth2` | ブラウザフロー | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
 
 次の点に注意してください:

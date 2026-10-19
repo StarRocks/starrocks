@@ -211,7 +211,7 @@ A user of a security integration on `authentication_chain` can log in over every
 | Integration type | HTTP | Arrow Flight SQL |
 | --- | --- | --- |
 | LDAP (`authentication_ldap_simple`) | HTTP Basic: `-u <username>:<password>` | username and password |
-| JWT (`authentication_jwt`), <br>OAuth 2.0 (`authentication_oauth2`) | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` header, <br>for example the ADBC `adbc.flight.sql.authorization_header` option |
+| JWT (`authentication_jwt`), <br />OAuth 2.0 (`authentication_oauth2`) | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` header, <br />for example the ADBC `adbc.flight.sql.authorization_header` option |
 
 A Bearer token needs no user name. StarRocks reads the user name from the claim named by `principal_field`, verifies the signature against `jwks_url`, and offers the token to every JWT and OAuth 2.0 integration on the chain whose `required_issuer` and `required_audience` (if set) match the token. When several integrations share one issuer, set a distinct `required_audience` on each: the token's `aud` claim then decides which integration, and therefore which group provider and roles, the connection gets. Setting `required_issuer` on every integration is strongly recommended.
 

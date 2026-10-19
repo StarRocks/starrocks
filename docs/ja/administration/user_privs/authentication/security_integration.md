@@ -211,7 +211,7 @@ ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 | インテグレーションのタイプ | HTTP | Arrow Flight SQL |
 | --- | --- | --- |
 | LDAP（`authentication_ldap_simple`） | HTTP Basic: `-u <username>:<password>` | ユーザー名とパスワード |
-| JWT（`authentication_jwt`）、<br>OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` ヘッダー。<br>例: ADBC の `adbc.flight.sql.authorization_header` オプション |
+| JWT（`authentication_jwt`）、<br />OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` ヘッダー。<br />例: ADBC の `adbc.flight.sql.authorization_header` オプション |
 
 Bearer トークンにはユーザー名は不要です。StarRocks は `principal_field` で指定したクレームからユーザー名を読み取り、`jwks_url` で署名を検証し、チェーン上の JWT および OAuth 2.0 インテグレーションのうち `required_issuer` と `required_audience`（設定時）がトークンに一致するものすべてにトークンを渡します。複数のインテグレーションが同じ issuer を共有する場合は、それぞれに異なる `required_audience` を設定してください。トークンの `aud` クレームがどのインテグレーション、つまりどの Group Provider とロールを使うかを決めます。すべてのインテグレーションに `required_issuer` を設定することを強く推奨します。
 

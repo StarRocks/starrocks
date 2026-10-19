@@ -10,12 +10,12 @@ StarRocks 在它暴露的每个入口上都会对客户端做认证：MySQL 协�
 
 | 用户的定义方式 | MySQL 协议 | HTTP API | Arrow Flight SQL |
 | --- | --- | --- | --- |
-| `CREATE USER ... IDENTIFIED BY '<password>'`<br>（原生密码） | 密码 | Basic | 用户名和密码 |
-| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br>（本地用户，LDAP bind） | 密码，<br>用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
-| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br>（本地用户，JWT） | JWT，<br>用 `authentication_openid_connect_client` 发送 | 不支持 | 不支持 |
-| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br>（本地用户，OAuth 2.0） | 浏览器流 | 不支持 | 不支持 |
-| 安全集成，`authentication_ldap_simple` | 密码，<br>用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
-| 安全集成，`authentication_jwt` | JWT，<br>用 `authentication_openid_connect_client` 发送 | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+| `CREATE USER ... IDENTIFIED BY '<password>'`<br />（原生密码） | 密码 | Basic | 用户名和密码 |
+| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br />（本地用户，LDAP bind） | 密码，<br />用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
+| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br />（本地用户，JWT） | JWT，<br />用 `authentication_openid_connect_client` 发送 | 不支持 | 不支持 |
+| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br />（本地用户，OAuth 2.0） | 浏览器流 | 不支持 | 不支持 |
+| 安全集成，`authentication_ldap_simple` | 密码，<br />用 `mysql_clear_password` 发送 | Basic | 用户名和密码 |
+| 安全集成，`authentication_jwt` | JWT，<br />用 `authentication_openid_connect_client` 发送 | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
 | 安全集成，`authentication_oauth2` | 浏览器流 | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
 
 请注意以下几点：

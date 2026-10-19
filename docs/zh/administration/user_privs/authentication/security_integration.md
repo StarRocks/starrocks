@@ -211,7 +211,7 @@ ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 | 安全集成类型 | HTTP | Arrow Flight SQL |
 | --- | --- | --- |
 | LDAP（`authentication_ldap_simple`） | HTTP Basic：`-u <username>:<password>` | 用户名和密码 |
-| JWT（`authentication_jwt`）、<br>OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` 请求头，<br>例如 ADBC 的 `adbc.flight.sql.authorization_header` 选项 |
+| JWT（`authentication_jwt`）、<br />OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` 请求头，<br />例如 ADBC 的 `adbc.flight.sql.authorization_header` 选项 |
 
 使用 Bearer token 时不需要提供用户名。StarRocks 从 `principal_field` 指定的 claim 中读取用户名，用 `jwks_url` 校验签名，并把 token 交给链上每一个 `required_issuer` 和 `required_audience`（如设置）与之匹配的 JWT 或 OAuth 2.0 安全集成。多个安全集成共用同一个 issuer 时，请为每个安全集成设置不同的 `required_audience`：token 的 `aud` claim 决定命中哪个安全集成，进而决定使用哪个 Group Provider 和哪些角色。强烈建议为每个安全集成都设置 `required_issuer`。
 
