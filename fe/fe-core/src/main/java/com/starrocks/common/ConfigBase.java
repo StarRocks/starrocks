@@ -219,10 +219,12 @@ public class ConfigBase {
         return map;
     }
 
+    private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{([^\\}]*)\\}");
+
     // Replaces ${NAME} with the system property or environment variable NAME.
     // $${NAME} is an escape and is kept as the literal ${NAME}, e.g. for a DN pattern with ${USER}.
     private void replacedByEnv() throws InvalidConfException {
-        Pattern pattern = Pattern.compile("(\\$?)\\$\\{([^\\}]*)\\}");
+        Pattern pattern = Pattern.compile("(\\$?)" + ENV_PLACEHOLDER.pattern());
         for (String key : props.stringPropertyNames()) {
             String value = props.getProperty(key);
             Matcher m = pattern.matcher(value);
@@ -577,8 +579,9 @@ public class ConfigBase {
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 
-        // Escape ${NAME} so that the next start keeps the value instead of substituting it from the environment
-        String fileValue = value.replace("${", "$${");
+        // Escape ${NAME} so that the next start keeps the value instead of substituting it from the environment.
+        // Only a complete placeholder is escaped: replacedByEnv() keeps a ${ without a closing } as it is.
+        String fileValue = ENV_PLACEHOLDER.matcher(value).replaceAll("\\$$0");
         boolean keyExists = false;
         // Keep the original configuration file format
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {

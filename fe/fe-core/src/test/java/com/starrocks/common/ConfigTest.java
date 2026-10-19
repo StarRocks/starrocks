@@ -756,4 +756,26 @@ public class ConfigTest {
             Config.authentication_ldap_simple_bind_dn_pattern = "";
         }
     }
+
+    @Test
+    public void testPersistedValueWithUnclosedPlaceholder(@TempDir Path dir) throws Exception {
+        Path conf = dir.resolve("fe.conf");
+        Files.writeString(conf, "authentication_ldap_simple_bind_dn_pattern = uid=a\n");
+        try {
+            new Config().init(conf.toString());
+            Assumptions.assumeTrue(ConfigBase.isIsPersisted(),
+                    "the config file is not writable, skipping");
+
+            // a ${ without a closing } is not substituted at start up, so it must not be escaped either
+            String value = "uid=${USER},ou=secret${unfinished";
+            Config.setMutableConfig("authentication_ldap_simple_bind_dn_pattern", value, true, "root");
+            Assertions.assertTrue(Files.readString(conf)
+                    .contains("authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=secret${unfinished"));
+
+            new Config().init(conf.toString());
+            Assertions.assertEquals(value, Config.authentication_ldap_simple_bind_dn_pattern);
+        } finally {
+            Config.authentication_ldap_simple_bind_dn_pattern = "";
+        }
+    }
 }
