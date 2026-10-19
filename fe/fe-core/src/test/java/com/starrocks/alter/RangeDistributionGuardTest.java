@@ -403,7 +403,11 @@ public class RangeDistributionGuardTest {
                 + "order by(k1,k2) properties('replication_num'='1')");
         DdlException error = assertThrows(DdlException.class, () -> createSync(name, "select k2 from " + name));
         assertEquals("Synchronous materialized view with range distribution requires a shared-data, "
-                + "non-colocate, non-auto-increment, non-primary-key table.", error.getMessage());
+                + "non-colocate, non-auto-increment, non-primary-key table. "
+                + "Use an asynchronous materialized view instead: declare it with an explicit "
+                + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
+                + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...",
+                error.getMessage());
         assertTrue(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().isEmpty());
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());

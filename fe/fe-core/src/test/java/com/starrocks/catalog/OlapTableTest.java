@@ -47,15 +47,11 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.lake.bookmark.BookmarkPartitionRewriter;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SqlModeHelper;
->>>>>>> 8a3978f6380... [Enhancement][RB-424] Support synchronous materialized views on shared-data range tables (#65336)
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;

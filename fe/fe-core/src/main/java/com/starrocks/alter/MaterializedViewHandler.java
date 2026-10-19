@@ -594,15 +594,11 @@ public class MaterializedViewHandler extends AlterHandler {
             // range tables are rejected here.
             if (queryStatement != null) {
                 throw new DdlException(
-<<<<<<< HEAD
-                    "Synchronous materialized view is not supported on tables with range distribution. " +
+                    "Synchronous materialized view with range distribution requires a shared-data, " +
+                    "non-colocate, non-auto-increment, non-primary-key table. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
                     "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
                     "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
-=======
-                    "Synchronous materialized view with range distribution requires a shared-data, " +
-                    "non-colocate, non-auto-increment, non-primary-key table.");
->>>>>>> 8a3978f6380... [Enhancement][RB-424] Support synchronous materialized views on shared-data range tables (#65336)
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +

@@ -73,11 +73,7 @@ import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.StarRocksExternalTable;
 import com.starrocks.catalog.SyncMaterializedViewRecoveryException;
->>>>>>> 8a3978f6380... [Enhancement][RB-424] Support synchronous materialized views on shared-data range tables (#65336)
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;

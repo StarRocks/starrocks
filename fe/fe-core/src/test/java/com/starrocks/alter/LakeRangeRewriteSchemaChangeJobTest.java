@@ -361,12 +361,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     @Test
     public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
         // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
-<<<<<<< HEAD
-        new MockUp<WarehouseManager>() {
-=======
-        // Control the actual fixture manager, which may be the community or enterprise implementation.
+        // Control the fixture's concrete warehouse manager.
         new MockUp<WarehouseManager>(GlobalStateMgr.getCurrentState().getWarehouseMgr().getClass()) {
->>>>>>> 8a3978f6380... [Enhancement][RB-424] Support synchronous materialized views on shared-data range tables (#65336)
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);

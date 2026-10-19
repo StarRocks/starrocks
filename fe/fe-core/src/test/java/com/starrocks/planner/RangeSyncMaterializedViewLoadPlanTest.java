@@ -37,6 +37,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
@@ -138,12 +139,10 @@ public class RangeSyncMaterializedViewLoadPlanTest {
         assertFalse(table.getColumn("g").isKey());
         assertTrue(table.getIndexMetaByMetaId(table.getIndexMetaIdByName("mv_read")).getSchema().get(0).isKey());
 
-        boolean extractCommonPlan = context.getSessionVariable().isCboExtractCommonPlan();
         boolean virtualColumns = Config.enable_virtual_columns;
         double cteReuseRatio = context.getSessionVariable().getCboCTERuseRatio();
         boolean mvRewrite = context.getSessionVariable().isEnableMaterializedViewRewrite();
         boolean syncMvRewrite = context.getSessionVariable().isEnableSyncMaterializedViewRewrite();
-        context.getSessionVariable().setCboExtractCommonPlan(true);
         Config.enable_virtual_columns = true;
         context.getSessionVariable().setCboCTERuseRatio(0);
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
@@ -178,7 +177,6 @@ public class RangeSyncMaterializedViewLoadPlanTest {
             assertTrue(explain.contains("AGGREGATE"), explain);
             assertTrue(explain.contains("sum("), explain);
         } finally {
-            context.getSessionVariable().setCboExtractCommonPlan(extractCommonPlan);
             Config.enable_virtual_columns = virtualColumns;
             context.getSessionVariable().setCboCTERuseRatio(cteReuseRatio);
             context.getSessionVariable().setEnableMaterializedViewRewrite(mvRewrite);
@@ -207,7 +205,6 @@ public class RangeSyncMaterializedViewLoadPlanTest {
         boolean syncMvRewrite = context.getSessionVariable().isEnableSyncMaterializedViewRewrite();
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
-        boolean extractCommonPlan = context.getSessionVariable().isCboExtractCommonPlan();
         context.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         try {
             assertEquals(Optional.of(minMax), manager.getStats(identifier, version));
@@ -215,7 +212,6 @@ public class RangeSyncMaterializedViewLoadPlanTest {
                     "select g, sum(mv_sum_v) from mv_cached [_SYNC_MV_] group by g");
             assertSame(cached, cache.getIfPresent(identifier), "direct MV planning must preserve the source cache");
             assertEquals(Optional.of(minMax), manager.getStats(identifier, version));
-            context.getSessionVariable().setCboExtractCommonPlan(false);
             ExecPlan basePlan = UtFrameUtils.getPlanAndFragment(context,
                     "select min(g), max(g) from cached_source").second;
             String baseExplain = basePlan.getExplainString(com.starrocks.sql.ast.StatementBase.ExplainLevel.NORMAL);
@@ -232,7 +228,6 @@ public class RangeSyncMaterializedViewLoadPlanTest {
             context.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(rewriteMeta);
             context.getSessionVariable().setEnableMaterializedViewRewrite(mvRewrite);
             context.getSessionVariable().setEnableSyncMaterializedViewRewrite(syncMvRewrite);
-            context.getSessionVariable().setCboExtractCommonPlan(extractCommonPlan);
             cache.synchronous().invalidate(identifier);
         }
     }
@@ -421,5 +416,90 @@ public class RangeSyncMaterializedViewLoadPlanTest {
         assertNotNull(contribution);
         assertTrue(contribution.getNodes().stream().anyMatch(node ->
                 node.getNode_type() == com.starrocks.thrift.TExprNodeType.SUBFIELD_EXPR));
+    }
+
+    private OlapTable createRecoveredStructPredicateTable(String name) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + name
+                + " (id INT,v BIGINT,s STRUCT<a INT,b STRUCT<c INT>>) "
+                + "DUPLICATE KEY(id) ORDER BY(id) PROPERTIES('replication_num'='1')");
+        OlapTable table = (OlapTable) db.getTable(name);
+        CreateSyncMVStmt create = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE MATERIALIZED VIEW mv_" + name + " AS SELECT id,v FROM " + name
+                        + " WHERE s.a > 0 AND s.b.c > 1", context);
+        installVisibleMv(table, create);
+        long mvId = table.getIndexMetaIdByName("mv_" + name);
+        MaterializedIndexMeta restored = GsonUtils.GSON.fromJson(
+                GsonUtils.GSON.toJson(table.getIndexMetaByMetaId(mvId)), MaterializedIndexMeta.class);
+        table.analyzeRollupIndexMeta(restored);
+        table.getIndexMetaIdToMeta().put(mvId, restored);
+        table.rebuildFullSchema();
+        return table;
+    }
+
+    private static void assertStructPredicate(TOlapTableSchemaParam schema, long mvId) {
+        TExpr predicate = schema.getIndexes().stream().filter(index -> index.getId() == mvId)
+                .findFirst().orElseThrow().getWhere_clause();
+        assertNotNull(predicate);
+        List<List<String>> fields = predicate.getNodes().stream()
+                .filter(node -> node.getNode_type() == com.starrocks.thrift.TExprNodeType.SUBFIELD_EXPR)
+                .map(node -> node.getUsed_subfield_names()).collect(Collectors.toList());
+        assertTrue(fields.contains(List.of("a")), fields.toString());
+        assertTrue(fields.contains(List.of("b", "c")), fields.toString());
+        for (com.starrocks.thrift.TExprNode node : predicate.getNodes()) {
+            if (node.isSetSlot_ref()) {
+                String name = schema.getSlot_descs().stream()
+                        .filter(slot -> slot.getId() == node.getSlot_ref().getSlot_id())
+                        .findFirst().orElseThrow().getColName();
+                assertEquals("s", name);
+            }
+        }
+    }
+
+    @Test
+    public void testRecoveredStructPredicateInsertAndBackfill() throws Exception {
+        OlapTable table = createRecoveredStructPredicateTable("struct_where_insert");
+        long mvId = table.getIndexMetaIdByName("mv_struct_where_insert");
+        String originalPredicate = ExprToSql.toSql(table.getIndexMetaByMetaId(mvId).getWhereClause());
+        for (boolean backfill : List.of(false, true)) {
+            InsertStmt insert = (InsertStmt) com.starrocks.sql.parser.SqlParser.parseOneWithStarRocksDialect(
+                    "INSERT INTO struct_where_insert SELECT id,v,s FROM struct_where_insert",
+                    context.getSessionVariable());
+            insert.setLabel("struct_where_insert_" + backfill);
+            if (backfill) {
+                insert.setTargetWriteIndexId(mvId);
+                insert.setShadowRewrite(true);
+                insert.setShadowRewriteWatershedTxnId(10);
+                insert.setShadowRewriteAlterVersion(1);
+            }
+            ExecPlan plan = StatementPlanner.plan(insert, context);
+            TOlapTableSchemaParam schema = plan.getFragments().get(0).getSink().toThrift()
+                    .getOlap_table_sink().getSchema();
+            assertEquals(backfill ? 1 : 2, schema.getIndexesSize());
+            assertStructPredicate(schema, mvId);
+            assertEquals(originalPredicate, ExprToSql.toSql(table.getIndexMetaByMetaId(mvId).getWhereClause()));
+        }
+    }
+
+    @Test
+    public void testRecoveredStructPredicateStreamLoad() throws Exception {
+        OlapTable table = createRecoveredStructPredicateTable("struct_where_stream");
+        long mvId = table.getIndexMetaIdByName("mv_struct_where_stream");
+        String originalPredicate = ExprToSql.toSql(table.getIndexMetaByMetaId(mvId).getWhereClause());
+        long transaction = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
+                List.of(table.getId()), "struct_where_stream",
+                new com.starrocks.transaction.TransactionState.TxnCoordinator(
+                        com.starrocks.transaction.TransactionState.TxnSourceType.BE, "127.0.0.1"),
+                com.starrocks.transaction.TransactionState.LoadJobSourceType.BACKEND_STREAMING, 600);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(transaction);
+        request.setLoadId(new TUniqueId(6, 7));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        StreamLoadInfo info = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        TExecPlanFragmentParams plan = new StreamLoadPlanner(context, db, table, info).plan(info.getId());
+        TOlapTableSchemaParam schema = plan.getFragment().getOutput_sink().getOlap_table_sink().getSchema();
+        assertEquals(2, schema.getIndexesSize());
+        assertStructPredicate(schema, mvId);
+        assertEquals(originalPredicate, ExprToSql.toSql(table.getIndexMetaByMetaId(mvId).getWhereClause()));
     }
 }
