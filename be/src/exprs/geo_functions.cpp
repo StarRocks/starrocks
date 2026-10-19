@@ -1143,8 +1143,7 @@ bool is_valid_canonical_geography_point(Slice wkb) {
     }
     const double longitude = std::bit_cast<double>(coordinates[0]);
     const double latitude = std::bit_cast<double>(coordinates[1]);
-    return std::isfinite(longitude) && std::isfinite(latitude) && longitude >= -180 && longitude <= 180 &&
-           latitude >= -90 && latitude <= 90;
+    return is_valid_crs84_coordinate(longitude, latitude);
 }
 
 template <LogicalType InputType>

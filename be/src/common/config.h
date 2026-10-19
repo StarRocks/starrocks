@@ -68,6 +68,9 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // BRPC stub cache expire configurations
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
+// The interval of the background check that resets BRPC stubs whose connection has failed, default 10 seconds.
+// A value <= 0 disables the check.
+CONF_mInt32(brpc_failed_channel_reset_interval_s, "10");
 
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
 // - true: StarRocks will attempt to resolve hostnames to IPs.

@@ -19,12 +19,15 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -42,6 +45,7 @@ public class MVTimelinessMgrTest {
     private final AtomicInteger computeCount = new AtomicInteger();
     // What the timeliness check returns, given the number of the call (from 1).
     private Function<Integer, MvUpdateInfo> arbiter;
+    private volatile boolean inCatalog = true;
 
     private static MaterializedView forceMv() {
         MaterializedView mv = mock(MaterializedView.class);
@@ -58,6 +62,11 @@ public class MVTimelinessMgrTest {
             @Mock
             public boolean isEnableMVTimelinessGlobalCache(MaterializedView ignored) {
                 return true;
+            }
+
+            @Mock
+            public boolean isInCatalog(MaterializedView ignored) {
+                return inCatalog;
             }
         };
         new MockUp<MvRefreshArbiter>() {
@@ -155,7 +164,7 @@ public class MVTimelinessMgrTest {
         waiting.start();
         // Let the second lookup reach the in-flight computation: it either waits on it or starts its own.
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (waiting.getState() != Thread.State.WAITING && computeCount.get() < 2 && System.nanoTime() < deadline) {
+        while (waiting.getState() != Thread.State.TIMED_WAITING && computeCount.get() < 2 && System.nanoTime() < deadline) {
             Thread.sleep(10);
         }
         release.countDown();
@@ -209,11 +218,8 @@ public class MVTimelinessMgrTest {
         Assertions.assertEquals(2, computeCount.get());
     }
 
-    @Test
-    public void testWaitersOfAFailedCheckRetryItOnce() throws Exception {
-        // A metadata race fails the check while other queries wait on it: one of them computes it again for all,
-        // and that result is cached, rather than each waiter computing it for itself.
-        CountDownLatch started = new CountDownLatch(1);
+    // Blocks the first check until the returned latch is released; later checks return NO_REFRESH.
+    private CountDownLatch blockFirstCheck(CountDownLatch started, Function<Integer, MvUpdateInfo> firstResult) {
         CountDownLatch release = new CountDownLatch(1);
         arbiter = call -> {
             if (call == 1) {
@@ -223,10 +229,29 @@ public class MVTimelinessMgrTest {
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
-                throw new IllegalStateException("partition dropped mid-check");
+                return firstResult.apply(call);
             }
             return MvUpdateInfo.noRefresh(mv);
         };
+        return release;
+    }
+
+    private static void awaitWaiting(List<Thread> waiters) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (waiters.stream().anyMatch(t -> t.getState() != Thread.State.TIMED_WAITING) &&
+                System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+    }
+
+    @Test
+    public void testWaitersOfAFailedCheckGetItsFailure() throws Exception {
+        // Retrying in each waiter would compute the check once per waiter in turn while it keeps failing. The
+        // failure is not cached: the next lookup computes it again.
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = blockFirstCheck(started, call -> {
+            throw new IllegalStateException("partition dropped mid-check");
+        });
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread failing = new Thread(() -> {
             try {
@@ -239,19 +264,22 @@ public class MVTimelinessMgrTest {
         Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
 
         int waiterCount = 3;
-        List<AtomicReference<MvUpdateInfo>> results = new ArrayList<>();
+        List<AtomicReference<Throwable>> waiterFailures = new ArrayList<>();
         List<Thread> waiters = new ArrayList<>();
         for (int i = 0; i < waiterCount; i++) {
-            AtomicReference<MvUpdateInfo> result = new AtomicReference<>();
-            results.add(result);
-            Thread waiter = new Thread(() -> result.set(lookup()));
+            AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
+            waiterFailures.add(waiterFailure);
+            Thread waiter = new Thread(() -> {
+                try {
+                    lookup();
+                } catch (Throwable t) {
+                    waiterFailure.set(t);
+                }
+            });
             waiters.add(waiter);
             waiter.start();
         }
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (waiters.stream().anyMatch(t -> t.getState() != Thread.State.WAITING) && System.nanoTime() < deadline) {
-            Thread.sleep(10);
-        }
+        awaitWaiting(waiters);
         release.countDown();
         failing.join();
         for (Thread waiter : waiters) {
@@ -259,11 +287,134 @@ public class MVTimelinessMgrTest {
         }
 
         Assertions.assertInstanceOf(IllegalStateException.class, failure.get());
-        for (AtomicReference<MvUpdateInfo> result : results) {
-            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, result.get().getMVToRefreshType());
+        for (AtomicReference<Throwable> waiterFailure : waiterFailures) {
+            Assertions.assertInstanceOf(IllegalStateException.class, waiterFailure.get());
         }
-        Assertions.assertEquals(2, computeCount.get(), "each waiter of the failed check computed it again");
-        Assertions.assertSame(results.get(0).get(), lookup(), "the retried check was not cached");
+        Assertions.assertEquals(1, computeCount.get(), "a waiter of the failed check computed it again");
+        MvUpdateInfo retried = lookup();
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, retried.getMVToRefreshType());
+        Assertions.assertSame(retried, lookup(), "the retried check was not cached");
         Assertions.assertEquals(2, computeCount.get());
+    }
+
+    // Runs a lookup on a new thread whose statement has the given timeout; the context is handed to the caller.
+    private Thread lookupInStatement(int timeoutS, AtomicReference<ConnectContext> context,
+                                     AtomicReference<Object> outcome) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setQueryTimeoutS(timeoutS);
+        ctx.setStartTime();
+        context.set(ctx);
+        return new Thread(() -> {
+            ctx.setThreadLocalInfo();
+            try {
+                outcome.set(lookup());
+            } catch (Throwable t) {
+                outcome.set(t);
+            } finally {
+                ConnectContext.remove();
+            }
+        });
+    }
+
+    @Test
+    public void testWaiterGivesUpOnceItsBudgetIsSpent() throws Exception {
+        // The check computed by another query hangs: the waiter stops at its own timeout instead of hanging with it,
+        // and does not compute the check again itself, which would repeat the same slow reads once per waiter.
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = blockFirstCheck(started, call -> MvUpdateInfo.fullRefresh(mv));
+        AtomicReference<MvUpdateInfo> first = new AtomicReference<>();
+        Thread computing = new Thread(() -> first.set(lookup()));
+        computing.start();
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        Thread waiter = lookupInStatement(1, new AtomicReference<>(), outcome);
+        waiter.start();
+        waiter.join(TimeUnit.SECONDS.toMillis(10));
+        boolean hung = waiter.isAlive();
+        release.countDown();
+        waiter.join();
+        computing.join();
+
+        Assertions.assertFalse(hung, "the waiter outlived its statement timeout");
+        Assertions.assertInstanceOf(StarRocksPlannerException.class, outcome.get());
+        Assertions.assertEquals(1, computeCount.get(), "the waiter computed the check itself");
+        Assertions.assertSame(first.get(), lookup());
+    }
+
+    @Test
+    public void testLookupPastItsBudgetStillTakesACachedCheck() throws Exception {
+        arbiter = call -> MvUpdateInfo.noRefresh(mv);
+        MvUpdateInfo cached = lookup();
+        AtomicReference<ConnectContext> context = new AtomicReference<>();
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        Thread late = lookupInStatement(1, context, outcome);
+        context.get().setStartTime(Instant.now().minusSeconds(3600));
+        late.start();
+        late.join();
+        Assertions.assertSame(cached, outcome.get());
+        Assertions.assertEquals(1, computeCount.get());
+    }
+
+    @Test
+    public void testCancelledWaiterStopsWaiting() throws Exception {
+        // KILL QUERY only marks the statement; the waiter must notice it without being interrupted.
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = blockFirstCheck(started, call -> MvUpdateInfo.noRefresh(mv));
+        Thread computing = new Thread(this::lookup);
+        computing.start();
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+
+        AtomicReference<ConnectContext> context = new AtomicReference<>();
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        Thread waiter = lookupInStatement(3600, context, outcome);
+        waiter.start();
+        awaitWaiting(List.of(waiter));
+        context.get().setKilled();
+        waiter.join(TimeUnit.SECONDS.toMillis(10));
+        boolean hung = waiter.isAlive();
+        release.countDown();
+        waiter.join();
+        computing.join();
+
+        Assertions.assertFalse(hung, "the cancelled waiter kept waiting");
+        Assertions.assertInstanceOf(StarRocksPlannerException.class, outcome.get());
+        Assertions.assertEquals(1, computeCount.get());
+    }
+
+    @Test
+    public void testInterruptedWaiterStopsWaiting() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = blockFirstCheck(started, call -> MvUpdateInfo.noRefresh(mv));
+        Thread computing = new Thread(this::lookup);
+        computing.start();
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        Thread waiter = lookupInStatement(3600, new AtomicReference<>(), outcome);
+        waiter.start();
+        awaitWaiting(List.of(waiter));
+        waiter.interrupt();
+        waiter.join(TimeUnit.SECONDS.toMillis(10));
+        boolean hung = waiter.isAlive();
+        release.countDown();
+        waiter.join();
+        computing.join();
+
+        Assertions.assertFalse(hung, "the interrupted waiter kept waiting");
+        Assertions.assertInstanceOf(StarRocksPlannerException.class, outcome.get());
+        Assertions.assertEquals(1, computeCount.get());
+    }
+
+    @Test
+    public void testDoesNotCacheTheCheckOfADroppedMv() {
+        // DROP removes the MV from the catalog, then evicts its entry; a check that puts its entry after that
+        // eviction must not leave it behind.
+        arbiter = call -> MvUpdateInfo.noRefresh(mv);
+        inCatalog = false;
+        lookup();
+        lookup();
+        Assertions.assertEquals(2, computeCount.get());
+        Assertions.assertEquals(0L, mgr.estimateCount().get("mvTimelinessMap"));
     }
 }
