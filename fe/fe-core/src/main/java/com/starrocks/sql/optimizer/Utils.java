@@ -34,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -106,9 +107,12 @@ public class Utils {
 
     // The bounds of the DATETIME domain, in epoch seconds, used to reject a statistic bound that
     // cannot be converted back into a datetime.
-    public static final double MIN_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MIN_DATETIME);
-    public static final double MAX_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATETIME);
-    public static final double MAX_DATE_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATE);
+    public static final double MIN_DATETIME_EPOCH_SECOND =
+            (double) getLongFromDateTime(ConstantOperator.MIN_DATETIME);
+    public static final double MAX_DATETIME_EPOCH_SECOND =
+            (double) getLongFromDateTime(ConstantOperator.MAX_DATETIME);
+    public static final double MAX_DATE_EPOCH_SECOND =
+            (double) getLongFromDateTime(DateLiteral.MAX_DATE.toLocalDateTime());
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
