@@ -1005,22 +1005,6 @@ PROPERTIES (
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
-<<<<<<< HEAD
-=======
-### 为云原生表启用轻量级 Tablet 创建
-
-*仅适用于云原生（存算分离）表*
-
-为云原生表启用 Light-weight Tablet Creation 后，表可以跳过通常向 BE/CN 节点分发的 `CreateReplicaTask`。
-
-将 `light_weight_tablet_creation` 设置为 `true` 后：
-
-- DDL 操作（例如 CREATE TABLE 和 ADD PARTITION）会跳过 `CreateReplicaTask` 的下发，并且在创建时不会将 v1 Tablet 元数据或 Schema 文件写入对象存储。
-
-- 初始 Tablet 元数据不会预先写入对象存储，而是在需要时从 FE 延迟获取。
-
-如果未在 CREATE TABLE 时显式设置此属性，则该属性遵循 FE 配置 `lake_enable_light_weight_tablet_creation`（默认值：`false`）。
-
 ### 在自动采集统计信息时跳过某张表
 
 将 `enable_statistic_auto_collect` 设置为 `false` 后，自动采集统计信息时会跳过该表。默认值：`true`。
@@ -1039,57 +1023,6 @@ PROPERTIES (
 
 可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改该属性。物化视图不支持该属性。
 
-### 行级 TTL
-
-行级 TTL 按行过期，而不是按分区。一行的过期时刻一到，这行就算过期，过期的行由后台清理。
-
-行级 TTL 仅支持存算分离集群中的主键表，并且需要先在集群级别开启：当 FE 配置项 `enable_row_ttl` 为 `false` 时，不能在尚未配置行级 TTL 的表上新增该配置，建表时也不行。
-
-```SQL
-PROPERTIES (
-    "row_ttl_expire_at" = "<expression>",
-    "row_ttl_check_interval_second" = "<int_value>",
-    "row_ttl_time_zone" = "<string_value>"
-)
-```
-
-- `row_ttl_expire_at`（使用行级 TTL 的必填项）：一行在什么时刻过期。表达式为以下四种形式之一，其中 `<column>` 为时间列：
-
-  ```SQL
-  <column>
-  <column> + INTERVAL <n> <unit>
-  to_datetime(<column>[, <scale>])
-  to_datetime(<column>[, <scale>]) + INTERVAL <n> <unit>
-  ```
-
-  - 写法决定时间列可以是什么类型。直接写列名（无论是否带 INTERVAL）时，读取的是 `DATE` 或 `DATETIME` 列，其中存放的是墙上时间；`to_datetime(<column>)` 读取的是 `INT` 或 `BIGINT` 列，其中存放的是 Unix 时间戳。其余列类型一律拒绝，`AUTO_INCREMENT` 列也不行，它存放的是自增序号而不是时间。
-  - `<unit>` 取 `YEAR`、`QUARTER`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND`。`<n>` 为 1 到 2147483647 之间的整数。
-  - `<scale>` 取 `0`、`3` 或 `6`，分别表示秒、毫秒和微秒，默认为 `0`。
-  - 时间列可以是生成列，也可以是主键的一部分或分区列。
-  - 时间列取值为 NULL 的行永不过期。
-
-- `row_ttl_check_interval_second`（选填）：本表检查过期行的周期，单位为秒，必须为正整数。不设置时使用 FE 配置项 `default_row_ttl_check_interval_second`，且每轮清理实时读取该配置，不会固化到表上。
-
-- `row_ttl_time_zone`（选填）：计算过期时刻所使用的时区。取值与会话变量 `time_zone` 相同：地区名（如 `Asia/Shanghai`）、偏移量（如 `+08:00`），或 `CST`。不设置时每轮清理实时读取集群的 `time_zone`。
-
-  时间列为 `DATE` 或 `DATETIME` 时该属性最为关键，它决定比较所用的参照系。StarRocks 的 `DATETIME` 本身不带时区，列里写入的是哪个时区的墙上时间没有任何地方记录。时间列为 Unix 时间戳时，原点没有歧义，该属性只用于 `DAY` 及更大单位的日历运算。
-
-:::note
-时间列是生成列时，该表的列模式部分更新必须带齐所有生成列的源列，否则整条导入会被拒绝。这是引擎既有行为，并非行级 TTL 引入，但使用生成列作为时间列时一定会遇到。
-:::
-
-#### 示例
-
-```SQL
-"row_ttl_expire_at" = "expire_at"
-"row_ttl_expire_at" = "event_time + INTERVAL 7 DAY"
-"row_ttl_expire_at" = "to_datetime(created_at_ms, 3)"
-"row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY"
-```
-
-建表之后修改或移除行级 TTL，参见 [ALTER TABLE](ALTER_TABLE.md)。
-
->>>>>>> a98c6b90d2a... [BugFix][RB-478] Let a table opt out of automatic statistics collection (#65500)
 ## 示例
 
 ### 带有Hash分桶和列式存储的聚合表

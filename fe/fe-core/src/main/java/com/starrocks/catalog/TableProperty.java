@@ -1560,15 +1560,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildLoadInitialOpenPartitionNumber();
-<<<<<<< HEAD
-=======
-        // Not a property being rebuilt from its string form, but the publish path's view of several
-        // of them, which has nowhere else to be restored after an image load.
-        buildPublishProperty();
         // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps
         // the map entry but drops unknown fields, which would silently re-enable collection on roll-forward.
         buildEnableStatisticAutoCollect();
->>>>>>> a98c6b90d2a... [BugFix][RB-478] Let a table opt out of automatic statistics collection (#65500)
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

@@ -887,11 +887,7 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
-<<<<<<< HEAD
-=======
 - `enable_statistic_auto_collect`
-- 行レベル TTL 関連のプロパティ
->>>>>>> a98c6b90d2a... [BugFix][RB-478] Let a table opt out of automatic statistics collection (#65500)
 
 :::note
 
