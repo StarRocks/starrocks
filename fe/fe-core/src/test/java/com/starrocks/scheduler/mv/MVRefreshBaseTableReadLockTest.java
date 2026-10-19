@@ -21,13 +21,19 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -248,6 +254,91 @@ public class MVRefreshBaseTableReadLockTest extends MVTestBase {
             probe.assertNoneLocked("the rewrite freshness check of a non-partitioned mv");
         } finally {
             starRocksAssert.dropMaterializedView("mv_lock_fresh");
+        }
+    }
+
+    /**
+     * A1: a lock timeout on a non-ref base table fails the refresh, as one on the ref base table does. Read as
+     * "changed", it would turn the refresh into a full one. The failure counts as lock contention, so the refresh
+     * gets the lock retries (max_mv_refresh_try_lock_failure_retry_times), not the ordinary refresh retries.
+     */
+    @Test
+    public void testNonRefBaseTableLockTimeoutFailsRefresh() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_lock_nonref_timeout\n"
+                + "PARTITION BY k1\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT r.k1, r.v1, l.k1 AS lk FROM base_range r JOIN base_list l ON r.v1 = l.v1;");
+        try {
+            MaterializedView mv = getMv(DB_NAME, "mv_lock_nonref_timeout");
+            withMVRefreshTaskRun(DB_NAME, mv);
+            executeInsertSql("INSERT INTO base_range VALUES ('2024-01-01', 5);");
+            long nonRefTableId = baseTable("base_list").getId();
+            new MockUp<MvUtils>() {
+                @Mock
+                public <T, E extends Exception> T readBaseTableUnderLock(Invocation inv, MaterializedView view,
+                                                                         Table baseTable, boolean unlocked,
+                                                                         MvUtils.BaseTableRead<T, E> read)
+                        throws Exception {
+                    if (!unlocked && baseTable.getId() == nonRefTableId) {
+                        throw new LockTimeoutException("injected lock timeout on " + baseTable.getName());
+                    }
+                    return inv.proceed();
+                }
+            };
+            Exception e = Assertions.assertThrows(Exception.class, () -> withMVRefreshTaskRun(DB_NAME, mv));
+            String stack = Throwables.getStackTraceAsString(e);
+            Assertions.assertTrue(stack.contains("injected lock timeout on base_list"), stack);
+            Assertions.assertTrue(stack.contains("failed after 0 times, try lock failed: "
+                    + Config.max_mv_refresh_try_lock_failure_retry_times), stack);
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_lock_nonref_timeout");
+        }
+    }
+
+    /**
+     * A2: inspect_mv_refresh_info is constant-folded while a statement is planned, where the planner may hold other
+     * tables' locks. A thread that holds one reads the base tables unlocked in its freshness check, as query rewrite
+     * does, instead of waiting on them out of order.
+     */
+    @Test
+    public void testInspectMVRefreshInfoReadsBaseTablesUnlocked() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_lock_inspect\n"
+                + "PARTITION BY k1\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT r.k1, r.v1, l.k1 AS lk FROM base_range r JOIN base_list l ON r.v1 = l.v1;");
+        try {
+            MaterializedView mv = getMv(DB_NAME, "mv_lock_inspect");
+            withMVRefreshTaskRun(DB_NAME, mv);
+            executeInsertSql("INSERT INTO base_range VALUES ('2024-01-02', 6);");
+            AtomicInteger reads = new AtomicInteger();
+            AtomicInteger lockedReads = new AtomicInteger();
+            new MockUp<MvUtils>() {
+                @Mock
+                public <T, E extends Exception> T readBaseTableUnderLock(Invocation inv, MaterializedView view,
+                                                                         Table baseTable, boolean unlocked,
+                                                                         MvUtils.BaseTableRead<T, E> read)
+                        throws Exception {
+                    reads.incrementAndGet();
+                    if (!unlocked) {
+                        lockedReads.incrementAndGet();
+                    }
+                    return inv.proceed();
+                }
+            };
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+            // the planner's lock on a table the statement references
+            OlapTable planned = baseTable("base_list");
+            String info;
+            try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), planned.getId(), LockType.READ)) {
+                info = MetaFunctions.inspectMVRefreshInfo(db, mv);
+            }
+            Assertions.assertTrue(info.contains("p20240102"), info);
+            Assertions.assertTrue(reads.get() > 0, "inspect_mv_refresh_info never read a base table");
+            Assertions.assertEquals(0, lockedReads.get(), "inspect_mv_refresh_info read a base table under its lock");
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_lock_inspect");
         }
     }
 }

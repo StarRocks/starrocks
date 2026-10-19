@@ -46,6 +46,10 @@ public abstract class PartitionDiffer {
         return queryRewriteParams != null && queryRewriteParams.isQueryRewrite();
     }
 
+    protected boolean readsBaseTablesUnlocked() {
+        return queryRewriteParams != null && queryRewriteParams.readsBaseTablesUnlocked();
+    }
+
     /**
      * Collect the ref base table's partition range map.
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>

@@ -235,11 +235,14 @@ public class MetaFunctions {
 
     public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
         // Compute mvToRefreshPartitions before acquiring the lock to avoid holding the lock
-        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan).
+        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan). Like readUnderTableLock, a thread
+        // that already holds metadata locks reads the base tables without theirs: a read broken by a concurrent
+        // change leaves the set empty.
         Set<String> mvToRefreshPartitions;
         try {
-            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
-                    mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
+            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, LockHoldDepth.isUnderLock()
+                    ? MVTimelinessArbiter.QueryRewriteParams.ofUnlockedRefresh()
+                    : MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
             if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
                 // For a full refresh, getMvToRefreshPartitionNames() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.

@@ -1526,17 +1526,17 @@ public class MvUtils {
      * ConcurrentModificationException, or looks up a partition that was dropped after its name was listed. An
      * external base table, or one the mv does not name, is read as before: no FE lock protects it.
      * <p>
-     * A freshness check for query rewrite ({@code isQueryRewrite}) reads unlocked, as before: it runs while the
-     * planner may already hold other tables' locks, so taking a base table's lock there could wait out of order,
-     * and its staleness check may reach a connector.
+     * A freshness check for query rewrite, or for {@code inspect_mv_refresh_info} ({@code unlocked}), reads unlocked,
+     * as before: it runs while the planner may already hold other tables' locks, so taking a base table's lock
+     * there could wait out of order, and its staleness check may reach a connector.
      *
      * @throws LockTimeoutException if the lock is not acquired within {@code mv_refresh_try_lock_timeout_ms}
      */
     public static <T, E extends Exception> T readBaseTableUnderLock(MaterializedView mv, Table baseTable,
-                                                                    boolean isQueryRewrite,
+                                                                    boolean unlocked,
                                                                     BaseTableRead<T, E> read)
             throws E, LockTimeoutException {
-        Optional<BaseTableInfo> baseTableInfo = isQueryRewrite || !baseTable.isNativeTableOrMaterializedView()
+        Optional<BaseTableInfo> baseTableInfo = unlocked || !baseTable.isNativeTableOrMaterializedView()
                 ? Optional.empty()
                 : mv.getBaseTableInfos().stream()
                         .filter(info -> info.isInternalCatalog() && info.getTableId() == baseTable.getId())

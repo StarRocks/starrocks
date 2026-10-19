@@ -226,7 +226,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
                 Map<String, PCell> basePartitionCells = MvUtils.readBaseTableUnderLock(mv, refBaseTable,
-                        isQueryRewrite(), () -> PartitionUtil.getPartitionCells(refBaseTable, refPartitionColumns));
+                        readsBaseTablesUnlocked(), () -> PartitionUtil.getPartitionCells(refBaseTable, refPartitionColumns));
                 refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
             }
         } catch (Exception e) {
