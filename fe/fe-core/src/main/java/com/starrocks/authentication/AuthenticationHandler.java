@@ -384,6 +384,119 @@ public class AuthenticationHandler {
         return authenticationResult;
     }
 
+    /**
+     * Authenticate a raw JWT sent outside the MySQL protocol, e.g. by Arrow Flight SQL. A native JWT user is
+     * checked first, then the JWT security integrations in authentication_chain.
+     *
+     * @param context    the connection context
+     * @param user       username
+     * @param remoteHost remote host address
+     * @param rawToken   the raw token string (e.g. a signed JWT) presented by the client
+     * @return authenticated user identity
+     * @throws AuthenticationException when authentication fails
+     */
+    public static UserIdentity authenticateWithToken(ConnectContext context, String user, String remoteHost,
+                                                      String rawToken) throws AuthenticationException {
+        if (user == null || user.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", "NO");
+        }
+        if (rawToken == null || rawToken.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "NO");
+        }
+
+        // with auth check disabled, behave exactly like a password login
+        if (!Config.enable_auth_check) {
+            return authenticateWithClearPassword(context, user, remoteHost, rawToken);
+        }
+
+        // native first, same precedence as authenticate()
+        AuthenticationResult authenticationResult =
+                authenticateWithNativeJwtUser(context.getAccessControlContext(), user, remoteHost, rawToken);
+        if (authenticationResult == null) {
+            authenticationResult =
+                    authenticateWithJwtSecurityIntegration(context.getAccessControlContext(), user, remoteHost, rawToken);
+        }
+
+        if (authenticationResult == null) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        setAuthenticationResultToContext(context, authenticationResult);
+        return authenticationResult.authenticatedUser;
+    }
+
+    private static AuthenticationResult authenticateWithJwtSecurityIntegration(AccessControlContext authContext,
+                                                                                String user, String remoteHost,
+                                                                                String rawToken)
+            throws AuthenticationException {
+        // unverified parse: picks the matching integration before paying for a JWKS fetch
+        String unverifiedIssuer = JWTAuthenticationProvider.extractIssuerWithoutVerification(rawToken);
+
+        List<Pair<String, AuthenticationException>> exceptions = Lists.newArrayList();
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        for (String authMechanism : Config.authentication_chain) {
+            SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
+            if (!(securityIntegration instanceof JWTSecurityIntegration)) {
+                continue;
+            }
+
+            JWTAuthenticationProvider provider =
+                    (JWTAuthenticationProvider) securityIntegration.getAuthenticationProvider();
+            if (!provider.isIssuerAccepted(unverifiedIssuer)) {
+                continue;
+            }
+
+            try {
+                authContext.setAuthenticationProvider(provider);
+                provider.authenticateRawToken(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), rawToken);
+            } catch (AuthenticationException e) {
+                exceptions.add(new Pair<>(authMechanism, e));
+                continue;
+            }
+
+            // getGroupProviderName() returns an empty list (never null) when the integration has no group_provider
+            List<String> groupProviderNames = securityIntegration.getGroupProviderName().isEmpty()
+                    ? List.of(Config.group_provider)
+                    : securityIntegration.getGroupProviderName();
+            return new AuthenticationResult(
+                    UserIdentity.createEphemeralUserIdent(user, remoteHost),
+                    groupProviderNames,
+                    securityIntegration.getGroupAllowedLoginList(),
+                    authMechanism);
+        }
+
+        if (!exceptions.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN,
+                    Joiner.on(", ").join(exceptions.stream().map(e -> e.first + ": " + e.second.getMessage())
+                            .collect(Collectors.toList())));
+        }
+        return null;
+    }
+
+    private static AuthenticationResult authenticateWithNativeJwtUser(AccessControlContext authContext, String user,
+                                                                      String remoteHost, String rawToken)
+            throws AuthenticationException {
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        // ForLogin refuses an ambiguous name instead of treating it as "no native user"
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                authenticationMgr.getBestMatchedUserIdentityForLogin(user, remoteHost);
+        if (matchedUserIdentity == null) {
+            return null;
+        }
+
+        // a native user that is not a JWT user must go through its own auth plugin
+        if (!AuthPlugin.Server.AUTHENTICATION_JWT.name()
+                .equalsIgnoreCase(matchedUserIdentity.getValue().getAuthPlugin())) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        JWTAuthenticationProvider provider = (JWTAuthenticationProvider) AuthPlugin.Server.AUTHENTICATION_JWT
+                .getProvider(matchedUserIdentity.getValue().getAuthString());
+        authContext.setAuthenticationProvider(provider);
+        provider.authenticateRawToken(authContext, matchedUserIdentity.getKey(), rawToken);
+        return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null, "native");
+    }
+
     private static void setAuthenticationResultToContext(ConnectContext context,
                                                          AuthenticationResult authenticationResult)
             throws AuthenticationException {
