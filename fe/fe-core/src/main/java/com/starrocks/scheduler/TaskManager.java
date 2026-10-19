@@ -351,7 +351,39 @@ public class TaskManager implements MemoryTrackable {
      * Suspend a task, which will stop the task scheduler and kill the running task run.
      * NOTE: this method is thread safe, no need to task lock again.
      */
+<<<<<<< HEAD
     public void suspendTask(Task task) {
+=======
+    public void suspendTask(Task task, boolean isReplay) {
+        suspendTask(task, isReplay, true);
+    }
+
+    /**
+     * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
+     * which killing them takes, and must not wait for it again.
+     */
+    public void suspendTaskLeavingRuns(Task task) {
+        suspendTask(task, false, false);
+    }
+
+    private void suspendTask(Task task, boolean isReplay, boolean killTaskRuns) {
+        if (task == null) {
+            return;
+        }
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                    wal -> task.setState(Constants.TaskState.PAUSE)
+            );
+        }
+        suspendTaskInternal(task, killTaskRuns);
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     */
+    private void suspendTaskInternal(Task task, boolean killTaskRuns) {
+>>>>>>> 8ed2433 ([BugFix] Journal every MV inactivation and its version-map clear (#81030))
         if (task == null) {
             return;
         }
@@ -369,7 +401,7 @@ public class TaskManager implements MemoryTrackable {
             }
 
             // kill running task run
-            if (!killTask(task.getName(), true)) {
+            if (killTaskRuns && !killTask(task.getName(), true)) {
                 LOG.warn("kill task failed: {}", task.getName());
             }
             // remove task from scheduler
