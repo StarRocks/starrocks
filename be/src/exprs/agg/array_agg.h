@@ -338,17 +338,7 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        // get_values must always grow dst by exactly end - start rows, even when it fails. Two callers depend
-        // on that and neither can observe an error: the Analytor appends dst to an input chunk whose row count
-        // is already fixed, and the nullable wrapper appends end - start null flags alongside this call no
-        // matter what happens here. So pad dst back up on every exit path. The padding is never read: whoever
-        // set the error fails the query.
-        const size_t expected_size = dst->size() + (end - start);
-        auto defer = DeferOp([&]() {
-            if (dst->size() < expected_size) {
-                dst->append_default(expected_size - dst->size());
-            }
-        });
+        // On error dst may be left short; the Analytor checks for errors before using any result column.
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
         if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()))) {
             return;
