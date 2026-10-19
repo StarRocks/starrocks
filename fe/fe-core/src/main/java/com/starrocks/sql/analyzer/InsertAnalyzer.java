@@ -109,10 +109,24 @@ public class InsertAnalyzer {
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
             afterQueryAnalyzed.run();
 
+<<<<<<< HEAD
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
             if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
                 session.setUseConnectorMetadataCache(Optional.of(false));
+=======
+            // Read the partition names and file lists of the Hive sources past the cache, unless the session says the
+            // cache is fine. With the auto refresh the sources are also dropped from the cache (InsertSourceRefresher),
+            // but that alone is not enough: a background refresh that read them before the drop writes what it read
+            // back after it.
+            if (session.getUseConnectorMetadataCache().isEmpty()
+                    && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+                List<Table> tables = new ArrayList<>();
+                AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+                if (!tables.isEmpty()) {
+                    session.setUseConnectorMetadataCache(Optional.of(false));
+                }
+>>>>>>> c0a76cd ([BugFix] Stop INSERT missing Hive source rows and SELECT * dropping resource-mapping Hive columns (#81032))
             }
         } finally {
             takeLock.run();
