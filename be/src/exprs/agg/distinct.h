@@ -414,6 +414,9 @@ class TDistinctAggregateFunction final
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
+    // multi_distinct_count returns 0 (never NULL); multi_distinct_sum can be NULL, so restrict this to COUNT.
+    bool is_result_non_nullable() const override { return DistinctType == AggDistinctType::COUNT; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* column = down_cast<const ColumnType*>(columns[0]);
         if constexpr (IsSlice<T>) {

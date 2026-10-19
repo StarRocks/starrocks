@@ -362,6 +362,7 @@ void PartitionedHashJoinProberImpl::reset(RuntimeState* runtime_state) {
     }
     _partition_input_channels.clear();
     _mem_tracker.release(_mem_tracker.consumption());
+    _partition_input_channels.resize(_probers.size(), PartitionChunkChannel(&_mem_tracker));
     _all_input_finished = false;
     _remain_partition_idx = 0;
 }
@@ -484,6 +485,7 @@ private:
     Status _transfer_to_appending_stage(RuntimeState* state);
     Status _convert_to_single_partition(RuntimeState* state);
     Status _flush_buffer_chunks(RuntimeState* state);
+    bool _partition_reached_capacity_limit() const;
 
     bool _need_partition_join_for_build(size_t ht_num_rows) const;
     bool _need_partition_join_for_append(size_t ht_num_rows) const;
@@ -520,6 +522,9 @@ private:
     size_t _L3_cache_size = 0;
 
     size_t _pushed_chunks = 0;
+
+    // Set once a partition outgrows what a 32-bit binary offset can address; partitions are never merged after that.
+    bool _keep_partitions = false;
 
     // Shared read-only data accessed concurrently by threads can lead to better cache performance.
     // Therefore, for broadcast joins, this parameter is used to reduce benefit of partitioned hash joins as the number
@@ -783,7 +788,38 @@ int64_t AdaptivePartitionHashJoinBuilder::ht_mem_usage() const {
                            [](int64_t sum, const auto& builder) { return sum + builder->ht_mem_usage(); });
 }
 
+bool AdaptivePartitionHashJoinBuilder::_partition_reached_capacity_limit() const {
+    // A ColumnView only references rows of the appended source columns and copies no bytes, so its offsets cannot
+    // wrap; it also does not support capacity_limit_reached().
+    auto reached = [](const ColumnPtr& column) {
+        return column != nullptr && !column->is_view() && !column->capacity_limit_reached().ok();
+    };
+    for (const auto& builder : _builders) {
+        const auto& ht = builder->hash_table();
+        if (std::any_of(ht.get_build_chunk()->columns().begin(), ht.get_build_chunk()->columns().end(), reached) ||
+            std::any_of(ht.get_key_columns().begin(), ht.get_key_columns().end(), reached)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Status AdaptivePartitionHashJoinBuilder::_convert_to_single_partition(RuntimeState* state) {
+    // A partition's binary column only gets 64-bit offsets when the partition is built. Until then, a column holding
+    // 4GB or more has wrapped 32-bit offsets, and merge_ht() would copy the wrong bytes out of it. Such partitions are
+    // kept apart instead: each one is upgraded correctly when it is built.
+    if (_stage == Stage::APPENDING && !_keep_partitions && _partition_reached_capacity_limit()) {
+        _keep_partitions = true;
+        LOG(INFO) << "Keep partitioned hash join because a partition reached the binary column capacity limit "
+                  << "[partition_num=" << _builders.size() << "] "
+                  << "[hash_table_row_count=" << hash_table_row_count() << "]";
+    }
+    if (_keep_partitions) {
+        // _adjust_partition_rows() may have already dropped _partition_num to 1.
+        _partition_num = _builders.size();
+        return Status::OK();
+    }
+
     VLOG_OPERATOR << "TRACE: convert_to_single_partition "
                   << "[partition_num=" << _partition_num << "] "
                   << "[partition_join_l2_min_rows=" << _partition_join_l2_min_rows << "] "
@@ -971,7 +1007,8 @@ Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
     if (_partition_num > 1) {
         if (!_need_partition_join_for_build(hash_table_row_count())) {
             RETURN_IF_ERROR(_convert_to_single_partition(state));
-        } else {
+        }
+        if (_partition_num > 1) {
             RETURN_IF_ERROR(_flush_buffer_chunks(state));
         }
     }

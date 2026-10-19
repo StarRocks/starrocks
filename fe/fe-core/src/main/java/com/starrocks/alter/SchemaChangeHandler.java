@@ -1131,9 +1131,23 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
                 if (!type.canDistributedBy()) {
+                    // Reachable only for the ambiguous case below: an explicit KEY on a non-key-capable
+                    // type is already rejected by ColumnDef.analyze. Keep this rejection ahead of the
+                    // ambiguity check so the message never suggests KEY for a type that cannot be a key.
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
+                }
+                if (!newColumn.isKey() && !Config.allow_implicit_key_column_in_agg_add_column) {
+                    // Neither an agg function nor KEY was written. Promoting such a column to a key
+                    // column changes the table's aggregation key and rewrites existing data, so when
+                    // this is switched off, require the user to say which one they meant.
+                    throw new DdlException("Column '" + newColName + "' on aggregate table '" +
+                            olapTable.getName() + "' must specify either an aggregate function, making it a " +
+                            "value column, or the KEY keyword, making it a key column. Adding a key column " +
+                            "changes the table's aggregation key and rewrites existing data. To allow such a " +
+                            "column to be created as a key column instead, set FE config " +
+                            "allow_implicit_key_column_in_agg_add_column to true.");
                 }
                 newColumn.setIsKey(true);
             } else if (newColumn.getAggregationType() == AggregateType.SUM
@@ -1496,6 +1510,10 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         if (bfColumns == null) {
             bfFpp = 0;
+        }
+        // Removing an absent filter is a no-op after empty-set normalization.
+        if (bfColumns == null && (oriBfColumns == null || oriBfColumns.isEmpty())) {
+            hasBfChange = false;
         }
 
         Set<ColumnId> bfColumnIds = null;
@@ -2109,9 +2127,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexSchemaMap, propertyMap, newIndexes,
                 modifyFieldColumns);
-        if (schemaChangeData.isShortKeyChanged()) {
+        if (schemaChangeData.isShortKeyChanged() || schemaChangeData.isBloomFilterColumnsChanged()) {
             fastSchemaEvolution = false;
         }
+
+        // After finalAnalyze, so a statement it already rejects keeps its own message.
+        checkBloomFilterColumnsForTypeChange(olapTable, schemaChangeData.getBloomFilterColumns(), indexSchemaMap);
 
         if (schemaChangeData.getNewIndexSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
@@ -2125,6 +2146,37 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
+        }
+    }
+
+    // A cast can skip reading an old filter, but future writes still build one from the new schema.
+    // Check only changed types: legacy metadata on an untouched column must not block other ALTERs.
+    // DecimalV3 is writable by the BE for an inherited filter even though CREATE uses a stricter policy.
+    private static void checkBloomFilterColumnsForTypeChange(OlapTable table, Set<ColumnId> bfColumns,
+                                                             Map<Long, ? extends List<Column>> indexSchemaMap)
+            throws DdlException {
+        if (bfColumns == null || bfColumns.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexSchemaMap.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (ColumnId columnId : bfColumns) {
+                Column newColumn = newColumns.get(columnId);
+                Column oldColumn = oldColumns.get(columnId);
+                if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                    continue;
+                }
+                Type type = newColumn.getType();
+                if ((type.isFixedPointType() && !type.isTinyint()) || type.isDecimalOfAnyVersion()
+                        || type.isDateType() || type.isStringType()) {
+                    continue;
+                }
+                String columnName = oldColumn != null ? oldColumn.getName()
+                        : Column.removeNamePrefix(newColumn.getName());
+                throw new DdlException("Invalid bloom filter column '" + columnName
+                        + "': unsupported type " + newColumn.getPrimitiveType());
+            }
         }
     }
 

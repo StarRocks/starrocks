@@ -418,6 +418,55 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 1024
 * **Introduced in**: v2.5
 
+### count_distinct_implementation
+
+* **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
+  * `default`: Reserves the `COUNT(DISTINCT expr)` implementation. The optimizer chooses the suitable aggregation plan based on query form, statistics, and costs.
+  * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
+  * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
+* **Default**: `default`
+* **Introduced in**: v3.3.6、v3.4.0
+
+:::note[Usage Notes for `multi_distinct_count`]
+`multi_distinct_count()` returns precise results.
+
+For most queries, `COUNT(DISTINCT expr)` is recommended. Set `count_distinct_implementation` to `default` to allow the optimizer to choose a suitable aggregation plan.
+
+When deduplicating low- and medium-cardinality columns, you can test and use `multi_distinct_count()`. This function uses two phases of aggregation, and can reduce a shuffle and deduplication phase for better performance. However, its HashSet status and final merging can cause excessive memory consumption and even OOM when deduplicating high-cardinality columns.
+
+If you want to test this implementation on one `COUNT(DISTINCT expr)` instead of changing the whole session, you can set `count_distinct_implementation` in a query hint:
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+Setting this value with hints applies only to `COUNT(DISTINCT)` with a single parameter. It will not affect multi-column deduplication expressions such as `COUNT(DISTINCT expr1, expr2)`.
+:::
+
+### custom_query_id (session)
+
+* **Description**: Used to bind some external identifier to a current query. Can be set using `SET SESSION custom_query_id = 'my-query-id';` before executing a query. The value is reset after query is finished. This value can be passed to `KILL QUERY 'my-query-id'`. Value can be found in audit logs as a `customQueryId` field.
+* **Default**: ""
+* **Data type**: String
+* **Introduced in**: v3.4.0
+
+### datacache_sharing_work_period
+
+* **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
+* **Default**: 600
+* **Unit**: Seconds
+* **Introduced in**: v3.5.1
+
+### default_authentication_plugin
+
+* **Scope**: Session
+* **Description**: Session-scoped variable that specifies the default MySQL authentication plugin name for this session. It is stored as SessionVariable.defaultAuthenticationPlugin and is used by StarRocks' MySQL-protocol compatibility layers when the server needs to advertise or use a default authentication plugin (for example during handshake or when a plugin is not specified). Accepts standard MySQL authentication plugin identifiers (e.g. `mysql_native_password`, `caching_sha2_password`) supported by the server. This variable affects session behavior only; persistent user account authentication configuration is managed separately. See related session variable `authentication_policy`.
+* **Default**: `mysql_native_password`
+* **Data Type**: String
+* **Introduced in**: -
+
 ### default_rowset_type (global)
 
 Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
@@ -594,7 +643,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### plan_mode
 
-* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-periodic-metadata-refresh-strategy). Valid values:
   * `auto`: The system will automatically select the retrieval plan.
   * `local`: Use the local cache plan.
   * `distributed`: Use the distributed plan.
@@ -628,7 +677,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_insert_strict
 
-* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
 
 ### insert_max_filter_ratio
@@ -739,7 +788,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_scan_datacache
 
-* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true 
 * **Introduced in**: v2.5
 

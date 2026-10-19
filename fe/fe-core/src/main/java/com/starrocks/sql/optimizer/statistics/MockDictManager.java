@@ -39,7 +39,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
+    public boolean hasGlobalDict(OlapTable table, ColumnId columnName, long versionTime) {
         return true;
     }
 

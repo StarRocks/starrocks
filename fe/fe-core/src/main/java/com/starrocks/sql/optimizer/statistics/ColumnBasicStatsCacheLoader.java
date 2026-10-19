@@ -71,8 +71,9 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
+                // A failed load is not "no statistics": do not cache it, so the next access loads again.
                 LOG.error(e);
-                return Optional.empty();
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {

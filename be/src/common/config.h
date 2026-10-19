@@ -107,6 +107,28 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
+// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so it is exported by
+// bin/start_backend.sh. It is ignored under the jemalloc_debug and check_mem_leak modes, which
+// force their own JEMALLOC_CONF.
+// Updating this config at runtime only re-applies the options that jemalloc itself allows to be
+// changed after init, namely dirty_decay_ms, muzzy_decay_ms and prof_active. Adding, removing or
+// changing any other option is rejected, because the corresponding `opt.*` mallctl nodes are
+// read-only; those need a restart. Note that prof_active can only be turned on when the process
+// was started with prof:true.
+// `oversize_threshold` sends every allocation of at least that many bytes to jemalloc's
+// dedicated huge arena, which is purged eagerly. Keeping the large buffers out of the
+// per-CPU arenas lets them be reused across threads and stops them from dominating the decay
+// bookkeeping of the ordinary arenas, where they otherwise drag small and medium extents into
+// being purged with them and cost a soft page fault each on the next use. It is set above
+// jemalloc's own 8MB default because the huge arena is a single shared arena, so a lower
+// threshold funnels more allocations through its lock.
+// NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
+CONF_mString(jemalloc_conf,
+             "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
@@ -1024,14 +1046,18 @@ CONF_Bool(object_storage_endpoint_path_style_access, "false");
 // Default is -1, indicate to use the default value in sdk (1000ms)
 // Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
 CONF_Int64(object_storage_connect_timeout_ms, "-1");
-// Request timeout for object storage
-// Default is -1, indicate to use the default value in sdk.
-// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
-// below "lowSpeedLimit" for the library to consider it too slow and abort.
-// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
-// value is greater than 0 and less than 1000.
-// When it's 0, low speed limit check will be disabled.
-CONF_mInt64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage.
+//
+// 10 s by default. It is not a deadline on the request: for Curl it is the low speed time, the
+// number of milliseconds the transfer may stay below "lowSpeedLimit" (1 byte/s) before the library
+// gives up, and for the Poco client it is the socket send/receive timeout. Either way a transfer
+// that keeps making progress is never cut off, however long it runs -- only one that has stopped
+// moving entirely. Curl rounds the value down to whole seconds; 0 disables the check, and a
+// negative value leaves the client on its own default.
+//
+// Leaving it unset is what made a stalled read wait out the HTTP client's built-in default:
+// measured on shared-data cold scans, 1.3% of queries hung for ~59 s each.
+CONF_mInt64(object_storage_request_timeout_ms, "10000");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
@@ -1124,7 +1150,7 @@ CONF_String(aws_sdk_logging_trace_level, "trace");
 CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 
 // use poco client to replace default curl client
-CONF_Bool(enable_poco_client_for_aws_sdk, "true");
+CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -1220,6 +1246,15 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
+// MemTracker accounting granularity. New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
+// Maximum bytes in the complete JSON response for one dump_tablet_metadata request.
+// New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_json_size_limit_bytes, "33554432");
+// Maximum number of admitted dump_tablet_metadata requests. A lower value does not cancel requests already admitted.
+// New requests fail closed when the value is non-positive.
+CONF_mInt32(lake_dump_tablet_metadata_max_concurrency, "1");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
@@ -1330,7 +1365,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.5"); // 50%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");

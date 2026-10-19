@@ -14,7 +14,10 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include <limits>
+
 #include "storage/lake/compaction_task_context.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/test_util.h"
 #include "testutil/assert.h"
 #include "util/bthreads/util.h"
@@ -103,9 +106,61 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     bthread_join(tid, nullptr);
 }
 
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_rejects_out_of_range) {
+    auto old_target = _compaction_scheduler._task_queues.target_size();
+    auto old_config = config::compact_threads;
+    SCOPED_CLEANUP({ config::compact_threads = old_config; });
+
+    for (int32_t v : {0, -1, static_cast<int32_t>(std::numeric_limits<int16_t>::max()) + 1}) {
+        config::compact_threads = v;
+        auto st = _compaction_scheduler.update_compact_threads(v);
+        EXPECT_TRUE(st.is_invalid_argument()) << st;
+        EXPECT_EQ(old_target, _compaction_scheduler._task_queues.target_size());
+    }
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_while_resizing) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    // A target above the current size leaves the queues "modifying" without any worker acting on it.
+    queues.set_target_size(size + 2);
+    SCOPED_CLEANUP({ queues.set_target_size(size); });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+    EXPECT_EQ(size + 2, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_concurrent_update) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    auto* sync_point = SyncPoint::GetInstance();
+    // Another update puts the target back before this one checks it.
+    sync_point->SetCallBack("CompactionScheduler::update_compact_threads:after_set_target_size",
+                            [&](void* /*arg*/) { queues.set_target_size(size); });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::update_compact_threads:after_set_target_size");
+        sync_point->DisableProcessing();
+    });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_internal_error()) << st;
+    EXPECT_EQ(size, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_after_stop) {
+    _compaction_scheduler.stop();
+    auto target = _compaction_scheduler._task_queues.target_size();
+    auto st = _compaction_scheduler.update_compact_threads(target + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     // set to single thread mode, so all the tasks will be in the same thread
-    _compaction_scheduler.update_compact_threads(1);
+    ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
     std::vector<CompactionTaskInfo> tasks;
     _compaction_scheduler.list_tasks(&tasks);
     EXPECT_EQ(0, tasks.size());
@@ -296,6 +351,118 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     TEST_DISABLE_ERROR_POINT("HorizontalCompactionTask::execute::1");
     TEST_DISABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
     SyncPoint::GetInstance()->DisableProcessing();
+
+    // A task that failed before producing a txn log must not leave anything behind in the metacache.
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id)));
+}
+
+// skip_write_txnlog is the aggregate/file-bundling path: the compaction worker returns the txn log
+// inline instead of persisting it, and the aggregator folds every tablet's log into one combined
+// `<txn_id>.logs` object. The worker must still populate the metacache under the per-tablet txn log
+// key, because that is what the publish path (`load_txn_log()` in transactions.cpp) probes before
+// falling back to a remote read of the combined log.
+TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    auto request = CompactRequest{};
+    auto response = CompactResponse{};
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(/*1 minute=*/60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    request.set_skip_write_txnlog(true);
+
+    auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
+
+    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSERT_EQ(1, response.txn_logs_size());
+
+    // The log was not written to object storage ...
+    EXPECT_FALSE(fs::path_exist(log_path));
+    // ... but the publish path can still find it without a remote read.
+    auto cached = _tablet_mgr->metacache()->lookup_txn_log(log_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(_tablet_metadata->id(), cached->tablet_id());
+    EXPECT_EQ(txn_id, cached->txn_id());
+    EXPECT_TRUE(cached->has_op_compaction());
+    EXPECT_EQ(response.txn_logs(0).op_compaction().compact_version(), cached->op_compaction().compact_version());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved) {
+    CompactionScheduler::Limiter limiter(8);
+    // Two tasks finished with memory limit exceeded, two tokens get reserved.
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(6, limiter.concurrency());
+
+    // Shrink the total from 8 to 4: the reserved tokens are scaled down
+    // proportionally (2 * 4/8 = 1) instead of being inflated.
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(3, limiter.concurrency());
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens) {
+    CompactionScheduler::Limiter limiter(8);
+    // Three tasks are running.
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(4, limiter.concurrency());
+    // Only one more token can be granted while the three tasks are still running.
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+
+    // After all running tasks finished, the concurrency is still bounded by the new total.
+    for (int i = 0; i < 4; i++) {
+        limiter.no_memory_limit_exceeded();
+    }
+    for (int i = 0; i < 4; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(2, limiter.concurrency());
+
+    // Shrinking to 1 must keep one grantable token instead of zeroing the concurrency.
+    limiter.adapt_to_task_queue_size(1);
+    ASSERT_EQ(1, limiter.concurrency());
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(3, limiter.concurrency());
+
+    limiter.adapt_to_task_queue_size(8);
+    ASSERT_EQ(7, limiter.concurrency());
+    for (int i = 0; i < 7; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
 }
 
 } // namespace starrocks::lake

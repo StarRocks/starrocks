@@ -184,6 +184,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
         if (isPrimaryKey(distinctColumn.get(), scan)) {
             Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+            newAggregations.putAll(otherMap);
             distinctMap.forEach((k, v) -> {
                 CallOperator newAgg = transformDistinctAgg(v);
                 newAggregations.put(k, newAgg);

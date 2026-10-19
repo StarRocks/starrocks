@@ -1178,20 +1178,19 @@ public class MvUtils {
     }
 
     /**
-     * Returns the maximum refresh timestamp among all partition infos.
-     * If no valid refresh time is found, returns the current system time.
+     * Returns the maximum refresh timestamp among all partition infos, or 0 when there is none -- not the
+     * wall clock: this is persisted as a base-table data timestamp, and <= 0 already means "unknown".
      */
     public static long getMaxTablePartitionInfoRefreshTime(
             Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
         return partitionInfos.stream()
                 .map(MvUtils::getMaxTablePartitionInfoRefreshTime)
                 .max(Long::compareTo)
-                .orElseGet(System::currentTimeMillis);
+                .orElse(0L);
     }
 
     /**
-     * Returns the maximum refresh timestamp from a single partition info map.
-     * If no valid refresh time is found, returns the current system time.
+     * Returns the maximum refresh timestamp from a single partition info map, or 0 when it is empty.
      */
     public static long getMaxTablePartitionInfoRefreshTime(
             Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
@@ -1199,7 +1198,7 @@ public class MvUtils {
                 .map(MaterializedView.BasePartitionInfo::getLastRefreshTime)
                 .filter(Objects::nonNull)
                 .max(Long::compareTo)
-                .orElseGet(System::currentTimeMillis);
+                .orElse(0L);
     }
 
     public static List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
@@ -1274,7 +1273,11 @@ public class MvUtils {
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
-            if (viewScanOperator.getPredicate() != null) {
+            // A view scan may carry a merged projection even without a predicate (e.g. an unfiltered
+            // view usage, or the null-supplying side of an outer join). Keep the projection in that
+            // case too; dropping it leaves parents referencing columns the inlined plan no longer
+            // produces, which later hard-errors in statistics derivation.
+            if (viewScanOperator.getPredicate() != null || viewScanOperator.getProjection() != null) {
                 Operator inlineViewOp = inlineViewPlan.getOp();
 
                 // original map records inlined view's column ref to non-inlined view's column ref mapping,

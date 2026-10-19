@@ -132,7 +132,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     // Set of table types that support adaptive materialized view (MV) refresh.
     //
-    // Internal tables (e.g., OLAP) have direct access to partition information,
+    // Internal tables (OLAP/cloud-native tables and materialized views, both shared-nothing
+    // and shared-data) have direct access to partition information,
     // enabling accurate and efficient adaptive MV refresh.
     //
     // For external tables (e.g., Hive, Iceberg, Hudi, Delta Lake),
@@ -142,11 +143,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // which currently only supports these external table types (since v3.3.0).
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH = EnumSet.of(
             Table.TableType.OLAP,
+            Table.TableType.CLOUD_NATIVE,
+            Table.TableType.MATERIALIZED_VIEW,
+            Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW,
             Table.TableType.HIVE,
             Table.TableType.ICEBERG,
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+
+    public static boolean isAdaptiveRefreshSupported(Table.TableType tableType) {
+        return SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(tableType);
+    }
 
     private Database db;
     private MaterializedView mv;
@@ -168,6 +176,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private TaskRun nextTaskRun = null;
 
     public PartitionBasedMvRefreshProcessor() {
+    }
+
+    @Override
+    public void postTaskRun(TaskRunContext context) {
+        // Older MV tasks may still have an ANALYZE statement persisted in postRun. MV refresh no longer
+        // generates this statement, so do not let the generic task post-processor execute the legacy value.
+        // Statistics maintenance for refreshed partitions is handled by the insert-overwrite path.
     }
 
     @VisibleForTesting
@@ -336,11 +351,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return mvToRefreshedPartitions;
             }
 
-            boolean hasUnsupportedTableType = mv.getBaseTableTypes().stream()
-                    .anyMatch(type -> !SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(type));
-            if (hasUnsupportedTableType) {
-                logger.warn("Materialized view {} contains unsupported external tables. Using default refresh strategy.",
-                        mv.getId());
+            List<String> unsupportedTablesForAdaptiveRefresh = mv.getBaseTables().stream()
+                    .filter(table -> !isAdaptiveRefreshSupported(table.getType()))
+                    .map(table -> table.getName() + "(" + table.getType() + ")")
+                    .collect(Collectors.toList());
+            if (!unsupportedTablesForAdaptiveRefresh.isEmpty()) {
+                if (partitionRefreshStrategy == PartitionRefreshStrategy.ADAPTIVE) {
+                    logger.info("base tables {} do not support adaptive refresh, " +
+                            "fall back to STRICT refresh strategy", unsupportedTablesForAdaptiveRefresh);
+                }
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
                         tentative);
             } else {
@@ -594,6 +613,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
+        // Planning may let go of the lock and take it back (the optimistic INSERT path); hold that to the same bound.
+        locker.setAcquireTimeoutMs(Config.mv_refresh_try_lock_timeout_ms);
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
         }
@@ -613,6 +634,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
+            } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                // Same as the first acquisition timing out: the task run retries it as a lock failure.
+                throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: %s " +
+                        "when planning the refresh", db.getFullName(), mv.getName(), e.getMessage()));
             }
         } finally {
             locker.unlock();
@@ -1010,6 +1035,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .map(t -> t.getId())
                 .collect(Collectors.toSet());
 
+        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
+        // Resolve the external base tables' partition names before locking: it is the only remote metadata call
+        // the version update needs, and the mv write lock below is contended by other refresh runs and DDLs.
+        Map<TableSnapshotInfo, List<String>> externalTablePartitionNames =
+                mvVersionManager.collectExternalTablePartitionNames(snapshotBaseTables, refBaseTableIds);
+
         Locker locker = new Locker();
         // update the meta if succeed
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
@@ -1018,10 +1049,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
 
-        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
+            // The existence check above ran before the unlocked connector call, so re-verify under the lock:
+            // a DROP that landed in that window must abort the refresh instead of persisting a refresh-scheme
+            // journal entry and an MV_REFRESHED event for a detached mv.
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.mv.getId()) == null) {
+                throw new DmlException("update meta failed: materialized view %s.%s does not exist, " +
+                                "it may have been dropped during refresh",
+                        db.getFullName(), this.mv.getName());
+            }
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, !mvContext.hasNextBatchPartition());
+                    refBaseTableIds, refTableAndPartitionNames, externalTablePartitionNames,
+                    !mvContext.hasNextBatchPartition());
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;
@@ -1061,6 +1100,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         this.mv = (MaterializedView) table;
         // refresh mv until mv is reloaded.
         this.mv.waitForReloaded();
+        // Before the run reads the MV's definition or any base table: a reset after this point means the data
+        // this run writes may come from a definition that no longer holds.
+        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 
@@ -1094,6 +1136,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // prepare mv context
         mvContext = new MvTaskRunContext(context);
+        mvContext.setVersionMapResetEpoch(versionMapResetEpoch);
         // prepare partition ttl number
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
@@ -1243,7 +1286,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return insertStmt;
     }
 
-    private boolean checkBaseTablePartitionHasChanged(TableSnapshotInfo snapshotInfo) {
+    @VisibleForTesting
+    boolean checkBaseTablePartitionHasChanged(TableSnapshotInfo snapshotInfo) {
         try {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
             Table snapshotTable = snapshotInfo.getBaseTable();
@@ -1263,9 +1307,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         return true;
                     }
                 } else if (snapshotPartitionInfo.isListPartition()) {
-                    OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
-                    Map<String, PListCell> snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
-                    Map<String, PListCell> currentPartitionMap = snapshotOlapTable.getListPartitionItems();
+                    Map<String, PListCell> snapshotPartitionMap = snapShotOlapTable.getListPartitionItems();
+                    Map<String, PListCell> currentPartitionMap = ((OlapTable) table).getListPartitionItems();
                     if (ListPartitionDiffer.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
                         return true;
                     }
@@ -1368,19 +1411,31 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw e;
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
+            // the MV refresh uses its own fresh ConnectContext whose audit builder starts at the default value.
+            executor.recordExecStatsIntoContext();
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             executor.addFinishedQueryDetail();
         }
     }
 
     /**
-     * Collect all deduplicated databases of the materialized view's base tables.
+     * Collect all deduplicated databases of the materialized view's base tables that are worth locking.
+     * <p>
+     * Only internal-catalog base tables enter the lock set. An external base table carries no usable lock
+     * identity: {@link BaseTableInfo#getTableId()} is left at its -1 default by the external constructor, and
+     * the database id comes from the connector. Locking on those either never contends or serializes every
+     * external base table in the FE behind a single entry, while protecting nothing: connector metadata refresh
+     * replaces cache entries and never takes the FE Locker.
+     * <p>
+     * The database existence check still runs for every base table, external ones included, so the diagnostics
+     * are unchanged.
      *
      * @param mv: the mv to check
-     * @return: the deduplicated databases of the materialized view's base tables,
+     * @return: the deduplicated internal databases of the materialized view's base tables,
      * throw exception if the database does not exist.
      */
-    private LockParams collectDatabases(MaterializedView mv) {
+    @VisibleForTesting
+    public LockParams collectDatabases(MaterializedView mv) {
         LockParams lockParams = new LockParams();
         for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
             Optional<Database> dbOpt =
@@ -1389,10 +1444,44 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.warn("database {} do not exist", baseTableInfo.getDbInfoStr());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
+            // Judged on the catalog name BaseTableInfo carries, not through Table#isMetaLockTarget: the ids
+            // about to be locked are the ones this name produced, and a resource-mapping base table both
+            // resolves its Database through the connector and never gets a real tableId (see BaseTableInfo).
+            if (!baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
             Database db = dbOpt.get();
             lockParams.add(db, baseTableInfo.getTableId());
         }
         return lockParams;
+    }
+
+    /**
+     * Resolve the base tables that live in an external catalog, so that {@link #collectBaseTableSnapshotInfos}
+     * does not have to do it while holding the read lock: resolving one is a connector RPC, and the lock does
+     * not protect external base tables anyway (see {@link #collectDatabases}).
+     *
+     * @return the resolved table per external base table info; internal base tables are absent, they stay
+     *         resolved under the lock because reading the local metastore is not I/O
+     */
+    private Map<BaseTableInfo, Optional<Table>> resolveExternalBaseTables(MaterializedView mv,
+                                                                          List<BaseTableInfo> baseTableInfos) {
+        Map<BaseTableInfo, Optional<Table>> externalTables = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
+            Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            externalTables.put(baseTableInfo, tableOpt);
+            // IcebergTable#getNativeTable loads lazily through the connector and caches on the table object, so
+            // warm it here or the partition spec check below faults it in under the lock. The condition has to
+            // stay identical to that check's, otherwise this loads metadata for MVs that never needed it.
+            if (tableOpt.isPresent() && tableOpt.get() instanceof IcebergTable
+                    && !mv.getPartitionInfo().isUnPartitioned()) {
+                ((IcebergTable) tableOpt.get()).getNativeTable();
+            }
+        }
+        return externalTables;
     }
 
     /**
@@ -1401,7 +1490,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * </p>
      * NOTE:
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
-     * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     * 2. internal base tables are locked for READ here because copyOnlyForQuery reads their in-memory partition
+     *    and index state, which a concurrent DDL can mutate. External base tables are not locked (see
+     *    collectDatabases), so they are resolved before the lock is taken (see resolveExternalBaseTables):
+     *    resolving inside would put a connector RPC in the critical section in exchange for no protection at all.
      *
      * @param mv the mv to collect
      * @return the base table and its snapshot info map
@@ -1413,6 +1505,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
 
         LockParams lockParams = collectDatabases(mv);
+        Map<BaseTableInfo, Optional<Table>> externalTables = resolveExternalBaseTables(mv, baseTableInfos);
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(lockParams, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
                 TimeUnit.MILLISECONDS)) {
@@ -1422,7 +1515,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Stopwatch stopwatch = Stopwatch.createStarted();
         try {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                // An external base table was already resolved above, outside the lock.
+                Optional<Table> tableOpt = baseTableInfo.isInternalCatalog()
+                        ? MvUtils.getTableWithIdentifier(baseTableInfo)
+                        : externalTables.get(baseTableInfo);
                 if (tableOpt.isEmpty()) {
                     logger.warn("table {} doesn't exist", baseTableInfo.getTableInfoStr());
                     throw new DmlException("Materialized view base table: %s not exist.",

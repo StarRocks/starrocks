@@ -56,8 +56,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    std::shared_ptr<FileSystem> fs =
-            FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
     auto data_column_evaluators = ColumnEvaluator::clone(ctx->data_column_evaluators);
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,

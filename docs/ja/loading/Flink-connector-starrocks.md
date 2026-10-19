@@ -1,8 +1,11 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 ---
 
 # Apache Flink® からデータを継続的にロードする
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks は、Apache Flink® 用の StarRocks Connector（以下、Flink コネクタ）という独自開発のコネクタを提供しており、Flink を使用して StarRocks テーブルにデータをロードするのに役立ちます。基本的な原理は、データを蓄積し、それを一度に StarRocks に [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じてロードすることです。
 
@@ -88,6 +91,10 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 >
 > 正式にリリースされていない Flink コネクタの名前には `SNAPSHOT` サフィックスが含まれています。
 
+## StarRocks に接続する
+
+<FlinkStarRocksConnection />
+
 ## オプション
 
 ### 一般的なオプション
@@ -139,7 +146,7 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **必須**: いいえ
 - **デフォルト値**: AUTO
 - **説明**: データのロードに使用されるインターフェース。このパラメータは、Flink connector バージョン 1.2.4 以降でサポートされています。有効な値:
-  - `V1`: [Stream Load](../loading/StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
+  - `V1`: [Stream Load](./StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
   - `V2`: [Stream Load transaction](./Stream_Load_transaction_interface.md) インターフェースを使用してデータをロードします。StarRocks のバージョンが 2.4 以上である必要があります。メモリ使用量を最適化し、より安定した exactly-once の実装を提供するため、`V2` を推奨します。
   - `AUTO`: StarRocks のバージョンがトランザクション Stream Load をサポートしている場合、自動的に `V2` を選択し、そうでない場合は `V1` を選択します。
 
@@ -210,6 +217,12 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **必須**: いいえ
 - **デフォルト値**: true
 - **説明**: バージョン 1.2.8 以降でサポートされています。Primary Key テーブルにデータをロードする際に、Flink からの `UPDATE_BEFORE` レコードを無視するかどうかを指定します。このパラメータを false に設定すると、レコードは StarRocks テーブルに対する削除操作として扱われます。
+
+#### sink.json.columns-from-flink-schema
+
+- **必須**: いいえ
+- **デフォルト値**: false
+- **説明**: 1.2.16 以降でサポートされています。形式が `json` の場合に、Stream Load の `columns` ヘッダーを Flink テーブルスキーマから生成するかどうかを指定します。デフォルトでは `json` の場合にヘッダーは送信されないため、サーバーはすべてのテーブル列をロード対象として宣言します。ペイロードに含まれていない列は、`DEFAULT` が定義されている場合でも `NULL` として格納されます。`true` に設定すると、Flink テーブルの列がヘッダーとして送信されるため、Flink スキーマで定義されていない列はヘッダーから除外され、サーバーによってその `DEFAULT` 値が適用されます。Flink スキーマと `sink.properties.format=json` が必要であり、`sink.properties.columns` または `sink.properties.jsonpaths` と併用することはできません。
 
 #### sink.parallelism
 
@@ -430,6 +443,22 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
   - `sink.buffer-flush.max-bytes` は、すべてのテーブルにわたるキャッシュされたデータすべての合計メモリ制限を制御します。キャッシュされたデータの合計がこの制限を超えると、コネクタはメモリを解放するためにチャンクを早期に削除します。
   - したがって、少なくとも 1 つの完全なチャンクを累積できるように、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも大きく設定する必要があります。一般に、特に複数のテーブルがある場合や並行処理が高い場合は、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも数倍大きくする必要があります。
 
+### JSON 形式でサーバー側の DEFAULT 値を適用する
+
+`json` 形式では、コネクタはデフォルトで `columns` ヘッダーを送信しません。そのため、サーバーはすべてのテーブル列をロード対象に含めます。JSON ペイロードに列が含まれていない場合、サーバーはその列を明示的な `NULL` として扱い、その列に定義された `DEFAULT` 値を上書きします。たとえば、テーブルに `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP` が含まれている場合、すべての行で `ingest_ts` に値が指定されていなければ、その列は `NULL` としてロードされます。
+
+サーバー側の `DEFAULT` 値を適用するには、`sink.json.columns-from-flink-schema=true` を設定します。コネクタは Flink テーブルスキーマを使用して `columns` ヘッダーを生成します。これは、Flink スキーマと StarRocks スキーマが異なる場合に `csv` 形式で行われる処理と同様です。
+
+Flink テーブルスキーマに定義されていない StarRocks 列は `columns` ヘッダーから除外されるため、サーバーはその列の `DEFAULT` 値を適用できます。したがって、ロード対象に含める列は Flink テーブル定義によって決まります。
+
+- **Flink スキーマから列を省略した場合:** コネクタはその列を送信しないため、StarRocks はその列の `DEFAULT` 値を適用します。
+
+- **Flink スキーマで列を定義した場合:** コネクタは行からその列の値を送信します。値が null の場合は `NULL` も送信されます。
+
+このオプションを使用するには Flink テーブルスキーマが必要であるため、Flink SQL およびスキーマを指定して作成したシンクに適用されます。`sink.version=V1` の場合は、`sink.properties.strip_outer_array=true` も設定する必要があります。V1 シンクは各バッチを JSON 配列として送信し、このプロパティを自動的には設定しません。V2 では自動的に設定されます。
+
+raw `String` DataStream シンクにはスキーマがないため、`sink.json.columns-from-flink-schema=true` を設定すると、起動時にこの設定が拒否されます。このシンクでは、代わりに `sink.properties.columns` を明示的に設定してください。
+
 ### データロードのメトリクスのモニタリング
 
 Flink コネクタは、データロードをモニタリングするために、以下のメトリクスを提供します。
@@ -480,7 +509,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### ネットワーク設定
 
-Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
+Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
 
 ### Flink SQL で実行
 

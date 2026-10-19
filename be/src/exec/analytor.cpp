@@ -34,6 +34,7 @@
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
@@ -154,6 +155,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
 
+    // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
+    // index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(analytic_node.analytic_functions[i].nodes[0].fn);
+    }
+
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _should_set_partition_size = false;
@@ -205,6 +213,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(return_type), false, false};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
             // count(*) no input column, we manually resize it to 1 to process count(*)
             // like other agg function.
             _agg_intput_columns[i].resize(1);
@@ -265,6 +274,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
@@ -299,6 +309,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                      next_state_align_size;
         }
     }
+
+    // Fails prepare after the aggregate FunctionContexts have been created, so that the analytor is
+    // destroyed (and closed) in a half-prepared state.
+    FAIL_POINT_TRIGGER_EXECUTE(analytor_prepare_failed,
+                               { return Status::InternalError("injected failure in Analytor::prepare"); });
 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
@@ -345,11 +360,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         if (!_order_ctxs.empty()) {
             RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
         }
-    }
-
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return _prepare_processing_mode(state, runtime_profile);
@@ -587,9 +597,13 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
             return;
         }
     } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
-        // Both cumulative process or sliding process need to access position around range.start
+        // Both cumulative process or sliding process need to access position around range.start.
+        // For a frame starting at a FOLLOWING offset, range.start runs ahead of the current row, so the
+        // current row position is the one that must be kept, otherwise it would be removed along with the
+        // rows before it and turn negative.
         const auto frame = _get_frame_range();
-        if (_get_global_position(frame.start - 1) <= remove_end_position) {
+        const int64_t referenced_position = std::min(_current_row_position, frame.start - 1);
+        if (_get_global_position(referenced_position) <= remove_end_position) {
             return;
         }
     } else {
@@ -1085,8 +1099,15 @@ void Analytor::_init_window_result_columns() {
     const auto chunk_size = _current_chunk_size();
     _result_window_columns.resize(_agg_fn_types.size());
     for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        // Materialize the result column with the function's window-result nullability (see
+        // FunctionTypes::is_result_nullable): a frame can be empty, so it is nullable when the input OR the
+        // declared result is nullable, unless the aggregate declares is_result_non_nullable(). An always-non-null
+        // aggregate such as bitmap_union_count() consumes a nullable input yet never emits a NULL, so this builds
+        // a non-null column for it; a downstream GROUP BY/DISTINCT that keys on the column then sees the type the
+        // plan promised. get_values() writes straight into the non-null column (see the non-nullable-dst fast path
+        // in NullableAggregateFunctionBase::get_values).
         _result_window_columns[i] =
-                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].is_result_nullable());
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
         if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
@@ -1291,4 +1312,7 @@ AnalytorPtr AnalytorFactory::create(int i) {
     }
     return _analytors[i];
 }
+
+DEFINE_FAIL_POINT(analytor_prepare_failed);
+
 } // namespace starrocks

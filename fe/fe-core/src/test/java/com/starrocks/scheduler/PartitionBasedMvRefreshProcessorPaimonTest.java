@@ -29,7 +29,9 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Map;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
 
@@ -105,6 +107,30 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                             "     PREAGGREGATION: ON\n" +
                             "     partitions=10/10\n" +
                             "     rollup: paimon_parttbl_mv1");
+                });
+    }
+
+    @Test
+    public void testPartitionRefreshRetainsPaimonScanPredicate() {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.paimon_partition_predicate_mv " +
+                        "PARTITION BY pt DISTRIBUTED BY HASH(pk) BUCKETS 1 REFRESH DEFERRED MANUAL " +
+                        "PROPERTIES (\"replication_num\" = \"1\") " +
+                        "AS SELECT pk, pt, d FROM paimon0.pmn_db1.partitioned_table",
+                () -> {
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), "paimon_partition_predicate_mv");
+                    LocalDate start = LocalDate.now();
+                    Task task = TaskBuilder.buildMvTask(mv, db.getFullName());
+                    TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(Map.of(
+                            TaskRun.PARTITION_START, start.toString(),
+                            TaskRun.PARTITION_END, start.plusDays(1).toString(),
+                            TaskRun.FORCE, "true")).build();
+                    initAndExecuteTaskRun(taskRun);
+                    PartitionBasedMvRefreshProcessor processor =
+                            (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                    assertPlanContains(processor.getMvContext().getExecPlan(),
+                            "pt >= '" + start + "'", "pt < '" + start.plusDays(1) + "'", "partitions=1/10");
                 });
     }
 

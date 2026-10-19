@@ -1038,6 +1038,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
             if (PARTITION_FUNCTIONS.contains(functionName)) {
+                // A partition function with no arguments (e.g. RANGE(substr(k)) parsed with an
+                // empty arg list) must surface a clean "unsupported expression" error instead of
+                // a raw IndexOutOfBoundsException from paramsExpr.get(0) below.
+                if (paramsExpr.isEmpty()) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
@@ -1660,8 +1667,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName dbTableName = qualifiedNameToTableName(qualifiedName);
 
+        // INTEGER_VALUE() is an empty list, never null, when no job ids are given. Keep the list
+        // null in that case so the handler cancels all unfinished jobs of the table.
         List<Long> alterJobIdList = null;
-        if (context.INTEGER_VALUE() != null) {
+        if (!context.INTEGER_VALUE().isEmpty()) {
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }

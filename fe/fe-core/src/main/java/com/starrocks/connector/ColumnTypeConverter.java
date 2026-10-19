@@ -509,7 +509,7 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(VarCharType varCharType) {
-            return ScalarType.createDefaultCatalogString();
+            return ScalarType.createVarcharType(varCharType.getLength());
         }
 
         public Type visit(BooleanType booleanType) {

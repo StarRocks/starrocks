@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -1573,7 +1574,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("S_ADDRESS"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("S_ADDRESS"), anyLong);
                 result = true;
                 dictManager.getGlobalDict(anyLong, ColumnId.create("S_ADDRESS"));
                 result = Optional.empty();
@@ -1998,6 +1999,25 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  order by: <slot 3> 3: S_ADDRESS ASC\n" +
                 "  |  pre agg functions: [, min(3: S_ADDRESS), ]\n" +
                 "  |  offset: 0");
+    }
+
+    // an ARRAY-returning expr must not define a dictionary: the BE reads the result as a BinaryColumn and crashes
+    @Test
+    public void testNoDictDefineForArrayResultOnScalarDictColumn() throws Exception {
+        String sql = "select upper(S_ADDRESS) as t from supplier limit 10";
+        assertContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] else ['x'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select if(S_ADDRESS = 'a', ['123','1234'], null) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select coalesce(if(S_ADDRESS = 'a', ['1'], null), ['2']) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
     }
 
 }

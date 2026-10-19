@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -366,9 +367,18 @@ public class AggregatePushDownUtils {
         Type argType = avgFunc.getChild(0).getType();
         if (argType.isDecimalV3()) {
             // There is not need to apply ImplicitCastRule to divide operator of decimal types.
-            // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-            ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
-            newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1), true));
+            // but we should cast BIGINT-typed countColRef into a decimal.
+            //
+            // The cast width must match the DIVIDE's own decimal type, not a fixed DECIMAL128: the BE
+            // dispatches division on the expression's type (VectorizedDivArithmeticExpr<TYPE_DECIMAL256>
+            // for a DECIMAL256 result) and reads BOTH operands at that width. Handing it a DECIMAL128
+            // count where it expects a DECIMAL256 one reinterprets the column's memory and silently
+            // returns garbage - avg(decimal(76,10)) came back as 0 for every row.
+            int countPrecision = avgFunc.getType().isDecimal256()
+                    ? PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256)
+                    : PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+            ScalarType countType = ScalarType.createDecimalV3NarrowestType(countPrecision, 0);
+            newAvg.getChildren().set(1, new CastOperator(countType, newAvg.getChild(1), true));
         } else {
             final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
             newAvg = (CallOperator) scalarRewriter.rewrite(newAvg, Lists.newArrayList(new ImplicitCastRule()));

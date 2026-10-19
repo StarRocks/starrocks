@@ -23,7 +23,7 @@ StarRocks は v2.3 以降で catalog 機能をサポートしています。cata
 
 - **External catalog** は外部で管理されているメタストアへのリンクのように機能し、StarRocks に外部データソースへの直接アクセスを提供します。データロードや移行なしで外部データを直接クエリできます。現在、StarRocks は以下の種類の external catalog をサポートしています:
   - [Hive catalog](../catalog/hive_catalog.md): Hive からデータをクエリするために使用されます。
-  - [Iceberg catalog](./iceberg/iceberg_catalog.md): Iceberg からデータをクエリするために使用されます。
+  - [Iceberg catalog](./iceberg/iceberg.md): Iceberg からデータをクエリするために使用されます。
   - [Hudi catalog](../catalog/hudi_catalog.md): Hudi からデータをクエリするために使用されます。
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): Delta Lake からデータをクエリするために使用されます。
   - [JDBC catalog](../catalog/jdbc_catalog.md): JDBC 互換のデータソースからデータをクエリするために使用されます。

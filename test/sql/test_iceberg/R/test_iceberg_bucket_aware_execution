@@ -81,11 +81,11 @@ function: assert_explain_not_contains('select trip_id, trip_distance, RANK() ove
 -- result:
 None
 -- !result
-function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1', 'colocate')
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
 -- result:
 None
 -- !result
-function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2', 'colocate')
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
 -- result:
 None
 -- !result

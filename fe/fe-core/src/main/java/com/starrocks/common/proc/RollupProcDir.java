@@ -23,10 +23,13 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJobV2;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.OrderByPair;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class RollupProcDir implements ProcDirInterface {
@@ -44,23 +47,25 @@ public class RollupProcDir implements ProcDirInterface {
         this.db = db;
     }
 
+    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, List<OrderByPair> orderByPairs,
+                                          LimitElement limitElement) throws AnalysisException {
+        Preconditions.checkNotNull(db);
+        Preconditions.checkNotNull(materializedViewHandler);
+
+        return ProcUtils.applyFilterOrderLimit(TITLE_NAMES, materializedViewHandler.getAlterJobInfosByDb(db),
+                filter, orderByPairs, limitElement);
+    }
+
+    public static int analyzeColumn(String columnName) throws AnalysisException {
+        return ProcUtils.analyzeColumn(TITLE_NAMES, columnName);
+    }
+
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(materializedViewHandler);
 
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-
-        List<List<Comparable>> rollupJobInfos = materializedViewHandler.getAlterJobInfosByDb(db);
-        for (List<Comparable> infoStr : rollupJobInfos) {
-            List<String> oneInfo = new ArrayList<String>(TITLE_NAMES.size());
-            for (Comparable element : infoStr) {
-                oneInfo.add(element.toString());
-            }
-            result.addRow(oneInfo);
-        }
-        return result;
+        return ProcUtils.toProcResult(TITLE_NAMES, materializedViewHandler.getAlterJobInfosByDb(db));
     }
 
     @Override

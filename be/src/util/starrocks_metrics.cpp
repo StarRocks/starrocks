@@ -65,6 +65,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_tablet_metadata_get_not_found_total);
 
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
@@ -302,6 +303,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     }
 
     _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+    _spill_metrics = std::make_unique<SpillMetrics>(&_metrics);
 
     if (init_jvm_metrics) {
         auto status = _jvm_metrics.init();

@@ -23,9 +23,11 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
@@ -33,6 +35,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.task.AgentBatchTask;
@@ -43,6 +46,7 @@ import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -55,6 +59,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
@@ -282,8 +287,18 @@ public class LakeRollupJobTest {
         }
     }
 
+    /**
+     * Whether {@link LakeRollupJob#lakePublishVersion} was holding a metadata lock when it published,
+     * sampled inside the faked transport. OR-accumulated: the publish runs once per partition and one
+     * lock-free call must not erase a locked one.
+     */
+    private static final AtomicBoolean PUBLISHED_UNDER_LOCK = new AtomicBoolean(false);
+    private static final AtomicBoolean PUBLISH_WAS_CALLED = new AtomicBoolean(false);
+
     @Test
     public void testCreateSyncMvWithEnableFileBundling() throws Exception {
+        PUBLISHED_UNDER_LOCK.set(false);
+        PUBLISH_WAS_CALLED.set(false);
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -300,7 +315,12 @@ public class LakeRollupJobTest {
                     Map<Long, Double> compactionScores,
                     Map<Long, Long> tabletRowNum)
                     throws NoAliveBackendException, RpcException {
-                // Do nothing, just return successfully
+                // Publishing is a BE RPC. Sample the lock depth where the real transport would be
+                // contacted: the job reads the partition's tablets under the table's READ lock, but the
+                // publish itself has to happen after that lock is dropped, or every waiter on the table
+                // -- transaction publish included -- pays the round trip.
+                PUBLISH_WAS_CALLED.set(true);
+                PUBLISHED_UNDER_LOCK.compareAndSet(false, LockHoldDepth.isUnderLock());
             }
         };
 
@@ -324,6 +344,10 @@ public class LakeRollupJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
+
+        Assertions.assertTrue(PUBLISH_WAS_CALLED.get(), "the job never reached the publish, so the check below is vacuous");
+        Assertions.assertFalse(PUBLISHED_UNDER_LOCK.get(),
+                "lakePublishVersion published while holding an FE metadata lock");
 
         for (Partition partition : table.getPartitions()) {
             long partitionId = partition.getId();
@@ -376,5 +400,86 @@ public class LakeRollupJobTest {
         Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> lakeRollupJob3.runPendingJob());
         Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
+    }
+
+    @Test
+    public void testCancelWithoutJobIdsReportsJobInFinishedRewriting() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_cancel\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+        LakeRollupJob job = createJob(
+                "create materialized view mv_cancel as select k2, k1 from base_table_cancel order by k2;");
+
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // A lake rollup job in FINISHED_REWRITING refuses to be cancelled while its table exists.
+        // CANCEL ALTER TABLE ROLLUP without job ids picks it up and must say so instead of succeeding.
+        MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        rollupHandler.addAlterJobV2(job);
+        try {
+            CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "cancel alter table rollup from base_table_cancel", connectContext);
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt));
+            Assertions.assertTrue(e.getMessage().contains("Job can not be cancelled. JobId: " + job.getJobId()
+                    + ", State: FINISHED_REWRITING"), e.getMessage());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        } finally {
+            rollupHandler.clearJobs();
+        }
+    }
+
+    @Test
+    public void testCancelAcceptsJobCancelledConcurrently() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_cancel2\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+        LakeRollupJob job = createJob(
+                "create materialized view mv_cancel2 as select k2, k1 from base_table_cancel2 order by k2;");
+
+        // The scheduler cancels the job (e.g. on timeout) after CANCEL ALTER TABLE ROLLUP has picked it
+        // up, so the statement's own cancel() finds it CANCELLED already and returns false.
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public boolean cancelImpl(Invocation invocation, String errMsg) {
+                invocation.proceed(errMsg);
+                return false;
+            }
+        };
+        MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        rollupHandler.addAlterJobV2(job);
+        try {
+            CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "cancel alter table rollup from base_table_cancel2", connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        } finally {
+            rollupHandler.clearJobs();
+        }
     }
 }

@@ -103,6 +103,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockView();
         mockPartUnionViewItem();
         mockSubfieldTable();
+        mockSubfieldMapTable();
         mockFileSplitTable();
     }
 
@@ -395,6 +396,36 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         "VIRTUAL_VIEW");
         HiveView view5 = HiveMetastoreApiConverter.toHiveView(hmsView5, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView5.getTableName(), new HiveTableInfo(view5));
+    }
+
+    // A struct next to a map, so a test can check that an expression reading the map does not stop the
+    // struct from being pruned. Kept separate from mockSubfieldTable() so existing expectations there
+    // (including "select *") stay untouched.
+    private static void mockSubfieldMapTable() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        cols.add(new FieldSchema("col_map", "map<int,int>", null));
+        cols.add(new FieldSchema("col_arr", "array<struct<c0: int, c1: int>>", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> stats = new CaseInsensitiveMap<>();
+        stats.put("col_int", ColumnStatistic.unknown());
+        stats.put("col_struct", ColumnStatistic.unknown());
+        stats.put("col_map", ColumnStatistic.unknown());
+        stats.put("col_arr", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("subfield_map", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                        null, null, "EXTERNAL_TABLE");
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, stats, MOCKED_FILES));
     }
 
     private static void mockSubfieldTable() {

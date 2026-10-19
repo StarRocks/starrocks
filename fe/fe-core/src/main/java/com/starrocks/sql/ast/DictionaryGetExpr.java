@@ -62,7 +62,19 @@ public class DictionaryGetExpr extends Expr {
     @Override
     protected String toSqlImpl() {
         String message = "DICTIONARY_GET(";
-        int size = (this.children.size() == 3) ? this.children.size() - 1 : this.children.size();
+        // children = [dictionary name, key..., optional null_if_not_exist literal], and
+        // nullIfNotExist is kept as a field of its own. So the flag would be printed twice if
+        // the optional child were included here, and a key would be dropped if it were mistaken
+        // for that child.
+        //
+        // ExpressionAnalyzer sets keySize from the dictionary metadata, which is exactly where
+        // the keys end — the children count is not, because a call with N keys and no explicit
+        // flag has the same shape as one with N-1 keys and a flag. Unanalyzed expressions carry
+        // no keySize (0) and no reliable flag either, so they keep the previous behaviour rather
+        // than guessing differently.
+        int size = keySize > 0
+                ? Math.min(keySize + 1, this.children.size())
+                : (this.children.size() == 3 ? this.children.size() - 1 : this.children.size());
         for (int i = 0; i < size; ++i) {
             Expr expr = this.children.get(i);
             message += expr.toSql();

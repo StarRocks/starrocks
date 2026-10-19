@@ -1,0 +1,40 @@
+-- name: test_push_down_heavy_exprs_nullability
+-- Regression test for the scan heavy-expr result column not following the slot's
+-- nullability. Loading in 20 small batches leaves one rowset per insert in a single
+-- tablet, so the scan emits partial chunks that ChunkPipelineAccumulator appends
+-- together instead of swapping out. The odd batches carry one row whose value has no
+-- date, so nullif() produces a NULL there and the expression evaluates to a
+-- NullableColumn, while the even batches evaluate to a bare BinaryColumn. Appending
+-- one into the other used to either crash the BE in BinaryColumnBase::append or
+-- silently return a NULL min(). Pushing the expression down must give the same answer
+-- as evaluating it above the scan.
+
+create table t_heavy (
+  id bigint,
+  flag varchar(10),
+  s varchar(1000)
+) duplicate key(id)
+distributed by hash(id) buckets 1
+properties("replication_num"="1");
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(1, 200))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(201, 400))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(401, 600))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(601, 800))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(801, 1000))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(1001, 1200))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(1201, 1400))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(1401, 1600))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(1601, 1800))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(1801, 2000))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(2001, 2200))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(2201, 2400))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(2401, 2600))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(2601, 2800))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(2801, 3000))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(3001, 3200))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(3201, 3400))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(3401, 3600))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, concat('a/b/c/2026-07-15/part-', cast(g as string)) from (select generate_series as g from table(generate_series(3601, 3800))) t;
+insert into t_heavy select g, case when g % 97 = 0 then 'n' else 'y' end, case when g % 200 = 1 then concat('a/b/c/no-date-', cast(g as string)) else concat('a/b/c/2026-07-15/part-', cast(g as string)) end from (select generate_series as g from table(generate_series(3801, 4000))) t;
+select /*+SET_VAR(push_down_heavy_exprs=true)*/ substr(s, 1, 6) as p, min(nullif(regexp_extract(s, '(\\d\\d\\d\\d-\\d\\d-\\d\\d)', 1), '')) as k from t_heavy where flag = 'y' group by p;
+select /*+SET_VAR(push_down_heavy_exprs=false)*/ substr(s, 1, 6) as p, min(nullif(regexp_extract(s, '(\\d\\d\\d\\d-\\d\\d-\\d\\d)', 1), '')) as k from t_heavy where flag = 'y' group by p;

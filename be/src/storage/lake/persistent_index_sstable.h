@@ -34,6 +34,10 @@ using KeyIndexSet = std::set<KeyIndex>;
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
+// Drop the local cache copy of `path` so subsequent reads go to remote storage.
+// Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
+Status drop_corrupted_sstable_cache(const std::string& path);
+
 class PersistentIndexSstable {
 public:
     PersistentIndexSstable() = default;
@@ -57,6 +61,9 @@ public:
     sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
+
+    // Full path of the underlying sstable file. Only valid after a successful init().
+    std::string filename() const { return _rf->filename(); }
 
     size_t memory_usage() const;
 

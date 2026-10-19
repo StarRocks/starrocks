@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
@@ -31,7 +32,7 @@ StarRocks はすべてのデータ型のデータロードをサポートして�
 
 ## Strict mode
 
-Strict mode は、データロードのために設定できるオプションのプロパティです。ロードの動作と最終的なロードデータに影響を与えます。詳細は [Strict mode](../load_concept/strict_mode.md) を参照してください。
+Strict mode は、データロードのために設定できるオプションのプロパティです。ロードの動作と最終的なロードデータに影響を与えます。詳細は [Strict mode](../strict_mode.md) を参照してください。
 
 ## Loading modes
 

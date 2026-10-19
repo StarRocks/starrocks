@@ -288,6 +288,9 @@ select url_encode(NULL);
 -- result:
 None
 -- !result
+
+
+-- name: test_url_decode
 select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
 -- result:
 https://docs.starrocks.io/en-us/latest/quick_start/Deploy
@@ -507,11 +510,11 @@ select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string
 -- !result
 select ngram_search("chi","chi",0);
 -- result:
-[REGEX].*ngram search's third parameter must be a positive number.*
+[REGEX].*third parameter must be a constant positive integer.*
 -- !result
 select ngram_search("chi","chi",-1);
 -- result:
-[REGEX].*ngram search's third parameter must be a positive number.*
+[REGEX].*third parameter must be a constant positive integer.*
 -- !result
 select ngram_search(date('2020-06-23'), "2020", 4);
 -- result:

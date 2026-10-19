@@ -123,4 +123,54 @@ TEST_F(TabletTest, test_get_basic_info_uses_tablet_footprint) {
     ASSERT_EQ(321, info.num_row);
     ASSERT_EQ(1, info.num_segment);
 }
+
+TEST_F(TabletTest, test_get_average_row_size_holds_meta_lock) {
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    tablet_meta->set_tablet_id(1028);
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    schema_pb.set_id(1029);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+    tablet_meta->set_tablet_schema(schema);
+    DataDir data_dir("./data_dir");
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, &data_dir);
+    tablet->set_data_dir(&data_dir);
+
+    RowsetMetaPB rowset_meta_pb;
+    RowsetId rowset_id;
+    rowset_id.init(2, 3, 0, 0);
+    rowset_meta_pb.set_rowset_id(rowset_id.to_string());
+    rowset_meta_pb.set_start_version(1);
+    rowset_meta_pb.set_end_version(1);
+    rowset_meta_pb.set_num_rows(100);
+    rowset_meta_pb.set_total_row_size(1000);
+    rowset_meta_pb.mutable_tablet_schema()->CopyFrom(schema_pb);
+    auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
+    ASSERT_TRUE(tablet->add_rowset(rowset, false).ok());
+
+    ASSERT_EQ(10, tablet->get_average_row_size());
+
+    // _rs_version_map is guarded by _meta_lock, and a writer publishes a rowset with
+    // `_rs_version_map[version] = rowset`, which leaves a null mapped value visible to
+    // any reader that walks the map without the lock. So the reader has to wait here.
+    tablet->obtain_header_wrlock();
+    std::atomic<bool> entered{false};
+    std::atomic<bool> finished{false};
+    std::thread reader([&]() {
+        entered.store(true, std::memory_order_release);
+        tablet->get_average_row_size();
+        finished.store(true, std::memory_order_release);
+    });
+    while (!entered.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(200ms);
+    EXPECT_FALSE(finished.load(std::memory_order_acquire))
+            << "get_average_row_size() walked _rs_version_map without holding _meta_lock";
+
+    tablet->release_header_lock();
+    reader.join();
+    EXPECT_TRUE(finished.load(std::memory_order_acquire));
+}
 } // namespace starrocks

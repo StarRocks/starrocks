@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -59,10 +60,19 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
@@ -72,6 +82,27 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class ExplicitTxnTest {
+    private TransactionState addExplicitState(GlobalTransactionMgr mgr, long txnId, String label, long timeoutMs) {
+        TransactionState state = new TransactionState(
+                txnId, label, null, TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(
+                        TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                timeoutMs);
+        state.setPrepareTime(System.currentTimeMillis());
+        ExplicitTxnState explicit = new ExplicitTxnState();
+        explicit.setTransactionState(state);
+        mgr.addTransactionState(txnId, explicit);
+        return state;
+    }
+
+    private void abortRunningTransactions(GlobalTransactionMgr mgr, long dbId) throws StarRocksException {
+        DatabaseTransactionMgr dbTxnMgr = mgr.getDatabaseTransactionMgr(dbId);
+        Long txnId;
+        while ((txnId = dbTxnMgr.getMinActiveTxnId().orElse(null)) != null) {
+            mgr.abortTransaction(dbId, txnId, "ExplicitTxnTest isolation");
+        }
+    }
+
     @BeforeAll
     public static void init() throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -685,5 +716,194 @@ public class ExplicitTxnTest {
         Assertions.assertEquals((long) queryTimeoutS * 1000L, capturedTimeoutMs[0],
                 "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
                         + "as milliseconds, got " + capturedTimeoutMs[0]);
+    }
+
+    @Test
+    public void testRollbackWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990001L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-fails", 60_000L);
+        // Registered with a database by a load that produced no item.
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        // The explicit state is cleared as for any rollback, but the failure is reported instead of ABORTED.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testCommitWithoutItemsAbortsRegisteredTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        addExplicitState(mgr, txnId, "commit-without-items", 60_000L);
+        // The INSERT path registers the transaction before it executes; a failed INSERT leaves the
+        // transaction registered without an item.
+        ConnectContext registerContext = new ConnectContext();
+        registerContext.setTxnId(txnId);
+        TransactionStmtExecutor.activateTable(db1.getId(), table1.getId(), registerContext);
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        int runningBefore = mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums();
+
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError(), context.getState().getErrorMessage());
+        Assertions.assertEquals("{'label':'commit-without-items', 'status':'VISIBLE', 'txnId':'" + txnId + "'}",
+                context.getState().getInfoMessage());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        // The registered transaction is aborted instead of lingering PREPARE until its timeout: it no
+        // longer counts as running, no longer blocks the table and its label can be used again.
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getTransactionState(db1.getId(), txnId).getTransactionStatus());
+        Assertions.assertEquals(runningBefore - 1, mgr.getDatabaseTransactionMgr(db1.getId()).getRunningTxnNums());
+        Assertions.assertTrue(mgr.isPreviousTransactionsFinished(txnId + 1, db1.getId(), List.of(table1.getId())));
+        Assertions.assertEquals(TransactionStatus.ABORTED,
+                mgr.getLabelTransactionState(db1.getId(), "commit-without-items").getTransactionStatus());
+    }
+
+    @Test
+    public void testCommitWithoutItemsReportsAbortFailure() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990002L;
+        TransactionState state = addExplicitState(mgr, txnId, "commit-abort-fails", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) throws StarRocksException {
+                throw new StarRocksException("abort failed for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("abort failed for test"));
+    }
+
+    @Test
+    public void testRollbackWithoutItemsClearsStateWhenAbortThrowsUnchecked() {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = 990003L;
+        TransactionState state = addExplicitState(mgr, txnId, "rollback-abort-unchecked", 60_000L);
+        state.setDbId(12345L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason) {
+                throw new IllegalStateException("unchecked abort failure for test");
+            }
+        };
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(txnId);
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO)));
+        // The session must not stay inside a dead transaction.
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testBeginWithLabelAlreadyUsedByAnotherSession() {
+        // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
+        // with the same label
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        ConnectContext first = new ConnectContext();
+        first.setThreadLocalInfo();
+        first.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        first.setExecutionId(new TUniqueId(970, 971));
+        TransactionStmtExecutor.beginStmt(first, new BeginStmt(NodePosition.ZERO, "duplicated_label"));
+        Assertions.assertFalse(first.getState().isError());
+        Assertions.assertNotEquals(0, first.getTxnId());
+
+        ConnectContext second = new ConnectContext();
+        second.setThreadLocalInfo();
+        second.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        second.setExecutionId(new TUniqueId(972, 973));
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> TransactionStmtExecutor.beginStmt(second, new BeginStmt(NodePosition.ZERO, "duplicated_label")));
+        Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+        // The rejected session must not be left inside a transaction
+        Assertions.assertEquals(0, second.getTxnId());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(first.getTxnId());
+        first.setTxnId(0);
+    }
+
+    @Test
+    public void testConcurrentBeginWithSameLabel() throws Exception {
+        // Regression test for the label uniqueness race: several sessions running
+        // `BEGIN WITH LABEL <same label>` at the same time must not all succeed. The uniqueness check and the
+        // registration of the explicit transaction state have to happen atomically, otherwise every session
+        // passes the check before any of them publishes its state.
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        final int concurrency = 8;
+        final int rounds = 5;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                final String label = "concurrent_label_" + round;
+                CyclicBarrier barrier = new CyclicBarrier(concurrency);
+                AtomicInteger succeeded = new AtomicInteger();
+                AtomicInteger rejected = new AtomicInteger();
+                Queue<Long> succeededTxnIds = new ConcurrentLinkedQueue<>();
+
+                List<Future<?>> futures = new ArrayList<>(concurrency);
+                for (int i = 0; i < concurrency; i++) {
+                    final int seq = i;
+                    futures.add(executor.submit(() -> {
+                        ConnectContext context = new ConnectContext();
+                        context.setThreadLocalInfo();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setExecutionId(new TUniqueId(1000 + seq, 2000 + seq));
+
+                        // Line up all sessions so that they hit the label check together
+                        barrier.await(30, TimeUnit.SECONDS);
+                        try {
+                            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, label));
+                            succeeded.incrementAndGet();
+                            succeededTxnIds.add(context.getTxnId());
+                        } catch (SemanticException e) {
+                            Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+                            rejected.incrementAndGet();
+                        }
+                        return null;
+                    }));
+                }
+                for (Future<?> future : futures) {
+                    future.get(60, TimeUnit.SECONDS);
+                }
+
+                Assertions.assertEquals(1, succeeded.get(),
+                        "exactly one BEGIN WITH LABEL " + label + " should succeed");
+                Assertions.assertEquals(concurrency - 1, rejected.get());
+
+                for (Long txnId : succeededTxnIds) {
+                    globalTransactionMgr.clearExplicitTxnState(txnId);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

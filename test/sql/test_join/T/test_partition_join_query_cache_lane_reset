@@ -1,0 +1,39 @@
+-- name: test_partition_join_query_cache_lane_reset @sequential
+
+-- Query cache reuses a lane across tablets. A tablet that is scanned but has every row filtered
+-- out pushes no chunk at all, so the probe side must still be able to index the partition channels
+-- after the lane is reset.
+
+CREATE TABLE `fact` (
+  `dt` date NOT NULL,
+  `c3` int(11) NOT NULL,
+  `v1` int(11) NOT NULL,
+  `flag` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c3`)
+PARTITION BY RANGE(`dt`) (START ("2022-01-01") END ("2022-02-10") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(`c3`) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE `dim` (
+  `c3` int(11) NOT NULL,
+  `w1` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c3`)
+DISTRIBUTED BY HASH(`c3`) BUCKETS 2
+PROPERTIES("replication_num" = "1");
+
+-- flag=1 only lands in the first half of the partitions, so the other half is scanned but yields
+-- no row, which is what leaves a lane reset with no chunk pushed after it.
+insert into fact select date_add('2022-01-01', interval (i%40) day), i%1000, i%500, if((i%40)<20,1,0) from table(generate_series(1,50000)) t(i);
+insert into dim select i, i from table(generate_series(1,1000)) t(i);
+
+admin enable failpoint 'always_use_partition_join';
+
+-- chunk_size is kept small so a partition channel reaches its 4-chunk limit and marks itself as
+-- processing before the lane is reset.
+select /*+SET_VAR(enable_query_cache=true,pipeline_dop=4,chunk_size=8)*/ sum(fact.v1) from fact join [broadcast] dim on fact.c3 = dim.c3 where fact.flag = 1;
+
+CLEANUP {
+  admin disable failpoint 'always_use_partition_join';
+} END CLEANUP

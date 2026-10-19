@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
@@ -112,10 +112,14 @@ public class AggregateMetaTest extends PlanTestBase {
                 return 3;
             }
         };
-        new MockUp<TabletStatMgr>() {
+        // The COUNT(*) fold no longer trusts a wall-clock stamp from TabletStatMgr, nor the row count
+        // cached on the index: it sums the tablets, and each must produce a count a stat collection
+        // proved was computed from that partition's visible version (issue #72271). t0 has 3 tablets,
+        // so one row apiece keeps the folded total at the 3 this test asserts.
+        new MockUp<LocalTablet>() {
             @Mock
-            public boolean workTimeIsMustAfter(LocalDateTime time) {
-                return true;
+            public long getRowCountAtVersion(long version) {
+                return 1;
             }
         };
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);

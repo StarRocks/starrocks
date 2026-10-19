@@ -35,10 +35,13 @@
 
 #include "backend_service.h"
 
+#include <algorithm>
+
 #include "agent/agent_server.h"
 #include "agent/task_worker_pool.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -69,6 +72,9 @@ void BackendService::publish_cluster_state(TAgentResult& result, const TAgentPub
 
 void BackendService::get_tablets_info(TGetTabletsInfoResult& result_, const TGetTabletsInfoRequest& request) {
     result_.__set_report_version(curr_report_version());
+    result_.__set_tablet_max_compaction_score(
+            std::max(StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.value(),
+                     StarRocksMetrics::instance()->tablet_base_max_compaction_score.value()));
     result_.__isset.tablets = true;
     TStatus t_status;
     Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&result_.tablets);

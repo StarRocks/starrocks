@@ -29,7 +29,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Unit tests for TabletInvertedIndex class
@@ -277,6 +280,47 @@ public class TabletInvertedIndexTest {
     public void testMarkTabletsForceDeleteEmptyCollection() {
         tabletInvertedIndex.markTabletsForceDelete(Collections.emptyList());
         Assertions.assertTrue(tabletInvertedIndex.getForceDeleteTablets().isEmpty());
+    }
+
+    @Test
+    public void testMarkTabletsForceDeleteDoesNotHoldIndexLockAcrossTabletLock() {
+        // Regression guard: markTabletsForceDelete() must resolve Tablet.getBackendIds() outside the
+        // inverted index write lock. getBackendIds() takes the per-tablet read lock, while the replica
+        // deletion path takes the same two locks in the opposite order
+        // (LocalTablet.deleteReplicaByBackendId -> TabletInvertedIndex.deleteReplica), so reading the
+        // backend ids under the index lock lets the two paths deadlock the FE.
+        Replica replica = new Replica(500L, 5000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        AtomicBoolean indexWritableFromOtherThread = new AtomicBoolean(false);
+
+        // While the batch mark reads this tablet's backend ids, another thread must still be able to
+        // acquire the index write lock. It cannot if the caller already holds it, which is the bug.
+        LocalTablet probeTablet = new LocalTablet(8001L, Arrays.asList(replica)) {
+            @Override
+            public Set<Long> getBackendIds() {
+                Set<Long> backendIds = super.getBackendIds();
+                CountDownLatch indexWriteDone = new CountDownLatch(1);
+                Thread writer = new Thread(() -> {
+                    tabletInvertedIndex.markTabletForceDelete(9001L, 9000L);
+                    indexWriteDone.countDown();
+                });
+                writer.setDaemon(true);
+                writer.start();
+                try {
+                    indexWritableFromOtherThread.set(indexWriteDone.await(5, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return backendIds;
+            }
+        };
+
+        tabletInvertedIndex.markTabletsForceDelete(Collections.singletonList(probeTablet));
+
+        Assertions.assertTrue(indexWritableFromOtherThread.get(),
+                "markTabletsForceDelete must not hold the inverted index write lock while reading backend ids");
+        // the mark itself still lands
+        Assertions.assertTrue(tabletInvertedIndex.tabletForceDelete(8001L, 5000L));
     }
 
     @Test

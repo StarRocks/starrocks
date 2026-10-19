@@ -41,6 +41,38 @@ void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts
     session.setKeepAliveTimeout(timeouts.http_keep_alive_timeout);
 }
 
+// Poco's own send/receive default, read from a freshly constructed session rather than hardcoded
+// so it cannot drift from the bundled Poco version.
+static const Poco::Timespan& poco_default_timeout() {
+    static const Poco::Timespan kDefault = [] {
+        Poco::Net::HTTPClientSession probe;
+        return probe.getReceiveTimeout();
+    }();
+    return kDefault;
+}
+
+void apply_request_timeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts) {
+    // Sessions are pooled per endpoint, not per client, and clients that share an endpoint do not
+    // share a timeout: a RENAME_FILE client carries object_storage_rename_file_request_timeout_ms
+    // while an ordinary request carries object_storage_request_timeout_ms, which can also be
+    // changed to unset at runtime. So this has to leave the session in the state THIS request asked
+    // for, never in whatever state the previous borrower left behind -- skipping the call when a
+    // request has no timeout would let it inherit another client's.
+    //
+    // A negative value means "unset" and Poco gives no defined meaning to a negative Timespan, so
+    // restore Poco's default in that case. Zero is meaningful: it disables the timeout and must be
+    // passed through just like it is on the Curl path.
+    const Poco::Timespan& send =
+            timeouts.send_timeout.totalMicroseconds() >= 0 ? timeouts.send_timeout : poco_default_timeout();
+    const Poco::Timespan& receive =
+            timeouts.receive_timeout.totalMicroseconds() >= 0 ? timeouts.receive_timeout : poco_default_timeout();
+    session.setTimeout(timeouts.connection_timeout, send, receive);
+
+    // Keep-alive is deliberately not touched: ConnectionTimeouts default-initializes
+    // http_keep_alive_timeout to zero and PocoHttpClient never sets it, so writing it through
+    // would work against the pool, which exists to reuse connections.
+}
+
 std::string getCurrentExceptionMessage() {
     std::stringstream ss;
 
@@ -121,6 +153,11 @@ PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const Co
     }
 
     auto session = pool->get(timeouts.connection_timeout.totalMicroseconds());
+    // A pooled session is reused, so whatever the previous caller left on it is still in
+    // effect -- apply this request's timeouts before handing it out. Without this the send and
+    // receive timeouts computed from ClientConfiguration were dropped here, and a read that
+    // stopped receiving waited out Poco's built-in default instead of the configured value.
+    apply_request_timeouts(*session, timeouts);
     session->attachSessionData({});
 
     return session;

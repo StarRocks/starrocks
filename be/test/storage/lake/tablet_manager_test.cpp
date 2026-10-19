@@ -39,6 +39,7 @@
 #include "util/bthreads/util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
+#include "util/starrocks_metrics.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
@@ -78,6 +79,19 @@ public:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+namespace {
+
+class MappedCacheKeyLocationProvider final : public lake::LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("virtual://{}", tablet_id); }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return fmt::format("physical/{}", virtual_path);
+    }
+};
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -156,6 +170,179 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->tablet_id(), tablet_id);
     EXPECT_EQ(res.value()->txn_id(), 2);
+}
+
+// A txn log is immutable once written, so a load that fails with Corruption is most likely served a
+// corrupted block from the local data cache. The loader must drop that cache copy and re-read once
+// instead of failing every publish until the cache entry is evicted, mirroring
+// tablet_meta_read_corrupted_and_recover. The test file system has no local cache to drop, so the
+// TabletManager::corrupted_txn_log_handler sync point stands in for a successful drop.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_and_recover) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(2);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    // put_txn_log() also fills the metacache; drop it so get_txn_log() has to read the file.
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // The txn log may be read with the legacy headerless format or the checksummed header format
+    // depending on lake_enable_protobuf_file_checksum, so inject the first-read corruption on both.
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(res.value()->tablet_id(), tablet_id);
+    EXPECT_EQ(res.value()->txn_id(), 2);
+    EXPECT_EQ(1, handler_called);
+    // Exactly one retry: the corrupted first read plus the re-read after the drop.
+    EXPECT_EQ(2, read_count);
+}
+
+// When the corrupted cache copy cannot be dropped (here: the test file system has no local cache,
+// so drop_local_cache reports NotFound), the original Corruption is reported and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_drop_cache_failed) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(3);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 3);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(1, read_count);
+    // A failed load must not leave anything in the metacache.
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_txn_log(_tablet_manager->txn_log_location(tablet_id, 3)));
+}
+
+// With lake_clear_corrupted_cache_meta off, a corrupted txn log read is reported as is: no cache drop
+// is attempted and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_clear_cache_disabled) {
+    auto old_flag = config::lake_clear_corrupted_cache_meta;
+    config::lake_clear_corrupted_cache_meta = false;
+    DeferOp guard([old_flag]() { config::lake_clear_corrupted_cache_meta = old_flag; });
+
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(4);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 4);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(0, handler_called);
+    EXPECT_EQ(1, read_count);
+}
+
+// The combined txn log written by a combined-txn publish takes the same recovery path as a single
+// txn log: drop the corrupted cache copy, re-read once, then serve every tablet's entry.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, combined_txnlog_read_corrupted_and_recover) {
+    const int64_t txn_id = 5;
+    auto partition_id = next_id();
+    auto tablet_id_1 = next_id();
+    auto tablet_id_2 = next_id();
+    starrocks::CombinedTxnLogPB combined_log;
+    for (auto tablet_id : {tablet_id_1, tablet_id_2}) {
+        auto* log = combined_log.add_txn_logs();
+        log->set_partition_id(partition_id);
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(txn_id);
+    }
+    EXPECT_OK(_tablet_manager->put_combined_txn_log(combined_log));
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto log_path = _tablet_manager->combined_txn_log_location(tablet_id_1, txn_id);
+    auto res = _tablet_manager->get_combined_txn_log(log_path);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, handler_called);
+    EXPECT_EQ(2, read_count);
+    ASSERT_EQ(2, res.value()->txn_logs_size());
+    EXPECT_EQ(tablet_id_1, res.value()->txn_logs(0).tablet_id());
+    EXPECT_EQ(tablet_id_2, res.value()->txn_logs(1).tablet_id());
+    EXPECT_EQ(txn_id, res.value()->txn_logs(1).txn_id());
+    // The healed copy, not the corrupted one, is what the metacache serves from now on.
+    auto cached = _tablet_manager->metacache()->lookup_combined_txn_log(log_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(2, cached->txn_logs_size());
 }
 
 // Compatibility: tablet metadata / txn logs written by an older BE without the checksum
@@ -923,6 +1110,42 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
+TEST_F(LakeTabletManagerTest, bundled_metadata_partition_marker_uses_real_location) {
+    auto location_provider = std::make_shared<MappedCacheKeyLocationProvider>();
+    auto old_location_provider = _tablet_manager->TEST_set_location_provider(location_provider);
+    DeferOp restore_location_provider(
+            [&]() { _tablet_manager->TEST_set_location_provider(std::move(old_location_provider)); });
+
+    auto tablet_id = next_id();
+    auto virtual_key = location_provider->metadata_root_location(tablet_id);
+    ASSIGN_OR_ABORT(auto real_key, location_provider->real_location(virtual_key));
+
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    EXPECT_TRUE(_tablet_manager->lookup_cached_bundled_metadata_partition_marker(tablet_id));
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(real_key));
+    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(virtual_key));
+}
+
+TEST_F(LakeTabletManagerTest, bundled_metadata_not_found_reads_bundle_once) {
+    auto tablet_id = next_id();
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    int bundle_read_attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata",
+                                          [&](void*) { ++bundle_read_attempts; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto metadata = _tablet_manager->get_tablet_metadata(tablet_id, 2, false);
+
+    EXPECT_TRUE(metadata.status().is_not_found()) << metadata.status();
+    EXPECT_EQ(1, bundle_read_attempts);
+}
+
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
@@ -970,6 +1193,39 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
     // Same contract on the single-tablet (bundle) read path.
     res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
     EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// Each remote metadata read that returns NotFound is counted, including
+// fallback reads; hits must leave the metric alone.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    // A missing version 2 probes both the per-tablet metadata object and the
+    // bundled metadata fallback in remote storage.
+    auto res = _tablet_manager->get_tablet_metadata(next_id(), 2);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->get_tablet_metadata(tablet_id, 2).status());
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+}
+
+// The bundle file is the other location a tablet's metadata can live in, so the
+// bulk bundle reader used by vacuum shares the same accounting.
+TEST_F(LakeTabletManagerTest, get_metas_from_bundle_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    auto missing_bundle = _tablet_manager->bundle_tablet_metadata_location(next_id(), 2);
+    auto res = lake::TabletManager::get_metas_from_bundle_tablet_metadata(missing_bundle);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 1, not_found_metric.value());
 }
 
 // With a durable copy present, skip_meta_cache reads it from storage (not the

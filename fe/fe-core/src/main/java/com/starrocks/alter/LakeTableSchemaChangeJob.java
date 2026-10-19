@@ -903,7 +903,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     mv.setInactiveAndReason(
                             MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                     // clear version map to make sure the MV will be refreshed
-                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+                    mv.resetVisibleVersionMap();
                     return;
                 }
             }

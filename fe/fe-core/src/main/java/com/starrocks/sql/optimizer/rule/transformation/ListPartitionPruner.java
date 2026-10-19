@@ -230,6 +230,9 @@ public class ListPartitionPruner implements PartitionPruner {
      * Only some simple conjuncts can be pruned
      */
     public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
+        if (!(conjunct instanceof CompoundPredicateOperator) && containsTruncatingCharCast(conjunct)) {
+            return false;
+        }
         if (conjunct instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator bop = conjunct.cast();
             return bop.getBinaryType().isEqualOrRange() && evaluateConstant(bop.getChild(1)) != null;
@@ -463,6 +466,12 @@ public class ListPartitionPruner implements PartitionPruner {
 
 
     private Pair<Set<Long>, Boolean> evalPartitionPruneFilter(ScalarOperator operator) {
+        // LiteralExprFactory does not implement explicit CHAR(N) truncation. Keep these predicates
+        // for execution instead of pruning with different values. Compound predicates recurse so
+        // an independent AND branch can still prune; an unevaluable OR branch retains all partitions.
+        if (!(operator instanceof CompoundPredicateOperator) && containsTruncatingCharCast(operator)) {
+            return Pair.create(null, true);
+        }
         Set<Long> matches = null;
         Boolean existNoEval = false;
         if (operator instanceof BinaryPredicateOperator) {
@@ -477,6 +486,13 @@ public class ListPartitionPruner implements PartitionPruner {
             existNoEval = matchesPair.second;
         }
         return matches == null ? Pair.create(null, true) : Pair.create(matches, existNoEval);
+    }
+
+    private static boolean containsTruncatingCharCast(ScalarOperator operator) {
+        if (operator instanceof CastOperator && ((CastOperator) operator).isTruncatingCharCast()) {
+            return true;
+        }
+        return operator.getChildren().stream().anyMatch(ListPartitionPruner::containsTruncatingCharCast);
     }
 
     private boolean isSinglePartitionColumn(ScalarOperator predicate) {
@@ -609,8 +625,9 @@ public class ListPartitionPruner implements PartitionPruner {
             case NE:
                 // SlotRef != Literal
                 matches.addAll(allPartitions);
-                // remove null partitions
-                matches.removeAll(nullPartitions);
+                // remove NULL-only partitions
+                matches.removeIf(id -> nullPartitions.contains(id)
+                        && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
                     if (listPartitionInfo == null) {
@@ -723,9 +740,10 @@ public class ListPartitionPruner implements PartitionPruner {
                 return Sets.newHashSet();
             }
 
-            // all partitions but remove null partitions
+            // all partitions but remove NULL-only partitions
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         }
 
         for (int i = 1; i < inPredicate.getChildren().size(); ++i) {
@@ -772,7 +790,9 @@ public class ListPartitionPruner implements PartitionPruner {
         if (isNullPredicate.isNotNull()) {
             // is not null
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            // all partitions but remove NULL-only partitions
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         } else {
             // is null
             matches.addAll(nullPartitions);

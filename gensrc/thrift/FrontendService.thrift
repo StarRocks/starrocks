@@ -357,6 +357,11 @@ struct TGetTablesParams {
   // If not set, match default_catalog
   22: optional string catalog_name
   23: optional string table_name
+
+  // Remaining query_timeout (seconds) of the outer user query. Forwarded by the BE schema scanner so the
+  // FE side can bound internal reads (e.g. task_run_history for information_schema.materialized_views) by
+  // the user's query_timeout instead of statistic_collect_query_timeout when the request is not FE-evaluated.
+  24: optional i64 query_timeout
 }
 
 struct TTableStatus {
@@ -570,6 +575,10 @@ struct TGetLoadsParams {
     18: optional i64 load_finish_time_to_ms
     19: optional i64 create_time_from_ms
     20: optional i64 create_time_to_ms
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
 }
 
 struct TTrackingLoadInfo {
@@ -630,6 +639,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {

@@ -40,6 +40,8 @@
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <memory>
 #include <sstream>
@@ -52,6 +54,7 @@
 #include "http/http_request.h"
 #include "service/backend_options.h"
 #include "service/brpc.h"
+#include "testutil/sync_point.h"
 #include "util/debug_util.h"
 #include "util/errno.h"
 #include "util/thread.h"
@@ -133,15 +136,47 @@ Status EvHttpServer::start() {
             _https.push_back(http);
             pthread_rwlock_unlock(&_rw_lock);
 
-            auto res = evhttp_accept_socket(http, _server_fd);
+            // evhttp_accept_socket() creates its listener with LEV_OPT_CLOSE_ON_FREE,
+            // so libevent owns the fd it is given and closes it in evhttp_free().
+            // Every worker must therefore hand libevent an fd of its own: a dup of
+            // _server_fd. Handing _server_fd itself to every worker, and closing it
+            // again in join(), closes whatever unrelated fd (e.g. a brpc socket) has
+            // reused that number in the meantime.
+            int worker_fd = ::fcntl(_server_fd, F_DUPFD_CLOEXEC, 0);
+            if (worker_fd < 0) {
+                LOG(WARNING) << "failed to dup listen fd: " << errno_to_string(errno);
+                return;
+            }
+
+            auto res = evhttp_accept_socket(http, worker_fd);
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
                              << ", error:" << errno_to_string(errno);
+                // TODO: evhttp_accept_socket() returns -1 in two cases that leave worker_fd with
+                // different owners: evconnlistener_new() failed (worker_fd untouched, we must close it),
+                // or evhttp_bind_listener() failed (libevent already closed worker_fd when freeing the
+                // listener, LEV_OPT_CLOSE_ON_FREE). Both only happen when a tiny allocation fails, so
+                // assume the first case here; calling evconnlistener_new() and evhttp_bind_listener()
+                // separately would make the ownership explicit.
+                ::close(worker_fd);
                 return;
             }
 
             evhttp_set_newreqcb(http, on_connection, this);
             evhttp_set_gencb(http, on_request, this);
+
+#ifdef BE_TEST
+            // Tell tests when this worker is actually running its event loop. event_base_loop() resets the
+            // break flag on entry, so an event_base_loopbreak() from stop() issued before that is lost and
+            // join() hangs. The callback runs inside the loop, after that reset.
+            struct timeval zero_tv = {0, 0};
+            event_base_once(
+                    base, -1, EV_TIMEOUT,
+                    [](evutil_socket_t, short, void*) {
+                        TEST_SYNC_POINT_CALLBACK("EvHttpServer::worker:in_dispatch", nullptr);
+                    },
+                    nullptr, &zero_tv);
+#endif
 
             event_base_dispatch(base);
         };
@@ -168,8 +203,11 @@ void EvHttpServer::join() {
         }
     }
 
-    // close the socket at last
+    // close the socket at last. Only _server_fd itself is owned here: the dups
+    // of it passed to evhttp_accept_socket() are closed by evhttp_free() below.
     close(_server_fd);
+    _server_fd = -1;
+    TEST_SYNC_POINT("EvHttpServer::join:before_evhttp_free");
 
     // free the evhttp and event_base
     for (auto http : _https) {

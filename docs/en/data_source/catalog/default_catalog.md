@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 ---
 
@@ -85,4 +86,4 @@ SELECT * FROM default_catalog.olap_db.olap_table limit 1;
 
 ## References
 
-To query data from external data sources, see [Query external data](../catalog/query_external_data.md).
+To query data from external data sources, see [Query external data](./query_external_data.md).

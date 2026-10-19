@@ -188,12 +188,24 @@ if __name__ == "__main__":
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
     # check sequential mode with concurrency=1
-    if "sequential" in attr and concurrency != 1:
+    # Match the attr as a token, not a substring: "!sequential" (exclude sequential cases)
+    # must not be mistaken for "sequential" (run only sequential cases), otherwise the
+    # concurrent pass silently drops to a single process.
+    attr_tokens = {each.strip() for each in attr.split(",")}
+    if "sequential" in attr_tokens and concurrency != 1:
         print("In sequential mode, set concurrency=1 in default!")
         concurrency = 1
     # check alive mode with concurrency=1
     if keep_alive and concurrency != 1:
         print("In alive mode, set concurrency=1 in default!")
+        concurrency = 1
+    # check record mode with concurrency=1
+    # Recording selects @sequential cases too (choose_cases skips the opt-in rule when
+    # record_mode is on), so the record pass has to be serial for the same reason the
+    # sequential validate pass is: those cases are marked sequential because they cannot
+    # share a cluster with anything else, and a racy run records a wrong R file.
+    if record and concurrency != 1:
+        print("In record mode, set concurrency=1 in default!")
         concurrency = 1
 
     # Auto-exclude no_arrow_flight_sql cases in arrow mode

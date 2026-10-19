@@ -43,8 +43,10 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/auth/credential_mask.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -56,6 +58,7 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/tablet_manager.h"
@@ -69,6 +72,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
+#include "util/logging.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
@@ -88,6 +92,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
             return Status::OK();
+        });
+        // jemalloc has already read JEMALLOC_CONF by the time we get here. The baseline is
+        // seeded by JemallocConfUpdater::init() at startup with the option string that actually
+        // took effect, and only the runtime-mutable options are re-applied here.
+        _config_callback.emplace("jemalloc_conf", []() -> Status {
+            return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
             StoragePageCache* cache = DataCache::GetInstance()->page_cache();
@@ -385,7 +395,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();
             if (tablet_manager != nullptr) {
-                tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+                return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
             return Status::OK();
         });
@@ -408,6 +418,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
 
+        // Without this, changing sys_log_level at runtime reports success and changes nothing.
+        _config_callback.emplace("sys_log_level", []() -> Status { return update_logging(); });
+
 #ifdef USE_STAROS
 #define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \
     _config_callback.emplace(#BE_CONFIG, [&]() {                                                   \
@@ -427,10 +440,20 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
                               fslib_s3client_nonread_retry_scale_factor);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
-        if (config::object_storage_request_timeout_ms >= 0 &&
-            config::object_storage_request_timeout_ms <= std::numeric_limits<int32_t>::max()) {
-            UPDATE_STARLET_CONFIG(object_storage_request_timeout_ms, fslib_s3client_request_timeout_ms);
-        }
+        _config_callback.emplace("object_storage_request_timeout_ms", [&]() {
+            auto timeout = starlet_request_timeout_ms(config::object_storage_request_timeout_ms,
+                                                      config::enable_poco_client_for_aws_sdk);
+            if (!timeout) {
+                return Status::InvalidArgument("object_storage_request_timeout_ms exceeds Starlet's int32 range.");
+            }
+            auto val = std::to_string(*timeout);
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_request_timeout_ms", val)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_request_timeout_ms";
+                return Status::InvalidArgument("Failed to update object_storage_request_timeout_ms.");
+            }
+            return Status::OK();
+        });
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
@@ -459,7 +482,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
                 }
             } else {
-                LOG(INFO) << "set_config " << name << "=" << value << " success";
+                LOG(INFO) << "set_config " << name << "="
+                          << (config::is_sensitive_config(name) ? std::string(kCredentialMask) : value) << " success";
             }
         }
     }
@@ -467,7 +491,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 }
 
 void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+    // A credential config's new value must not reach the log or the response, so it is masked everywhere below.
+    LOG(INFO) << req->debug_string(config::is_sensitive_config);
 
     Status s;
     std::string msg;
@@ -480,8 +505,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         const std::string& new_value = req->params()->begin()->second;
         s = update_config(config, new_value);
         if (!s.ok()) {
-            LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
-            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
+            const std::string shown_value =
+                    config::is_sensitive_config(config) ? std::string(kCredentialMask) : new_value;
+            LOG(WARNING) << "set_config " << config << "=" << shown_value << " failed";
+            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, shown_value, s.to_string());
         }
     }
 

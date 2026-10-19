@@ -6,6 +6,8 @@ sidebar_position: 10
 
 # 权限系统总览
 
+import EditionSpecificPlatformRoles from '../../../_assets/commonMarkdown/Edition_Specific_Platform_Roles.mdx'
+
 本文介绍 StarRocks 中权限系统的基本概念。权限决定了哪些用户可以对哪些特定对象执行哪些特定的操作，从而方便您更加安全地管控数据和资源。
 
 > **版本提示**：本文介绍的权限管理系统从 3.0 版本开始提供。升级后的权限框架、语法与旧的系统无法兼容，请以 3.0 版本的操作说明为准。升级后，除个别操作外，您在原有系统上的大部分操作权限仍然保留。具体差异请见权限项文档的[升级注意事项](privilege_item.md#升级注意事项)。
@@ -64,10 +66,8 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 ![roles](../../../_assets/privilege-role.png)
 
-- `root`：拥有全局权限。root 用户默认拥有 `root` 角色。
-  StarRocks 集群最初创建时，系统会自动生成 root 用户，该用户拥有 root 权限。由于 root 用户、角色的权限范围过大，建议您在后续使用和维护集群时创建新的用户和角色，避免直接使用此用户和角色。root 用户的密码请您妥善保管。
-- `cluster_admin`：拥有集群的管理权限。包含对节点的操作权限，如增加、减少节点。
-  `cluster_admin` 角色拥有对集群节点的上、下线权限，请妥善赋权。建议您不要将 `cluster_admin` 或任何包含此角色的自定义角色设置为用户的默认角色，防止因误操作而导致的节点变更。
+<EditionSpecificPlatformRoles />
+
 - `db_admin`：拥有数据库的管理权限。包含所有 CATALOG、数据库、表、视图、物化视图、函数及全局函数、资源组、插件等对象的所有操作权限。
 - `user_admin`：拥有用户和角色的管理权限。包含创建用户、角色、赋权等权限。
 

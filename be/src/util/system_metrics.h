@@ -19,6 +19,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include "util/metrics.h"
 
@@ -51,6 +52,8 @@ public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_resident_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_mapped_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jemalloc_dirty_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jemalloc_muzzy_bytes, MetricUnit::BYTES);
 
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
@@ -159,6 +162,7 @@ private:
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
     std::vector<IOMetrics*> _io_metrics;
 
+    std::mutex _update_mutex;
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;
     MetricRegistry* _registry = nullptr;

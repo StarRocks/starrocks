@@ -637,6 +637,14 @@ public class BinaryPredicateStatisticCalculator {
         // so the predicate factor :
         //          pf = 1.0 / distinct_val.
         double predicateFactor = columnRange.overlapPercentWith(intersectRange);
+        // `col = c` on a column already narrowed to exactly c (e.g. by an earlier `col = c`, whose NDV is kept)
+        // keeps every row; 1 / NDV would apply the earlier filter again. Only a point predicate qualifies: `<` / `>`
+        // are encoded with c included and must still drop the row, and a string constant has no finite bounds while
+        // string columns carry a placeholder min = max.
+        if (!intersectRange.isEmpty() && columnRange.getLow() == columnRange.getHigh()
+                && predicateRange.getLow() == predicateRange.getHigh() && !predicateRange.isBothInfinite()) {
+            predicateFactor = 1.0;
+        }
         double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
 
         ColumnStatistic newEstimateColumnStatistics = ColumnStatistic.builder().

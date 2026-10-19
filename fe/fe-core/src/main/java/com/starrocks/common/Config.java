@@ -1347,6 +1347,16 @@ public class Config extends ConfigBase {
     public static int alter_table_timeout_second = 86400; // 1day
 
     /**
+     * On an aggregate table, ALTER TABLE ... ADD COLUMN with neither an aggregate function nor the
+     * KEY keyword is ambiguous, and treating it as a key column changes the table's aggregation key
+     * and rewrites existing data. When false, such a statement is rejected and the error names both
+     * options. When true, the column becomes a key column, which is the behavior before this was
+     * introduced. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
+     */
+    @ConfField(mutable = true)
+    public static boolean allow_implicit_key_column_in_agg_add_column = true;
+
+    /**
      * The alter handler max worker threads
      */
     @ConfField
@@ -1567,8 +1577,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2142,7 +2158,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "ldap ssl trust store file path, supports perm and jks formats")
     public static String authentication_ldap_simple_ssl_conn_trust_store_path = "";
 
-    @ConfField(mutable = true, comment = "LDAP SSL trust store file password; " +
+    @ConfField(mutable = true, sensitive = true, comment = "LDAP SSL trust store file password; " +
             "no password is required for files in PEM format.")
     public static String authentication_ldap_simple_ssl_conn_trust_store_pwd = "";
 
@@ -2167,7 +2183,7 @@ public class Config extends ConfigBase {
     /**
      * the root DN password to search users for authentication_ldap_simple
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, sensitive = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
@@ -2191,7 +2207,7 @@ public class Config extends ConfigBase {
     /**
      * Cluster token used for internal authentication.
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String auth_token = "";
 
     /**
@@ -2200,6 +2216,29 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, a cached query profile can be read only by the user who ran the query or by a holder of
+     * SYSTEM OPERATE. This gates SHOW PROFILELIST, ANALYZE PROFILE, get_query_profile(), the /api/profile,
+     * /api/query/progress and /api/query_detail endpoints (the last keeps listing every query but drops the
+     * profile text and the plan rendered from it), and the /query and /query_profile web pages; the OPERATE
+     * requirement that enable_http_auth already places on the endpoints is unchanged.
+     * Off by default so an upgrade keeps the earlier behavior, in which every authenticated user can read every
+     * profile; turn it on to restrict profile visibility.
+     *
+     * Turning it on has two visible consequences beyond the rule itself, both deliberate. /api/query/progress
+     * stops accepting anonymous requests, because the rule needs a caller identity -- an existing anonymous
+     * poller of it starts getting 401. And get_query_profile() requires SYSTEM OPERATE for an id whose profile
+     * is not cached on the connected frontend, since the RPC that fetches it from the other frontends carries
+     * no caller identity to authorize there; that narrows the cross-frontend lookup to OPERATE holders while
+     * the check is on.
+     *
+     * Mutable so the check can be toggled without a restart. Changing it needs SYSTEM OPERATE, which already grants
+     * full profile visibility, so the knob opens no path its holder lacks. Callers that apply it across several
+     * rows snapshot it once so a flip mid-operation cannot produce a half-filtered result.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_query_profile_access_check = false;
 
     /**
      * When set to true, guava cache is used to cache the privilege collection
@@ -2975,7 +3014,7 @@ public class Config extends ConfigBase {
      * set this to enable Transparent Data Encryption(TDE)
      * once set, should not be changed, or the data depending on this key cannot be read anymore
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String default_master_key = "";
 
     /**
@@ -3055,9 +3094,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean aws_s3_use_instance_profile = false;
 
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_access_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_secret_key = "";
 
     @ConfField
@@ -3074,9 +3113,9 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_sas_token = "";
 
     // azure adls2
@@ -3084,9 +3123,9 @@ public class Config extends ConfigBase {
     public static String azure_adls2_endpoint = "";
     @ConfField
     public static String azure_adls2_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_sas_token = "";
     @ConfField
     public static boolean azure_adls2_oauth2_use_managed_identity = false;
@@ -3094,7 +3133,7 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_tenant_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_id = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_oauth2_client_secret = "";
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
@@ -3106,11 +3145,11 @@ public class Config extends ConfigBase {
     public static String gcp_gcs_path = "";
     @ConfField
     public static String gcp_gcs_use_compute_engine_service_account = "true";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_email = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key_id = "";
     @ConfField
     public static String gcp_gcs_impersonation_service_account = "";
@@ -3486,13 +3525,13 @@ public class Config extends ConfigBase {
     /**
      * the password of keystore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_keystore_password = "";
 
     /**
      * the password of private key
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_key_password = "";
 
     /**
@@ -3504,7 +3543,7 @@ public class Config extends ConfigBase {
     /**
      * the password of truststore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
 
     /**
@@ -4091,7 +4130,7 @@ public class Config extends ConfigBase {
     /**
      * The secret used to authorize StarRocks client with the authorization server.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String oauth2_client_secret = "";
 
     /**
@@ -4160,6 +4199,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
+
+    /**
+     *  max load record count will be returned when BE/CN call GetLoads
+     *  a page is cut at a job boundary, so a single job's rows are never split across pages.
+     */
+    @ConfField(mutable = true)
+    public static int max_get_loads_result_count = 10000;
 
     @ConfField(mutable = false)
     public static int max_spm_cache_baseline_size = 1000;

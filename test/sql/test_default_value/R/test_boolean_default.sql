@@ -48,6 +48,10 @@ None
 ALTER TABLE users_basic ADD COLUMN flag_0 BOOLEAN DEFAULT '0';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT id, name, flag_true, flag_false, flag_1, flag_0 FROM users_basic ORDER BY id;
 -- result:
 1	alice	1	0	1	0

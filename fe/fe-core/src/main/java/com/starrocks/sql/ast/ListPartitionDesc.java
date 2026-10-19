@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -23,6 +24,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -121,10 +123,15 @@ public class ListPartitionDesc extends PartitionDesc {
 
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
+        this.analyze(columnDefs, tableProperties, null);
+    }
+
+    public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties, KeysType keysType)
+            throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
         // analyze partition expr
-        this.analyzePartitionExprs(columnDefs);
+        this.analyzePartitionExprs(columnDefs, keysType);
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
@@ -134,17 +141,50 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     public void analyzePartitionExprs(List<ColumnDef> columnDefs) throws AnalysisException {
-        if (partitionExprs == null) {
-            return;
+        this.analyzePartitionExprs(columnDefs, null);
+    }
+
+    public void analyzePartitionExprs(List<ColumnDef> columnDefs, KeysType keysType) throws AnalysisException {
+        List<String> slotRefs = Lists.newArrayList();
+        if (partitionExprs != null) {
+            slotRefs.addAll(partitionExprs.stream()
+                    .flatMap(e -> e.collectAllSlotRefs().stream())
+                    .map(SlotRef::getColumnName)
+                    .collect(Collectors.toList()));
         }
-        List<String> slotRefs = partitionExprs.stream()
-                .flatMap(e -> e.collectAllSlotRefs().stream())
-                .map(SlotRef::getColumnName)
-                .collect(Collectors.toList());
+        Map<String, ColumnDef> columnDefMap = columnDefs.stream()
+                .collect(Collectors.toMap(ColumnDef::getName, c -> c, (a, b) -> a,
+                        () -> Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER)));
+        for (String partitionCol : partitionColNames == null ? Lists.<String>newArrayList() : partitionColNames) {
+            ColumnDef partitionColumnDef = columnDefMap.get(partitionCol);
+            if (partitionColumnDef == null) {
+                continue;
+            }
+            if (partitionColumnDef.isGeneratedColumn()) {
+                slotRefs.addAll(partitionColumnDef.generatedColumnExpr().collectAllSlotRefs()
+                        .stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
+            } else {
+                slotRefs.add(partitionColumnDef.getName());
+            }
+        }
+
         for (ColumnDef columnDef : columnDefs) {
-            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName()))
+                    && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
+            }
+        }
+
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            Set<String> keyColumnNames = columnDefs.stream()
+                    .filter(ColumnDef::isKey)
+                    .map(ColumnDef::getName)
+                    .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+            for (String slotRef : slotRefs) {
+                if (!keyColumnNames.contains(slotRef)) {
+                    throw new AnalysisException("The partition expr should base on key column");
+                }
             }
         }
     }

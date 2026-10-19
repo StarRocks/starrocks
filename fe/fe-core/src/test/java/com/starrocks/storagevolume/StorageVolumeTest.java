@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
@@ -775,12 +776,12 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_ADLS2_SAS_TOKEN, "sasToken");
         storageParams.put(AZURE_ADLS2_SHARED_KEY, "sharedKey");
         Deencapsulation.invoke(StorageVolume.class, "addMaskForCredential", storageParams);
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_ACCESS_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SAS_TOKEN));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SHARED_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AWS_S3_ACCESS_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AWS_S3_SECRET_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_BLOB_SAS_TOKEN));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_BLOB_SHARED_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_ADLS2_SAS_TOKEN));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_ADLS2_SHARED_KEY));
     }
 
     @Test
@@ -794,6 +795,6 @@ public class StorageVolumeTest {
                 "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, ""
         ));
         Assertions.assertFalse(exception.getMessage().contains(awsSecretKey));
-        Assertions.assertTrue(exception.getMessage().contains(StorageVolume.CREDENTIAL_MASK));
+        Assertions.assertTrue(exception.getMessage().contains(CredentialMask.LONG));
     }
 }

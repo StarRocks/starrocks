@@ -31,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 
 public class LogicalEsScanOperator extends LogicalScanOperator {
-    private EsTablePartitions esTablePartitions;
+    // Taken once when the scan is built, so that pruning, the shard locations and the field mappings sent to the
+    // BEs all come from one sync of the index metadata.
+    private EsTable.MetaSnapshot metaSnapshot;
     private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 
     public LogicalEsScanOperator(Table table,
@@ -46,7 +48,7 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
                 columnMetaToColRefMap,
                 limit, predicate, projection);
         Preconditions.checkState(table instanceof EsTable);
-        this.esTablePartitions = ((EsTable) table).getEsTablePartitions();
+        this.metaSnapshot = ((EsTable) table).getMetaSnapshot();
     }
 
     private LogicalEsScanOperator() {
@@ -54,7 +56,11 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     }
 
     public EsTablePartitions getEsTablePartitions() {
-        return this.esTablePartitions;
+        return this.metaSnapshot.getPartitions();
+    }
+
+    public EsTable.MetaSnapshot getMetaSnapshot() {
+        return this.metaSnapshot;
     }
 
     public List<EsShardPartitions> getSelectedIndex() {
@@ -77,7 +83,7 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
         @Override
         public LogicalEsScanOperator.Builder withOperator(LogicalEsScanOperator esScanOperator) {
             super.withOperator(esScanOperator);
-            builder.esTablePartitions = esScanOperator.esTablePartitions;
+            builder.metaSnapshot = esScanOperator.metaSnapshot;
             builder.selectedIndex = esScanOperator.selectedIndex;
             Preconditions.checkState(builder.table instanceof EsTable);
             return this;

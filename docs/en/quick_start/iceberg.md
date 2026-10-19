@@ -249,4 +249,4 @@ downloads or jars are needed.
 #### Learn More
 
 Now that you're up and running with Iceberg and StarRocks, check out
-the [StarRocks-Iceberg docs](../data_source/catalog/iceberg/iceberg_catalog.md) to learn more!
+the [StarRocks-Iceberg docs](../data_source/catalog/iceberg/iceberg.md) to learn more!

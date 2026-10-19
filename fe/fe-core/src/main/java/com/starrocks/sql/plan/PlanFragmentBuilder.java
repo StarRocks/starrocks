@@ -553,6 +553,18 @@ public class PlanFragmentBuilder {
                 return Collections.emptyMap();
             }
 
+            // Heavy exprs reach the BE in TPlanNodeCommon.heavy_exprs, a map keyed by slot id, and ScanNode
+            // materializes them in ascending slot-id order without honouring dependencies. A heavy expr that
+            // references another hoisted heavy expr's slot therefore reads a column the chunk does not carry
+            // yet. Nesting one heavy call inside another produces exactly that pair: the inner call becomes a
+            // heavy common sub-expression and the outer one references it by slot. Give up the optimization for
+            // the whole projection in that case and let the ProjectNode evaluate everything itself, where the
+            // ordering is well defined. Bail out before commonSubExprs is touched so the projection is left
+            // exactly as it was found.
+            if (hasHeavyExprDependency(commonSubExprs, heavyCommonSubExprs, heavyExprs)) {
+                return Collections.emptyMap();
+            }
+
             // Heavy exprs should be removed from ProjectNode's commonSubExprs to avoid trivial mapping from
             // slotId to itself in commonSubExprs.
             heavyCommonSubExprs.forEach((k, v) -> commonSubExprs.remove(k));
@@ -562,6 +574,49 @@ public class PlanFragmentBuilder {
             exprs.replaceAll((k, v) -> heavyExprs.containsKey(k) ? k : v);
             heavyExprs.putAll(heavyCommonSubExprs);
             return heavyExprs;
+        }
+
+        // True when any expression that would be hoisted into the scan node reaches the output slot of
+        // another hoisted expression. Only the heavy common sub-expressions survive the hoist as slot
+        // references -- the ordinary ones are inlined by the rewriter above -- so a reference is followed
+        // through the ordinary common sub-expressions and stops at the heavy ones. The expressions
+        // themselves are never rebuilt here: inlining them just to probe would risk tripping the
+        // max_scalar_operator_flat_children guard on a query that is otherwise fine.
+        private boolean hasHeavyExprDependency(Map<ColumnRefOperator, ScalarOperator> commonSubExprs,
+                                               Map<ColumnRefOperator, ScalarOperator> heavyCommonSubExprs,
+                                               Map<ColumnRefOperator, ScalarOperator> heavyExprs) {
+            Set<ColumnRefOperator> hoisted = Sets.newHashSet(heavyExprs.keySet());
+            hoisted.addAll(heavyCommonSubExprs.keySet());
+
+            return Stream.concat(heavyExprs.entrySet().stream(), heavyCommonSubExprs.entrySet().stream())
+                    .anyMatch(entry -> reachesHoistedSlot(entry.getValue(), entry.getKey(), hoisted,
+                            commonSubExprs, heavyCommonSubExprs.keySet()));
+        }
+
+        private boolean reachesHoistedSlot(ScalarOperator expr, ColumnRefOperator self,
+                                           Set<ColumnRefOperator> hoisted,
+                                           Map<ColumnRefOperator, ScalarOperator> commonSubExprs,
+                                           Set<ColumnRefOperator> heavyCommonSubExprKeys) {
+            List<ScalarOperator> worklist = Lists.newArrayList(expr);
+            Set<ColumnRefOperator> expanded = Sets.newHashSet();
+            for (int i = 0; i < worklist.size(); i++) {
+                for (ColumnRefOperator ref : worklist.get(i).getColumnRefs()) {
+                    if (hoisted.contains(ref) && !ref.equals(self)) {
+                        return true;
+                    }
+                    // Heavy common sub-expressions stay behind as slot references, so their definitions are
+                    // not part of this expression and must not be followed. `expanded` also keeps a cyclic
+                    // common sub-expression map from looping forever.
+                    if (heavyCommonSubExprKeys.contains(ref) || !expanded.add(ref)) {
+                        continue;
+                    }
+                    ScalarOperator definition = commonSubExprs.get(ref);
+                    if (definition != null) {
+                        worklist.add(definition);
+                    }
+                }
+            }
+            return false;
         }
 
         @Override
@@ -1980,7 +2035,7 @@ public class PlanFragmentBuilder {
 
             final ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
             EsScanNode scanNode = new EsScanNode(context.getNextNodeId(), tupleDescriptor, "EsScanNode",
-                    computeResource);
+                    computeResource, node.getMetaSnapshot());
             currentExecGroup.add(scanNode, true);
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -3445,10 +3500,6 @@ public class PlanFragmentBuilder {
             }
 
             ExecGroup execGroup = execGroups.newExecGroup();
-            // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.
-            //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
-            //  query hanging forever.
-            boolean canExecGroup = true;
             Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
@@ -3457,9 +3508,19 @@ public class PlanFragmentBuilder {
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
                 ExecGroup inputExecGroup = inputExecGroups.get(i);
+                // This branch's exec group is about to disappear -- merged into the Set operator's
+                // group below (which we then disable), or simply dropped when the branch sits
+                // behind an exchange. Runtime filters built inside the branch were stamped with
+                // build_from_group_execution back when that group was still colocate
+                // (RuntimeFilterPushDownContext stamps it as the join is built), and merge() copies
+                // only node ids -- so nothing would ever clear the flag. The BE would keep treating
+                // those probes as group-colocate filters and refuse to push them down, even though
+                // no colocate TExecGroup is emitted for them any more. disableColocateGroup() drops
+                // that metadata; it walks only this group's own node ids, so a colocate group
+                // elsewhere in the plan is left untouched.
+                inputExecGroup.disableColocateGroup(inputFragment.getPlanRoot());
                 execGroups.remove(inputExecGroup);
                 if (inputFragment.getPlanRoot() instanceof ExchangeNode) {
-                    canExecGroup = false;
                     if (isColocate) {
                         inputFragment.getChildren().forEach(fragment -> {
                             fragment.setOutputPartition(
@@ -3477,11 +3538,30 @@ public class PlanFragmentBuilder {
             execGroup.add(setOperationNode);
 
             setOperationNode.setColocate(isColocate);
-            if (canExecGroup && isColocate && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
-                execGroup.setColocateGroup();
-            } else {
-                execGroup.disableColocateGroup(setOperationNode);
-            }
+            // Never run a Set operator inside a colocate exec group: it hangs forever.
+            //
+            // A colocate Set operator carries localPartitionByExprs, so on the BE
+            // UnionNode::decompose_to_pipeline routes each branch through
+            // maybe_interpolate_local_bucket_shuffle_exchange, which returns early -- without
+            // interpolating a grouped exchange -- whenever the branch source reports
+            // could_local_shuffle() == false. A group-execution scan always reports false. The
+            // branch pipelines therefore stay in the colocate exec group but are terminated by a
+            // plain LocalExchangeSink instead of a GroupedExecutionSink.
+            //
+            // ColocateExecutionGroup submits its logical bucket groups in waves of physical dop
+            // and the only thing that advances a wave is
+            // GroupedExecutionSinkOperator::set_finishing() -> submit_next_driver(). With no
+            // grouped sink on those pipelines, the groups beyond the first wave are never
+            // submitted, the gather exchanger never sees all sinkers finish, and every downstream
+            // driver stays INPUT_EMPTY forever. Reproduces whenever
+            // bucket groups >= 2 * physical dop (e.g. INSERT INTO, whose sink fragment dop is
+            // forced down in InsertPlanner).
+            //
+            // Group execution buys nothing for this shape anyway -- the gather exchanger at the
+            // Set operator collapses logical dop back to physical dop, so the per-group agg/join
+            // benefit is already lost -- hence disabling it outright rather than teaching the BE
+            // to split the group here.
+            execGroup.disableColocateGroup(setOperationNode);
             currentExecGroup = execGroup;
             return setOperationFragment;
         }

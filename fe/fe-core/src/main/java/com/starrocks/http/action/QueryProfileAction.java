@@ -35,11 +35,14 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -76,6 +79,21 @@ public class QueryProfileAction extends WebBaseAction {
 
         // HTML encode the queryId to prevent XSS
         String encodedQueryId = Encode.forHtml(queryId);
+        ProfileManager.ProfileElement queryProfile = ProfileManager.getInstance().getProfileElement(queryId);
+        if (queryProfile != null) {
+            // Same rule as ANALYZE PROFILE. The web gate admits NODE holders, who are not thereby OPERATE
+            // holders, so the owner-or-OPERATE rule has to be applied here too.
+            try {
+                Authorizer.checkQueryProfileAccess(ConnectContext.get(), queryProfile);
+            } catch (AccessDeniedException e) {
+                response.appendContent("<p class=\"text-error\"> Access denied: the profile of query "
+                        + encodedQueryId + " belongs to another user and reading it requires the OPERATE "
+                        + "privilege.</p>");
+                getPageFooter(response.getContent());
+                writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
+                return;
+            }
+        }
         String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
         if (queryProfileStr != null) {
             appendCopyButton(response.getContent());

@@ -13,7 +13,7 @@ description: "Alphabetical q - z"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクスとStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 
@@ -284,6 +284,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: 読み取られた有効な行数（無効な形式の行を除く）。ラベル: `file_format`, `scan_type`。
 
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 共有データモード専用。Lake tablet metadata をリモートストレージから読み取り、`NotFound` が返された試行の総数。tablet の metadata は個別の metadata ファイルか bundle metadata ファイルのいずれか一方にのみ存在し、両方に存在することはありません。いずれの読み取りもカウント対象で、vacuum が発行する bundle 読み取りも含まれます。失敗したフォールバック読み取りはそれぞれ個別にカウントされます。キャッシュミスおよび読み取り成功時には、このメトリクスは増加しません。レプリケーションでのソースクラスタ metadata の読み取り、およびリストアでのスナップショット metadata の読み取りはカウントされません。
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - 単位: バイト
@@ -409,6 +415,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬間
 - 説明: 特定のウェアハウスにおける最後のクエリまたはロードの終了時間を示します。シェアードナッシングクラスターの場合、この項目はデフォルトのウェアハウスのみを監視します。
 
+## `starrocks_fe_max_journal_replay_lag`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 稼動中の Follower または Observer FE のうち、Leader に追いつくために再生が必要なメタデータジャーナルの最大数。Leader FE のみが報告します (`is_leader="true"`)。Leader は自身のジャーナル書き込み位置と、ハートビートで受け取る他の各ノードの再生済みジャーナル ID の両方を知る唯一のノードであるためです。稼動していない FE ノードは除外されます。最後に報告されたジャーナル ID が最後に成功したハートビートの値で止まるためです。そのようなノードは `SHOW FRONTENDS` の `Alive` 列で検出してください。他のすべてのノードが追いついている場合、他に稼動中の FE ノードがない場合、および単一 FE クラスターの場合は `0` を返します。値が大きい、または継続的に増加している場合は、少なくとも 1 つのノードでメタデータの再生が遅れていることを意味し、そのノードは古いメタデータを提供し、`meta_delay_toleration_second` を超えるとクエリを Leader に転送します。
+
 ## `starrocks_fe_memory_usage`
 
 - 単位: バイトまたはカウント
@@ -437,7 +449,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
 
-- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`: 報告元のFEノードがリーダーであるかどうかを示します。リーダーFE (`is_leader="true"`) のみが実際のメトリクス値を報告します。フォロワーは `is_leader="false"` となり、データは報告しません。
 
 ## `starrocks_fe_query_resource_group`
@@ -698,7 +710,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 ## `threadpool_task_exception_total`
 
 - 単位: カウント
-- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
 
 ## `thrift_connections_total`
 

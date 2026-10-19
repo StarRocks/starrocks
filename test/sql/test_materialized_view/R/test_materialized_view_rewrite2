@@ -74,6 +74,9 @@ drop materialized view test_empty_partition_mv1;
 drop table test_empty_partition_tbl;
 -- result:
 -- !result
+
+
+-- name: test_mv_rewrite_with_having
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",

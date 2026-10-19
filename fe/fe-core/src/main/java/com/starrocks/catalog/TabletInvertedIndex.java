@@ -224,15 +224,25 @@ public class TabletInvertedIndex implements MemoryTrackable {
         if (tablets.iterator().next() instanceof LakeTablet) {
             return;
         }
+        // Resolve the backend ids BEFORE taking the write lock, like markTabletForceDelete(Tablet) does:
+        // LocalTablet.getBackendIds() acquires the per-tablet read lock, while the replica deletion paths
+        // take the tablet write lock first and this write lock second (LocalTablet.deleteReplicaByBackendId
+        // -> TabletInvertedIndex.deleteReplica). Reading the backend ids while holding this lock inverts
+        // that order and deadlocks the FE.
+        Map<Long, Set<Long>> tabletToBackendIds = Maps.newHashMapWithExpectedSize(tablets.size());
+        for (Tablet tablet : tablets) {
+            Set<Long> backendIds = tablet.getBackendIds();
+            if (backendIds.isEmpty()) {
+                continue;
+            }
+            tabletToBackendIds.put(tablet.getId(), backendIds);
+        }
+        if (tabletToBackendIds.isEmpty()) {
+            return;
+        }
         writeLock();
         try {
-            for (Tablet tablet : tablets) {
-                Set<Long> backendIds = tablet.getBackendIds();
-                if (backendIds.isEmpty()) {
-                    continue;
-                }
-                forceDeleteTablets.put(tablet.getId(), backendIds);
-            }
+            forceDeleteTablets.putAll(tabletToBackendIds);
         } finally {
             writeUnlock();
         }

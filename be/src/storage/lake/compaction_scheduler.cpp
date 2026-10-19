@@ -20,6 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include <chrono>
+#include <limits>
 #include <thread>
 
 #include "agent/master_info.h"
@@ -33,6 +34,7 @@
 #include "runtime/exec_env.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
@@ -104,6 +106,36 @@ Status CompactionTaskCallback::has_error() const {
     }
 }
 
+// Populate the metacache with a txn log that this node produced but did NOT persist itself.
+//
+// On the aggregate/file-bundling path the compaction txn log is not written to object storage by the
+// compaction worker: it travels back in `CompactResponse.txn_logs` and the aggregator folds every
+// tablet's log into one combined `<txn_id>.logs` object. Without a cache entry the subsequent publish
+// of this tablet has to download that combined object (`load_txn_log()` in transactions.cpp first
+// probes the metacache under the per-tablet txn log path, then falls back to
+// `get_combined_txn_log()`), so every file-bundling compaction pays an extra remote GET at publish
+// time. This mirrors what the file-bundling tablet metadata path already does -- skip the object
+// storage write, but still cache the metadata (`publish_version()` -> `cache_tablet_metadata()`) --
+// and what the load path already does for its own combined txn logs
+// (`DeltaWriterImpl::finish_with_txnlog()` under kDontWriteTxnLog).
+//
+// The raw (non-normalized) log is cached, exactly like `put_txn_log()` caches the caller's log rather
+// than the dual-written copy it serializes: the legacy arrays only exist for on-disk rollback compat
+// and are folded back into the structured fields by `normalize_txn_log_after_load()` on read.
+//
+// Only the complete log for a tablet reaches here. Parallel compaction subtasks carry
+// skip_write_txnlog=true as well, but their partial logs are funneled through
+// `TabletParallelCompactionManager::on_subtask_complete()` and only the merged context is handed to
+// finish_task(), so a partial log can never land in the cache under the tablet's txn log key.
+void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context) {
+    if (_scheduler == nullptr) { // unit tests may construct a callback without a scheduler
+        return;
+    }
+    auto* tablet_mgr = _scheduler->_tablet_mgr;
+    tablet_mgr->metacache()->cache_txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id),
+                                           context.txn_log);
+}
+
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
     std::unique_lock l(_mtx);
 
@@ -130,6 +162,18 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.
         _response->add_txn_logs()->CopyFrom(*context->txn_log);
+        if (context->status.ok()) {
+            // Skip a tablet whose own compaction failed -- publish will never ask for its log.
+            // That is ALL this guard establishes; it does not make the cached log guaranteed
+            // durable. write_combined_txn_log() is gated on the whole AggregateCompactRequest
+            // succeeding (FE pins allow_partial_success to false on this path), so when a
+            // SIBLING tablet fails this log is cached while the combined object is never
+            // written, and the entry then survives until LRU eviction -- abort_txn()'s combined
+            // branch bails out on the NotFound before reaching collect_files_in_log(), the only
+            // place that erases the per-tablet key. Harmless: txn_id is never reused, so no
+            // later publish can read the stale entry.
+            cache_txn_log(*context);
+        }
     }
     DCHECK(_request != nullptr);
     _status.update(context->status);
@@ -320,28 +364,25 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
 }
 
 // Pay special attentions to the following statements order with different new and old val
-void CompactionScheduler::update_compact_threads(int32_t new_val) {
-    if (_task_queues.modifying()) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, reset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+Status CompactionScheduler::update_compact_threads(int32_t new_val) {
+    // _target_size is an int16_t, so anything above its max would wrap around when stored.
+    if (new_val <= 0 || new_val > std::numeric_limits<int16_t>::max()) {
+        return Status::InvalidArgument(fmt::format("compact_threads must be in [1, {}], got {}",
+                                                   std::numeric_limits<int16_t>::max(), new_val));
     }
-
+    if (_task_queues.modifying()) {
+        return Status::ServiceUnavailable(
+                fmt::format("compact_threads is still being resized to {}, retry later", _task_queues.target_size()));
+    }
     if (new_val == _task_queues.task_queue_size()) {
-        return;
-    } else if (new_val <= 0) {
-        LOG(ERROR) << "compact_threads can't be set to " << new_val << ", reset it back to "
-                   << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
+        return Status::OK();
     }
 
     _task_queues.set_target_size(new_val);
+    TEST_SYNC_POINT("CompactionScheduler::update_compact_threads:after_set_target_size");
     if (_task_queues.target_size() != new_val) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, bereset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+        return Status::InternalError(fmt::format("Failed to update compact_threads to {}, current target is {}",
+                                                 new_val, _task_queues.target_size()));
     }
 
     auto old_val = _task_queues.task_queue_size();
@@ -349,12 +390,13 @@ void CompactionScheduler::update_compact_threads(int32_t new_val) {
         // increase queue count
         _task_queues.resize_if_needed(_limiter);
         for (int i = old_val; i < new_val; i++) {
-            CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
+            RETURN_IF_ERROR(_threads->submit_func([this, id = i]() { this->thread_task(id); }));
         }
     } else {
         // In order to prevent exceptions due to concurrent modifications of the task queues,
         // reducing the queue length will be completed asynchronously.
     }
+    return Status::OK();
 }
 
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {

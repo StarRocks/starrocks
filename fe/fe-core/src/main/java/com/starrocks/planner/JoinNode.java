@@ -363,7 +363,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
-        if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
+        if (joinOp.isAsofJoin()) {
+            // an ASOF join picks each left row's match among the right rows: filtering the right input makes it pick
+            // another (earlier) row instead of dropping the left row
+            sides = ImmutableList.of(0);
+        } else if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
             sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);

@@ -36,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace starrocks {
 
 class ShortKeyIndexTest : public testing::Test {
@@ -104,6 +106,59 @@ TEST_F(ShortKeyIndexTest, buider) {
         auto iter = decoder.upper_bound("9999");
         ASSERT_FALSE(iter.valid());
     }
+}
+
+// A footer claiming UINT32_MAX items makes `num_items + 1` wrap to zero, leaving _offsets empty --
+// after which the first loop iteration writes through its null data pointer. Every value here comes
+// from a persisted page footer, so a corrupt or crafted segment reaches this through the ordinary
+// read path and parse() has to reject the shape instead.
+TEST_F(ShortKeyIndexTest, parse_rejects_num_items_overflow) {
+    ShortKeyFooterPB footer;
+    footer.set_num_items(std::numeric_limits<uint32_t>::max());
+    footer.set_key_bytes(0);
+    footer.set_offset_bytes(1);
+
+    // One 0x00 byte: a valid varint decoding to offset 0, which clears both of the old guards
+    // (0 is not below prev_offset 0, and 0 is not above key_bytes 0).
+    const std::string body(1, '\0');
+
+    ShortKeyIndexDecoder decoder;
+    auto st = decoder.parse(Slice(body), footer);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption()) << st.to_string();
+}
+
+// key_bytes + offset_bytes was uint32 arithmetic compared against a size_t body size, so this pair
+// sums to zero and a zero-byte body passed the check. Slice(body.data, key_bytes) would then claim
+// 4 GB and body.data + key_bytes would be pointer arithmetic far past the buffer.
+TEST_F(ShortKeyIndexTest, parse_rejects_key_offset_bytes_overflow) {
+    ShortKeyFooterPB footer;
+    footer.set_num_items(0);
+    footer.set_key_bytes(std::numeric_limits<uint32_t>::max());
+    footer.set_offset_bytes(1);
+
+    ShortKeyIndexDecoder decoder;
+    auto st = decoder.parse(Slice(), footer);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption()) << st.to_string();
+}
+
+// An offset past key_bytes makes key(i) yield a Slice reaching outside the key region. This was
+// guarded only by a DCHECK, which compiles away in a release build, so the page was accepted and
+// read out of bounds there.
+TEST_F(ShortKeyIndexTest, parse_rejects_out_of_range_offset) {
+    ShortKeyFooterPB footer;
+    footer.set_num_items(1);
+    footer.set_key_bytes(4);
+    footer.set_offset_bytes(1);
+
+    std::string body("abcd");
+    body.push_back(static_cast<char>(9)); // varint offset 9, past the 4-byte key region
+
+    ShortKeyIndexDecoder decoder;
+    auto st = decoder.parse(Slice(body), footer);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption()) << st.to_string();
 }
 
 } // namespace starrocks

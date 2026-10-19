@@ -290,7 +290,7 @@ IOTaskExecTime: 2s77ms // Scan 数据总时间，相对于没创建 Bitmap 索�
     DictDecode: 329.696ms // 因为输出的行数是一样的，所以低基数优化字典解码的时间所花时间差不多
     BitmapIndexFilter: 419.308ms // Bitmap 索引过滤数据的时间。
     BitmapIndexFilterRows: 123.433M (123432975) // Bitmap 索引过滤掉的数据行数。
-    ZoneMapIndexFiter: 171.580ms // ZoneMap 索引过滤数据花了 0.17 秒。
+    ZoneMapIndexFilter: 171.580ms // ZoneMap 索引过滤数据花了 0.17 秒。
 ```
 
 ##### 由 StarRocks 默认配置决定是否使用 Bitmap 索引

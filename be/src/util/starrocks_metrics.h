@@ -43,6 +43,7 @@
 #include "util/jvm_metrics.h"
 #include "util/metrics.h"
 #include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
 
@@ -237,6 +238,13 @@ public:
     // missing open RPC or an open/data-arrival race and warrants
     // investigation. Each orphan is also logged at ERROR on the CN.
     METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_orphan_partition_total, MetricUnit::NOUNIT);
+
+    // Counts remote lake tablet metadata read attempts that return NotFound,
+    // including each failed fallback attempt. A tablet's metadata lives either
+    // in its own metadata object or in a bundled metadata file, never in both,
+    // and reads of either location count. Replication reads of a source
+    // cluster and restore reads of a snapshot are not counted.
+    METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
 
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
@@ -464,6 +472,7 @@ public:
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
     FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
+    SpillMetrics* spill_metrics() { return _spill_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -483,6 +492,7 @@ private:
     TableMetricsManager _table_metrics_mgr;
 
     std::unique_ptr<FileScanMetrics> _file_scan_metrics;
+    std::unique_ptr<SpillMetrics> _spill_metrics;
 };
 
 }; // namespace starrocks

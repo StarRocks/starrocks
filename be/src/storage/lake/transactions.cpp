@@ -186,8 +186,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
             RETURN_IF_ERROR(tablet_mgr->cache_tablet_metadata(new_metadata));
-            tablet_mgr->metacache()->cache_aggregation_partition(tablet_mgr->tablet_metadata_root_location(tablet_id),
-                                                                 true);
+            tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
         }
         return new_metadata;
     }
@@ -465,6 +464,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
+    if (skip_write_tablet_metadata) {
+        tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
+    }
 
     delete_files_async(std::move(files_to_delete));
 

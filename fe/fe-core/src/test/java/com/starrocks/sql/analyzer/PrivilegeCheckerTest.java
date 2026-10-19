@@ -40,9 +40,11 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -54,6 +56,8 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.load.pipe.PipeManagerTest;
@@ -91,6 +95,7 @@ import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -4139,5 +4144,160 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         );
         Assertions.assertDoesNotThrow(PrivilegeCheckerTest::ctxToRoot);
         Assertions.assertDoesNotThrow(() -> starRocksAssert.dropDatabase("db_for_alter_test"));
+    }
+
+    private static RuntimeProfile buildQueryProfile(String queryId, String user) {
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, queryId);
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, "select 1");
+        if (user != null) {
+            summary.addInfoString(ProfileManager.USER, user);
+        }
+        profile.addChild(summary);
+        return profile;
+    }
+
+    private static void assertAnalysisDenied(String sql, String expectError, ConnectContext ctx) {
+        Exception e = Assertions.assertThrows(Exception.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+    }
+
+    private static List<String> listProfileQueryIds(String sql) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ShowProfilelistStmt stmt = (ShowProfilelistStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Authorizer.check(stmt, ctx);
+        List<String> queryIds = Lists.newArrayList();
+        for (List<String> row : ShowExecutor.execute(stmt, ctx).getResultRows()) {
+            queryIds.add(row.get(0));
+        }
+        return queryIds;
+    }
+
+    @Test
+    public void testQueryProfileAccess() throws Exception {
+        String denied = "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation";
+        String needsConstantId = "get_query_profile() requires a constant query id";
+        ProfileManager profileManager = ProfileManager.getInstance();
+        profileManager.clearProfiles();
+        // Pushed oldest first; SHOW PROFILELIST lists newest first.
+        profileManager.pushProfile(null, buildQueryProfile("q_test", "test"));
+        profileManager.pushProfile(null, buildQueryProfile("q_test2", "test2"));
+        profileManager.pushProfile(null, buildQueryProfile("q_root", "root"));
+        profileManager.pushProfile(null, buildQueryProfile("q_no_user", null));
+        // The check is off by default; the test enables it and restores the default at the end.
+        Config.authorization_enable_query_profile_access_check = true;
+        try {
+            ConnectContext ctx = starRocksAssert.getCtx();
+
+            // Without OPERATE, test sees and analyzes only the profiles of its own queries; a profile that
+            // records no user is not its own either.
+            ctxToTestUser();
+            Assertions.assertEquals(List.of("q_test"), listProfileQueryIds("SHOW PROFILELIST"));
+            Assertions.assertEquals(List.of(), listProfileQueryIds("SHOW PROFILELIST LIMIT 0"));
+            verifySuccess("ANALYZE PROFILE FROM 'q_test'", ctx);
+            verify("ANALYZE PROFILE FROM 'q_test2'", denied, ctx);
+            verify("ANALYZE PROFILE FROM 'q_root'", denied, ctx);
+            verify("ANALYZE PROFILE FROM 'q_no_user'", denied, ctx);
+            // A missing profile is not an authorization matter; execution reports it as not found.
+            verifySuccess("ANALYZE PROFILE FROM 'q_missing'", ctx);
+
+            // get_query_profile() serves the same payload through a BE-side RPC that carries no identity, so it
+            // is checked at analysis time: a constant id cached here against its owner; a non-constant id, or
+            // one not cached here (the RPC would fetch it from another FE unauthorized), needs OPERATE.
+            ctxToTestUser();
+            UtFrameUtils.parseStmtWithNewParser("select get_query_profile('q_test')", ctx);
+            assertAnalysisDenied("select get_query_profile('q_test2')", denied, ctx);
+            assertAnalysisDenied("select get_query_profile('q_missing')", denied, ctx);
+            // A non-constant id names its own obstacle rather than pointing at a privilege the caller may
+            // already hold on the profile it meant to read.
+            assertAnalysisDenied("select get_query_profile(concat('q_', 'test2'))", needsConstantId, ctx);
+
+            // A reader owns profiles under both its login name and its authenticated identity: impersonating
+            // test2 through EXECUTE AS keeps test's own queries visible and adds test2's, whose privileges the
+            // session is exercising.
+            UserIdentity test2 = new UserIdentity("test2", "%");
+            ctx.setCurrentUserIdentity(test2);
+            ctx.setCurrentRoleIds(authorizationManager.getRoleIdsByUser(test2));
+            Assertions.assertEquals(List.of("q_test2", "q_test"), listProfileQueryIds("SHOW PROFILELIST"));
+            ctxToTestUser();
+
+            // A prepared point query containing the builtin must not reuse a cached plan, since a later EXECUTE
+            // could rebind the id without re-analysis; PrepareStmtPlanner keys the exclusion off the resolved
+            // builtin.
+            ctxToRoot();
+            StatementBase withProfile = UtFrameUtils.parseStmtWithNewParser(
+                    "select get_query_profile('q_test') from db1.tbl1 where k1 = 'a'", ctx);
+            Assertions.assertTrue(Authorizer.containsGetQueryProfile(withProfile));
+            StatementBase plain = UtFrameUtils.parseStmtWithNewParser("select k1 from db1.tbl1 where k1 = 'a'", ctx);
+            Assertions.assertFalse(Authorizer.containsGetQueryProfile(plain));
+            // The gate keys off the builtin's metadata, so a SQL-defined function sharing the name is left alone
+            // even though, unlike a jar-backed UDF, it records no location.
+            Function builtin = Expr.getBuiltinFunction(FunctionSet.GET_QUERY_PROFILE,
+                    new Type[] {Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+            Assertions.assertTrue(Authorizer.isGetQueryProfileBuiltin(builtin));
+            SqlFunction sqlNamesake = new SqlFunction(new FunctionName("db1", FunctionSet.GET_QUERY_PROFILE),
+                    new Type[] {Type.INT}, Type.INT, new String[] {"x"}, "x + 1");
+            Assertions.assertFalse(Authorizer.isGetQueryProfileBuiltin(sqlNamesake));
+            ctxToTestUser();
+
+            // With OPERATE, every profile is visible and LIMIT counts the visible rows.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            Assertions.assertEquals(List.of("q_no_user", "q_root", "q_test2", "q_test"),
+                    listProfileQueryIds("SHOW PROFILELIST"));
+            Assertions.assertEquals(List.of("q_no_user", "q_root"), listProfileQueryIds("SHOW PROFILELIST LIMIT 2"));
+            verifySuccess("ANALYZE PROFILE FROM 'q_test2'", ctx);
+            verifySuccess("ANALYZE PROFILE FROM 'q_no_user'", ctx);
+            UtFrameUtils.parseStmtWithNewParser("select get_query_profile('q_test2')", ctx);
+            UtFrameUtils.parseStmtWithNewParser("select get_query_profile('q_missing')", ctx);
+            UtFrameUtils.parseStmtWithNewParser("select get_query_profile(concat('q_', 'test2'))", ctx);
+
+            // Admin user protection keeps root's profiles to root alone, even from an OPERATE holder.
+            Config.authorization_enable_admin_user_protection = true;
+            try {
+                ctxToTestUser();
+                Assertions.assertEquals(List.of("q_no_user", "q_test2", "q_test"), listProfileQueryIds("SHOW PROFILELIST"));
+                verify("ANALYZE PROFILE FROM 'q_root'", denied, ctx);
+                // A profile not cached here may be root's on another FE, so only root may reach for it.
+                assertAnalysisDenied("select get_query_profile('q_missing')", denied, ctx);
+                ctxToRoot();
+                Assertions.assertEquals(List.of("q_no_user", "q_root", "q_test2", "q_test"),
+                        listProfileQueryIds("SHOW PROFILELIST"));
+                Authorizer.check(UtFrameUtils.parseStmtWithNewParser("ANALYZE PROFILE FROM 'q_root'", ctx), ctx);
+                UtFrameUtils.parseStmtWithNewParser("select get_query_profile('q_missing')", ctx);
+            } finally {
+                Config.authorization_enable_admin_user_protection = false;
+            }
+            // Back to a plain user: LIMIT applies after filtering, so a non-owner does not get an empty page
+            // of hidden rows.
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+            ctxToTestUser();
+            Assertions.assertEquals(List.of("q_test"), listProfileQueryIds("SHOW PROFILELIST LIMIT 1"));
+
+            // With the check off (the default), every profile is open to everyone, as in earlier versions.
+            Config.authorization_enable_query_profile_access_check = false;
+            try {
+                ctxToTestUser();
+                Assertions.assertEquals(List.of("q_no_user", "q_root", "q_test2", "q_test"),
+                        listProfileQueryIds("SHOW PROFILELIST"));
+                verifySuccess("ANALYZE PROFILE FROM 'q_root'", ctx);
+                UtFrameUtils.parseStmtWithNewParser("select get_query_profile(concat('q_', 'root'))", ctx);
+                UtFrameUtils.parseStmtWithNewParser("select get_query_profile('q_missing')", ctx);
+            } finally {
+                Config.authorization_enable_query_profile_access_check = true;
+            }
+        } finally {
+            Config.authorization_enable_query_profile_access_check = false;
+            profileManager.clearProfiles();
+            // Released here rather than inline: a failure anywhere above would otherwise leave `test` holding
+            // SYSTEM OPERATE for the rest of the class.
+            try {
+                grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+            } catch (Exception ignored) {
+                // not granted (an early failure) -- nothing to release
+            }
+            ctxToRoot();
+        }
     }
 }

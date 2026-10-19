@@ -158,6 +158,9 @@ public class QueryDetail implements Serializable {
         queryDetail.startTime = this.startTime;
         queryDetail.endTime = this.endTime;
         queryDetail.latency = this.latency;
+        queryDetail.pendingTime = this.pendingTime;
+        queryDetail.netTime = this.netTime;
+        queryDetail.netComputeTime = this.netComputeTime;
         queryDetail.state = this.state;
         queryDetail.database = this.database;
         queryDetail.sql = this.sql;

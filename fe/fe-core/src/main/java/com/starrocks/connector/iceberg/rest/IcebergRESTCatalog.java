@@ -43,6 +43,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
@@ -53,6 +54,7 @@ import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -61,9 +63,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
@@ -97,6 +97,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private final boolean viewEndpointsEnabled;
     private final boolean authRecoveryEnabled;
     private long lastAuthRecoveryMillis;
+    // Guarded by this: once shut down, auth recovery must not install a session catalog nobody would close.
+    private boolean closed;
+    // Guarded by this: session catalogs replaced by auth recovery, kept open while the catalog lives.
+    private final List<RESTSessionCatalog> replacedDelegates = new ArrayList<>();
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -158,6 +162,32 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.authRecoveryEnabled = false;
     }
 
+    // Stops the OAuth2 token refresh threads and closes the HTTP clients and FileIO of the current session catalog
+    // and of those replaced by auth recovery. Synchronized with tryRecoverAuthSession so an in-progress rebuild is
+    // closed rather than installed afterwards.
+    @Override
+    public synchronized void shutdown() {
+        closed = true;
+        // Fields are null only when a test mocks the constructor.
+        if (delegate == null) {
+            return;
+        }
+        replacedDelegates.forEach(this::closeSessionCatalog);
+        replacedDelegates.clear();
+        closeSessionCatalog(delegate.get());
+    }
+
+    private void closeSessionCatalog(RESTSessionCatalog sessionCatalog) {
+        if (sessionCatalog == null) {
+            return;
+        }
+        try {
+            sessionCatalog.close();
+        } catch (IOException | RuntimeException e) {
+            LOG.warn("Failed to close REST catalog {}", catalogName, e);
+        }
+    }
+
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return IcebergCatalogType.REST_CATALOG;
@@ -204,10 +234,16 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private List<String> listNamespaces(SessionCatalog.SessionContext sessionContext, Namespace parent) {
-        return delegate.get().listNamespaces(sessionContext, parent).stream().
-                flatMap(child -> Stream.concat(Stream.of(child.toString()),
-                        listNamespaces(sessionContext, child).stream()))
-                .collect(toImmutableList());
+        ImmutableList.Builder<String> namespaces = ImmutableList.builder();
+        for (Namespace child : delegate.get().listNamespaces(sessionContext, parent)) {
+            namespaces.add(child.toString());
+            try {
+                namespaces.addAll(listNamespaces(sessionContext, child));
+            } catch (NoSuchNamespaceException e) {
+                LOG.info("Namespace {} was dropped while listing nested namespaces, skip its children", child);
+            }
+        }
+        return namespaces.build();
     }
 
     @Override
@@ -490,7 +526,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private synchronized boolean tryRecoverAuthSession(RuntimeException cause) {
-        if (!authRecoveryEnabled) {
+        if (!authRecoveryEnabled || closed) {
             return false;
         }
         if (System.currentTimeMillis() - lastAuthRecoveryMillis < AUTH_RECOVERY_MIN_INTERVAL_MS) {
@@ -504,8 +540,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             configureHadoopConf(rebuilt, conf);
             rebuilt.initialize(catalogName, restCatalogProperties);
             // don't close the old delegate: tables it produced may still be cached upstream
-            // (CachingIcebergCatalog holds them up to its table-cache TTL) and use its FileIO; leave it for GC
-            delegate.set(rebuilt);
+            // (CachingIcebergCatalog holds them up to its table-cache TTL) and use its FileIO; close it on shutdown
+            replacedDelegates.add(delegate.getAndSet(rebuilt));
             return true;
         } catch (Exception rebuildError) {
             LOG.warn("Failed to rebuild REST catalog {} to re-authenticate", catalogName, rebuildError);

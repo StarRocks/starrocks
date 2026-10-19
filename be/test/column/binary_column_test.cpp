@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -176,6 +178,92 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
     auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], c->get_data()[i]);
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
+    // Values longer than 128 bytes take the branch that copies each value at its exact
+    // length. Build the sources in one padded buffer, the way the parquet dict decoder
+    // and binary dict page do, so the fixed-length branches would be legal here too.
+    const std::vector<size_t> lengths{200, 0, 129, 1, 4096};
+    size_t total_length = 0;
+    for (size_t len : lengths) {
+        total_length += len;
+    }
+
+    std::string backing(total_length + Column::APPEND_OVERFLOW_MAX_SIZE, '\0');
+    std::vector<Slice> values;
+    size_t offset = 0;
+    for (size_t i = 0; i < lengths.size(); i++) {
+        for (size_t j = 0; j < lengths[i]; j++) {
+            backing[offset + j] = static_cast<char>('a' + (i * 7 + j) % 26);
+        }
+        values.emplace_back(backing.data() + offset, lengths[i]);
+        offset += lengths[i];
+    }
+    const size_t max_length = *std::max_element(lengths.begin(), lengths.end());
+
+    auto c1 = BinaryColumn::create();
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size(), c1->size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], c1->get_data()[i]);
+    }
+    ASSERT_EQ(total_length, c1->get_bytes().size());
+    // The byte buffer is sized from the total up front. Appending value by value would
+    // grow it geometrically and leave the capacity at up to twice the bytes held.
+    ASSERT_EQ(total_length, c1->get_bytes().capacity());
+
+    // Appending onto a non-empty column keeps the existing prefix intact.
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size() * 2, c1->size());
+    ASSERT_EQ(total_length * 2, c1->get_bytes().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], c1->get_data()[i]);
+        ASSERT_EQ(values[i], c1->get_data()[i + values.size()]);
+    }
+
+    // Appending nothing is a no-op.
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), 0, max_length));
+    ASSERT_EQ(values.size() * 2, c1->size());
+    ASSERT_EQ(total_length * 2, c1->get_bytes().size());
+
+    // Nullable BinaryColumn forwards to the same path.
+    auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(c2->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size(), c2->size());
+    auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_FALSE(c2->is_null(i));
+        ASSERT_EQ(values[i], c->get_data()[i]);
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_short_values) {
+    // Guard the fixed-length specializations against the long-value branch: both must
+    // produce identical columns.
+    for (size_t max_length : {8, 16, 32, 64, 128}) {
+        std::string backing(max_length * 4 + Column::APPEND_OVERFLOW_MAX_SIZE, '\0');
+        std::vector<Slice> values;
+        size_t offset = 0;
+        for (size_t i = 0; i < 4; i++) {
+            const size_t len = max_length - i;
+            for (size_t j = 0; j < len; j++) {
+                backing[offset + j] = static_cast<char>('a' + (i * 3 + j) % 26);
+            }
+            values.emplace_back(backing.data() + offset, len);
+            offset += len;
+        }
+
+        auto column = BinaryColumn::create();
+        ASSERT_TRUE(column->append_strings_overflow(values.data(), values.size(), max_length));
+        ASSERT_EQ(values.size(), column->size());
+        for (size_t i = 0; i < values.size(); i++) {
+            ASSERT_EQ(values[i], column->get_data()[i]);
+        }
+        ASSERT_EQ(offset, column->get_bytes().size());
     }
 }
 
@@ -670,6 +758,26 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
+// NOLINTNEXTLINE
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_replicate_overflow) {
+    // one element of 64KB, repeated 65537 times: true total size is
+    // 65536 * 65537 = 4295032832, which exceeds Column::MAX_CAPACITY_LIMIT (2^32).
+    // If bytes_size * repeat_count were computed in 32-bit (T) arithmetic instead of
+    // being widened to size_t first, it would wrap around to 65536 and wrongly pass
+    // the capacity check, leading to a too-small buffer allocation and an out-of-bounds
+    // write in the copy loop below.
+    auto c1 = BinaryColumn::create();
+    std::string large_str(65536, 'a');
+    c1->append_datum(Slice(large_str));
+
+    Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(65537);
+
+    auto result = c1->replicate(offsets);
+    ASSERT_FALSE(result.ok());
+}
+
 PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     BinaryColumn::Ptr column = BinaryColumn::create();
     column->append("");
@@ -719,5 +827,40 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
 INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
                          ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
                                            std::make_tuple(4 * 1024 * 1024 + 10)));
+
+// Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
+//   BinaryColumn::deserialize_and_append_batch_nullable() <- NullableColumn::
+//   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
+//   Aggregator::convert_hash_set_to_chunk().
+//
+// convert_hash_set_to_chunk() sizes `hash_set.results` to the whole chunk size and then fills only
+// the first `read_index` entries. A streaming DISTINCT aggregation that AggregateDistinctStreaming
+// SourceOperator::_output_chunk_from_hash_set() has just reset drains a brand new, empty hash set,
+// so read_index is 0 and every Slice in the buffer is still default constructed -- Slice() points
+// its data at the 1-byte "" literal. Both deserialize_and_append_batch overloads peeked at srcs[0]
+// to size a reserve() before consulting chunk_size, reading 4 bytes off the end of that literal.
+//
+// Deserializing zero rows must not touch srcs[0] at all.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_size) {
+    // Exactly what Aggregator::convert_hash_set_to_chunk() hands down when the hash set is empty:
+    // a full-size buffer of default constructed slices, and a row count of 0.
+    Buffer<Slice> srcs(4096);
+    ASSERT_EQ(0u, srcs[0].size);
+
+    auto column = BinaryColumn::create();
+    column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, column->size());
+
+    auto large_column = LargeBinaryColumn::create();
+    large_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, large_column->size());
+
+    // The nullable wrapper is the path the crash actually took.
+    auto nullable_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    nullable_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, nullable_column->size());
+    ASSERT_FALSE(nullable_column->has_null());
+}
 
 } // namespace starrocks

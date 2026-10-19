@@ -19,13 +19,61 @@ package com.starrocks.common;
 
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 public class ThreadPoolManagerTest {
+
+    @Test
+    public void testCheckpointThreadDoesNotBufferMetrics() throws Exception {
+        Field checkpointThreadIdField = GlobalStateMgr.class.getDeclaredField("checkpointThreadId");
+        checkpointThreadIdField.setAccessible(true);
+        long previousCheckpointThreadId = checkpointThreadIdField.getLong(null);
+
+        Field poolMapField = ThreadPoolManager.class.getDeclaredField("nameToThreadPoolMap");
+        poolMapField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, ThreadPoolExecutor> poolMap =
+                (Map<String, ThreadPoolExecutor>) poolMapField.get(null);
+
+        String daemonPoolName = "checkpoint-daemon-pool";
+        String priorityPoolName = "checkpoint-priority-pool";
+        String scheduledPoolName = "checkpoint-scheduled-pool";
+        ThreadPoolExecutor daemonPool = null;
+        PriorityThreadPoolExecutor priorityPool = null;
+        ScheduledThreadPoolExecutor scheduledPool = null;
+        try {
+            checkpointThreadIdField.setLong(null, Thread.currentThread().getId());
+            daemonPool = ThreadPoolManager.newDaemonCacheThreadPool(1, daemonPoolName, true);
+            priorityPool = ThreadPoolManager.newDaemonFixedPriorityThreadPool(1, 1, priorityPoolName, true);
+            scheduledPool = ThreadPoolManager.newDaemonScheduledThreadPool(1, scheduledPoolName, true);
+
+            Assertions.assertFalse(poolMap.containsKey(daemonPoolName));
+            Assertions.assertFalse(poolMap.containsKey(priorityPoolName));
+            Assertions.assertFalse(poolMap.containsKey(scheduledPoolName));
+        } finally {
+            checkpointThreadIdField.setLong(null, previousCheckpointThreadId);
+            poolMap.remove(daemonPoolName);
+            poolMap.remove(priorityPoolName);
+            poolMap.remove(scheduledPoolName);
+            if (daemonPool != null) {
+                daemonPool.shutdownNow();
+            }
+            if (priorityPool != null) {
+                priorityPool.shutdownNow();
+            }
+            if (scheduledPool != null) {
+                scheduledPool.shutdownNow();
+            }
+        }
+    }
 
     @Test
     public void testNormal() throws InterruptedException {

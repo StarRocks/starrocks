@@ -146,6 +146,8 @@ select v1 from sc3 where a1[1] not in (select tt.v1 from sc3 as tt where false);
 1
 3
 -- !result
+
+-- name: test_prune_with_dict_column @system
 CREATE TABLE `scs3` (
   `v1` bigint(20) NULL COMMENT "",
   `str` string NULL COMMENT "",

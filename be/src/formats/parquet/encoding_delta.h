@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "runtime/current_thread.h"
 #include "simd/delta_decode.h"
 #include "util/bit_stream_utils.h"
 #include "util/slice.h"
@@ -342,11 +343,11 @@ private:
         }
         values_per_mini_block_ = values_per_block_ / mini_blocks_per_block_;
         if (values_per_mini_block_ == 0) {
-            throw Status::Corruption("cannot have zero value per miniblock");
+            return Status::Corruption("cannot have zero value per miniblock");
         }
         if (values_per_mini_block_ % 32 != 0) {
-            throw Status::Corruption("the number of values in a miniblock must be multiple of 32, but it's " +
-                                     std::to_string(values_per_mini_block_));
+            return Status::Corruption("the number of values in a miniblock must be multiple of 32, but it's " +
+                                      std::to_string(values_per_mini_block_));
         }
 
         total_values_remaining_ = total_value_count_;
@@ -601,7 +602,7 @@ public:
             down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_continuous_strings(slice_buffer_.data(), count);
+        TRY_CATCH_BAD_ALLOC(binary_column->append_continuous_strings(slice_buffer_.data(), count));
         return Status::OK();
     }
 
@@ -867,7 +868,7 @@ public:
             down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        binary_column->append_continuous_strings(slice_buffer_.data(), count);
+        TRY_CATCH_BAD_ALLOC(binary_column->append_continuous_strings(slice_buffer_.data(), count));
         return Status::OK();
     }
 

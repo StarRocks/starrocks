@@ -140,10 +140,27 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         mem_tracker_counter->set(query_mem_limit);
         size_t lowest_limit = parent->lowest_limit();
-        size_t tracker_reserve_limit = -1;
 
-        if (spill_mem_reserve_ratio.has_value()) {
-            tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
+        // The effective memory limit of this query is the tightest of the parent chain limit, the
+        // explicit query_mem_limit and the resource group big query limit. It has to be computed
+        // before the reserve limit below, which is derived from it.
+        _static_query_mem_limit = lowest_limit;
+        if (query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+
+        int64_t tracker_reserve_limit = -1;
+        if (spill_mem_reserve_ratio.has_value() && _static_query_mem_limit > 0) {
+            // The reserve limit is the early-warning line probed by the AUTO spill trigger in
+            // PipelineDriver::_adjust_memory_usage, so it must sit below the hard limit this query
+            // is actually checked against. Deriving it from the parent chain alone made it ignore an
+            // explicit and possibly much smaller query_mem_limit: the reservation probe then never
+            // failed, the operator was never switched to the low memory mode, and the query OOMed
+            // instead of spilling.
+            tracker_reserve_limit = _static_query_mem_limit * spill_mem_reserve_ratio.value();
         }
 
         if (wg != nullptr && big_query_mem_limit > 0 &&
@@ -158,13 +175,6 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
 
-        _static_query_mem_limit = lowest_limit;
-        if (query_mem_limit > 0) {
-            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
-        }
-        if (big_query_mem_limit > 0) {
-            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
-        }
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(
                 new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit, connector_scan_node_number));
 
@@ -246,6 +256,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
+    query_statistic->add_read_stats(consume_delta_read_local_cnt(), consume_delta_read_remote_cnt());
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
@@ -366,9 +377,20 @@ void QueryContextManager::_clean_query_contexts() {
 }
 
 void QueryContextManager::_clean_func(QueryContextManager* manager) {
+#ifdef BE_TEST
+    // The stop flag is only re-checked between sleeps and ~QueryContextManager joins this thread, so
+    // shutdown blocks for whatever remains of the current interval. Every unit-test process builds and
+    // destroys this manager exactly once, which made that wait the single largest item in test
+    // teardown at the production interval -- it lands anywhere in [0, interval) depending on where the
+    // run happens to be in the cycle (measured 17-77ms across filters). Shrink the interval under test
+    // so the wait is bounded by 10ms instead.
+    constexpr int64_t kCleanIntervalMs = 10;
+#else
+    constexpr int64_t kCleanIntervalMs = 100;
+#endif
     while (!manager->_is_stopped()) {
         manager->_clean_query_contexts();
-        std::this_thread::sleep_for(milliseconds(100));
+        std::this_thread::sleep_for(milliseconds(kCleanIntervalMs));
     }
 }
 

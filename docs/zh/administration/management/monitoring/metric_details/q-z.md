@@ -13,7 +13,7 @@ description: "Alphabetical q - z"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../monitoring.md)。
 
 :::
 
@@ -65,6 +65,48 @@ description: "Alphabetical q - z"
 
 - 单位：计数
 - 描述：扫描的总行数。
+
+## `query_spill_trigger_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端（`local`、`remote`）细分的、触发过至少一次落盘的 spillable 算子实例数量。每个算子实例首次执行 flush 回调时累加一次。
+
+## `query_spill_bytes_write_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、spillable 算子累计写入溢出存储的有效负载字节数。
+
+## `query_spill_bytes_read_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段从溢出存储累计读回的有效负载字节数。
+
+## `query_spill_blocks_write_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、为写入分配的溢出 block 数量。用于估算写路径的 IO 次数规模。
+
+## `query_spill_blocks_read_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、打开用于读取的溢出 block 数量。用于估算读路径的 IO 次数规模。
+
+## `query_spill_write_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、写侧溢出 IO（block append 与 flush）累计耗时。用于跟踪写盘性能。
+
+## `query_spill_read_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
 
 ## `readable_blocks_total (Deprecated)`
 
@@ -218,6 +260,12 @@ description: "Alphabetical q - z"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `spill_disk_bytes_used`
+
+- 单位: 字节
+- 标签: `storage_type`
+- 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
+
 ## `snmp`
 
 - 单位: -
@@ -283,6 +331,12 @@ description: "Alphabetical q - z"
 
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 仅存算分离模式。从远程存储读取 Lake Tablet 元数据时返回 `NotFound` 的尝试总数。Tablet 元数据要么存放在其独立的元数据文件中，要么存放在 Bundle 元数据文件中，二者必居其一且不会同时存在；对这两种位置的读取均会计入该指标，包括 Vacuum 流程发起的 Bundle 文件读取。每次失败的回退读取均会单独计数。缓存未命中和读取成功不会增加该指标。复制流程中对源集群元数据的读取、以及恢复流程中对快照元数据的读取不计入该指标。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -409,6 +463,12 @@ description: "Alphabetical q - z"
 - 类型：瞬时
 - 描述：表示特定仓库下最后一次查询或加载的结束时间。对于无共享集群，此项仅监控默认仓库。
 
+## `starrocks_fe_max_journal_replay_lag`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：所有存活的 Follower 或 Observer FE 中，为追上 Leader 仍需回放的元数据日志的最大条数。仅由 Leader FE 上报（`is_leader="true"`），因为只有 Leader 同时知道自身的日志写入位置以及通过心跳获取的其他各节点已回放的日志 ID。非存活的 FE 节点会被排除，因为它们最后上报的日志 ID 停留在最后一次成功心跳时的值；此类节点请通过 `SHOW FRONTENDS` 的 `Alive` 列来发现。当其他节点均已追上、没有其他存活的 FE 节点，以及单 FE 集群时，该值为 `0`。该值较高或持续增长，说明至少有一个节点的元数据回放已落后，将导致该节点提供陈旧的元数据，并在超过 `meta_delay_toleration_second` 后把查询转发给 Leader。
+
 ## `starrocks_fe_memory_usage`
 
 - 单位：字节或计数
@@ -437,7 +497,7 @@ description: "Alphabetical q - z"
 
 所有事务指标共享以下标签：
 
-- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`：指示报告的FE节点是否为Leader。只有Leader FE (`is_leader="true"`) 报告实际指标值。Follower将具有`is_leader="false"`并报告无数据。
 
 ## `starrocks_fe_query_resource_group`
@@ -698,7 +758,7 @@ description: "Alphabetical q - z"
 ## `threadpool_task_exception_total`
 
 - 单位: 计数
-- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
+- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
 
 ## `thrift_connections_total`
 

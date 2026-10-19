@@ -65,7 +65,11 @@ Status ResultQueueMgr::fetch_result(const TUniqueId& fragment_instance_id, std::
         }
     }
     // check queue status before get result
-    RETURN_IF_ERROR(queue->status());
+    if (Status st = queue->status(); !st.ok()) {
+        // the queue is already cancelled or failed, no more results will be produced
+        *eos = true;
+        return st;
+    }
     bool sucess = queue->blocking_get(result);
     if (sucess) {
         // sentinel nullptr indicates scan end

@@ -111,11 +111,11 @@ None
 ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
 -- result:
 -- !result
-shell: sleep 5
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 3, "desc": "wait tablet stats report to 56%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "SAMPLE" in str(${result}) and "56%" in str(${result}) and "tableRowCount=2050001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '56%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=2050001, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=4, unhealthyPartitionRowCount=1800000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=900001, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -126,11 +126,11 @@ ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
 create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
 -- result:
 -- !result
-shell: sleep 7
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait first full stats collect to 100%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "FULL" in str(${result}) and "100%" in str(${result}) and "tableRowCountInStatistics=2050001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -154,11 +154,11 @@ shell: sleep 5
 create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
 -- result:
 -- !result
-shell: sleep 7
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait full stats after double insert to 100%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "FULL" in str(${result}) and "100%" in str(${result}) and "tableRowCountInStatistics=4100001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -182,11 +182,11 @@ shell: sleep 5
 create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
 -- result:
 -- !result
-shell: sleep 7
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait full stats healthy ratio to 97%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "FULL" in str(${result}) and "97%" in str(${result}) and "tableRowCount=4200001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '97%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -202,11 +202,11 @@ shell: sleep 13
 insert into target_table select k1, '2026-01-01' from source where event_day = '2021-01-01';
 -- result:
 -- !result
-shell: sleep 5
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait sample after new partition"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "SAMPLE" in str(${result}) and "97%" in str(${result}) and "sample_once_times=4" in str(${result}) and "tableRowCount=4450001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, init_stats_sample_job=true}', '97%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -222,11 +222,11 @@ shell: sleep 5
 create analyze all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
 -- result:
 -- !result
-shell: sleep 7
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait sample analyze job to 100%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "SAMPLE" in str(${result}) and "100%" in str(${result}) and "tableRowCountInStatistics=5600001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, statistic_exclude_pattern=.*?, sample_schedule_times=1}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
 None
@@ -266,11 +266,11 @@ shell: sleep 5
 create analyze all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
 -- result:
 -- !result
-shell: sleep 7
--- result:
-0
-
--- !result
+LOOP {
+  PROPERTY: {"timeout": 180, "interval": 5, "desc": "wait final full stats to 100%"}
+  result=show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table';
+  CHECK: "FULL" in str(${result}) and "100%" in str(${result}) and "tableRowCountInStatistics=11200001" in str(${result})
+} END LOOP
 function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=3, sample_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
 -- result:
 None

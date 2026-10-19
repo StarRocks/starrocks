@@ -557,7 +557,15 @@ public class CreateTableAnalyzer {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
                         PartitionDescAnalyzer.analyze(partitionDesc);
-                        partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        if (partitionDesc instanceof ListPartitionDesc) {
+                            // The key type decides whether a list partition expr may reference a non-key
+                            // column: a primary key table must partition on key columns only, and a generated
+                            // partition column has to be checked through the columns its expr reads.
+                            ((ListPartitionDesc) partitionDesc).analyze(stmt.getColumnDefs(), stmt.getProperties(),
+                                    stmt.getKeysDesc().getKeysType());
+                        } else {
+                            partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        }
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

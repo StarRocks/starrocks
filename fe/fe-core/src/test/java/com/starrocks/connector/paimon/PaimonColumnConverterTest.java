@@ -69,9 +69,9 @@ public class PaimonColumnConverterTest {
 
     @Test
     public void testConvertVarchar() {
-        VarCharType paimonType = new VarCharType();
+        VarCharType paimonType = new VarCharType(20);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createDefaultCatalogString();
+        Type srType = ScalarType.createVarcharType(20);
         Assertions.assertEquals(result, srType);
     }
 
@@ -170,7 +170,7 @@ public class PaimonColumnConverterTest {
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assertions.assertTrue(result instanceof com.starrocks.catalog.MapType);
         com.starrocks.catalog.MapType srType = (com.starrocks.catalog.MapType) result;
-        Assertions.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
+        Assertions.assertEquals(ScalarType.createVarcharType(20), srType.getKeyType());
         Assertions.assertEquals(Type.DATETIME, srType.getValueType());
     }
 

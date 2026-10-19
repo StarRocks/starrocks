@@ -290,6 +290,22 @@ public class StatisticExecutor {
         }
     }
 
+    // Best-effort cleanup of the stale raw-keyed rows superseded by a fresh hashed-key write.
+    // Failure just means the raw row lingers a bit longer (until this partition/column is
+    // collected again); it must never fail the collection job that just succeeded.
+    public boolean dropExternalStatRawPartitions(ConnectContext statsConnectCtx, String rawTableUUID,
+                                                 List<String> partitionNames, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
+        LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, Lists.newArrayList(columnName));
+        LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -382,7 +398,8 @@ public class StatisticExecutor {
             String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                     "cast(" + version + " as bigint), " +
                     "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
-                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
+                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                    StatisticUtils.quoting("_dict_merge_" + columnName) +
                     " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
             return executeStatisticDQLWithoutContext(sql);
         } else {
@@ -412,7 +429,8 @@ public class StatisticExecutor {
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + columnRef + ", " +
-                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnAlias +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                StatisticUtils.quoting("_dict_merge_" + columnAlias) +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         return executeStatisticDQLWithoutContext(sql);
@@ -764,7 +782,8 @@ public class StatisticExecutor {
 
     private static boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
-        try {
+        // Nested analysis and error reporting must use the internal session, not the caller's catalog or state.
+        try (var guard = context.bindScope()) {
             Stopwatch watch = Stopwatch.createStarted();
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
