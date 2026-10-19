@@ -54,8 +54,21 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.column_iterator_init_ns += that.column_iterator_init_ns;
     diff.io_count_local_disk += that.io_count_local_disk;
     diff.io_count_remote += that.io_count_remote;
+<<<<<<< HEAD
     // read segment count is managed else where
     // diff.read_segment_count += that.read_segment_count;
+=======
+    diff.input_rowset_count += that.input_rowset_count;
+    diff.input_row_count += that.input_row_count;
+    diff.output_row_count += that.output_row_count;
+    diff.read_chunk_count += that.read_chunk_count;
+    diff.write_chunk_count += that.write_chunk_count;
+    diff.column_group_count += that.column_group_count;
+    diff.stream_buffer_shrunk_passes += that.stream_buffer_shrunk_passes;
+    diff.vertical_key_group_ns += that.vertical_key_group_ns;
+    diff.vertical_value_group_ns += that.vertical_value_group_ns;
+    diff.read_segment_count += that.read_segment_count;
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
     diff.write_segment_count += that.write_segment_count;
     diff.write_segment_bytes += that.write_segment_bytes;
     diff.io_ns_write_remote += that.io_ns_write_remote;
@@ -75,8 +88,21 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.column_iterator_init_ns -= that.column_iterator_init_ns;
     diff.io_count_local_disk -= that.io_count_local_disk;
     diff.io_count_remote -= that.io_count_remote;
+<<<<<<< HEAD
     // read segment count is managed else where
     // diff.read_segment_count -= that.read_segment_count;
+=======
+    diff.input_rowset_count -= that.input_rowset_count;
+    diff.input_row_count -= that.input_row_count;
+    diff.output_row_count -= that.output_row_count;
+    diff.read_chunk_count -= that.read_chunk_count;
+    diff.write_chunk_count -= that.write_chunk_count;
+    diff.column_group_count -= that.column_group_count;
+    diff.stream_buffer_shrunk_passes -= that.stream_buffer_shrunk_passes;
+    diff.vertical_key_group_ns -= that.vertical_key_group_ns;
+    diff.vertical_value_group_ns -= that.vertical_value_group_ns;
+    diff.read_segment_count -= that.read_segment_count;
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
     diff.write_segment_count -= that.write_segment_count;
     diff.write_segment_bytes -= that.write_segment_bytes;
     diff.io_ns_write_remote -= that.io_ns_write_remote;
@@ -100,6 +126,7 @@ std::string CompactionTaskStats::to_json_stats() {
     root.AddMember("segment_init_sec", rapidjson::Value(segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("column_iterator_init_sec", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);
+<<<<<<< HEAD
     root.AddMember("read_segment_count", rapidjson::Value(read_segment_count), allocator);
     root.AddMember("write_segment_count", rapidjson::Value(write_segment_count), allocator);
     root.AddMember("write_remote_mb", rapidjson::Value(write_segment_bytes / BYTES_UNIT_MB), allocator);
@@ -107,6 +134,26 @@ std::string CompactionTaskStats::to_json_stats() {
     root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("input_file_size", rapidjson::Value(input_file_size), allocator);
+=======
+    root.AddMember("input_rowset_count", rapidjson::Value(s.input_rowset_count), allocator);
+    root.AddMember("input_row_count", rapidjson::Value(s.input_row_count), allocator);
+    root.AddMember("output_row_count", rapidjson::Value(s.output_row_count), allocator);
+    root.AddMember("read_chunk_count", rapidjson::Value(s.read_chunk_count), allocator);
+    root.AddMember("write_chunk_count", rapidjson::Value(s.write_chunk_count), allocator);
+    root.AddMember("column_group_count", rapidjson::Value(s.column_group_count), allocator);
+    root.AddMember("stream_buffer_shrunk_passes", rapidjson::Value(s.stream_buffer_shrunk_passes), allocator);
+    root.AddMember("vertical_key_group_ns", rapidjson::Value(s.vertical_key_group_ns), allocator);
+    root.AddMember("vertical_value_group_ns", rapidjson::Value(s.vertical_value_group_ns), allocator);
+    root.AddMember("read_segment_count", rapidjson::Value(s.read_segment_count), allocator);
+    root.AddMember("write_segment_count", rapidjson::Value(s.write_segment_count), allocator);
+    root.AddMember("write_remote_mb", rapidjson::Value(s.write_segment_bytes / BYTES_UNIT_MB), allocator);
+    root.AddMember("write_remote_ns", rapidjson::Value(s.io_ns_write_remote), allocator);
+    root.AddMember("write_remote_sec", rapidjson::Value(s.io_ns_write_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("in_queue_sec", rapidjson::Value(s.in_queue_time_sec), allocator);
+    root.AddMember("pk_sst_merge_sec", rapidjson::Value(s.pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("input_file_size", rapidjson::Value(s.input_file_size), allocator);
+}
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
 
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
