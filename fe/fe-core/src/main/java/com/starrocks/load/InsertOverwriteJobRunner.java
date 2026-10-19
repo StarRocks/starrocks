@@ -577,6 +577,10 @@ public class InsertOverwriteJobRunner {
             // Drop temp partitions by partition IDs (for non-dynamic overwrite)
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
+                    // A temp partition that was already swapped in keeps its id and is live now, so leave it alone.
+                    if (!targetTable.isTempPartition(pid)) {
+                        continue;
+                    }
                     LOG.info("drop temp partition:{}", pid);
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
