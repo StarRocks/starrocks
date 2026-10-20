@@ -63,6 +63,24 @@ bool spherical_polygon_has_valid_hole_relationships(const WkbGeometry& geometry)
     return true;
 }
 
+bool prepare_spherical_polygon(const WkbGeometry& geometry, GeoPolygon* polygon) {
+    return spherical_polygon(geometry, polygon) == GEO_PARSE_OK &&
+           spherical_polygon_has_valid_hole_relationships(geometry);
+}
+
+bool prepare_spherical_multipolygon(const WkbGeometry& geometry, std::vector<std::unique_ptr<GeoPolygon>>* polygons) {
+    for (const auto& child : geometry.children) {
+        if (child.empty) continue;
+        auto polygon = std::make_unique<GeoPolygon>();
+        if (!prepare_spherical_polygon(child, polygon.get())) return false;
+        for (const auto& previous : *polygons) {
+            if (polygon->intersects_interior(*previous)) return false;
+        }
+        polygons->emplace_back(std::move(polygon));
+    }
+    return true;
+}
+
 GeoParseStatus spherical_line(const WkbGeometry& geometry, GeoLine* output) {
     return output->from_coords(coordinates(geometry.coordinates));
 }
@@ -403,6 +421,34 @@ StatusOr<double> planar_measurement(const WkbGeometry& geometry, GeoMeasurementK
 }
 
 StatusOr<double> spherical_measurement(const WkbGeometry& geometry, GeoMeasurementKind kind) {
+    if (!geometry.empty && (kind == GeoMeasurementKind::AREA || kind == GeoMeasurementKind::PERIMETER)) {
+        if (geometry.type == WkbGeometryType::POLYGON) {
+            GeoPolygon polygon;
+            if (!prepare_spherical_polygon(geometry, &polygon)) {
+                return Status::InvalidArgument("Measurement requires a valid GEOGRAPHY");
+            }
+            return kind == GeoMeasurementKind::AREA ? polygon.area_square_meters() : polygon.perimeter_meters();
+        }
+        if (geometry.type == WkbGeometryType::MULTIPOLYGON) {
+            std::vector<std::unique_ptr<GeoPolygon>> polygons;
+            if (!prepare_spherical_multipolygon(geometry, &polygons)) {
+                return Status::InvalidArgument("Measurement requires a valid GEOGRAPHY");
+            }
+            // Finish validation before measuring; preserve child order and long-double accumulation.
+            long double result = 0;
+            size_t i = 0;
+            for (const auto& child : geometry.children) {
+                long double value = 0;
+                if (!child.empty) {
+                    const auto& polygon = polygons[i++];
+                    value = kind == GeoMeasurementKind::AREA ? polygon->area_square_meters()
+                                                             : polygon->perimeter_meters();
+                }
+                result += value;
+            }
+            return static_cast<double>(result);
+        }
+    }
     ASSIGN_OR_RETURN(const bool valid, spherical_is_valid(geometry));
     if (!valid) return Status::InvalidArgument("Measurement requires a valid GEOGRAPHY");
     ASSIGN_OR_RETURN(const auto value, spherical_measurement_impl(geometry, kind));

@@ -2533,6 +2533,101 @@ TEST_F(geographyFunctionsTest, nativeGeoMeasurementsAndCollections) {
     EXPECT_NEAR(spherical_perimeter.value(1), spherical_perimeter.value(2), 0.001);
 }
 
+TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResults) {
+    // Rebuild the polygon as main's second pass did, using this build's S2/libm results.
+    const auto reference_polygon = [](const WkbGeometry& geometry, bool area, long double* value) {
+        if (geometry.empty) {
+            *value = 0;
+            return GEO_PARSE_OK;
+        }
+        GeoCoordinateListList rings;
+        for (const auto& ring : geometry.rings) {
+            auto coordinates = std::make_unique<GeoCoordinateList>();
+            for (const auto& point : ring) coordinates->add({point.x, point.y});
+            rings.add(coordinates.release());
+        }
+        GeoPolygon polygon;
+        const auto status = polygon.from_coords(rings);
+        if (status == GEO_PARSE_OK) {
+            *value = area ? polygon.area_square_meters() : polygon.perimeter_meters();
+        }
+        return status;
+    };
+    const char* cases[] = {
+            "POLYGON ((0 0,1 0,1 1,0 1,0 0))",
+            "POLYGON ((0 0,0 1,1 1,1 0,0 0))",
+            "POLYGON ((0 0,10 0,10 10,0 10,0 0),(1 1,2 1,2 2,1 2,1 1),(6 6,8 6,8 8,6 8,6 6))",
+            "MULTIPOLYGON (EMPTY,((0 0,1 0,1 1,0 1,0 0)),EMPTY,((20 10,21 10,21 11,20 11,20 10)),EMPTY)",
+            "POLYGON ((-170 -70,170 -70,170 70,-170 70,-170 -70))",
+            "POLYGON ((-135 80,-45 80,45 80,135 80,-135 80))",
+            "POLYGON ((179 -1,-179 -1,-179 1,179 1,179 -1))",
+            "POLYGON ((0 0,0.000000001 0,0.000000001 0.000000001,0 0.000000001,0 0))",
+    };
+    for (const auto* wkt : cases) {
+        SCOPED_TRACE(wkt);
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkt(wkt, &geometry, WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        auto input = geography({wkt, nullptr, "POLYGON EMPTY"});
+        for (bool area : {true, false}) {
+            long double reference = 0;
+            if (geometry.type == WkbGeometryType::MULTIPOLYGON) {
+                for (const auto& child : geometry.children) {
+                    long double value = 0;
+                    ASSERT_EQ(GEO_PARSE_OK, reference_polygon(child, area, &value));
+                    reference += value;
+                }
+            } else {
+                ASSERT_EQ(GEO_PARSE_OK, reference_polygon(geometry, area, &reference));
+            }
+            const auto expected = std::bit_cast<uint64_t>(static_cast<double>(reference));
+            const auto evaluate = [&](const ColumnPtr& column) {
+                return area ? GeoFunctions::st_geography_area(nullptr, {column})
+                            : GeoFunctions::st_geography_perimeter(nullptr, {column});
+            };
+            auto result = evaluate(input);
+            ASSERT_TRUE(result.ok()) << result.status();
+            ColumnViewer<TYPE_DOUBLE> values(*result);
+            EXPECT_EQ(expected, std::bit_cast<uint64_t>(values.value(0)));
+            EXPECT_TRUE(values.is_null(1));
+            EXPECT_EQ(0, std::bit_cast<uint64_t>(values.value(2)));
+
+            auto constant = ConstColumn::create(geography({wkt}), 3);
+            auto constant_result = evaluate(constant);
+            ASSERT_TRUE(constant_result.ok()) << constant_result.status();
+            EXPECT_TRUE((*constant_result)->is_constant());
+            EXPECT_EQ(3, (*constant_result)->size());
+            ColumnViewer<TYPE_DOUBLE> constant_values(*constant_result);
+            EXPECT_EQ(expected, std::bit_cast<uint64_t>(constant_values.value(2)));
+            auto null_result = evaluate(ColumnHelper::create_const_null_column(3));
+            ASSERT_TRUE(null_result.ok()) << null_result.status();
+            EXPECT_TRUE((*null_result)->only_null());
+            EXPECT_EQ(3, (*null_result)->size());
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsValidateBeforeUsingPreparedPolygons) {
+    // Match production initialization, as in h3SingleRingValidityMatchesSphericalPredicate.
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    for (const char* wkt : {"POLYGON ((0 0,2 2,0 2,2 0,0 0))", "POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))",
+                            "POLYGON ((0 0,10 0,10 10,0 10,0 0),(2 2,8 2,8 8,2 8,2 2),(3 3,4 3,4 4,3 4,3 3))",
+                            "MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((1 1,3 1,3 3,1 3,1 1)))",
+                            "MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))"}) {
+        SCOPED_TRACE(wkt);
+        auto input = geography({wkt});
+        auto valid = GeoFunctions::st_geography_is_valid(nullptr, {input});
+        ASSERT_TRUE(valid.ok()) << valid.status();
+        EXPECT_FALSE(ColumnViewer<TYPE_BOOLEAN>(*valid).value(0));
+        for (auto function : {GeoFunctions::st_geography_area, GeoFunctions::st_geography_perimeter}) {
+            auto result = function(nullptr, {input});
+            ASSERT_FALSE(result.ok());
+            EXPECT_TRUE(result.status().is_invalid_argument());
+            EXPECT_EQ("Measurement requires a valid GEOGRAPHY", result.status().message());
+        }
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeometryMeasurementsAreStableAfterLargeTranslation) {
     const auto type = geometry_type("EPSG:3857", 3857);
     auto polygons = geometry({"POLYGON ((0 0, 0.1 0, 0.1 0.1, 0 0.1, 0 0))",
