@@ -153,4 +153,17 @@ TEST(TimestampValueTest, from_uncommon_format_str_microsecond) {
     }
 }
 
+TEST(TimestampValueTest, from_date_format_str_rejects_zero_day_or_month) {
+    TimestampValue ts;
+    const char* fmt = "%Y-%m-%d";
+    ASSERT_FALSE(ts.from_date_format_str("0000-01-00", 10, fmt));
+    ASSERT_FALSE(ts.from_date_format_str("0000-00-01", 10, fmt));
+    ASSERT_TRUE(ts.from_date_format_str("2020-01-01", 10, fmt));
+
+    TimestampValue ts2;
+    const char* dt_fmt = "%Y-%m-%d %H:%i:%s";
+    ASSERT_FALSE(ts2.from_datetime_format_str("0000-01-00 00:00:00", 19, dt_fmt));
+    ASSERT_TRUE(ts2.from_datetime_format_str("2020-01-01 00:00:00", 19, dt_fmt));
+}
+
 } // namespace starrocks
