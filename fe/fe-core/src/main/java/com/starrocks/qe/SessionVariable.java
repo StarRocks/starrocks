@@ -854,6 +854,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
     public static final String CONNECTOR_SINK_COMPRESSION_CODEC = "connector_sink_compression_codec";
 
+    // Opt-in: return one Arrow Flight endpoint per result-producing BE instance so
+    // clients can fan out DoGet across backends. Default off; only partition-
+    // independent queries fan out, everything else stays single-endpoint.
+    public static final String ENABLE_ARROW_FLIGHT_MULTI_ENDPOINT = "enable_arrow_flight_multi_endpoint";
+
     public static final String CONNECTOR_SINK_TARGET_MAX_FILE_SIZE = "connector_sink_target_max_file_size";
     public static final String ENABLE_CONNECTOR_SPLIT_IO_TASKS = "enable_connector_split_io_tasks";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
@@ -3024,6 +3029,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setConnectorSinkCompressionCodec(String connectorSinkCompressionCodec) {
         this.connectorSinkCompressionCodec = connectorSinkCompressionCodec;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_ARROW_FLIGHT_MULTI_ENDPOINT)
+    private boolean enableArrowFlightMultiEndpoint = false;
+
+    public boolean isEnableArrowFlightMultiEndpoint() {
+        return enableArrowFlightMultiEndpoint;
     }
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)

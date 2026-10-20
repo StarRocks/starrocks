@@ -39,6 +39,7 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNotifyForwardDeploymentFinishedRequest;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -46,6 +47,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -271,8 +273,20 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         TNotifyForwardDeploymentFinishedRequest request = new TNotifyForwardDeploymentFinishedRequest();
 
         request.setQuery_id(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        request.setArrow_flight_sql_result_backend_id(backendResult.getBackendId());
-        request.setArrow_flight_sql_result_fragment_id(backendResult.getFragmentInstanceId());
+        List<Long> backendIds = new ArrayList<>();
+        List<TUniqueId> fragmentIds = new ArrayList<>();
+        for (ArrowFlightSqlResultDescriptor.BackendResultDescriptor backend : backendResult.getBackendResultDescriptors()) {
+            backendIds.add(backend.backendId());
+            fragmentIds.add(backend.fragmentInstanceId());
+        }
+        request.setArrow_flight_sql_result_backend_ids(backendIds);
+        request.setArrow_flight_sql_result_fragment_ids(fragmentIds);
+        // Back-compat: also set the single fields (first instance) for a leader FE
+        // that predates the multi-endpoint list fields.
+        if (!backendIds.isEmpty()) {
+            request.setArrow_flight_sql_result_backend_id(backendIds.get(0));
+            request.setArrow_flight_sql_result_fragment_id(fragmentIds.get(0));
+        }
         request.setArrow_flight_sql_result_schema(backendResult.getSchema().serializeAsMessage());
 
         ThriftRPCRequestExecutor.call(

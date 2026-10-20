@@ -1,0 +1,16 @@
+-- name: test_arrow_flight_multi_endpoint @arrow_flight_sql
+DROP DATABASE IF EXISTS arrow_me_demo;
+
+CREATE DATABASE arrow_me_demo;
+
+USE arrow_me_demo;
+
+CREATE TABLE arrow_me_demo.t (     id INT NOT NULL,    v INT NOT NULL ) ENGINE=OLAP  DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 8 PROPERTIES (    'replication_num' = '1');
+
+INSERT INTO arrow_me_demo.t (id, v) VALUES (1, 10),(2, 20),(3, 30),(4, 40),(5, 50);
+
+SET enable_arrow_flight_multi_endpoint = true;
+
+SELECT count(*), sum(v) FROM arrow_me_demo.t;
+
+SELECT id, v FROM arrow_me_demo.t ORDER BY id ASC;

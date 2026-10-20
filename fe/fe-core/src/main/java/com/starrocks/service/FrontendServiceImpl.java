@@ -1307,11 +1307,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(
             TNotifyForwardDeploymentFinishedRequest request) throws TException {
-        long backendId = request.getArrow_flight_sql_result_backend_id();
-        TUniqueId fragmentId = request.getArrow_flight_sql_result_fragment_id();
         byte[] schemaBytes = request.getArrow_flight_sql_result_schema();
         Schema schema = Schema.deserializeMessage(ByteBuffer.wrap(schemaBytes));
-        ArrowFlightSqlResultDescriptor resultDesc = new ArrowFlightSqlResultDescriptor(backendId, fragmentId, schema);
+
+        ArrowFlightSqlResultDescriptor resultDesc;
+        if (request.isSetArrow_flight_sql_result_backend_ids()
+                && !request.getArrow_flight_sql_result_backend_ids().isEmpty()) {
+            List<Long> backendIds = request.getArrow_flight_sql_result_backend_ids();
+            List<TUniqueId> fragmentIds = request.getArrow_flight_sql_result_fragment_ids();
+            List<ArrowFlightSqlResultDescriptor.BackendResultDescriptor> backends = new ArrayList<>();
+            for (int i = 0; i < backendIds.size(); i++) {
+                backends.add(new ArrowFlightSqlResultDescriptor.BackendResultDescriptor(
+                        backendIds.get(i), fragmentIds.get(i)));
+            }
+            resultDesc = new ArrowFlightSqlResultDescriptor(backends, schema);
+        } else {
+            long backendId = request.getArrow_flight_sql_result_backend_id();
+            TUniqueId fragmentId = request.getArrow_flight_sql_result_fragment_id();
+            resultDesc = new ArrowFlightSqlResultDescriptor(backendId, fragmentId, schema);
+        }
 
         ArrowFlightSqlProxyQueryManager.getInstance().notifyBackendResult(request.getQuery_id(), resultDesc);
 

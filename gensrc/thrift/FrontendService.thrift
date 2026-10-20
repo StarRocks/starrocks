@@ -980,6 +980,11 @@ struct TNotifyForwardDeploymentFinishedRequest {
     2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
     3: optional i64 arrow_flight_sql_result_backend_id;
     4: optional binary arrow_flight_sql_result_schema;
+    // Multi-endpoint Arrow Flight: one (backend_id, fragment_instance_id) pair per
+    // result-producing BE instance. When set (non-empty), supersedes the single
+    // fields 2/3 above. Index-aligned.
+    5: optional list<i64> arrow_flight_sql_result_backend_ids;
+    6: optional list<Types.TUniqueId> arrow_flight_sql_result_fragment_ids;
 }
 
 struct TNotifyForwardDeploymentFinishedRespone {

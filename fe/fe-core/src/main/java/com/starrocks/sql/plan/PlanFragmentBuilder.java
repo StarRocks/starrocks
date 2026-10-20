@@ -294,7 +294,7 @@ public class PlanFragmentBuilder {
         UKFKConstraintsCollector.collectColumnConstraints(plan);
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
-                outputColumns, hasOutputFragment);
+                outputColumns, hasOutputFragment, resultSinkType);
         execPlan.setPlanCount(plan.getPlanCount());
         return finalizeFragments(execPlan, resultSinkType);
     }
@@ -310,7 +310,7 @@ public class PlanFragmentBuilder {
 
     private static void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                              List<ColumnRefOperator> outputColumns,
-                                             boolean hasOutputFragment) {
+                                             boolean hasOutputFragment, TResultSinkType resultSinkType) {
         if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() ||
                 !hasOutputFragment) {
             List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
@@ -342,6 +342,18 @@ public class PlanFragmentBuilder {
             for (PlanFragment fragment : execPlan.getFragments()) {
                 fragment.setSingleTabletGatherOutputFragment(true);
             }
+            return;
+        }
+
+        // Arrow Flight multi-endpoint: keep the result-producing fragment at N
+        // instances so each instance serves its own Flight endpoint. Skip inserting
+        // the single-instance UNPARTITIONED output gather. Gated by the session
+        // variable; only reached here for partition-independent queries (ORDER BY /
+        // LIMIT / global agg build their own gather earlier and never get here).
+        boolean arrowFlightMultiEndpoint = resultSinkType == TResultSinkType.ARROW_FLIGHT_PROTOCAL
+                && execPlan.getConnectContext().getSessionVariable().isEnableArrowFlightMultiEndpoint();
+        if (arrowFlightMultiEndpoint) {
+            inputFragment.setOutputExprs(outputExprs);
             return;
         }
 
