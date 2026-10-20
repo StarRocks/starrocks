@@ -42,16 +42,16 @@ SHOW CREATE ROUTINE LOAD testherbavro;
 STOP ROUTINE LOAD for testherbavro;
 
 -- name: test_show_create_routine_load_without_partitions
-create database test_show_create_routine_load_no_parts;
+create database db_${uuid0};
 
-use test_show_create_routine_load_no_parts;
+use db_${uuid0};
 
 create table no_parts_tbl (k int, v bigint)
 DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ( "replication_num" = "1" );
 
-CREATE ROUTINE LOAD test_show_create_routine_load_no_parts.no_parts_job on no_parts_tbl
+CREATE ROUTINE LOAD db_${uuid0}.no_parts_job on no_parts_tbl
 PROPERTIES (
 "desired_concurrent_number"="1",
 "format"="json")
@@ -63,3 +63,5 @@ FROM KAFKA (
 SHOW CREATE ROUTINE LOAD no_parts_job;
 
 STOP ROUTINE LOAD for no_parts_job;
+
+drop database db_${uuid0} force;
