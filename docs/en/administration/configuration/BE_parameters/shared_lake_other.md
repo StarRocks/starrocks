@@ -235,6 +235,24 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of cached client instances retained for each remote host by BE-wide client caches. This single setting is used when creating BackendServiceClientCache, FrontendServiceClientCache, and BrokerServiceClientCache during ExecEnv initialization, so it limits the number of client stubs/connections kept per host across those caches. Raising this value reduces reconnects and stub creation overhead at the cost of increased memory and file-descriptor usage; lowering it saves resources but may increase connection churn. The value is read at startup and cannot be changed at runtime. Currently one shared setting controls all client cache types; separate per-cache configuration may be introduced later.
 - Introduced in: v3.2.0
 
+### primary_key_index_memory_high_percent
+
+- Default: 85
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). A background thread checks the cache periodically. When the cache holds more than this percentage, it evicts the least recently used primary key indexes that are not in use until the cache is within this percentage. Indexes in use are never evicted.
+- Introduced in: -
+
+### primary_key_index_memory_middle_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level, expressed as a percentage of the cache capacity, to which the primary key index cache is shrunk when a publish of a Primary Key table in a shared-data cluster fails because it exceeds the memory limit. The primary key indexes that are not in use are evicted until the cache is within this percentage, which frees memory for the retried publish. Set it to a value lower than `primary_key_index_memory_high_percent`.
+- Introduced in: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - Default: 10000
