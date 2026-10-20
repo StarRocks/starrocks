@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
@@ -61,8 +62,11 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,6 +76,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -86,6 +91,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
@@ -299,6 +305,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (file.content() != FileContent.EQUALITY_DELETES) {
                 continue;
             }
+            // each equality-id group has its own delete scan; a file of another group would be read with its
+            // missing key columns filled with NULL and match rows whose key is NULL
+            if (!file.equalityFieldIds().equals(morParams.getEqualityIds())) {
+                continue;
+            }
 
             if (!seenEqDeleteFiles.contains(file.path().toString())) {
                 THdfsScanRange hdfsScanRange = buildScanRange(task, file, partitionId);
@@ -356,12 +367,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
-            if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
+            if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID) ||
+                    isPartitionKeyColumn(name, table.getNativeTable().schema())) {
                 LiteralExpr value;
                 if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
                     value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), Type.BIGINT);
-                } else {
+                } else if (name.equalsIgnoreCase(SPEC_ID)) {
                     value = LiteralExpr.create(String.valueOf(file.specId()), Type.INT);
+                } else {
+                    String partitionKey = buildPartitionKey(table.getNativeTable().specs().get(file.specId()),
+                            file.partition());
+                    value = partitionKey == null ? new NullLiteral() : LiteralExpr.create(partitionKey, Type.STRING);
                 }
 
                 extendedColumns.put(slot.getId().asInt(), value.treeToThrift());
@@ -387,6 +403,50 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
         return hdfsScanRange;
+    }
+
+    // A real table column of the same name is read from the file; only the column the equality delete rewrite
+    // adds is filled with the partition key.
+    static boolean isPartitionKeyColumn(String name, Schema schema) {
+        return name.equalsIgnoreCase(PARTITION_KEY) && schema.caseInsensitiveFindField(PARTITION_KEY) == null;
+    }
+
+    /**
+     * Encodes the spec id and partition values of a file, so that a data file and a partitioned equality delete
+     * file get the same key exactly when the delete applies to the data file by partition. Returns null for an
+     * unpartitioned spec: such deletes are global.
+     */
+    static String buildPartitionKey(PartitionSpec spec, StructLike partition) {
+        if (spec == null || spec.isUnpartitioned()) {
+            return null;
+        }
+        StringBuilder key = new StringBuilder().append(spec.specId());
+        List<Types.NestedField> fields = spec.partitionType().fields();
+        for (int i = 0; i < fields.size(); i++) {
+            Object partitionValue = partition.get(i, Object.class);
+            key.append('|');
+            if (partitionValue == null) {
+                key.append('n');
+            } else {
+                // int -> long and float -> double are allowed type promotions, so the two sides of one query may
+                // see a field under either type (an older schema, or a concurrent ALTER); always encode the wide one
+                org.apache.iceberg.types.Type type = fields.get(i).type();
+                if ((type.typeId() == org.apache.iceberg.types.Type.TypeID.INTEGER ||
+                        type.typeId() == org.apache.iceberg.types.Type.TypeID.LONG) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.LongType.get();
+                    partitionValue = number.longValue();
+                } else if ((type.typeId() == org.apache.iceberg.types.Type.TypeID.FLOAT ||
+                        type.typeId() == org.apache.iceberg.types.Type.TypeID.DOUBLE) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.DoubleType.get();
+                    partitionValue = number.doubleValue();
+                }
+                key.append('v').append(Base64.getEncoder().encodeToString(
+                        ByteBuffers.toByteArray(Conversions.toByteBuffer(type, partitionValue))));
+            }
+        }
+        return key.toString();
     }
 
     private int getCurBucketId(FileScanTask task, int i) {
