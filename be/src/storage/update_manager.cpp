@@ -72,12 +72,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _update_column_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
-    int64_t preload_mem_limit = -1;
-    if (_update_mem_tracker != nullptr) {
-        preload_mem_limit = (int64_t)_update_mem_tracker->limit() *
-                            std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
-    }
-    _update_state_mem_tracker = std::make_unique<MemTracker>(preload_mem_limit, "rowset_update_state", mem_tracker);
+    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
     _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
