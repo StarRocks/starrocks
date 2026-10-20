@@ -3844,6 +3844,57 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadMemLimit;
     }
 
+<<<<<<< HEAD
+=======
+    public String getLakeMultiNodeTabletWriteMode() {
+        return lakeMultiNodeTabletWriteMode;
+    }
+
+    // Named for the field so VariableMgr's SETTER_MAP picks it up: a bad mode must fail the SET
+    // rather than be stored and quietly read as something else later.
+    public void setLakeMultiNodeTabletWriteMode(String mode) {
+        this.lakeMultiNodeTabletWriteMode = parseMultiNodeTabletWriteMode(mode).name().toLowerCase();
+    }
+
+    public MultiNodeTabletWriteMode getMultiNodeTabletWriteMode() {
+        return parseMultiNodeTabletWriteMode(lakeMultiNodeTabletWriteMode);
+    }
+
+    // Public so a load that planned its sink from a persisted snapshot of this variable resolves the
+    // mode exactly as a SET does, rejection included.
+    public static MultiNodeTabletWriteMode parseMultiNodeTabletWriteMode(String mode) {
+        if (mode != null) {
+            for (MultiNodeTabletWriteMode candidate : MultiNodeTabletWriteMode.values()) {
+                if (candidate.name().equalsIgnoreCase(mode.trim())) {
+                    return candidate;
+                }
+            }
+        }
+        throw new SemanticException("Invalid " + LAKE_MULTI_NODE_TABLET_WRITE_MODE + ": '" + mode
+                + "'. Valid values are off, auto, force.");
+    }
+
+    public int getLakeMultiNodeWriteMaxNodes() {
+        return lakeMultiNodeWriteMaxNodes;
+    }
+
+    public void setLakeMultiNodeWriteMaxNodes(int lakeMultiNodeWriteMaxNodes) {
+        this.lakeMultiNodeWriteMaxNodes = lakeMultiNodeWriteMaxNodes;
+    }
+
+    public long getLakeMultiNodeWriteBytesPerNode() {
+        return lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public void setLakeMultiNodeWriteBytesPerNode(long lakeMultiNodeWriteBytesPerNode) {
+        this.lakeMultiNodeWriteBytesPerNode = lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public long getQueryMemLimit() {
+        return queryMemLimit;
+    }
+
+>>>>>>> 312af9a ([Feature] Apply query_queue_mem_used_pct_limit per warehouse under Query Queue V2 (#81026))
     public int getQueryTimeoutS() {
         return queryTimeoutS;
     }
