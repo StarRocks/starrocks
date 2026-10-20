@@ -14,11 +14,19 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.Map;
+
 public class ScanOptimizeOption {
     private boolean canUseAnyColumn;
     private boolean canUseMinMaxOpt;
     private boolean usePartitionColumnValueOnly;
     private boolean canUseCountOpt;
+    /**
+     * COUNT(col) placeholder column ref id to the name of the column it counts, set by
+     * RewriteSimpleAggToHDFSScanRule. The counted column is kept by name because a later low-cardinality
+     * rewrite may replace its column ref.
+     */
+    private Map<Integer, String> nonNullCountColumns = Map.of();
 
     public void setCanUseAnyColumn(boolean v) {
         canUseAnyColumn = v;
@@ -52,12 +60,21 @@ public class ScanOptimizeOption {
         return canUseCountOpt;
     }
 
+    public void setNonNullCountColumns(Map<Integer, String> nonNullCountColumns) {
+        this.nonNullCountColumns = Map.copyOf(nonNullCountColumns);
+    }
+
+    public Map<Integer, String> getNonNullCountColumns() {
+        return nonNullCountColumns;
+    }
+
     public ScanOptimizeOption copy() {
         ScanOptimizeOption opt = new ScanOptimizeOption();
         opt.canUseAnyColumn = this.canUseAnyColumn;
         opt.canUseMinMaxOpt = this.canUseMinMaxOpt;
         opt.usePartitionColumnValueOnly = this.usePartitionColumnValueOnly;
         opt.canUseCountOpt = this.canUseCountOpt;
+        opt.nonNullCountColumns = this.nonNullCountColumns;
         return opt;
     }
 }
