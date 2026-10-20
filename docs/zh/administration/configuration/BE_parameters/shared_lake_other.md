@@ -234,11 +234,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### primary_key_index_memory_high_percent
 
-- 默认值: 85
+- 默认值: 75
 - 类型: Int
 - 单位: -
 - 是否动态配置: 是
-- 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。缓存容量即更新相关内存的上限（参见 `update_memory_limit_percent`）。后台线程会定期检查该缓存，占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。正在使用的主键索引不会被淘汰。
+- 描述: 存算分离集群中，后台线程定期回收主键索引缓存的目标，以缓存容量的百分比表示。缓存容量即更新相关内存的上限（参见 `update_memory_limit_percent`）。占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。正在使用的主键索引不会被淘汰。建议设置为小于 `primary_key_index_memory_urgent_percent` 的值。
 - 引入版本: -
 
 ### primary_key_index_memory_middle_percent
@@ -248,6 +248,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位: -
 - 是否动态配置: 是
 - 描述: 存算分离集群中主键表 Publish 因超出内存限制而失败时，主键索引缓存的回收目标，以缓存容量的百分比表示。此时系统会淘汰未在使用的主键索引，直至占用回落到该比例以内，为重试的 Publish 腾出内存。建议设置为小于 `primary_key_index_memory_high_percent` 的值。
+- 引入版本: -
+
+### primary_key_index_memory_urgent_percent
+
+- 默认值: 85
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
 
 ### starlet_filesystem_instance_cache_capacity

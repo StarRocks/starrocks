@@ -578,9 +578,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                   base_version_order);
     // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
     // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
-    // that the retry has memory to load into.
+    // that the retry has memory to load into. Any other publish only checks the urgent level: the background
+    // evict thread does the regular trimming to primary_key_index_memory_high_percent, and this is the backstop
+    // for when the cache grows past the urgent level before that thread runs. Like that thread, it is part of
+    // the automatic eviction that enable_auto_evict_update_cache turns off.
     if (res.status().is_mem_limit_exceeded()) {
         tablet_mgr->update_mgr()->evict_cache(config::primary_key_index_memory_middle_percent);
+    } else if (config::enable_auto_evict_update_cache) {
+        tablet_mgr->update_mgr()->evict_cache(config::primary_key_index_memory_urgent_percent);
     }
     return res;
 }
