@@ -160,20 +160,14 @@ private:
     }
     std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
-<<<<<<< HEAD
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
-    std::optional<ShardInfo> get_borrowed_shard_info(ShardId id) const;
-    std::optional<std::shared_ptr<FileSystem>> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
-=======
-    absl::StatusOr<FileSystemHandle> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     std::optional<BorrowedShardInfo> get_borrowed_shard_info(ShardId id) const;
-    std::optional<FileSystemHandle> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
+    std::optional<std::shared_ptr<FileSystem>> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
     // Keeps |value| unless this worker owns the shard or already keeps a newer storage version of it.
     void keep_borrowed_shard_info(std::unique_ptr<BorrowedShardInfo> value);
     // Keeps what starmgr returned for a shard this worker does not own, together with the filesystem
     // built for it if any, see `retrieve_shard_info`.
     void keep_fetched_shard_info(const ShardInfo& info, std::shared_ptr<std::string> fs_cache_key);
->>>>>>> 656122ae4f5... [Enhancement][RB-522] Keep shard info fetched from starmgr for shards a node does not own (#65944)
     // Puts |value| into `_borrowed_cache` under |id|, replacing what is there. Requires `_borrowed_mtx`.
     void insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>

@@ -312,15 +312,9 @@ std::optional<StarOSWorker::BorrowedShardInfo> StarOSWorker::get_borrowed_shard_
     return *value;
 }
 
-<<<<<<< HEAD
 std::optional<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::get_borrowed_shard_filesystem(
         ShardId id, const Configuration& conf) {
-    // Turning the handoff off also stops using what was borrowed before, not only new borrowing.
-    if (!config::lake_enable_tablet_location_handoff) {
-=======
-std::optional<FileSystemHandle> StarOSWorker::get_borrowed_shard_filesystem(ShardId id, const Configuration& conf) {
     if (!shard_info_cache_enabled()) {
->>>>>>> 656122ae4f5... [Enhancement][RB-522] Keep shard info fetched from starmgr for shards a node does not own (#65944)
         return std::nullopt;
     }
     ShardInfo info;
@@ -335,18 +329,12 @@ std::optional<FileSystemHandle> StarOSWorker::get_borrowed_shard_filesystem(Shar
         if (value->expire_at_sec <= MonotonicSeconds()) {
             return std::nullopt;
         }
-<<<<<<< HEAD
-        if (auto fs = lookup_fs_cache(value->fs_cache_key); fs != nullptr) {
-            StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_hits_total.increment(1);
-            return fs;
-=======
         fetched = value->fetched;
         // The kept filesystem is built with the default configuration. One asked for with extra
         // configuration (`new_fs_starlet`'s raw-path mode) is built from the kept shard info instead.
         if (auto fs = conf.empty() ? lookup_fs_cache(value->fs_cache_key) : nullptr; fs != nullptr) {
             count_borrowed_hit(fetched);
-            return FileSystemHandle{std::move(fs), value->shard_info.replicas};
->>>>>>> 656122ae4f5... [Enhancement][RB-522] Keep shard info fetched from starmgr for shards a node does not own (#65944)
+            return fs;
         }
         info = value->shard_info;
     }

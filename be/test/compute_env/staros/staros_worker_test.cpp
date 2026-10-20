@@ -854,7 +854,7 @@ TEST_F(StarOSWorkerTest, fetched_shard_info_is_kept_for_the_next_lookup) {
         ASSERT_TRUE(fs1.ok()) << fs1.status();
         auto fs2 = worker.get_shard_filesystem(10001, {});
         ASSERT_TRUE(fs2.ok()) << fs2.status();
-        EXPECT_EQ(fs1->file_system.get(), fs2->file_system.get());
+        EXPECT_EQ(fs1->get(), fs2->get());
 
         EXPECT_EQ(hits_before + 3, metrics->staros_shard_info_fallback_cache_hits_total.value());
         EXPECT_EQ(handoff_hits_before, metrics->lake_tablet_location_handoff_hits_total.value());
@@ -876,7 +876,7 @@ TEST_F(StarOSWorkerTest, fetched_filesystem_is_reused) {
     ASSERT_TRUE(first.ok()) << first.status();
     auto second = worker.get_shard_filesystem(10101, {});
     ASSERT_TRUE(second.ok()) << second.status();
-    EXPECT_EQ(first->file_system.get(), second->file_system.get());
+    EXPECT_EQ(first->get(), second->get());
     ASSERT_TRUE(worker.retrieve_shard_info(10101).ok());
 }
 
@@ -976,7 +976,7 @@ TEST_F(StarOSWorkerTest, kept_filesystem_survives_a_replaced_fs_cache_entry) {
     }
     ASSERT_TRUE(worker->is_live_fs_cache_key(kept_key));
     // Another key takes the entry over and then goes away, as when the cache expires or evicts it.
-    auto other_key = worker->insert_fs_cache(*kept_key, first->file_system);
+    auto other_key = worker->insert_fs_cache(*kept_key, *first);
     ASSERT_NE(nullptr, other_key);
     EXPECT_FALSE(worker->is_live_fs_cache_key(kept_key));
     other_key.reset();
@@ -986,7 +986,7 @@ TEST_F(StarOSWorkerTest, kept_filesystem_survives_a_replaced_fs_cache_entry) {
     ASSERT_TRUE(rebuilt.ok()) << rebuilt.status();
     auto reused = worker->get_shard_filesystem(10801, {});
     ASSERT_TRUE(reused.ok()) << reused.status();
-    EXPECT_EQ(rebuilt->file_system.get(), reused->file_system.get());
+    EXPECT_EQ(rebuilt->get(), reused->get());
 }
 
 TEST_F(StarOSWorkerTest, failed_fetch_is_not_kept) {
@@ -1016,10 +1016,10 @@ TEST_F(StarOSWorkerTest, fetched_filesystem_with_extra_configuration_is_not_kept
     EXPECT_TRUE(worker.has_borrowed_shard_info(10701));
     auto plain = worker.get_shard_filesystem(10701, {});
     ASSERT_TRUE(plain.ok()) << plain.status();
-    EXPECT_NE(raw->file_system.get(), plain->file_system.get());
+    EXPECT_NE(raw->get(), plain->get());
     auto raw_again = worker.get_shard_filesystem(10701, raw_path);
     ASSERT_TRUE(raw_again.ok()) << raw_again.status();
-    EXPECT_NE(plain->file_system.get(), raw_again->file_system.get());
+    EXPECT_NE(plain->get(), raw_again->get());
 }
 
 TEST_F(StarOSWorkerTest, test_fallback_metric_not_incremented_on_cache_hit) {
