@@ -1641,6 +1641,18 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
+### range_scan_execution_mode
+
+* **Description**: Experimental execution mode for read-only single-table aggregates on native shared-data range-colocate tables. `colocate` preserves range colocation. `parallel` gives the scan effective ANY distribution and requires Hash/Gather Exchanges to merge aggregates, including exact `COUNT DISTINCT`. Values are case-insensitive; `auto` is unsupported.
+* **Scope**: Session
+* **Default**: `colocate`
+* **Data type**: String
+* **Valid values**: `colocate`, `parallel`
+
+A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
+
+Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
 ### resource_group
 
         * **Description**: The specified resource group of this session

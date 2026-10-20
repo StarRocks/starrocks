@@ -175,6 +175,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private List<Long> scanTabletIds = Lists.newArrayList();
     private List<Long> hintsReplicaIds = Lists.newArrayList();
     private boolean isFinalized = false;
+    private boolean parallelRangeScan;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
     // only used in bucket agg
@@ -227,6 +228,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         this.computeResource = computeResource;
     }
 
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
     public Map<Long, Long> getScanPartitionVersions() {
         return scanPartitionVersions;
     }
@@ -249,6 +254,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
+    }
+
+    public boolean isParallelRangeScan() {
+        return parallelRangeScan;
+    }
+
+    public void setParallelRangeScan(boolean parallelRangeScan) {
+        this.parallelRangeScan = parallelRangeScan;
     }
 
     public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
@@ -767,7 +780,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             scanRange.setInternal_scan_range(internalRange);
             scanRangeLocations.setScan_range(scanRange);
 
-            bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
+            if (!parallelRangeScan) {
+                bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
+            }
             checkScanRangeNumSafeOnce(scanRange);
 
             result.add(scanRangeLocations);
@@ -834,7 +849,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
-        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
+        RangeColocateScanDispatch dispatch = parallelRangeScan ? null : RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -855,7 +870,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                if (!parallelRangeScan) {
+                    fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                }
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
@@ -965,6 +982,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
+
+        if (parallelRangeScan) {
+            output.append(prefix).append("SCAN EXECUTION MODE: PARALLEL_SCAN\n");
+            output.append(prefix).append("EFFECTIVE DISTRIBUTION: ANY, STORAGE DISTRIBUTION: RANGE\n");
+        }
 
         // TODO: unify them
         long selectedIndexMetaId = index.indexMetaId;

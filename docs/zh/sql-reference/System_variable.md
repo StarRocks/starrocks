@@ -1401,6 +1401,18 @@ FROM test;
 * 默认值：100
 * 引入版本：v3.0
 
+### range_scan_execution_mode
+
+* 描述：原生存算分离范围 Colocate 表的只读单表聚合实验执行模式。`colocate` 保留范围 Colocate 执行；`parallel` 将扫描的有效分布设为 ANY，通过 Hash/Gather Exchange 合并聚合结果，包括精确的 `COUNT DISTINCT`。取值不区分大小写，不支持 `auto`。
+* 作用域：Session
+* 默认值：`colocate`
+* 数据类型：String
+* 有效值：`colocate`、`parallel`
+
+非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
+
+并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
+
 ### resource_group
 
 * **描述**: 此会话指定的 resource group

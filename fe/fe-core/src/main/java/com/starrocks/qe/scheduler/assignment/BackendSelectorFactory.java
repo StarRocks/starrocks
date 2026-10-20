@@ -28,6 +28,8 @@ import com.starrocks.qe.NoopBackendSelector;
 import com.starrocks.qe.NormalBackendSelector;
 import com.starrocks.qe.ReplicatedBackendSelector;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.TabletParallelBackendSelector;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -56,6 +58,12 @@ public class BackendSelectorFactory {
         }
 
         List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(maxScanRangeLength);
+        if (scanNode instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan()) {
+            if (isLoadType || useIncrementalScanRanges) {
+                throw new NonRecoverableException("range_scan_execution_mode=parallel requires one-shot native reads");
+            }
+            return new TabletParallelBackendSelector(nativeScan, locations, assignment, workerProvider);
+        }
         if (locations == null) {
             return new NoopBackendSelector();
         }

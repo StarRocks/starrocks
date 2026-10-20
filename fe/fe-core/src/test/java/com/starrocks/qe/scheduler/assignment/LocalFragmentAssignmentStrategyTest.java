@@ -14,9 +14,26 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstance.DeployedScanRangeLayout;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -78,4 +95,57 @@ public class LocalFragmentAssignmentStrategyTest {
         Assertions.assertEquals(3, layout.getDriverSeqCount());
     }
 
+    @Test
+    public void parallelSourceIgnoresForcedPerDriverPropertyAssignment() throws Exception {
+        ComputeResource resource = new ComputeResource() {
+            public long getWarehouseId() {
+                return 0;
+            }
+            public long getWorkerGroupId() {
+                return 0;
+            }
+        };
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        OlapTable table = new OlapTable();
+        table.setBaseIndexMetaId(0);
+        table.setIndexMeta(0, "base", List.of(new com.starrocks.catalog.Column("k", com.starrocks.type.IntegerType.INT)),
+                0, 0, (short) 1, com.starrocks.thrift.TStorageType.COLUMN, com.starrocks.sql.ast.KeysType.DUP_KEYS);
+        tuple.setTable(table);
+        List<TScanRangeLocations> tasks = java.util.stream.LongStream.range(100, 132)
+                .mapToObj(id -> new TScanRangeLocations().setScan_range(new TScanRange().setInternal_scan_range(
+                        new TInternalScanRange().setTablet_id(id).setVersion("7").setSchema_hash("0"))))
+                .toList();
+        OlapScanNode scan = new OlapScanNode(new PlanNodeId(0), tuple, "OlapScanNode", 0, resource) {
+            @Override
+            public List<TScanRangeLocations> getScanRangeLocations(long maxLength) {
+                return tasks;
+            }
+        };
+        scan.setParallelRangeScan(true);
+        for (int dop : List.of(1, 4)) {
+            PlanFragment plan = new PlanFragment(new PlanFragmentId(0), scan, DataPartition.RANDOM);
+            plan.setParallelExecNum(1);
+            plan.setPipelineDop(dop);
+            plan.setForceAssignScanRangesPerDriverSeq();
+            ComputeNode first = new ComputeNode(1, "127.0.0.1", 9000);
+            ComputeNode second = new ComputeNode(2, "127.0.0.2", 9000);
+            first.setAlive(true);
+            second.setAlive(true);
+            var nodes = ImmutableMap.of(1L, first, 2L, second);
+            var provider = new DefaultSharedDataWorkerProvider(nodes, nodes, resource);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentComputeResource(resource);
+            ExecutionFragment fragment = new ExecutionFragment(null, plan, 0);
+            new LocalFragmentAssignmentStrategy(context, provider, true, false, false)
+                    .assignFragmentToWorker(fragment);
+            Assertions.assertNull(fragment.getColocatedAssignment());
+            Assertions.assertEquals(2, fragment.getInstances().size());
+            Assertions.assertEquals(32, fragment.getInstances().stream().mapToInt(instance -> {
+                Assertions.assertTrue(instance.getBucketSeqs().isEmpty());
+                Assertions.assertTrue(instance.getNode2DriverSeqToScanRanges().isEmpty());
+                Assertions.assertEquals(dop, instance.getPipelineDop());
+                return instance.getNode2ScanRanges().values().stream().mapToInt(List::size).sum();
+            }).sum());
+        }
+    }
 }
