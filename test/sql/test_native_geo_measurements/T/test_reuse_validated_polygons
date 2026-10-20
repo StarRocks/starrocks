@@ -12,6 +12,6 @@ INSERT INTO shapes VALUES
 [ORDER] SELECT id, ST_Area(ST_GeogFromText(wkt)), ST_Perimeter(ST_GeogFromText(wkt)), ST_IsValid(ST_GeogFromText(wkt)), hex(ST_AsBinary(ST_Centroid(ST_GeogFromText(wkt)))) FROM shapes ORDER BY id;
 SELECT ST_Area(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')), ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'));
 SELECT ST_Area(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')), ST_Perimeter(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'));
-SELECT ST_Area(ST_GeogFromText('MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))'));
-SELECT ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))'));
+function: assert_query_error_contains("SELECT ST_Area(ST_GeogFromText('MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))'))", "Measurement requires a valid GEOGRAPHY")
+function: assert_query_error_contains("SELECT ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))'))", "Measurement requires a valid GEOGRAPHY")
 DROP DATABASE geog_measure_${uuid0};

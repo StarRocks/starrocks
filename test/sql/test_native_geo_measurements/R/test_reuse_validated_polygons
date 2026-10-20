@@ -36,13 +36,13 @@ SELECT ST_Area(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')), ST_Perimeter
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 65. Detail message: No matching function with signature: st_area(varchar).')
 -- !result
-SELECT ST_Area(ST_GeogFromText('MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))'));
+function: assert_query_error_contains("SELECT ST_Area(ST_GeogFromText('MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))'))", "Measurement requires a valid GEOGRAPHY")
 -- result:
-E: (1064, 'Measurement requires a valid GEOGRAPHY: BE:10002')
+None
 -- !result
-SELECT ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))'));
+function: assert_query_error_contains("SELECT ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))'))", "Measurement requires a valid GEOGRAPHY")
 -- result:
-E: (1064, 'Measurement requires a valid GEOGRAPHY: BE:10002')
+None
 -- !result
 DROP DATABASE geog_measure_${uuid0};
 -- result:
