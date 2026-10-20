@@ -2533,6 +2533,78 @@ TEST_F(geographyFunctionsTest, nativeGeoMeasurementsAndCollections) {
     EXPECT_NEAR(spherical_perimeter.value(1), spherical_perimeter.value(2), 0.001);
 }
 
+TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResults) {
+    // DOUBLE bits from main 77815dba, including normalized loops, holes and empty MULTIPOLYGON children.
+    struct Case {
+        const char* wkt;
+        uint64_t area;
+        uint64_t perimeter;
+    };
+    const Case cases[] = {
+            {"POLYGON ((0 0,1 0,1 1,0 1,0 0))", 0x420707a1ceb89c7cULL, 0x411b256ddffa2224ULL},
+            {"POLYGON ((0 0,0 1,1 1,1 0,0 0))", 0x420707a1ceb89c81ULL, 0x411b256ddffa2224ULL},
+            {"POLYGON ((0 0,10 0,10 10,0 10,0 0),(1 1,2 1,2 2,1 2,1 1),(6 6,8 6,8 8,6 8,6 6))", 0x42710d1f2200da09ULL,
+             0x4155fab3a7691bcfULL},
+            {"MULTIPOLYGON (EMPTY,((0 0,1 0,1 1,0 1,0 0)),EMPTY,((20 10,21 10,21 11,20 11,20 10)),EMPTY)",
+             0x4216d65fa86bc6a7ULL, 0x412b086705597c27ULL},
+            {"POLYGON ((-170 -70,170 -70,170 70,-170 70,-170 -70))", 0x42b83f2a989a36a5ULL, 0x417f22f569843d6dULL},
+            {"POLYGON ((-135 80,-45 80,45 80,135 80,-135 80))", 0x42821579ac16af4fULL, 0x4157ef0b04cdf681ULL},
+            {"POLYGON ((179 -1,-179 -1,-179 1,179 1,179 -1))", 0x42270814b9b78b97ULL, 0x412b252a1ee3da9fULL},
+            {"POLYGON ((0 0,0.000000001 0,0.000000001 0.000000001,0 0.000000001,0 0))", 0x3e4a8d5fa35e302bULL,
+             0x3f3d262d4ac915d8ULL},
+    };
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.wkt);
+        auto input = geography({test.wkt, nullptr, "POLYGON EMPTY"});
+        for (bool area : {true, false}) {
+            const auto evaluate = [&](const ColumnPtr& column) {
+                return area ? GeoFunctions::st_geography_area(nullptr, {column})
+                            : GeoFunctions::st_geography_perimeter(nullptr, {column});
+            };
+            auto result = evaluate(input);
+            ASSERT_TRUE(result.ok()) << result.status();
+            ColumnViewer<TYPE_DOUBLE> values(*result);
+            EXPECT_EQ(area ? test.area : test.perimeter, std::bit_cast<uint64_t>(values.value(0)));
+            EXPECT_TRUE(values.is_null(1));
+            EXPECT_EQ(0, std::bit_cast<uint64_t>(values.value(2)));
+
+            auto constant = ConstColumn::create(geography({test.wkt}), 3);
+            auto constant_result = evaluate(constant);
+            ASSERT_TRUE(constant_result.ok()) << constant_result.status();
+            EXPECT_TRUE((*constant_result)->is_constant());
+            EXPECT_EQ(3, (*constant_result)->size());
+            ColumnViewer<TYPE_DOUBLE> constant_values(*constant_result);
+            EXPECT_EQ(area ? test.area : test.perimeter, std::bit_cast<uint64_t>(constant_values.value(2)));
+            auto null_result = evaluate(ColumnHelper::create_const_null_column(3));
+            ASSERT_TRUE(null_result.ok()) << null_result.status();
+            EXPECT_TRUE((*null_result)->only_null());
+            EXPECT_EQ(3, (*null_result)->size());
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsValidateBeforeUsingPreparedPolygons) {
+    // Match production initialization, as in h3SingleRingValidityMatchesSphericalPredicate.
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    for (const char* wkt : {"POLYGON ((0 0,2 2,0 2,2 0,0 0))", "POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))",
+                            "POLYGON ((0 0,10 0,10 10,0 10,0 0),(2 2,8 2,8 8,2 8,2 2),(3 3,4 3,4 4,3 4,3 3))",
+                            "MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((1 1,3 1,3 3,1 3,1 1)))",
+                            "MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))"}) {
+        SCOPED_TRACE(wkt);
+        auto input = geography({wkt});
+        auto valid = GeoFunctions::st_geography_is_valid(nullptr, {input});
+        ASSERT_TRUE(valid.ok()) << valid.status();
+        EXPECT_FALSE(ColumnViewer<TYPE_BOOLEAN>(*valid).value(0));
+        for (auto function : {GeoFunctions::st_geography_area, GeoFunctions::st_geography_perimeter}) {
+            auto result = function(nullptr, {input});
+            ASSERT_FALSE(result.ok());
+            EXPECT_TRUE(result.status().is_invalid_argument());
+            EXPECT_EQ("Measurement requires a valid GEOGRAPHY", result.status().message());
+        }
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeometryMeasurementsAreStableAfterLargeTranslation) {
     const auto type = geometry_type("EPSG:3857", 3857);
     auto polygons = geometry({"POLYGON ((0 0, 0.1 0, 0.1 0.1, 0 0.1, 0 0))",
