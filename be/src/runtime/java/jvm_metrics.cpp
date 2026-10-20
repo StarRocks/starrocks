@@ -207,12 +207,19 @@ Status JVMMetrics::update() {
         auto& usage = pool.usage;
         auto& peak_usage = pool.peak_usage;
 
-#define UPDATE_METRIC(name, used, committed, max, peak_used, peak_max) \
-    jvm_##name##_used_bytes.set_value(used);                           \
-    jvm_##name##_committed_bytes.set_value(committed);                 \
-    jvm_##name##_max_bytes.set_value(max);                             \
-    jvm_##name##_peak_used_bytes.set_value(peak_used);                 \
-    jvm_##name##_peak_max_bytes.set_value(peak_max)
+// A pool without a defined maximum reports -1, e.g. G1 Eden/Survivor, or Metaspace without
+// MaxMetaspaceSize. Stop exporting its max and peak_max rather than a negative byte count. Whether
+// a pool has a maximum is fixed for the JVM's lifetime, so the gauges are hidden only once.
+#define UPDATE_METRIC(name, used, committed, max, peak_used, peak_max)                  \
+    jvm_##name##_used_bytes.set_value(used);                                            \
+    jvm_##name##_committed_bytes.set_value(committed);                                  \
+    jvm_##name##_max_bytes.set_value(max);                                              \
+    jvm_##name##_peak_used_bytes.set_value(peak_used);                                  \
+    jvm_##name##_peak_max_bytes.set_value(peak_max);                                    \
+    if ((max) < 0 && !_##name##_max_hidden.exchange(true, std::memory_order_acq_rel)) { \
+        jvm_##name##_max_bytes.hide();                                                  \
+        jvm_##name##_peak_max_bytes.hide();                                             \
+    }
 
         if (name == "Eden Space" || name == "PS Eden Space" || name == "Par Eden Space" || name == "G1 Eden Space") {
             UPDATE_METRIC(young, usage.used, usage.committed, usage.max, peak_usage.used, peak_usage.max);

@@ -94,6 +94,34 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_GE(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_used_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
+
+    // A pool without a defined maximum reports -1 (e.g. G1 Eden/Survivor, Metaspace without
+    // MaxMetaspaceSize); its max and peak_max must be hidden instead of exported as negative bytes.
+    // Which pools have a maximum depends on the GC, so only check that no exported value is negative.
+    struct PoolMaxGauges {
+        const char* metric_name;
+        IntGauge* max;
+        IntGauge* peak_max;
+    };
+    for (const auto& pool : {PoolMaxGauges{"jvm_young_size_bytes", &jvm_metrics.jvm_young_max_bytes,
+                                           &jvm_metrics.jvm_young_peak_max_bytes},
+                             PoolMaxGauges{"jvm_old_size_bytes", &jvm_metrics.jvm_old_max_bytes,
+                                           &jvm_metrics.jvm_old_peak_max_bytes},
+                             PoolMaxGauges{"jvm_survivor_size_bytes", &jvm_metrics.jvm_survivor_max_bytes,
+                                           &jvm_metrics.jvm_survivor_peak_max_bytes},
+                             PoolMaxGauges{"jvm_perm_size_bytes", &jvm_metrics.jvm_perm_max_bytes,
+                                           &jvm_metrics.jvm_perm_peak_max_bytes}}) {
+        if (registry.get_metric(pool.metric_name, type_label("max")) != nullptr) {
+            ASSERT_GE(pool.max->value(), 0) << pool.metric_name;
+        }
+        if (registry.get_metric(pool.metric_name, type_label("peak_max")) != nullptr) {
+            ASSERT_GE(pool.peak_max->value(), 0) << pool.metric_name;
+        }
+    }
+    // The heap always has a maximum, and hiding a pool's max must not touch its other values.
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("max")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes", type_label("committed")));
 }
 
 TEST_F(JVMMetricsTest, JavaEnvInstallsJvmMetrics) {
