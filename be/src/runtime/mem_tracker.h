@@ -119,13 +119,8 @@ enum class MemTrackerType {
     INDEX_CACHE,
     DEL_VEC_CACHE,
     COMPACTION_STATE,
-<<<<<<< HEAD
-    BUILTIN_INVERTED_INDEX
-=======
     BUILTIN_INVERTED_INDEX,
-    VECTOR_INDEX,
     JVM
->>>>>>> 60408a5 ([Enhancement] Count JVM committed memory in the BE process memory tracker (#81127))
 };
 
 class MemTracker {

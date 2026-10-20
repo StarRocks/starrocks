@@ -16,24 +16,13 @@
 
 #include <vector>
 
-<<<<<<< HEAD:be/src/util/jvm_metrics.cpp
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
+#include "runtime/mem_tracker.h"
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
-=======
-#include "base/logging.h"
-#include "base/utility/defer_op.h"
-#include "common/config_metrics_fwd.h"
-#include "common/status.h"
-#include "common/statusor.h"
-#include "jni.h"
-#include "runtime/java/java_runtime.h"
-#include "runtime/java/jni_env.h"
-#include "runtime/java/jvm_helper.h"
-#include "runtime/mem_tracker.h"
->>>>>>> 60408a5 ([Enhancement] Count JVM committed memory in the BE process memory tracker (#81127)):be/src/runtime/java/jvm_metrics.cpp
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                          \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                          \

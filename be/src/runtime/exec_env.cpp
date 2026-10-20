@@ -268,6 +268,10 @@ Status GlobalEnv::_init_mem_tracker() {
     // a segment; see the hooks above.
     set_dict_dctx_alloc_scope(&enter_dctx_alloc_scope, &leave_dctx_alloc_scope);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
+    // JVM heap and non-heap memory are mapped by the JVM itself rather than allocated through the
+    // malloc hook, so they are invisible to the other trackers. The JVM metrics hook sets this one.
+    _jvm_mem_tracker = regist_tracker(MemTrackerType::JVM, -1, process_mem_tracker());
+    StarRocksMetrics::instance()->jvm_metrics()->set_mem_tracker(_jvm_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker = regist_tracker(MemTrackerType::QUERY_POOL, query_pool_mem_limit, process_mem_tracker());
@@ -339,6 +343,13 @@ std::shared_ptr<MemTracker> GlobalEnv::get_mem_tracker_by_type(MemTrackerType ty
     } else {
         return nullptr;
     }
+}
+
+void GlobalEnv::stop() {
+    _is_init = false;
+    // The JVM metrics hook outlives the trackers; stop it from using the one released below.
+    StarRocksMetrics::instance()->jvm_metrics()->set_mem_tracker(nullptr);
+    _reset_tracker();
 }
 
 void GlobalEnv::_reset_tracker() {
