@@ -317,7 +317,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
 #ifndef __APPLE__
     if (init_jvm_metrics) {
         if (std::getenv("JAVA_HOME") == nullptr) {
-            LOG(WARNING) << "JAVA_HOME is not set, skip installing jvm metrics";
+            LOG(INFO) << "JAVA_HOME is not set, skip installing jvm metrics";
             return;
         }
         // Only registers the gauges and the collect hook. The JNI side is initialized lazily by the
