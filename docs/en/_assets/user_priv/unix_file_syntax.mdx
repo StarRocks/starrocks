@@ -17,3 +17,13 @@ PROPERTIES (
     "group_file_url" = ""
 )
 ```
+
+- JWT group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name>
+PROPERTIES (
+    "type" = "jwt",
+    "jwt_claim" = "realm_access.roles"
+)
+```

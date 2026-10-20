@@ -142,7 +142,9 @@ public class AuthenticationHandler {
                             ? AuthFailureReason.NO_MATCHING_SI : AuthFailureReason.BAD_CREDENTIAL);
         }
 
+        ConnectContext.set(context);
         setAuthenticationResultToContext(context, authenticationResult);
+        ConnectContext.remove();
         return authenticationResult.authenticatedUser;
     }
 
