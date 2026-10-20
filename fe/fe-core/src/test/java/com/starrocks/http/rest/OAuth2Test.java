@@ -94,7 +94,7 @@ public class OAuth2Test {
         assertEquals("test_client_id", context.clientId());
         assertEquals("test_client_secret", context.clientSecret());
         assertEquals("https://auth.example.com/.well-known/jwks.json", context.jwksUrl());
-        assertEquals("sub", context.principalFiled());
+        assertEquals("sub", context.principalField());
         assertEquals("https://auth.example.com", context.requiredIssuer()[0]);
         assertEquals("test_client_id", context.requiredAudience()[0]);
         assertEquals(30L, context.connectWaitTimeout());
@@ -131,7 +131,7 @@ public class OAuth2Test {
         assertNotNull(oAuth2Context.clientId());
         assertNotNull(oAuth2Context.clientSecret());
         assertNotNull(oAuth2Context.jwksUrl());
-        assertNotNull(oAuth2Context.principalFiled());
+        assertNotNull(oAuth2Context.principalField());
         assertNotNull(oAuth2Context.requiredIssuer());
         assertNotNull(oAuth2Context.requiredAudience());
         assertNotNull(oAuth2Context.connectWaitTimeout());
@@ -466,7 +466,7 @@ public class OAuth2Test {
         assertEquals("test_client_id", context.clientId());
         assertEquals("test_client_secret", context.clientSecret());
         assertEquals("https://auth.example.com/.well-known/jwks.json", context.jwksUrl());
-        assertEquals("sub", context.principalFiled());
+        assertEquals("sub", context.principalField());
         assertEquals(3L, context.connectWaitTimeout());
     }
 
