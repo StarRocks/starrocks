@@ -30,8 +30,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -43,7 +41,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -956,8 +953,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             persistStateChange(this, JobState.FINISHED, () -> {
                 // Below this point, all query and load jobs will use the new schema.
                 visualiseShadowIndex(table);
-                // inactivate related mv
-                inactiveRelatedMv(modifiedColumns, table);
+                // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
                 table.onReload();
             });
         }
@@ -1134,33 +1131,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
-    }
-
-    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), tbl.getName());
-                    mv.setInactiveAndReason(
-                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                    // clear version map to make sure the MV will be refreshed
-                    mv.resetVisibleVersionMap();
-                    return;
-                }
-            }
-        }
     }
 
     boolean tableHasBeenDropped() {

@@ -79,20 +79,12 @@ public class OAuth2SecurityIntegration extends JWTBaseSecurityIntegration {
                 oauthRedirectUrl,
                 clientId,
                 clientSecret,
-<<<<<<< HEAD
-                jwksUrl,
-                principalField,
-                requiredIssuers,
-                requiredAudiences,
-                connectWaitTimeout));
-=======
                 getJwksUrl(),
                 getPrincipalField(),
                 getRequiredIssuer(),
                 getRequiredAudience(),
                 connectWaitTimeout),
                 getGroupSource(), getGroupClaim(), name);
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
     }
 
     @Override

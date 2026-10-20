@@ -197,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 ODBC の DSN に `default\_auth=mysql_clear_password` と `ENABLE_CLEARTEXT\_PLUGIN=1` を追加し、ユーザー名とパスワードを指定します。
+
+### HTTP または Arrow Flight から LDAP で接続する
+
+HTTP API と Arrow Flight SQL はもともと平文パスワードを送るため、LDAP ユーザーはこれらのエントリポイントで特別な設定を必要としません。HTTP Basic 認証も Arrow Flight のユーザー名とパスワードも、最終的には同じ LDAP bind に行き着きます。`IDENTIFIED WITH authentication_ldap_simple` で作成したユーザーと、LDAP [セキュリティインテグレーション](./security_integration.md)のユーザーで挙動は同じです。[各認証方式が使えるエントリポイント](./authentication.mdx#各認証方式が使えるエントリポイント)を参照してください。
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

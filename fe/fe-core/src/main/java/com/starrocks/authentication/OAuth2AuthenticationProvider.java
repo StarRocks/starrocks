@@ -14,16 +14,13 @@
 
 package com.starrocks.authentication;
 
-<<<<<<< HEAD
-=======
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.JWTClaimsSet;
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.ByteArrayOutputStream;
 import java.net.URLEncoder;
@@ -73,19 +70,90 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
-            throws AuthenticationException {
-        /*
-          If the auth plugin used by the client for this authentication is not AUTHENTICATION_OAUTH2_CLIENT,
-          then the authentication success will be directly returned.
-          However, this is not a true authentication success, the user cannot perform any operations on this connection.
-          Any operation will return an auth url to guide the user to perform oauth2 authentication.
-          This is because in many scenarios, the client cannot directly launch a web browser.
-         */
-        if (!AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString().equals(authContext.getAuthPlugin())) {
-            return;
+    public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity,
+                                     AuthCredentials cred) throws AuthenticationException {
+        // Three routes, and this method only picks between them. Where the token comes from is
+        // what separates them:
+        //
+        //   BEARER_TOKEN - the client already holds an IdP-issued token and hands it over in the
+        //                  request. Verified right here (verifyBearer), acting as a Resource
+        //                  Server. This is every non-MySQL channel: HTTP Bearer on each request,
+        //                  Arrow Flight on the first contact of a session (it then mints an
+        //                  internal session token), and the BE-to-FE Thrift RPCs on each call.
+        //
+        //   The two MySQL kinds never carry the token. On MySQL it arrives out of band: the browser
+        //   completes the IdP login, the IdP redirects to /api/oauth2, and OAuth2Action exchanges
+        //   the code, verifies the id token and stores it on the connection's context. The two
+        //   kinds differ only in what the handshake does meanwhile:
+        //
+        //   MYSQL_OAUTH2_CLIENT - the client declared the OAuth2 plugin, so it received
+        //                  the authorization endpoint in the handshake and can open the browser
+        //                  itself. The handshake waits for the callback (authenticateMysqlBrowserFlow).
+        //   MYSQL_NATIVE_SCRAMBLE - an ordinary MySQL client, which cannot open a browser. The handshake
+        //                  is answered as if it had succeeded, and ConnectProcessor#checkLoginSuccess
+        //                  turns the first statement into the authorization URL for the user to open
+        //                  by hand; the callback then completes the login for the next statement.
+        //                  Reached both for a native user whose row names this plugin and through
+        //                  the security integration chain - see supportsCredentialKind for what
+        //                  bounds a connection that took this route and has no token yet.
+        //
+        // Anything else is refused rather than silently taking one of the routes.
+        switch (cred.kind()) {
+            case BEARER_TOKEN -> {
+                return verifyBearer(authContext, userIdentity, cred.tokenString(), cred.remoteHost());
+            }
+            case MYSQL_OAUTH2_CLIENT -> {
+                return authenticateMysqlBrowserFlow(authContext, userIdentity);
+            }
+            case MYSQL_NATIVE_SCRAMBLE -> {
+                // A scramble reaching an OAuth2 provider means one thing: the client could not
+                // speak our plugin and fell back to mysql_native_password. There is nothing to
+                // check it against for an OAuth2 user, so let the handshake succeed; the first
+                // statement will carry the authorization URL (checkLoginSuccess), and the
+                // callback binds the token to the declared user before anything else runs.
+                //
+                // This branch is only safe because that first-statement gate exists, which is true
+                // of the MySQL protocol and of nothing else. What keeps it off the other channels
+                // is AuthCredentials: the kind is MySQL-only (AuthCredentialKind#isMysqlProtocolOnly)
+                // and the record refuses to pair it with any other channel, so a scramble cannot be
+                // handed to this branch from HTTP, Arrow Flight or a load RPC.
+                return userIdentity;
+            }
+            default -> throw new AuthenticationException(
+                    "OAuth2 requires a Bearer token or the MySQL handshake, not " + cred.kind());
         }
+    }
 
+    /**
+     * The waiting half of the MySQL browser flow, for a client that declared the OAuth2 plugin.
+     * The handshake already sent it the authorization endpoint ({@link #authMoreDataPacket}), so
+     * it can open the browser itself; the user completes the IdP login, the IdP redirects to
+     * {@code OAuth2Action}, and that callback verifies the id token and deposits it on this
+     * connection's context. The loop below waits for that, bounded by {@code connectWaitTimeout}.
+     * Nothing is verified here - the callback did that before storing the token.
+     *
+     * <p>Which client this is used to be decided here by comparing {@code
+     * authContext.getAuthPlugin()}. It is decided at the MySQL entry now and carried as the
+     * credential kind, which is why the two clients arrive at different branches of
+     * {@link #authenticate}. The negotiation behind it: {@code MysqlProto.switchAuthPlugin}
+     * normally answers with an AuthSwitchRequest and the client re-authenticates with the target
+     * plugin, but when the target is a StarRocks custom plugin - which a stock mysql client cannot
+     * speak - the switch is skipped, so a stock client keeps whatever plugin it originally sent
+     * and its frame arrives as a plain {@code MYSQL_NATIVE_SCRAMBLE}. Nothing is remembered across
+     * connections; every handshake re-negotiates.
+     *
+     * <p>The other client is handled in {@link #authenticate}:
+     *
+     * <ul>
+     *   <li><b>A client without the OAuth2 plugin</b> - an ordinary MySQL client - cannot open a
+     *       browser, so the handshake is answered as if it had succeeded. It has not: the
+     *       connection carries no token, and the first statement on it returns the authorization
+     *       URL instead of running. {@code ConnectProcessor} is what enforces that, which is why
+     *       answering "success" here is safe on this channel and only on this channel.</li>
+     * </ul>
+     */
+    private UserIdentity authenticateMysqlBrowserFlow(AccessControlContext authContext,
+                                                      UserIdentity userIdentity) throws AuthenticationException {
         long startTime = System.currentTimeMillis();
         String token;
         while (true) {
@@ -108,8 +176,6 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
         if (token == null) {
             throw new AuthenticationException("OAuth2 authentication wait callback timeout");
         }
-<<<<<<< HEAD
-=======
         return userIdentity;
     }
 
@@ -210,7 +276,6 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
         return kind == AuthCredentialKind.MYSQL_NATIVE_SCRAMBLE
                 || kind == AuthCredentialKind.MYSQL_OAUTH2_CLIENT
                 || kind == AuthCredentialKind.BEARER_TOKEN;
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
     }
 
     @Override

@@ -1072,6 +1072,17 @@ public class Config extends ConfigBase {
     public static boolean enable_http_auth = false;
 
     /**
+     * Master switch for Bearer-token authentication on the non-MySQL channels: the HTTP endpoints
+     * (SQL API, Stream Load, Web UI, /metrics), Arrow Flight SQL, and the load RPCs a BE forwards
+     * with auth_type=bearer. The token is verified against the JWT and OAuth2 security integrations
+     * in {@code authentication_chain}, routed by its issuer, exactly as a MySQL token login is.
+     * When false those channels refuse any {@code Authorization: Bearer ...} and only Basic (and the
+     * Arrow Flight session tokens) remain; MySQL protocol authentication is never gated by this.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_rest_bearer_authentication = true;
+
+    /**
      * Fe https port
      * Currently, all FEs' https port must be the same.
      */
@@ -2506,6 +2517,35 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+
+
+    /**
+     * JWKS cache lifetime in seconds. HTTP Bearer authenticates fully on every request, so the JWK
+     * set is cached per JWKS URL instead of being fetched each time.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_ttl_seconds = 600;
+
+    /**
+     * Refresh the cached JWKS this many seconds before it expires, in the background, to reduce
+     * cache misses.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_ahead_seconds = 300;
+
+    /**
+     * When the IdP is unreachable, keep serving the stale (expired) JWKS for at most this many
+     * seconds.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_outage_ttl_seconds = 3600;
+
+    /**
+     * Lower bound (seconds) on how often an unknown {@code kid} may trigger a forced JWKS refresh,
+     * to guard against kid-flooding.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_rate_limit_seconds = 30;
 
     /**
      * If set to true, the granularity of auth check extends to the column level
@@ -4728,7 +4768,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
             "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
-            "Combine values for multiple types.")
+            "Combine values for multiple types. Does not apply to a materialized view whose "
+            + "refresh_mode is INCREMENTAL, which is maintained from base table changes by definition.")
     public static int mv_refresh_force_partition_type = 0;
 
     /**

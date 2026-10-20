@@ -63,6 +63,15 @@ public abstract class SecurityIntegration {
 
     public abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
+    /**
+     * The issuers (iss) this integration accepts, used to route an HTTP/Arrow Flight Bearer token
+     * to the right integration. Only token-based integrations (JWT / OAuth2) participate; the
+     * default empty array means "never matched by Bearer routing" (e.g. LDAP).
+     */
+    public String[] getRequiredIssuer() {
+        return new String[0];
+    }
+
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
     }

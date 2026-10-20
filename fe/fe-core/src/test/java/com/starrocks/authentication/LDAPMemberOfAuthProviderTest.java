@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -119,7 +121,10 @@ class LDAPMemberOfAuthProviderTest {
 
     private static AccessControlContext authenticate(LDAPAuthProvider provider) throws AuthenticationException {
         AccessControlContext context = new AccessControlContext();
-        provider.authenticate(context, UserIdentity.createEphemeralUserIdent("alice", "%"), PASSWORD);
+        // The MySQL clear-password frame, read the way the entry point reads it: PLAIN_PASSWORD with
+        // the frame's trailing NUL stripped. The provider refuses a raw scramble.
+        provider.authenticate(context, UserIdentity.createEphemeralUserIdent("alice", "%"),
+                MysqlProto.handshakeCredentials("alice", PASSWORD, AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         return context;
     }
 

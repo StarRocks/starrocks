@@ -105,16 +105,56 @@ Status JVMMetrics::init() {
     _get_name = env->GetMethodID(memory_pool_mxbean_cls, "getName", "()Ljava/lang/String;");
     CHECK_JNI_EXCEPTION(env, "get method getName failed")
 
+    _initialized.store(true, std::memory_order_release);
     return Status::OK();
 }
 
-void JVMMetrics::install(MetricRegistry* registry) {
-    if (!registry->register_hook("jvm_metrics", [this] {
-            auto status = update();
-            if (!status.ok()) {
-                LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+StatusOr<bool> JVMMetrics::is_jvm_created() {
+    JavaVM* vm = nullptr;
+    // The mock libjvm leaves the count untouched and returns JNI_ERR, so it must be initialized.
+    jsize num_vms = 0;
+    if (JNI_GetCreatedJavaVMs(&vm, 1, &num_vms) != JNI_OK) {
+        return Status::NotSupported("JNI_GetCreatedJavaVMs failed, java runtime is unavailable");
+    }
+    return num_vms > 0;
+}
+
+void JVMMetrics::_update_if_jvm_ready() {
+    if (!_initialized.load(std::memory_order_acquire)) {
+        if (_jvm_unavailable.load(std::memory_order_acquire)) {
+            return;
+        }
+        std::lock_guard<std::mutex> l(_init_lock);
+        if (!_initialized.load(std::memory_order_acquire)) {
+            auto created = is_jvm_created();
+            if (!created.ok()) {
+                // Stop polling: the mock libjvm prints to stderr on every call.
+                _jvm_unavailable.store(true, std::memory_order_release);
+                LOG(WARNING) << "jvm metrics are disabled: " << created.status().to_string();
+                return;
             }
-        })) {
+            if (!created.value()) {
+                // No JVM yet. Never create one just to collect metrics; check again next round.
+                return;
+            }
+            // A JVM that is still being created may refuse to attach this thread, so a failure
+            // here is retried on the next round.
+            auto status = init();
+            if (!status.ok()) {
+                LOG_EVERY_N(WARNING, 20) << "init jvm metrics failed, will retry: " << status.to_string();
+                return;
+            }
+        }
+    }
+
+    auto status = update();
+    if (!status.ok()) {
+        LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+    }
+}
+
+void JVMMetrics::install(MetricRegistry* registry) {
+    if (!registry->register_hook("jvm_metrics", [this] { _update_if_jvm_ready(); })) {
         return;
     }
 

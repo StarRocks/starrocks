@@ -283,10 +283,12 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         HivePartitionValue hivePartitionValue = HivePartitionValue.of(databaseTableName, partitionValues);
-        if (metastore instanceof CachingHiveMetastore) {
+        if (metastore instanceof CachingHiveMetastore catalogLevel) {
             Table table = getTable(dbName, tableName);
             if (table.isHiveTable() && !useMetadataCache()) {
-                invalidatePartitionKeys(hivePartitionValue);
+                // Past both levels, from the metastore itself, caching nothing. Dropping the cached names and loading
+                // through the cache let a background refresh that read them before the drop fill it with what it read.
+                return catalogLevel.metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
             }
         }
         // update last access time

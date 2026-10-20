@@ -212,4 +212,32 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
             starRocksAssert.dropMaterializedView(mvName);
         }
     }
+
+    /**
+     * An MV that is already inactive can be inactivated again while the activation resolves, by ALTER VIEW on a
+     * view it reads or a schema change of a base table. Its own definition stays the same, but the base tables
+     * resolved from it may be the ones it read before; activating with them would track the wrong tables.
+     */
+    @Test
+    public void testInactivationBeforeTheLockIsRejected() throws Exception {
+        String mvName = "mv_activate_before_lock_reinactivated";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        MaterializedView mv = getMv(DB_NAME, mvName);
+        try {
+            mv.setInactiveAndReason("test: forced inactive before the activation");
+
+            installProbe();
+            String reason = "test: inactivated again while the activation resolved";
+            probe.onUnlockedGetTable = () -> mv.setInactiveAndReason(reason);
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " ACTIVE"));
+
+            Assertions.assertTrue(e.getMessage().contains("altered concurrently"), e.getMessage());
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertEquals(reason, mv.getInactiveReason());
+            Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE));
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
 }

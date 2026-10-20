@@ -945,8 +945,6 @@ This topic introduces the following types of FE configurations:
 - Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
 - Introduced in: v4.2, v4.1.6
 
-<<<<<<< HEAD
-=======
 ### `authentication_group_case_insensitive`
 
 - Default: true
@@ -956,7 +954,6 @@ This topic introduces the following types of FE configurations:
 - Description: Whether a group name from a login matches a `GRANT ... TO EXTERNAL GROUP` entry or a `permitted_groups` entry that differs from it only in case. On by default because an LDAP `cn` is case-insensitive in the directory, so a GRANT written in another case than the directory returns must not silently have no effect. Set it to `false` when the identity system behind the groups distinguishes them by case, for example groups read from a JWT claim, so that `Admins` and `admins` stay two groups. Only the comparison is affected: the names are stored and shown exactly as they arrived, and handed to Apache Ranger unchanged.
 - Introduced in: v4.2
 
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
 ### `authentication_ldap_case_insensitive`
 
 - Default: false
@@ -1369,6 +1366,42 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
+
+### `jwks_cache_ttl_seconds`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lifetime of the cached JWKS (JSON Web Key Set) per JWKS URL. Because HTTP Bearer performs a full authentication on every request, the JWK set is cached instead of being fetched from the IdP each time.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How many seconds before the cached JWKS expires that StarRocks refreshes it in the background, to reduce cache misses. Must be smaller than `jwks_cache_ttl_seconds`.
+- Introduced in: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: When the IdP is unreachable, the maximum time StarRocks keeps serving the stale (expired) JWKS so that already-issued tokens can still be verified.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lower bound on how often an unknown key ID (`kid`) may trigger a forced JWKS refresh, to guard against key-ID flooding.
+- Introduced in: v4.2
 
 ### `jwt_jwks_url`
 

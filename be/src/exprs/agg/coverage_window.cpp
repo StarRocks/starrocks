@@ -15,10 +15,8 @@
 #include "exprs/agg/coverage_window.h"
 
 #include <cmath>
-#include <exception>
 #include <limits>
 
-#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
@@ -168,15 +166,8 @@ void CoverageWindowFunction::update_batch_single_state_with_frame(FunctionContex
 void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start,
                                         size_t end) const {
     DCHECK_GT(end, start);
-    // Variable-width window results append end-start rows. Preserve that
-    // invariant on errors too, before the caller can append dst to its chunk.
-    const size_t expected_size = dst->size() + (end - start);
-    auto pad = DeferOp([&] {
-        // Allocation exceptions are handled by the caller's allocation scope.
-        // Never inspect a partly appended nullable column or allocate on unwind.
-        if (std::uncaught_exceptions() != 0) return;
-        if (dst->size() < expected_size) dst->append_default(expected_size - dst->size());
-    });
+    // On error dst may be left short; the Analytor checks for errors before using any result column.
+    // A failed update has already released the kernel, so stop before touching it.
     if (ctx->has_error()) return;
     auto& current = data(const_cast<AggDataPtr>(state));
     auto* nullable = dynamic_cast<NullableColumn*>(dst);

@@ -110,14 +110,16 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException {
-        // clear password terminate string: the MySQL clear-password frame appends a trailing \0, while
-        // HTTP Basic sends the bare password and may even send an empty one.
-        byte[] clearPassword = authResponse;
-        if (authResponse.length > 0 && authResponse[authResponse.length - 1] == 0) {
-            clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
+        // One shape only. The MySQL clear-password frame reaches here as PLAIN_PASSWORD with its
+        // trailing NUL already stripped at the entry point, so MySQL and HTTP Basic are the same
+        // bytes by the time they arrive.
+        if (cred.kind() != AuthCredentialKind.PLAIN_PASSWORD) {
+            throw new AuthenticationException(
+                    "LDAP user must authenticate with a password, not " + cred.kind());
         }
+        byte[] clearPassword = cred.rawSecret();
 
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
@@ -204,6 +206,16 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 authContext.setAuthenticatorGroups(Set.of());
             }
         }
+        return userIdentity;
+    }
+
+    @Override
+    public boolean supportsCredentialKind(AuthCredentialKind kind) {
+        // Binds against the directory with a password. The MySQL clear-password frame is unwrapped
+        // at the entry point, so this one shape covers MySQL and HTTP Basic alike. A Bearer token
+        // is not a password: leaving it out is what keeps the security-integration chain from
+        // offering this provider a token it cannot check.
+        return kind == AuthCredentialKind.PLAIN_PASSWORD;
     }
 
     /**

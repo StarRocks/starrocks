@@ -14,18 +14,12 @@
 
 package com.starrocks.authentication;
 
-<<<<<<< HEAD
-import com.nimbusds.jose.jwk.JWKSet;
-=======
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.JWTClaimsSet;
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.nio.ByteBuffer;
 
 public class JWTAuthenticationProvider implements AuthenticationProvider {
     public static final String JWT_JWKS_URL = "jwks_url";
@@ -59,19 +53,25 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException {
+        // One shape only. The MySQL OpenID Connect frame is unwrapped at the entry point
+        // (AuthenticationHandler#fromMysqlHandshake), so a MySQL JWT user and an HTTP Bearer
+        // request arrive as the same thing here. PLAIN_PASSWORD is refused on purpose: stuffing a
+        // JWT into a Basic password slot is an anti-pattern.
+        if (cred.kind() != AuthCredentialKind.BEARER_TOKEN) {
+            throw new AuthenticationException(
+                    "JWT user must authenticate via Bearer token, not " + cred.kind());
+        }
+        String idToken = cred.tokenString();
+
+        // userName source is asymmetric: MySQL / Basic supply the declared user (the principal
+        // claim is then checked against it); Bearer has no declared user, so the principal claim
+        // itself becomes the user name.
+        String userName = (userIdentity != null) ? userIdentity.getUser()
+                : OpenIdConnectVerifier.extractPrincipal(idToken, principalFiled);
+
         try {
-<<<<<<< HEAD
-            ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
-            //1 Byte for capability mysql client
-            MysqlCodec.readInt1(authBuffer);
-            byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
-            JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
-                    requiredAudience);
-            authContext.setAuthToken(new String(idToken));
-=======
             JWKSource<SecurityContext> jwkSource = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(jwksUrl);
             JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, userName, jwkSource, principalFiled,
                     requiredIssuer, requiredAudience);
@@ -84,14 +84,20 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
             authContext.setAuthToken(idToken);
         } catch (AuthenticationException e) {
             throw e;
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }
+
+        // Bearer: build an ephemeral identity from the token-derived user name; otherwise keep the
+        // passed-in one.
+        return (userIdentity != null) ? userIdentity
+                : UserIdentity.createEphemeralUserIdent(userName, cred.remoteHost());
     }
-<<<<<<< HEAD
-}
-=======
+
+    @Override
+    public boolean supportsCredentialKind(AuthCredentialKind kind) {
+        return kind == AuthCredentialKind.BEARER_TOKEN;
+    }
 
     @Override
     public boolean isGroupProviderUsed() {
@@ -103,4 +109,3 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
         return groupSource.usesAuthenticatorGroups();
     }
 }
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)

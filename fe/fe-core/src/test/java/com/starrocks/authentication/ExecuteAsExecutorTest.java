@@ -23,6 +23,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -134,7 +136,9 @@ public class ExecuteAsExecutorTest {
         // login as impersonate_user
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
         Assertions.assertEquals(Set.of(), context.getGroups());
@@ -201,7 +205,9 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -247,7 +253,9 @@ public class ExecuteAsExecutorTest {
                             NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(
                     new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false), context);
@@ -293,7 +301,9 @@ public class ExecuteAsExecutorTest {
                     new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -342,7 +352,9 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -370,7 +382,9 @@ public class ExecuteAsExecutorTest {
                 new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Stand in for a login that resolved groups from the original user's own entry.
         String originalOnly = "Original Only Group";
@@ -411,7 +425,9 @@ public class ExecuteAsExecutorTest {
         // login as impersonate_user
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
         Assertions.assertEquals(Set.of(), context.getGroups());
@@ -470,7 +486,9 @@ public class ExecuteAsExecutorTest {
 
         // Test 1: User with impersonate permission through role-group can execute as target user
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user has the role through group membership
         long roleId = authorizationMgr.getRoleIdByNameAllowNull("impersonate_role");
@@ -498,7 +516,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.revoke(revokeStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user still has the role through group membership
         Assertions.assertEquals(Set.of("test_group"), context.getGroups());
@@ -518,7 +538,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.grant(grantStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify impersonate permission check passes again
         try {
@@ -539,7 +561,9 @@ public class ExecuteAsExecutorTest {
         authorizationMgr.revokeRole(revokeRoleStmt);
 
         // Re-authenticate to refresh context
-        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("group_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
 
         // Verify user no longer has the role
         Assertions.assertEquals(Set.of("test_group"), context.getGroups());

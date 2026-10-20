@@ -30,20 +30,8 @@ public class JWTSecurityIntegration extends JWTBaseSecurityIntegration {
 
     @Override
     public AuthenticationProvider getAuthenticationProvider() {
-<<<<<<< HEAD
-        String jwksUrl = propertyMap.get(JWTAuthenticationProvider.JWT_JWKS_URL);
-        String principalFiled = propertyMap.get(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD);
-        String commaSeparatedIssuer = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER);
-        String[] requireIssuer = commaSeparatedIssuer == null ?
-                new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
-        String commaSeperatedRequireAudiences = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_AUDIENCE);
-        String[] requireAudiences = commaSeperatedRequireAudiences == null ?
-                new String[0] : COMMA_SPLIT.split(commaSeperatedRequireAudiences.trim());
-        return new JWTAuthenticationProvider(jwksUrl, principalFiled, requireIssuer, requireAudiences);
-=======
         return new JWTAuthenticationProvider(getJwksUrl(), getPrincipalField(), getRequiredIssuer(),
                 getRequiredAudience(), getGroupSource(), getGroupClaim(), name);
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
     }
 
     @Override

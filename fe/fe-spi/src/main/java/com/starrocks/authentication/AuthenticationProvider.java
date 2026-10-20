@@ -19,19 +19,27 @@ import com.starrocks.catalog.UserIdentity;
 public interface AuthenticationProvider {
 
     /**
-     * Attempt to authentication
+     * Attempt to authenticate, returning the authenticated {@link UserIdentity}.
      *
-     * @param authContext  authentication context
-     * @param userIdentity best matched user
-     * @param authResponse auth response received by mysql protocol
-     * @throws AuthenticationException when authentication fail
+     * <ul>
+     *   <li>For paths with an explicit user (native / HTTP Basic / MySQL handshake): the passed-in
+     *       {@code userIdentity} is returned.</li>
+     *   <li>For Bearer ({@code userIdentity == null}): the provider parses the principal claim out
+     *       of the token, builds an ephemeral {@link UserIdentity} and returns it &mdash; this
+     *       return value is the only channel by which a Bearer user name flows back from the
+     *       provider to the handler.</li>
+     * </ul>
+     *
+     * @param authContext authentication context
+     * @param userIdentity best matched user, or {@code null} for Bearer (no declared user)
+     * @param cred the client credential, interpreted by its {@link AuthCredentialKind kind}
+     * @return the authenticated user identity
+     * @throws AuthenticationException when authentication fails
      */
-    void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException;
 
     /**
-<<<<<<< HEAD
-=======
      * Whether the security integration chain may offer this provider a credential of this kind.
      * That is the whole question: the native path selects its provider from the user row and never
      * asks, so a provider may handle more kinds in {@link #authenticate} than it declares here.
@@ -92,7 +100,6 @@ public interface AuthenticationProvider {
     }
 
     /**
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */

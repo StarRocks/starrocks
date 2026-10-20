@@ -210,6 +210,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE の thrift サーバーポートで、FEs からのリクエストを受け取るために使用されます。
 - 導入バージョン: -
 
+### brpc_failed_channel_reset_interval_s
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: BE がキャッシュされた bRPC stub を確認し、接続が失敗した stub をリセットする間隔。bRPC は失敗した接続が解放されるまで数秒ごとにヘルスチェックを行い、到達不能なアドレス（Kubernetes で再起動された BE Pod の古い IP アドレスなど）に対しては、チェックのたびに `Fail to wait EPOLLOUT` をログに出力します。stub をリセットすると失敗した接続が解放され、stub は次の RPC で新しい接続を確立します。`0` 以下の値を指定すると、このチェックは無効になります。
+- 導入バージョン: -
+
 ### brpc_max_body_size
 
 - デフォルト: 2147483648

@@ -949,8 +949,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
 - 導入時期：v4.2, v4.1.6
 
-<<<<<<< HEAD
-=======
 ### `authentication_group_case_insensitive`
 
 - デフォルト：true
@@ -960,7 +958,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ログインで得られたグループ名が、大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` または `permitted_groups` のエントリーと一致するとみなすかどうか。LDAP の `cn` はディレクトリー内で大文字小文字を区別しないため、ディレクトリーが返す表記と異なる大文字小文字で書かれた GRANT が黙って無効になってはならず、デフォルトで有効です。グループの背後にある ID システムが大文字小文字を区別する場合（たとえば JWT の claim から読み取ったグループ）は `false` に設定し、`Admins` と `admins` を別のグループのままにしてください。影響するのは比較だけです。名前は到着したままの表記で保存・表示され、Apache Ranger にもそのまま渡されます。
 - 導入時期：v4.2
 
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
 ### `authentication_ldap_case_insensitive`
 
 - デフォルト：false
@@ -969,6 +966,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：StarRocks 側での LDAP/AD ユーザー名の照合を大文字小文字の区別なしに緩めるかどうか。`true` に設定すると、`AUTHENTICATION_LDAP_SIMPLE` で作成されたユーザーと大文字小文字だけが異なるログイン名でもそのユーザーに解決されるため、ユーザーごとの DN と付与されたロールが有効になります。また LDAP security integration で認証されたログインは、クライアントが入力した表記ではなくディレクトリが保持する名前をセッション ID として使用します。この項目はログインが解決しうる保存済みユーザーの範囲を広げ、さらに `current_user()` と `SHOW PROCESSLIST` が返す値を変えるため、デフォルトでは無効です。ネイティブパスワード、JWT、OAuth2 で認証されたユーザーは影響を受けません。`AUTHENTICATION_LDAP_SIMPLE` で作成された 2 つのユーザーの名前が大文字小文字だけ異なる場合、その両方に一致するログインはどちらかに解決されるのではなく拒否されます。グループ名の照合はこの項目とは独立しています。
 - 導入時期：v4.2.0
+
+### `jwks_cache_ttl_seconds`
+
+- デフォルト：600
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：JWKS URL ごとにキャッシュされる公開鍵セット（JWK Set）の有効期間。HTTP Bearer はリクエストごとに完全な認証を行うため、毎回 IdP から取得するのではなくキャッシュします。
+- 導入時期：v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- デフォルト：300
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：キャッシュされた JWKS の有効期限が切れる何秒前にバックグラウンドで更新するか。キャッシュミスを減らします。`jwks_cache_ttl_seconds` より小さい必要があります。既定値は TTL の半分にしてあり、更新が一度失敗しても TTL の半分だけ再試行の余地が残ります。ただしこれは比率ではなく絶対秒数なので、TTL を変更する際は併せて調整してください。
+- 導入時期：v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- デフォルト：3600
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：IdP に到達できない場合に、発行済みトークンを検証できるよう、期限切れの古い JWKS を使い続ける最大時間。
+- 導入時期：v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- デフォルト：30
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：未知の鍵 ID（`kid`）が JWKS の強制更新を引き起こせる最小間隔。kid フラッディングを防ぎます。
+- 導入時期：v4.2
 
 ### `authentication_ldap_simple_bind_base_dn`
 

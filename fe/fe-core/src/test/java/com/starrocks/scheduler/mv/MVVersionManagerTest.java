@@ -58,10 +58,19 @@ import static org.mockito.Mockito.when;
 public class MVVersionManagerTest {
 
     private final AtomicInteger editLogCount = new AtomicInteger();
+    // The test MVs live in no catalog; this stands in for whether a DROP has removed the MV.
+    private boolean mvInCatalog;
 
     @BeforeEach
     public void setUp() {
         editLogCount.set(0);
+        mvInCatalog = true;
+        new MockUp<MaterializedView>() {
+            @Mock
+            public boolean isInCatalog() {
+                return mvInCatalog;
+            }
+        };
         new MockUp<Locker>() {
             @Mock
             public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
@@ -84,6 +93,16 @@ public class MVVersionManagerTest {
             @Mock
             public EditLog getEditLog() {
                 return new EditLog(null);
+            }
+
+            @Mock
+            public MaterializedViewMgr getMaterializedViewMgr() {
+                return new MaterializedViewMgr();
+            }
+        };
+        new MockUp<MaterializedViewMgr>() {
+            @Mock
+            public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
             }
         };
     }
@@ -163,6 +182,18 @@ public class MVVersionManagerTest {
     }
 
     @Test
+    public void confirmFreshnessSkipsAnMvDroppedBeforeTheLock() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        mvInCatalog = false;
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    @Test
     public void confirmFreshnessSkipsWhenLockTimedOut() {
         new MockUp<Locker>() {
             @Mock
@@ -202,6 +233,30 @@ public class MVVersionManagerTest {
 
         Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(0, editLogCount.get());
+    }
+
+    // A base table can be processed by a run without any of its partitions being refreshed: the run is not
+    // skipped (isOlapTableRefreshed is set unconditionally), but the derived max is 0.
+    @Test
+    public void updateMVVersionInfoKeepsLastRefreshTimeWhenNoPartitionWasRefreshed() {
+        long absorbedRefreshTime = 1767225600000L;
+        MaterializedView mv = buildMv(1000L);
+        mv.getRefreshScheme().setLastRefreshTime(absorbedRefreshTime);
+
+        OlapTable baseTable = mock(OlapTable.class);
+        when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        when(baseTable.isOlapOrCloudNativeTable()).thenReturn(true);
+        when(baseTable.getId()).thenReturn(2000L);
+        when(baseTable.getVisiblePartitionNames()).thenReturn(Set.of());
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
+        Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
+
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        manager.updateMVVersionInfo(Map.of(2000L, snapshot), PCellSortedSet.of(), Set.of(2000L),
+                Map.of(), null, Map.of(), true);
+
+        Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
+                "a run that refreshed no partition must not report the MV as never refreshed");
     }
 
     // PartitionUtil.getPartitionNames reaches a connector table's remote metadata, so it must not run under the

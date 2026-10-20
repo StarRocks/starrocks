@@ -197,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 Add `default\_auth=mysql_clear_password` and `ENABLE_CLEARTEXT\_PLUGIN=1` in the DSN of ODBC: , along with username and password.
+
+### Connect over HTTP or Arrow Flight with LDAP
+
+A clear-text password is what the HTTP API and Arrow Flight SQL send anyway, so an LDAP-bound user needs nothing special there: HTTP Basic authentication and the Arrow Flight user name and password both end in the same LDAP bind. This works for a user created with `IDENTIFIED WITH authentication_ldap_simple` and for a user of an LDAP [security integration](./security_integration.md) alike. See [Where each authentication method works](./authentication.mdx#where-each-authentication-method-works).
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

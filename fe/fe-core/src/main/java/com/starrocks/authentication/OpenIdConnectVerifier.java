@@ -16,27 +16,32 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Preconditions;
 import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSVerifier;
+import com.nimbusds.jose.KeySourceException;
+import com.nimbusds.jose.crypto.ECDSAVerifier;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
+import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWK;
+import com.nimbusds.jose.jwk.JWKMatcher;
+import com.nimbusds.jose.jwk.JWKSelector;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.KeyType;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
-import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 
 public class OpenIdConnectVerifier {
 
-<<<<<<< HEAD
-    public static void verify(String idToken,
-                              String userName,
-                              JWKSet jwkSet,
-                              String principalFiled,
-                              String[] requiredIssuer,
-                              String[] requiredAudience) throws AuthenticationException {
-=======
     /**
      * Signature algorithms we accept. Anything outside this set (notably {@code none}, and HMAC
      * algorithms that would let an attacker sign with the public key) is rejected up front to
@@ -102,55 +107,102 @@ public class OpenIdConnectVerifier {
      * forged token cannot benefit.
      */
     public static String extractPrincipal(String idToken, String principalFiled) throws AuthenticationException {
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
         try {
-            SignedJWT signedJWT = verifyJWT(idToken, jwkSet);
-            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
-            String jwtUserName = claims.getStringClaim(principalFiled);
-
-            if (jwtUserName == null) {
-                throw new AuthenticationException("Can not get specified principal " + principalFiled);
+            String principal = SignedJWT.parse(idToken).getJWTClaimsSet().getStringClaim(principalFiled);
+            if (principal == null) {
+                throw new AuthenticationException("Can not get specified principal " + principalFiled)
+                        .withReason(AuthFailureReason.CLAIM_MISMATCH);
             }
-
-            if (!jwtUserName.equalsIgnoreCase(userName)) {
-                throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName);
-            }
-
-            Date exp = claims.getExpirationTime();
-            if (exp != null && exp.before(new Date())) {
-                throw new AuthenticationException("JWT expired at " + exp);
-            }
-
-            if (requiredIssuer != null && requiredIssuer.length != 0 &&
-                    !Arrays.asList(requiredIssuer).contains(claims.getIssuer())) {
-                throw new AuthenticationException("Issuer (iss) field " + claims.getIssuer() + " is invalid");
-            }
-
-            if (requiredAudience != null && requiredAudience.length != 0 &&
-                    !Arrays.stream(requiredAudience).anyMatch(claims.getAudience()::contains)) {
-                throw new AuthenticationException("Audience (aud) field " + claims.getAudience() + " is invalid");
-            }
-        } catch (Exception e) {
-            throw new AuthenticationException(e.getMessage());
+            return principal;
+        } catch (ParseException e) {
+            throw new AuthenticationException("Malformed JWT").withReason(AuthFailureReason.MALFORMED);
         }
     }
 
-    private static SignedJWT verifyJWT(String jwt, JWKSet jwkSet) throws AuthenticationException, ParseException, JOSEException {
-        Preconditions.checkNotNull(jwt);
+    private static SignedJWT verifySignature(String idToken, JWKSource<SecurityContext> jwkSource) throws Exception {
+        Preconditions.checkNotNull(idToken);
 
-        SignedJWT signedJWT = SignedJWT.parse(jwt);
+        SignedJWT signedJWT = SignedJWT.parse(idToken);
+
+        // Lock down the signature algorithm before touching any key (reject alg:none / HMAC
+        // confusion, T7).
+        JWSAlgorithm algorithm = signedJWT.getHeader().getAlgorithm();
+        if (algorithm == null || !ALLOWED_ALGORITHMS.contains(algorithm)) {
+            throw new AuthenticationException("Unsupported or insecure JWT signature algorithm: " + algorithm)
+                    .withReason(AuthFailureReason.SIGNATURE_FAIL);
+        }
+
+        // Candidate keys: the one the header's kid names, or - for a token without a kid - every key
+        // of the algorithm's type. A kid-less token is legitimate (some IdPs publish a single key
+        // and omit it), but it must not be verified against only the first key that happens to be
+        // listed: each candidate is tried, and the token is valid if any of them verifies it.
         String kid = signedJWT.getHeader().getKeyID();
-
-        JWK jwk = jwkSet.getKeyByKeyId(kid);
-        if (jwk == null) {
-            throw new AuthenticationException("Cannot find public key for kid: " + kid);
+        JWKMatcher.Builder matcher = new JWKMatcher.Builder().keyType(KeyType.forAlgorithm(algorithm));
+        if (kid != null) {
+            matcher.keyID(kid);
+        }
+        List<JWK> keys = jwkSource.get(new JWKSelector(matcher.build()), null);
+        if (keys.isEmpty()) {
+            throw new AuthenticationException("Cannot find public key for kid: " + kid)
+                    .withReason(AuthFailureReason.SIGNATURE_FAIL);
         }
 
-        RSAPublicKey publicKey = jwk.toRSAKey().toRSAPublicKey();
-        RSASSAVerifier verifier = new RSASSAVerifier(publicKey);
-        if (!signedJWT.verify(verifier)) {
-            throw new AuthenticationException("JWT with kid " + kid + " is invalid");
+        for (JWK jwk : keys) {
+            JWSVerifier verifier;
+            if (jwk instanceof RSAKey) {
+                verifier = new RSASSAVerifier(((RSAKey) jwk).toRSAPublicKey());
+            } else if (jwk instanceof ECKey) {
+                verifier = new ECDSAVerifier(((ECKey) jwk).toECPublicKey());
+            } else {
+                throw new AuthenticationException("Unsupported JWK type: " + jwk.getKeyType())
+                        .withReason(AuthFailureReason.SIGNATURE_FAIL);
+            }
+            if (signedJWT.verify(verifier)) {
+                return signedJWT;
+            }
         }
-        return signedJWT;
+        throw new AuthenticationException("JWT with kid " + kid + " is invalid")
+                .withReason(AuthFailureReason.SIGNATURE_FAIL);
+    }
+
+    /**
+     * Claim checks, ordered signature(done) -> exp -> iss -> aud -> principal (RFC 7519 recommends
+     * validating expiry early, so an expired token is reported as expired rather than as a
+     * principal mismatch).
+     */
+    private static void checkClaims(SignedJWT signedJWT,
+                                    String userName,
+                                    String principalFiled,
+                                    String[] requiredIssuer,
+                                    String[] requiredAudience) throws Exception {
+        JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+
+        Date exp = claims.getExpirationTime();
+        if (exp != null && exp.before(new Date())) {
+            throw new AuthenticationException("JWT expired at " + exp).withReason(AuthFailureReason.EXPIRED);
+        }
+
+        if (requiredIssuer != null && requiredIssuer.length != 0 &&
+                !Arrays.asList(requiredIssuer).contains(claims.getIssuer())) {
+            throw new AuthenticationException("Issuer (iss) field " + claims.getIssuer() + " is invalid")
+                    .withReason(AuthFailureReason.CLAIM_MISMATCH);
+        }
+
+        if (requiredAudience != null && requiredAudience.length != 0 &&
+                (claims.getAudience() == null ||
+                        Arrays.stream(requiredAudience).noneMatch(claims.getAudience()::contains))) {
+            throw new AuthenticationException("Audience (aud) field " + claims.getAudience() + " is invalid")
+                    .withReason(AuthFailureReason.CLAIM_MISMATCH);
+        }
+
+        String jwtUserName = claims.getStringClaim(principalFiled);
+        if (jwtUserName == null) {
+            throw new AuthenticationException("Can not get specified principal " + principalFiled)
+                    .withReason(AuthFailureReason.CLAIM_MISMATCH);
+        }
+        if (!jwtUserName.equalsIgnoreCase(userName)) {
+            throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName)
+                    .withReason(AuthFailureReason.CLAIM_MISMATCH);
+        }
     }
 }

@@ -14,10 +14,14 @@
 
 package com.starrocks.authentication;
 
+import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
@@ -50,15 +54,30 @@ public class MockTokenUtils {
         return sb.toString();
     }
 
-    String generateTestOIDCToken(long validity) throws Exception {
+    public String generateTestOIDCToken(long validity) throws Exception {
+        return generateTestOIDCToken(validity, "12345");
+    }
+
+    /** Same signer and claims as {@link #generateTestOIDCToken(long)}, with the audience chosen. */
+    public String generateTestOIDCToken(long validity, String audience) throws Exception {
+        return generateTestOIDCToken(validity, audience, "http://localhost:38080/realms/master");
+    }
+
+    /** Same signer and claims as {@link #generateTestOIDCToken(long)}, but with no {@code iss} claim at all. */
+    public String generateTestOIDCTokenWithoutIssuer(long validity) throws Exception {
+        return generateTestOIDCToken(validity, "12345", null);
+    }
+
+    // issuer null: the token carries no iss claim.
+    private String generateTestOIDCToken(long validity, String audience, String issuer) throws Exception {
         MockJwkMgr mockJwkMgr = new MockJwkMgr();
         RSASSASigner signer = new RSASSASigner(mockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
         JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
 
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .issuer("http://localhost:38080/realms/master")
+                .issuer(issuer)
                 .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
-                .audience("12345")
+                .audience(audience)
                 .issueTime(new Date())
                 .expirationTime(new Date(new Date().getTime() + validity))
                 .claim("preferred_username", "harbor")
@@ -74,9 +93,6 @@ public class MockTokenUtils {
         return signedJWT.serialize();
     }
 
-<<<<<<< HEAD
-    static class MockJwkMgr extends JwkMgr {
-=======
     /** Generate a fresh RSA JWK (with private material) for a given kid. */
     public static RSAKey newRsaKey(String kid) throws JOSEException {
         return new RSAKeyGenerator(2048).keyID(kid).generate();
@@ -163,7 +179,6 @@ public class MockTokenUtils {
     }
 
     public static class MockJwkMgr extends JwkMgr {
->>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
         @Override
         public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
             String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();

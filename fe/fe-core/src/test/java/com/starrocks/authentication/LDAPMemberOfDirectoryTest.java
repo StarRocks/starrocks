@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.unboundid.ldap.listener.InMemoryDirectoryServer;
 import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
 import com.unboundid.ldap.listener.InMemoryListenerConfig;
@@ -229,8 +231,11 @@ class LDAPMemberOfDirectoryTest {
 
     private AccessControlContext authenticate(LDAPAuthProvider provider, String user) throws Exception {
         AccessControlContext context = new AccessControlContext();
+        // The MySQL clear-password frame, read the way the entry point reads it: PLAIN_PASSWORD with
+        // the frame's trailing NUL stripped. The provider refuses a raw scramble.
         provider.authenticate(context, UserIdentity.createEphemeralUserIdent(user, "%"),
-                (USER_PWD + "\0").getBytes(StandardCharsets.UTF_8));
+                MysqlProto.handshakeCredentials(user, (USER_PWD + "\0").getBytes(StandardCharsets.UTF_8),
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         return context;
     }
 

@@ -4292,6 +4292,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.lakeMultiNodeWriteBytesPerNode = lakeMultiNodeWriteBytesPerNode;
     }
 
+    public long getQueryMemLimit() {
+        return queryMemLimit;
+    }
+
     public int getQueryTimeoutS() {
         return queryTimeoutS;
     }
