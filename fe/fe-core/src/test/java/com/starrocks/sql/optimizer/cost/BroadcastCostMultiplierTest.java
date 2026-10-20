@@ -27,7 +27,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -74,6 +76,24 @@ public class BroadcastCostMultiplierTest {
 
         sessionVariable.setMaxExecMemByte(8192);
         assertBroadcastCost(4097, 12291);
+    }
+
+    @Test
+    public void testBroadcastCostRemainsFiniteAtMaximumPenaltyFactor() {
+        sessionVariable.setMaxExecMemByte(4096);
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(maxMultiplier);
+        assertBroadcastCost(4096, 12288);
+        assertBroadcastCost(4097, 12291 * maxMultiplier);
+        CostEstimate cost = distributionCost(DistributionSpec.createReplicatedDistributionSpec(), 4097);
+
+        assertAll(
+                () -> assertTrue(Double.isFinite(cost.getCpuCost()), "CPU cost must be finite: " + cost.getCpuCost()),
+                () -> assertTrue(Double.isFinite(cost.getMemoryCost()), "Memory cost must be finite: " + cost.getMemoryCost()),
+                () -> assertTrue(Double.isFinite(cost.getNetworkCost()), "Network cost must be finite: " + cost.getNetworkCost()),
+                () -> assertTrue(Double.isFinite(CostModel.getRealCost(cost)),
+                        "Weighted cost must be finite: " + CostModel.getRealCost(cost)));
+        assertEquals(49164 * maxMultiplier, CostModel.getRealCost(cost));
     }
 
     @Test

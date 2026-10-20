@@ -280,7 +280,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Scope**: Session, Global
 * **Default**: `1000.0`
 * **Data Type**: Double
-* **Valid Values**: Finite numbers greater than or equal to `1.0`. Values below `1.0`, non-numeric values, `NaN`, and infinity are rejected.
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
 
 You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
 

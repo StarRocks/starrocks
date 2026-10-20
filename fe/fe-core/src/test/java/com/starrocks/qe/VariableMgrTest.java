@@ -81,12 +81,13 @@ public class VariableMgrTest {
     @Test
     public void testBroadcastCostMultiplierSettings() throws Exception {
         String name = SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
         for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
             VariableMgr variableMgr = new VariableMgr();
             SessionVariable session = variableMgr.newSessionVariable();
             Assertions.assertTrue(variableMgr.dump(scope, session, null).stream()
                     .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("1000.0")));
-            for (double value : new double[] {1.0, 2.5, 10.0, 1000.0, Double.MAX_VALUE}) {
+            for (double value : new double[] {1.0, 2.5, 10.0, 1000.0, Math.nextDown(maxMultiplier), maxMultiplier}) {
                 SystemVariable variable = new SystemVariable(scope, name, new FloatLiteral(value));
                 SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
                 variableMgr.setSystemVariable(session, variable, false);
@@ -99,12 +100,14 @@ public class VariableMgrTest {
             variableMgr.applySessionVariable(Map.of(name, "2.5"), session);
             Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());
             double globalValue = variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor();
-            for (String value : List.of("0", "-1", "0.999", "NaN", "Infinity", "-Infinity", "1e309", "invalid")) {
+            for (String value : List.of("0", "-1", "0.999", Double.toString(Math.nextUp(maxMultiplier)),
+                    Double.toString(maxMultiplier + 1), Double.toString(Double.MAX_VALUE),
+                    "NaN", "Infinity", "-Infinity", "1e309", "invalid")) {
                 SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
                         () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
                 Assertions.assertTrue(error.getMessage().contains(name));
-                Assertions.assertTrue(error.getMessage().contains("finite number greater than or equal to 1.0"));
+                Assertions.assertTrue(error.getMessage().contains("finite number in [1.0, " + maxMultiplier + "]"));
                 Assertions.assertThrows(DdlException.class,
                         () -> variableMgr.applySessionVariable(Map.of(name, value), session));
                 Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());

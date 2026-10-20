@@ -43,11 +43,16 @@ public class SessionVariableTest {
         clone.setBroadcastMemExceededPenaltyFactor(1.0);
         Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
 
-        for (double value : new double[] {0.0, -1.0, 0.999, Double.NaN,
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        variables.setBroadcastMemExceededPenaltyFactor(maxMultiplier);
+        Assertions.assertEquals(maxMultiplier, variables.getBroadcastMemExceededPenaltyFactor());
+        variables.setBroadcastMemExceededPenaltyFactor(2.5);
+        for (double value : new double[] {0.0, -1.0, 0.999, Math.nextUp(maxMultiplier), maxMultiplier + 1,
+                Double.MAX_VALUE, Double.NaN,
                 Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
             SemanticException error = Assertions.assertThrows(SemanticException.class,
                     () -> variables.setBroadcastMemExceededPenaltyFactor(value));
-            Assertions.assertTrue(error.getMessage().contains("a finite number greater than or equal to 1.0"));
+            Assertions.assertTrue(error.getMessage().contains("a finite number in [1.0, " + maxMultiplier + "]"));
             Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
         }
     }

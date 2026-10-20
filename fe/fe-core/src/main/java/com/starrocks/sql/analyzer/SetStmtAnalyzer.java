@@ -152,13 +152,11 @@ public class SetStmtAnalyzer {
             try {
                 multiplier = Double.parseDouble(value);
             } catch (NumberFormatException e) {
-                throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
-                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
+                throw new SemanticException(String.format("%s must be a finite number in [1.0, %s], got %s",
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR,
+                        SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
             }
-            if (!Double.isFinite(multiplier) || multiplier < 1.0) {
-                throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
-                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
-            }
+            SessionVariable.checkBroadcastMemExceededPenaltyFactor(multiplier);
         }
 
         // Check variable chunk_size value if valid

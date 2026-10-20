@@ -271,7 +271,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **作用域**: Session, Global
 * **默认值**: `1000.0`
 * **数据类型**: Double
-* **有效值**: 大于等于 `1.0` 的有限数值。小于 `1.0` 的值、非数值、`NaN` 和无穷大均会被拒绝。
+* **有效值**: `[1.0, 1000000.0]` 范围内的有限数值。超出此范围的值、非数值、`NaN` 和无穷大均会被拒绝。
 
 支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置。例如：
 
