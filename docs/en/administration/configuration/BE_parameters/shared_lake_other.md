@@ -158,6 +158,17 @@ This topic introduces the following types of BE configurations:
 - Description: Whether the nodes that write a load's data hand the storage location of their tablets over to the node that coordinates the load, in a shared-data cluster. For a table with `file_bundling` enabled, the coordinating node writes one combined transaction log per partition, and it usually owns no tablet of most partitions. When this item is `true`, the nodes that own the tablets return the storage location of one tablet per partition together with their transaction logs, and the coordinating node writes the combined transaction log without requesting the location from StarMgr; the requests avoided are counted in `lake_tablet_location_handoff_hits_total`. When it is `false`, the coordinating node requests the location from StarMgr once per such partition per load, which is counted in `starrocks_be_staros_shard_info_fallback_total`. The returned location includes the credentials of the storage volume.
 - Introduced in: -
 
+### lake_replication_enable_light_schema_change
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Allows shared-data replication snapshots with live rowsets from compatible lightweight add/drop column changes. The source and target current schemas must match logically. Added columns must be ordinary scalar value columns with a default value or nullable semantics; key, sort, type, generated-column, nested-UID, external-index, bundled-file, and shared/range-tablet changes are not supported. When disabled, snapshots with live historical rowset schemas are rejected. Validated dropped columns are removed from segment footer metadata; their data pages are not rewritten. The setting is captured when each replication task starts.
+- Introduced in: -
+
+Enable this option only after **all target CNs** support it. A normalized replication transaction records its target schema and fails publish if that schema changes. Disabling this option prevents new admissions but does not change replay of already recorded transactions. Older CNs cannot safely replay these transaction logs; finish or abort pending normalized transactions before any downgrade and do not assume that disabling the option makes a downgrade safe.
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500

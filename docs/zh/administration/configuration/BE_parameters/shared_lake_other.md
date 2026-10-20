@@ -155,6 +155,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，写入导入数据的节点是否把所持有 tablet 的存储位置交给负责该导入的协调节点。对于开启了 `file_bundling` 的表，协调节点会为每个分区写一个 combined txn log，而它通常不持有大多数分区的 tablet。设为 `true` 时，持有 tablet 的节点在回传事务日志时，每个分区附带一个 tablet 的存储位置，协调节点据此写 combined txn log，无需向 StarMgr 查询；省掉的查询计入 `lake_tablet_location_handoff_hits_total`。设为 `false` 时，每次导入中协调节点没有 tablet 的分区都要向 StarMgr 查询一次存储位置，这些查询计入 `starrocks_be_staros_shard_info_fallback_total`。回传的存储位置包含存储卷的访问凭证。
 - 引入版本：-
 
+### lake_replication_enable_light_schema_change
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：允许存算分离集群复制包含兼容轻量加删列历史的活跃 Rowset 快照。源端与目标端的当前 Schema 必须在逻辑上匹配。新增列必须是具有默认值或可空语义的普通标量值列；不支持 Key 列、排序列、类型、生成列、嵌套列 UID、外部索引、捆绑文件及共享/范围 Tablet 的变更。关闭时，包含历史 Schema 活跃 Rowset 的快照会被拒绝。已验证删除的列会从 Segment footer 元数据中移除，不重写其数据页。每个复制任务启动时读取并固定该配置值。
+- 引入版本：-
+
+仅在**所有目标 CN** 均支持此能力后启用。规范化的复制事务会记录目标 Schema；若发布前目标 Schema 发生变化，发布将失败。关闭该配置只阻止新的准入，不改变已记录事务的回放行为。旧版 CN 无法安全回放这些事务日志；降级前必须完成或中止待处理的规范化事务，不能认为关闭配置就可以安全降级。
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
