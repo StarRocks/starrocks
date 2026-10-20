@@ -26,7 +26,9 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
-CONF_Bool(enable_jvm_metrics, "false");
+// Collect JVM memory metrics. No JVM is created for this: collection starts once a JVM exists
+// in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
+CONF_Bool(enable_jvm_metrics, "true");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
