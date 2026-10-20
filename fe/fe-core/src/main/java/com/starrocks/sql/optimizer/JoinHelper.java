@@ -146,6 +146,40 @@ public class JoinHelper {
                 HintNode.HINT_JOIN_BUCKET.equals(hint) || HintNode.HINT_JOIN_SKEW.equals(hint);
     }
 
+    /**
+     * A temporal predicate can drive the ASOF match only if it relates the two sides of the join: one operand must be
+     * computable from the left child alone and the other from the right child alone. An operand mixing both sides, or
+     * two operands reading the same side, leaves the join without a build-side temporal column -- the BE would then
+     * look up a slot the build chunk never contains.
+     */
+    public static boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
+                                                       ColumnRefSet leftColumns,
+                                                       ColumnRefSet rightColumns) {
+        if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
+            return false;
+        }
+        if (!binaryPredicate.getBinaryType().isRange()) {
+            return false;
+        }
+
+        ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
+        ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
+        // An operand with no column at all is contained by either child, which would let a constant stand in
+        // for a whole side of the match.
+        if (leftOperandColumns.isEmpty() || rightOperandColumns.isEmpty()) {
+            return false;
+        }
+        if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
+            return false;
+        }
+        if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
+            return false;
+        }
+
+        return (leftColumns.containsAll(leftOperandColumns) && rightColumns.containsAll(rightOperandColumns)) ||
+                (rightColumns.containsAll(leftOperandColumns) && leftColumns.containsAll(rightOperandColumns));
+    }
+
     public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                                    List<ScalarOperator> conjunctList) {
         List<BinaryPredicateOperator> eqConjuncts = Lists.newArrayList();
