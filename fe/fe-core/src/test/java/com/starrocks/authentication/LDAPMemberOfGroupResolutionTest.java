@@ -306,7 +306,6 @@ public class LDAPMemberOfGroupResolutionTest {
                 new UserRef(USER, "%", false, NodePosition.ZERO),
                 true,
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
-                null, null,
                 List.of(), Map.of(), NodePosition.ZERO));
 
         boolean saved = Config.enable_auth_check;
