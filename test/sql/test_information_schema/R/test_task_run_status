@@ -24,15 +24,15 @@ SELECT * FROM mv1 ORDER BY event_day;
 -- !result
 SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
-mv1	MANUAL	true	
+mv1	ASYNC	true	
 -- !result
 SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
-mv1	MANUAL	true	
+mv1	ASYNC	true	
 -- !result
 SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
 -- result:
-mv1	MANUAL	true	
+mv1	ASYNC	true	
 -- !result
 SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
 -- result:
