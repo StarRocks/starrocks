@@ -2026,9 +2026,10 @@ void PrimaryKeyManager::evict_cache(int32_t percent) {
     _index_cache.try_evict(target);
     const size_t size = _index_cache.size();
     if (size < orig_size) {
-        LOG(INFO) << "lake primary index cache evicted to " << percent << "% of capacity "
-                  << PrettyPrinter::print_bytes(_index_cache.capacity()) << ": "
-                  << PrettyPrinter::print_bytes(orig_size) << " -> " << PrettyPrinter::print_bytes(size);
+        // Every publish can trim the cache, so log at most once a second.
+        LOG_EVERY_T(INFO, 1) << "lake primary index cache evicted to " << percent << "% of capacity "
+                             << PrettyPrinter::print_bytes(_index_cache.capacity()) << ": "
+                             << PrettyPrinter::print_bytes(orig_size) << " -> " << PrettyPrinter::print_bytes(size);
     }
 }
 

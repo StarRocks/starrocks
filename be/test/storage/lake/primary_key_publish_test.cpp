@@ -2027,6 +2027,45 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_c
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, 2));
 }
 
+// A publish that succeeds trims the primary index cache back to primary_key_index_memory_urgent_percent right
+// away, instead of leaving it above that level until the background evict thread runs.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_trims_index_cache_to_urgent_percent) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(20 * kEntrySize);
+    const int32_t old_urgent = config::primary_key_index_memory_urgent_percent;
+    config::primary_key_index_memory_urgent_percent = 50;
+    DeferOp restore([&]() { config::primary_key_index_memory_urgent_percent = old_urgent; });
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    EXPECT_LE(index_cache.size(), 10 * kEntrySize);
+    // The least recently used indexes go first; the one this publish just used stays.
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 1));
+    auto* entry = index_cache.get(tablet_id);
+    ASSERT_NE(nullptr, entry);
+    index_cache.release(entry);
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, 2));
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
