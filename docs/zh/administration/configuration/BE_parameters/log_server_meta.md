@@ -411,7 +411,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否在 BE 上采集 JVM 内存指标。指标包括堆内存和非堆内存的 `jvm_heap_size_bytes`、`jvm_non_heap_size_bytes`，以及各内存池的 `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` 和 `jvm_perm_size_bytes`（Metaspace）。每个指标的 `type` 标签取值为 `used`、`committed`、`max`、`peak_used` 或 `peak_max`。开启该参数不会启动 JVM。只有当 HDFS 访问、基于 JNI 的读取器、Java UDF 等使用 Java 的功能在 BE 进程中创建了 JVM 之后，BE 才开始采集这些指标，在此之前指标值为 0。当 `enable_metric_calculator` 为 `true` 时，指标每 15 秒刷新一次。如果未设置 `JAVA_HOME`，则不会注册这些指标。如果内存池没有定义上限（例如 G1 的 Eden 和 Survivor 区，或未设置 `MaxMetaspaceSize` 时的 Metaspace），则不导出该内存池的 `max` 和 `peak_max`。内存池指标仅在使用 Serial、Parallel 和 G1 垃圾回收器时有值。系统级指标由 `enable_system_metrics` 控制。
+- 描述：是否在 BE 上采集 JVM 内存指标。指标包括堆内存和非堆内存的 `jvm_heap_size_bytes`、`jvm_non_heap_size_bytes`，以及各内存池的 `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` 和 `jvm_perm_size_bytes`（Metaspace）。每个指标的 `type` 标签取值为 `used`、`committed`、`max`、`peak_used` 或 `peak_max`。开启该参数不会启动 JVM。只有当 HDFS 访问、基于 JNI 的读取器、Java UDF 等使用 Java 的功能在 BE 进程中创建了 JVM 之后，BE 才开始采集这些指标，在此之前指标值为 0。当 `enable_metric_calculator` 为 `true` 时，指标每 15 秒刷新一次。如果未设置 `JAVA_HOME`，则不会注册这些指标。`max` 或 `peak_max` 为 -1 表示该内存池没有定义上限。内存池指标仅在使用 Serial、Parallel 和 G1 垃圾回收器时有值。系统级指标由 `enable_system_metrics` 控制。
 - 引入版本：v4.0.0
 
 ### get_pindex_worker_count

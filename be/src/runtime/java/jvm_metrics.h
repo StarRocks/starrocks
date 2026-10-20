@@ -102,13 +102,6 @@ private:
     std::atomic<bool> _initialized{false};
     std::atomic<bool> _jvm_unavailable{false};
 
-    // Set once the max and peak_max gauges of a memory pool group are hidden because the pool has
-    // no defined maximum (MemoryUsage.getMax() returns -1).
-    std::atomic<bool> _young_max_hidden{false};
-    std::atomic<bool> _old_max_hidden{false};
-    std::atomic<bool> _survivor_max_hidden{false};
-    std::atomic<bool> _perm_max_hidden{false};
-
     std::unique_ptr<JVMClass> _management_factory_cls = nullptr;
     JavaGlobalRef _memory_mxbean_obj = nullptr;
 
