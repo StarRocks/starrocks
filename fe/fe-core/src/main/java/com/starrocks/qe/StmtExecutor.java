@@ -268,7 +268,6 @@ import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
@@ -2152,13 +2151,28 @@ public class StmtExecutor {
                 DefaultCoordinator defaultCoordinator = (DefaultCoordinator) coord;
 
                 ExecutionFragment rootFragment = defaultCoordinator.getExecutionDAG().getRootFragment();
-                FragmentInstance rootFragmentInstance = rootFragment.getInstances().get(0);
-                ComputeNode worker = rootFragmentInstance.getWorker();
-                TUniqueId rootFragmentInstanceId = rootFragmentInstance.getInstanceId();
                 Schema schema = buildSchema(execPlan);
 
+                // Multi-endpoint fan-out: emit one backend result per terminal-fragment
+                // instance so the client can parallelize DoGet. Gated by the session
+                // variable; only engages when the planner left the terminal fragment
+                // partitioned (size > 1). Otherwise keep the single-endpoint path.
+                List<ArrowFlightSqlResultDescriptor.BackendResultDescriptor> backendResults = new ArrayList<>();
+                boolean multiEndpoint = context.getSessionVariable().isEnableArrowFlightMultiEndpoint()
+                        && rootFragment.getInstances().size() > 1;
+                if (multiEndpoint) {
+                    for (FragmentInstance instance : rootFragment.getInstances()) {
+                        backendResults.add(new ArrowFlightSqlResultDescriptor.BackendResultDescriptor(
+                                instance.getWorker().getId(), instance.getInstanceId()));
+                    }
+                } else {
+                    FragmentInstance rootFragmentInstance = rootFragment.getInstances().get(0);
+                    backendResults.add(new ArrowFlightSqlResultDescriptor.BackendResultDescriptor(
+                            rootFragmentInstance.getWorker().getId(), rootFragmentInstance.getInstanceId()));
+                }
+
                 ArrowFlightSqlResultDescriptor backendResultDesc =
-                        new ArrowFlightSqlResultDescriptor(worker.getId(), rootFragmentInstanceId, schema);
+                        new ArrowFlightSqlResultDescriptor(backendResults, schema);
 
                 deploymentFinished.complete(backendResultDesc);
             }

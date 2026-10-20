@@ -82,6 +82,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -860,21 +861,23 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 return buildFlightInfo(ticketStatement, descriptor, result.getSchema(), endpoint);
             }
 
-            // Query task will wait until deployment to BE is finished and return BE as endpoint.
-            long workerId = result.getBackendId();
-            TUniqueId rootFragmentInstanceId = result.getFragmentInstanceId();
+            // Query task waits until deployment to BE(s) is finished. Emit one Flight
+            // endpoint per result-producing BE instance so the client can fan out DoGet
+            // across backends. Single-instance queries yield exactly one endpoint.
             Schema schema = result.getSchema();
-
             SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            ComputeNode worker = clusterInfoService.getBackendOrComputeNode(workerId);
 
-            Pair<Location, ByteString> beEndpoint = getBEEndpoint(ctx.getExecutionId(), worker, rootFragmentInstanceId);
-            Location endpoint = beEndpoint.first;
-            ByteString handle = beEndpoint.second;
-
-            FlightSql.TicketStatementQuery ticketStatement =
-                    FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
-            return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
+            List<FlightEndpoint> flightEndpoints = new ArrayList<>();
+            for (ArrowFlightSqlResultDescriptor.BackendResultDescriptor backend : result.getBackendResultDescriptors()) {
+                ComputeNode worker = clusterInfoService.getBackendOrComputeNode(backend.backendId());
+                Pair<Location, ByteString> beEndpoint =
+                        getBEEndpoint(ctx.getExecutionId(), worker, backend.fragmentInstanceId());
+                FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
+                        .setStatementHandle(beEndpoint.second).build();
+                Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
+                flightEndpoints.add(new FlightEndpoint(ticket, beEndpoint.first));
+            }
+            return buildFlightInfo(descriptor, schema, flightEndpoints);
         } catch (Exception e) {
             LOG.warn("[ARROW] failed to getFlightInfoFromQuery [queryID={}]", DebugUtil.printId(ctx.getExecutionId()), e);
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
@@ -954,6 +957,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private static Schema buildPlaceholderSchema() {
         return new Schema(Lists.newArrayList(
                 ArrowUtils.convertToArrowType(com.starrocks.type.IntegerType.INT, "result", true)));
+    }
+
+    // Multi-endpoint variant: the caller has already built one FlightEndpoint
+    // (ticket + Location) per result-producing BE instance.
+    protected FlightInfo buildFlightInfo(FlightDescriptor descriptor, Schema schema, List<FlightEndpoint> endpoints) {
+        return new FlightInfo(schema, descriptor, endpoints, -1, -1);
     }
 
     public static Schema buildSchema(ExecPlan execPlan) {

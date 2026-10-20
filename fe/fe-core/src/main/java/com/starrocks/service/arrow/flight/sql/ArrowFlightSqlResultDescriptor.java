@@ -14,24 +14,29 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.vector.types.pojo.Schema;
 
-import javax.annotation.Nullable;
+import java.util.List;
 
 public class ArrowFlightSqlResultDescriptor {
     private final Schema schema;
-    @Nullable
-    private final BackendResultDescriptor backendResultDescriptor;
+    // One entry per result-producing BE instance. Empty => the result is served
+    // from the FE (metadata/short-circuit), not a backend.
+    private final List<BackendResultDescriptor> backendResultDescriptors;
 
     public ArrowFlightSqlResultDescriptor(long backendId, TUniqueId fragmentInstanceId, Schema schema) {
-        this.backendResultDescriptor = new BackendResultDescriptor(backendId, fragmentInstanceId);
+        this.backendResultDescriptors = List.of(new BackendResultDescriptor(backendId, fragmentInstanceId));
+        this.schema = schema;
+    }
+
+    public ArrowFlightSqlResultDescriptor(List<BackendResultDescriptor> backendResultDescriptors, Schema schema) {
+        this.backendResultDescriptors = List.copyOf(backendResultDescriptors);
         this.schema = schema;
     }
 
     public ArrowFlightSqlResultDescriptor(Schema schema) {
-        this.backendResultDescriptor = null;
+        this.backendResultDescriptors = List.of();
         this.schema = schema;
     }
 
@@ -40,17 +45,11 @@ public class ArrowFlightSqlResultDescriptor {
     }
 
     public boolean isBackendResultDescriptor() {
-        return backendResultDescriptor != null;
+        return !backendResultDescriptors.isEmpty();
     }
 
-    public long getBackendId() {
-        Preconditions.checkArgument(backendResultDescriptor != null, "backend result not found");
-        return backendResultDescriptor.backendId();
-    }
-
-    public TUniqueId getFragmentInstanceId() {
-        Preconditions.checkArgument(backendResultDescriptor != null, "backend result not found");
-        return backendResultDescriptor.fragmentInstanceId();
+    public List<BackendResultDescriptor> getBackendResultDescriptors() {
+        return backendResultDescriptors;
     }
 
     public record BackendResultDescriptor(long backendId, TUniqueId fragmentInstanceId) {

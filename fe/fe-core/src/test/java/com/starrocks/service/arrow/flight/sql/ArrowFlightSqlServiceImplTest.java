@@ -41,6 +41,7 @@ import org.apache.arrow.flight.Criteria;
 import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
+import org.apache.arrow.flight.FlightEndpoint;
 import org.apache.arrow.flight.FlightInfo;
 import org.apache.arrow.flight.FlightProducer;
 import org.apache.arrow.flight.FlightRuntimeException;
@@ -70,8 +71,12 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -231,6 +236,56 @@ public class ArrowFlightSqlServiceImplTest {
 
         CloseSessionResult result = resultCaptor.getValue();
         assertEquals(CloseSessionResult.Status.CLOSED, result.getStatus());
+    }
+
+    @Test
+    public void testBuildFlightInfoMultipleEndpoints() {
+        Schema schema = new Schema(Collections.emptyList());
+        FlightDescriptor descriptor = FlightDescriptor.command("q".getBytes());
+        List<FlightEndpoint> endpoints = List.of(
+                new FlightEndpoint(new Ticket("t1".getBytes()), Location.forGrpcInsecure("be1", 9001)),
+                new FlightEndpoint(new Ticket("t2".getBytes()), Location.forGrpcInsecure("be2", 9002)),
+                new FlightEndpoint(new Ticket("t3".getBytes()), Location.forGrpcInsecure("be3", 9003)));
+
+        FlightInfo info = service.buildFlightInfo(descriptor, schema, endpoints);
+
+        assertEquals(3, info.getEndpoints().size());
+        assertEquals(Location.forGrpcInsecure("be2", 9002),
+                info.getEndpoints().get(1).getLocations().get(0));
+    }
+
+    @Test
+    public void testBuildFlightInfoSingleEndpoint() {
+        Schema schema = new Schema(Collections.emptyList());
+        FlightDescriptor descriptor = FlightDescriptor.command("q".getBytes());
+        List<FlightEndpoint> endpoints = List.of(
+                new FlightEndpoint(new Ticket("t1".getBytes()), Location.forGrpcInsecure("be1", 9001)));
+
+        FlightInfo info = service.buildFlightInfo(descriptor, schema, endpoints);
+
+        assertEquals(1, info.getEndpoints().size());
+    }
+
+    @Test
+    public void testResultDescriptorMultipleBackends() {
+        Schema schema = new Schema(Collections.emptyList());
+        List<ArrowFlightSqlResultDescriptor.BackendResultDescriptor> backends = List.of(
+                new ArrowFlightSqlResultDescriptor.BackendResultDescriptor(1L, new TUniqueId(1, 1)),
+                new ArrowFlightSqlResultDescriptor.BackendResultDescriptor(2L, new TUniqueId(2, 2)));
+        ArrowFlightSqlResultDescriptor desc = new ArrowFlightSqlResultDescriptor(backends, schema);
+
+        assertTrue(desc.isBackendResultDescriptor());
+        assertEquals(2, desc.getBackendResultDescriptors().size());
+        assertEquals(2L, desc.getBackendResultDescriptors().get(1).backendId());
+    }
+
+    @Test
+    public void testResultDescriptorFeOnlyHasNoBackends() {
+        Schema schema = new Schema(Collections.emptyList());
+        ArrowFlightSqlResultDescriptor desc = new ArrowFlightSqlResultDescriptor(schema);
+
+        assertTrue(!desc.isBackendResultDescriptor());
+        assertTrue(desc.getBackendResultDescriptors().isEmpty());
     }
 
     @Test
