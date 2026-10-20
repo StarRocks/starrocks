@@ -137,8 +137,8 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) 
     const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
     const std::string saved_percent = std::to_string(config::lake_pk_preload_memory_limit_percent);
     DeferOp defer([&]() {
-        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent",
-                                                                 saved_percent));
+        CHECK_OK(
+                ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", saved_percent));
     });
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
