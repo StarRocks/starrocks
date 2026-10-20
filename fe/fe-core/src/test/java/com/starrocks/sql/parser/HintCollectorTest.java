@@ -63,6 +63,9 @@ class HintCollectorTest {
                 "where tbl.col = t1.col", 3));
         arguments.add(Arguments.of("submit /*+ set_var(abc = abc) */ task " +
                 "as create table temp as select count(*) as cnt from tbl1", 1));
+        arguments.add(Arguments.of("submit /*+ set_var(abc = abc) */ task as update /*+ set_var(abc = abc) */ tbl set col = 1 " +
+                "from (select /*+ set_var(abc = abc) */ * from (select /*+ set_var(abc = abc) */ * from t1) t) t1 " +
+                "where t1.col = tbl.col", 4));
         arguments.add(Arguments.of("LOAD /*+ set_var(abc = abc) */ LABEL test.testLabel " +
                 "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/file\") " +
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") " +

@@ -71,6 +71,9 @@ public class TaskBuilder {
         if (submitTaskStmt.getInsertStmt() != null) {
             taskNamePrefix = "insert-";
             taskSource = Constants.TaskSource.INSERT;
+        } else if (submitTaskStmt.getUpdateStmt() != null) {
+            taskNamePrefix = "update-";
+            taskSource = Constants.TaskSource.UPDATE;
         } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
             taskNamePrefix = "ctas-";
             taskSource = Constants.TaskSource.CTAS;

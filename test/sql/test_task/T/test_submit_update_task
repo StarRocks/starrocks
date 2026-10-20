@@ -1,0 +1,24 @@
+-- name: test_submit_update_task
+create database test_task_${uuid0};
+use test_task_${uuid0};
+
+create table target(pk int not null, v int not null) primary key(pk) distributed by hash(pk) buckets 1 properties("replication_num" = "1");
+create table staging(pk int, v int) duplicate key(pk) distributed by hash(pk) buckets 1 properties("replication_num" = "1");
+insert into target values(1, 10), (2, 20);
+insert into staging values(1, 100), (3, 300);
+
+[UC]submit task t_update_${uuid0} as update target set v = staging.v from staging where target.pk = staging.pk;
+select DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name='t_update_${uuid0}';
+
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for the UPDATE task run to succeed"}
+  result=select count(*) from information_schema.task_runs where `DATABASE`='test_task_${uuid0}' and task_name='t_update_${uuid0}' and `STATE`='SUCCESS';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+
+select * from target order by pk;
+
+drop task t_update_${uuid0};
+drop table staging;
+drop table target;
+drop database test_task_${uuid0};

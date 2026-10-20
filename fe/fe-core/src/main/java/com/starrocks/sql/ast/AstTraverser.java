@@ -70,6 +70,9 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt(), context);
         }
+        if (statement.getUpdateStmt() != null) {
+            visit(statement.getUpdateStmt(), context);
+        }
         if (statement.getCreateTableAsSelectStmt() != null) {
             visit(statement.getCreateTableAsSelectStmt(), context);
         }
