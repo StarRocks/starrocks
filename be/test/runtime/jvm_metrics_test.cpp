@@ -99,6 +99,12 @@ TEST_F(JVMMetricsTest, normal) {
 }
 
 TEST_F(JVMMetricsTest, MemTrackerFollowsCommittedMemory) {
+    // This test binary never calls config::init(), so config fields hold zero values rather than
+    // their declared defaults. Set the switch explicitly.
+    const bool saved_switch = config::enable_jvm_memory_tracker;
+    DeferOp restore_switch([saved_switch]() { config::enable_jvm_memory_tracker = saved_switch; });
+    config::enable_jvm_memory_tracker = true;
+
     MetricRegistry registry("mem_tracker_test");
     MemTracker process_tracker(MemTrackerType::PROCESS, -1, "process");
     MemTracker jvm_tracker(MemTrackerType::JVM, -1, "jvm", &process_tracker);
@@ -121,8 +127,6 @@ TEST_F(JVMMetricsTest, MemTrackerFollowsCommittedMemory) {
 
     // enable_jvm_memory_tracker is mutable: turning it off releases the tracked memory on the next
     // round, and turning it back on counts the committed memory again.
-    const bool saved_switch = config::enable_jvm_memory_tracker;
-    DeferOp restore_switch([saved_switch]() { config::enable_jvm_memory_tracker = saved_switch; });
     config::enable_jvm_memory_tracker = false;
     registry.trigger_hook();
     ASSERT_EQ(0, jvm_tracker.consumption());
