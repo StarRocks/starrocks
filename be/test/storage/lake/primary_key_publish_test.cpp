@@ -1978,6 +1978,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_c
     ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
+    // Call publish_version itself: publish_single_version turns every error into InternalError.
+    auto publish = [&]() {
+        auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr))};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns, false).status();
+    };
     // Publish with the primary index load failing with |error|.
     auto publish_with_index_load_error = [&](const Status& error) {
         SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) { *(Status*)arg = error; });
@@ -1986,7 +1991,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_c
             SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
             SyncPoint::GetInstance()->DisableProcessing();
         });
-        return publish_single_version(tablet_id, 2, txn_id).status();
+        return publish();
     };
 
     fill_index_cache(16, kEntrySize);
@@ -2003,7 +2008,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_c
     {
         const int64_t old_limit = _primary_key_mgr->mem_tracker()->limit();
         _primary_key_mgr->mem_tracker()->set_limit(1);
-        auto st = publish_single_version(tablet_id, 2, txn_id).status();
+        auto st = publish();
         _primary_key_mgr->mem_tracker()->set_limit(old_limit);
         ASSERT_TRUE(st.is_mem_limit_exceeded()) << st;
     }
