@@ -39,33 +39,37 @@ jobs:
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: SYNC CHECKER
     outputs:
-      BACKPORT_SOURCE_PR: ${{ steps.backport_assign.outputs.ORI_PR }}
+      BACKPORT_SOURCE_PR: ${{ steps.backport_source.outputs.ORI_PR }}
     steps:
       - run: echo "Normal PR."
 
-      - name: backport assign
-        id: backport_assign
+      # Only the source PR number, for title-check's body update. Who gets assigned is
+      # decided by the backport-assign job below (ci-tool).
+      - name: backport source
+        id: backport_source
         if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.number }}
-          REPO: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
-          author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
-          if [[ ! "${author}" =~ "mergify" ]]; then
-            # REST "Add assignees to an issue", not `gh pr edit`: the latter also
-            # queries Projects (classic), which GitHub has sunset -- on a runner with
-            # an older gh it fails with "GraphQL: Projects (classic) is being
-            # deprecated" and the `|| true` swallowed it, so nothing got assigned.
-            # The body is passed as JSON (--input -) so the array does not depend on
-            # gh's `key[]=` sugar, which not every gh version supports.
-            echo "{\"assignees\":[\"${author}\"]}" \
-              | gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/assignees" --input - --silent \
-              || echo "::warning::failed to assign ${author} to #${PR_NUMBER}"
-            echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
-          fi
+          echo "ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)" >> $GITHUB_OUTPUT
+
+  backport-assign:
+    # Assign a mergify backport to the person behind its source PR. The selection lives in
+    # ci-tool scripts/backport-assign.py; self-hosted because ci-tool is mounted there.
+    # Reads only the API, never the PR's code, like conflict-marker-check.
+    needs: sync-checker
+    if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Assign backport
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/backport-assign.py
 
   title-check:
     runs-on: ubuntu-latest
