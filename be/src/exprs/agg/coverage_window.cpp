@@ -121,7 +121,7 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
     if (!input || start < 0 || end < start || (!input->is_constant() && uint64_t(end) > input->size()))
         return Status::InvalidArgument("ST_CoverageSimplify invalid input partition");
     ASSIGN_OR_RETURN(state.core,
-                     GeoCoverageSimplify::create(memory::get_default_allocator(), {}, {ctx->state(), checkpoint}));
+                     GeoCoverageSimplify::create(memory::get_default_allocator(), {ctx->state(), checkpoint}));
     const bool skip = !state.tolerance || !state.boundary;
     for (int64_t row = start; row < end; ++row) {
         if ((row - start) % 128 == 0) RETURN_IF_ERROR(checkpoint(ctx->state()));
