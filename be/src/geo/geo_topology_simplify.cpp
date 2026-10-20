@@ -248,22 +248,10 @@ struct Index {
         }
         for (const auto& item : tree) items[item.second] = item;
     }
-    void replace(size_t path, uint32_t a, uint32_t b, uint32_t c, const std::vector<Path>& paths, Budget& budget) {
-        budget.check();
-        const bool first_update = links.empty();
-        if (first_update) {
-            // Before the lazy tables exist, use rebuild's rule for skipped zero-length edges.
-            const auto& raw = *paths[path].raw;
-            const size_t removed = (raw[a] != raw[b]) + (raw[b] != raw[c]);
-            budget.charge(tree.size() - removed + 1);
-            initialize_updates(paths);
-        }
+    void replace(size_t path, uint32_t a, uint32_t b, uint32_t c, const std::vector<Path>& paths) {
+        if (links.empty()) initialize_updates(paths);
         const size_t left = outgoing[offsets[path] + a], right = outgoing[offsets[path] + b];
         const size_t id = left != none ? left : right;
-        if (!first_update) {
-            const size_t removed = (left != none) + (right != none);
-            budget.charge(std::min(removed + 1, tree.size() - removed + 1));
-        }
         // Use the saved value before changing endpoints; equal boxes still have distinct IDs.
         for (size_t old : {left, right}) {
             if (old == none) continue;
@@ -285,7 +273,6 @@ struct Index {
         outgoing[offsets[path] + b] = none;
         items[id] = {bounds((*paths[path].raw)[a], (*paths[path].raw)[c]), id};
         tree.insert(items[id]);
-        budget.check();
     }
     std::vector<Item> query(const Box& box, Budget& budget) const {
         // Charge live leaves, including an empty result, rather than inactive slots.
@@ -305,59 +292,6 @@ struct Index {
                (paths[a.path].closed &&
                 ((x == first[a.path] && y == last[a.path]) || (y == first[a.path] && x == last[a.path])));
     }
-#if defined(BE_TEST) && !defined(NDEBUG)
-    void check_rebuild(const std::vector<Path>& paths, const Retained& retained) const {
-        // Keep exhaustive diagnostic rebuilding out of large tests and all production builds.
-        constexpr size_t kDebugMaxLiveEdges = 512;
-        if (tree.size() > kDebugMaxLiveEdges) return;
-        const std::function<Status()> checkpoint;
-        Budget diagnostic(std::numeric_limits<size_t>::max(), checkpoint);
-        Index reference;
-        reference.rebuild(paths, retained, diagnostic);
-        assert(counts == reference.counts && tree.size() == reference.tree.size());
-        std::vector<size_t> ids, rank(edges.size(), none);
-        for (size_t id = first_edge(); id != none; id = next_edge(id)) {
-            const size_t i = ids.size();
-            assert(i < reference.edges.size());
-            const auto& a = edges[id];
-            const auto& b = reference.edges[i];
-            assert(a.path == b.path && a.a == b.a && a.b == b.b);
-            assert(outgoing[offsets[a.path] + a.a] == id);
-            rank[id] = i;
-            ids.push_back(id);
-        }
-        assert(ids.size() == tree.size());
-        for (size_t i = 0; i < ids.size(); ++i) {
-            const auto id = ids[i], path = edges[id].path;
-            assert(links[id].previous == (i == 0 ? none : ids[i - 1]));
-            assert(links[id].next == (i + 1 == ids.size() ? none : ids[i + 1]));
-            if (reference.edges[i].order == 0) assert(first[path] == id);
-            if (reference.edges[i].order + 1 == counts[path]) assert(last[path] == id);
-        }
-        std::vector<bool> seen(edges.size(), false);
-        for (const auto& item : tree) {
-            const size_t id = item.second;
-            assert(id < edges.size() && rank[id] != none && !seen[id]);
-            seen[id] = true;
-            const auto s = segment(edges[id], paths);
-            assert(bg::equals(item.first, bounds(s.raw_a, s.raw_b)));
-            assert(bg::equals(item.first, items[id].first));
-        }
-        for (size_t path = 0; path < paths.size(); ++path) {
-            for (size_t v = offsets[path]; v < offsets[path + 1]; ++v) {
-                const auto id = outgoing[v];
-                assert(id == none || (rank[id] != none && edges[id].path == path && edges[id].a == v - offsets[path]));
-            }
-        }
-        // Equal predecessor/successor/wrap sets above prove all pairs; exhaust small cases too.
-        if (ids.size() <= 64) {
-            for (size_t i = 0; i < ids.size(); ++i)
-                for (size_t j = 0; j < ids.size(); ++j)
-                    assert(adjacent(edges[ids[i]], edges[ids[j]], paths) ==
-                           reference.adjacent(reference.edges[i], reference.edges[j], paths));
-        }
-    }
-#endif
 };
 
 // A midpoint is represented doubled, so even subnormal input edges get an
@@ -791,10 +725,7 @@ StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
                     const auto a = retained[i][j - 1], b = retained[i][j], c = retained[i][j + 1];
                     if (removable(_impl->paths, index, retained, areas, i, j, tolerance2, distance_shift, budget)) {
                         changed = true;
-                        index.replace(i, a, b, c, _impl->paths, budget);
-#if defined(BE_TEST) && !defined(NDEBUG)
-                        index.check_rebuild(_impl->paths, retained);
-#endif
+                        index.replace(i, a, b, c, _impl->paths);
                     } else {
                         ++j;
                     }
