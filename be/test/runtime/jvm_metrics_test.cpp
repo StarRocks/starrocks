@@ -22,6 +22,7 @@
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
 #include "common/system/cpu_info.h"
 #include "runtime/java/java_env.h"
 #include "runtime/java/jni_env.h"
@@ -113,6 +114,20 @@ TEST_F(JVMMetricsTest, MemTrackerFollowsCommittedMemory) {
     ASSERT_EQ(committed, process_tracker.consumption());
 
     // Each round sets the tracker to the latest value instead of adding to it.
+    registry.trigger_hook();
+    committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // enable_jvm_memory_tracker is mutable: turning it off releases the tracked memory on the next
+    // round, and turning it back on counts the committed memory again.
+    const bool saved_switch = config::enable_jvm_memory_tracker;
+    DeferOp restore_switch([saved_switch]() { config::enable_jvm_memory_tracker = saved_switch; });
+    config::enable_jvm_memory_tracker = false;
+    registry.trigger_hook();
+    ASSERT_EQ(0, jvm_tracker.consumption());
+    ASSERT_EQ(0, process_tracker.consumption());
+    config::enable_jvm_memory_tracker = true;
     registry.trigger_hook();
     committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
     ASSERT_EQ(committed, jvm_tracker.consumption());

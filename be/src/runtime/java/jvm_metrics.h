@@ -98,7 +98,8 @@ public:
     static StatusOr<bool> is_jvm_created();
 
     // After each successful collection, the tracker is set to the committed heap plus non-heap
-    // memory. Pass nullptr to stop updating it. The caller keeps the tracker alive while it is set.
+    // memory, or to 0 while config::enable_jvm_memory_tracker is off. Pass nullptr to stop updating
+    // it. The caller keeps the tracker alive while it is set.
     void set_mem_tracker(MemTracker* mem_tracker);
 
 private:

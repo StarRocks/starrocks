@@ -20,6 +20,7 @@
 
 #include "base/logging.h"
 #include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
@@ -167,9 +168,13 @@ void JVMMetrics::_update_mem_tracker() {
         return;
     }
     // Committed rather than used: the JVM keeps committed memory after a GC frees objects in it,
-    // and that memory is not available to the rest of BE.
-    int64_t committed = jvm_heap_committed_bytes.value() + jvm_non_heap_committed_bytes.value();
-    _mem_tracker->consume(committed - _mem_tracker->consumption());
+    // and that memory is not available to the rest of BE. enable_jvm_memory_tracker is mutable;
+    // when it is off, release whatever was tracked before.
+    int64_t tracked = 0;
+    if (config::enable_jvm_memory_tracker) {
+        tracked = jvm_heap_committed_bytes.value() + jvm_non_heap_committed_bytes.value();
+    }
+    _mem_tracker->consume(tracked - _mem_tracker->consumption());
 }
 
 void JVMMetrics::install(MetricRegistry* registry) {
