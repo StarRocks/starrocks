@@ -17,25 +17,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
-import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> da12424 ([BugFix] Scope Iceberg equality deletes to their partition (#81139))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StringType;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Types;
->>>>>>> da12424 ([BugFix] Scope Iceberg equality deletes to their partition (#81139))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -126,10 +117,10 @@ public class IcebergEqualityDeleteRewriteRuleTest {
     // without them the plain equality stays a hash join key.
     @Test
     public void testBuildOnPredicateMatchesPartitionKey() {
-        ColumnRefOperator leftId = new ColumnRefOperator(1, IntegerType.INT, "id", true);
-        ColumnRefOperator leftKey = new ColumnRefOperator(2, StringType.STRING, PARTITION_KEY, true);
-        ColumnRefOperator rightId = new ColumnRefOperator(3, IntegerType.INT, "id", true);
-        ColumnRefOperator rightKey = new ColumnRefOperator(4, StringType.STRING, PARTITION_KEY, true);
+        ColumnRefOperator leftId = new ColumnRefOperator(1, Type.INT, "id", true);
+        ColumnRefOperator leftKey = new ColumnRefOperator(2, Type.STRING, PARTITION_KEY, true);
+        ColumnRefOperator rightId = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator rightKey = new ColumnRefOperator(4, Type.STRING, PARTITION_KEY, true);
 
         Map<String, ColumnRefOperator> leftCols = new HashMap<>();
         leftCols.put("id", leftId);

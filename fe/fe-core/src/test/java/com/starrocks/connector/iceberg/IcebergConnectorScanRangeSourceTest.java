@@ -28,11 +28,7 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.DateType;
->>>>>>> da12424 ([BugFix] Scope Iceberg equality deletes to their partition (#81139))
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;

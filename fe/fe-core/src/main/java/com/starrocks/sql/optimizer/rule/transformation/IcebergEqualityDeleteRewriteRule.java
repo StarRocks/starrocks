@@ -48,11 +48,6 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StringType;
->>>>>>> da12424 ([BugFix] Scope Iceberg equality deletes to their partition (#81139))
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.PartitionSpec;
@@ -422,7 +417,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         }
 
         if (withPartitionKey) {
-            Column partitionKeyColumn = new Column(PARTITION_KEY, StringType.STRING, true);
+            Column partitionKeyColumn = new Column(PARTITION_KEY, Type.STRING, true);
             ColumnRefOperator partitionKeyColumnRef = buildNewColumnRef(partitionKeyColumn, columnRefFactory, icebergTable);
             newColRefToColumnMetaMapBuilder.put(partitionKeyColumnRef, partitionKeyColumn);
             newColumnMetaToColRefMapBuilder.put(partitionKeyColumn, partitionKeyColumnRef);
