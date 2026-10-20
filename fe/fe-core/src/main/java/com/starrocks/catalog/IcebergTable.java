@@ -31,6 +31,7 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.connector.iceberg.procedure.AddEqualityDeleteFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
@@ -783,6 +784,7 @@ public class IcebergTable extends Table {
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
+            case ADD_EQUALITY_DELETE_FILES -> AddEqualityDeleteFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };
     }
