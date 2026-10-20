@@ -997,6 +997,35 @@ public class DatabaseTransactionMgr {
         return conflictingTxnIds;
     }
 
+    /**
+     * The given physical partitions that a COMMITTED, not yet VISIBLE transaction of the table covers.
+     * <p>
+     * One pass over one snapshot of the running transactions of the table, however many partitions are checked.
+     * Checking them one at a time with {@link GlobalTransactionMgr#existCommittedTxns} copies and sorts every
+     * committed transaction of the database for each of them, see {@link #getCommittedTxnList()}, which adds up
+     * while a caller holds the table lock over all the temp partitions of a job.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Set<Long> getPhysicalPartitionsWithCommittedTxns(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        Set<Long> partitionsWithCommittedTxns = Sets.newHashSet();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            if (txn.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                continue;
+            }
+            TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+            if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {
+                addIntersection(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds,
+                        partitionsWithCommittedTxns);
+            }
+        }
+        return partitionsWithCommittedTxns;
+    }
+
     private List<TransactionState> getRunningTxnsOfTable(long tableId) {
         // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
         // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),

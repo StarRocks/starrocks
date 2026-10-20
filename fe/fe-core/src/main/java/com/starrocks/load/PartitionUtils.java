@@ -100,17 +100,30 @@ public class PartitionUtils {
     }
 
     /**
-     * Whether the given partition has a transaction that is committed but not published yet.
+     * The given partitions that have a transaction committed but not published yet, all looked up in one pass
+     * over the transactions of the table, since callers check every temp partition of a job under the table lock.
      * <p>
-     * Used to gate the rewritten temp partition before it takes over: swapping it in while its own rewrite
+     * Used to gate the rewritten temp partitions before they take over: swapping one in while its own rewrite
      * is not published yet would briefly expose a partition without the rewritten rows. Unlike a source
      * partition, a temp partition survives the swap, so a pending publish still lands on it and no row is
      * lost, which is why in flight transactions are not considered here.
+     *
+     * @return ids of those partitions
      */
-    public static boolean hasCommittedNotVisibleTxn(long dbId, long tableId, Partition partition) {
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        return partition.getSubPartitions().stream()
-                .anyMatch(physicalPartition -> transactionMgr.existCommittedTxns(dbId, tableId, physicalPartition.getId()));
+    public static Set<Long> getPartitionsWithCommittedNotVisibleTxn(long dbId, long tableId,
+                                                                   Collection<Partition> partitions) {
+        Map<Long, Long> physicalToLogicalPartitionId = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalToLogicalPartitionId.put(physicalPartition.getId(), partition.getId());
+            }
+        }
+        if (physicalToLogicalPartitionId.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Long> physicalPartitionIds = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getPhysicalPartitionsWithCommittedTxns(dbId, tableId, physicalToLogicalPartitionId.keySet());
+        return physicalPartitionIds.stream().map(physicalToLogicalPartitionId::get).collect(Collectors.toSet());
     }
 
     /**

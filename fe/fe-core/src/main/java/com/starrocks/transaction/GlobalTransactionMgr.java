@@ -873,6 +873,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     /**
+     * The given physical partitions that a COMMITTED, not yet VISIBLE transaction of the table covers, looked up
+     * in one pass, see {@link DatabaseTransactionMgr#getPhysicalPartitionsWithCommittedTxns(long, Set)}.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Set<Long> getPhysicalPartitionsWithCommittedTxns(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        return dbTransactionMgr == null ? Collections.emptySet()
+                : dbTransactionMgr.getPhysicalPartitionsWithCommittedTxns(tableId, physicalPartitionIds);
+    }
+
+    /**
      * Find the running transactions that may write to any of the given physical partitions.
      * See {@link #getConflictingTxnIdsByPartition(long, long, Set)}.
      *

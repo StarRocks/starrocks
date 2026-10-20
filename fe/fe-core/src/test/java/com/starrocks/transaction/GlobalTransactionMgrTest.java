@@ -1701,6 +1701,47 @@ public class GlobalTransactionMgrTest {
                 GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)).isEmpty());
     }
 
+    // The visibility gate of a partition replacement checks all the temp partitions of a job in one lookup. Only a
+    // committed, not yet visible transaction counts there, and only for the physical partitions it committed into.
+    @Test
+    public void testGetPhysicalPartitionsWithCommittedTxns() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        Set<Long> physicalPartitionIds = Sets.newHashSet(physicalPartitionId, physicalPartitionId + 1);
+
+        // a transaction still in flight does not count, even with the partition registered as a write target
+        beginTxnTargeting(physicalPartitionId);
+        Assertions.assertTrue(
+                masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId, tableId, physicalPartitionIds).isEmpty());
+
+        long transactionId = masterTransMgr.beginTransaction(dbId, Lists.newArrayList(tableId),
+                GlobalStateMgrTestUtil.testTxnLable2, transactionSource, LoadJobSourceType.FRONTEND,
+                Config.stream_load_default_timeout_second);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+        masterTransMgr.commitTransaction(dbId, transactionId, transTablets, Lists.newArrayList(), null);
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                masterTransMgr.getTransactionState(dbId, transactionId).getTransactionStatus());
+
+        Assertions.assertEquals(Sets.newHashSet(physicalPartitionId),
+                masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId, tableId, physicalPartitionIds));
+        // the same answer as the lookup of one partition at a time
+        Assertions.assertTrue(masterTransMgr.existCommittedTxns(dbId, tableId, physicalPartitionId));
+        // a logical partition id, another table, no partition at all, a database without any transaction
+        Assertions.assertTrue(masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId, tableId,
+                Sets.newHashSet(GlobalStateMgrTestUtil.testPartitionId1)).isEmpty());
+        Assertions.assertTrue(
+                masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId, tableId + 1, physicalPartitionIds).isEmpty());
+        Assertions.assertTrue(
+                masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId, tableId, Sets.newHashSet()).isEmpty());
+        Assertions.assertTrue(
+                masterTransMgr.getPhysicalPartitionsWithCommittedTxns(dbId + 1, tableId, physicalPartitionIds).isEmpty());
+    }
+
     // A statement of an explicit transaction registers its write targets while its plan is built, but the
     // transaction joins the database transaction manager only right before the statement starts writing
     // (TransactionStmtExecutor#loadData). A replacement that runs in between must see it all the same.
@@ -1745,7 +1786,7 @@ public class GlobalTransactionMgrTest {
     // Nothing aborts an explicit transaction on timeout before it joined the database transaction manager, so a
     // statement that was planned but never got to write must not block a replacement past that timeout.
     @Test
-    public void testGetConflictingTxnIdsSkipsTimedOutExplicitTxnThatNeverWrote() throws Exception {
+    public void testGetConflictingTxnIdsSkipsTimedOutExplicitTxnThatNeverWrote() {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
 
@@ -1764,7 +1805,7 @@ public class GlobalTransactionMgrTest {
      * The transaction has not joined the database transaction manager: that happens only right before the statement
      * starts writing.
      */
-    private TransactionState beginExplicitTxnPlannedOn(long physicalPartitionId, long prepareTime) throws Exception {
+    private TransactionState beginExplicitTxnPlannedOn(long physicalPartitionId, long prepareTime) {
         long transactionId = masterTransMgr.getTransactionIDGenerator().getNextTransactionId();
         TransactionState explicitTxn = new TransactionState(transactionId, GlobalStateMgrTestUtil.testTxnLable1, null,
                 LoadJobSourceType.INSERT_STREAMING, transactionSource, Config.stream_load_default_timeout_second * 1000L);

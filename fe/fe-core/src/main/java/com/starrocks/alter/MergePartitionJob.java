@@ -720,26 +720,37 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     }
 
     /**
-     * Whether the rewritten data of the given temp partition is published, see
-     * {@link PartitionUtils#hasCommittedNotVisibleTxn(long, long, Partition)}. Overridable for testability.
+     * Of the given temp partitions, the ones whose rewritten data is committed but not published yet, all looked
+     * up at once, see {@link PartitionUtils#getPartitionsWithCommittedNotVisibleTxn(long, long, Collection)}.
+     * Overridable for testability.
+     *
+     * @return ids of those temp partitions
      */
-    protected boolean hasCommittedNotVisibleTxn(Partition partition) {
-        return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
+    protected Set<Long> getNotVisibleTempPartitionIds(Collection<Partition> tempPartitions) {
+        return PartitionUtils.getPartitionsWithCommittedNotVisibleTxn(dbId, tableId, tempPartitions);
     }
 
     /**
      * Whether the rewritten data of some temp partition is committed but not published yet, in which case the
-     * replacement has to wait for it. Must be called while holding the table lock.
+     * replacement has to wait for it. Must be called while holding the table lock, and checks all the temp
+     * partitions in one lookup.
      */
     private boolean hasUnpublishedRewrite(OlapTable tbl) {
-        List<String> unpublishedTempPartitionNames = Lists.newArrayList();
+        List<Partition> rewrittenTempPartitions = Lists.newArrayList();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
                 continue;
             }
             Partition tempPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
-            if (tempPartition != null && hasCommittedNotVisibleTxn(tempPartition)) {
-                unpublishedTempPartitionNames.add(rewriteTask.getTempPartitionName());
+            if (tempPartition != null) {
+                rewrittenTempPartitions.add(tempPartition);
+            }
+        }
+        Set<Long> notVisibleTempPartitionIds = getNotVisibleTempPartitionIds(rewrittenTempPartitions);
+        List<String> unpublishedTempPartitionNames = Lists.newArrayList();
+        for (Partition tempPartition : rewrittenTempPartitions) {
+            if (notVisibleTempPartitionIds.contains(tempPartition.getId())) {
+                unpublishedTempPartitionNames.add(tempPartition.getName());
             }
         }
         if (unpublishedTempPartitionNames.isEmpty()) {

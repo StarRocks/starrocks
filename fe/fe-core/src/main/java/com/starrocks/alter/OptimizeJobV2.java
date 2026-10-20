@@ -462,13 +462,20 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> pendingTempPartitionNames = Lists.newArrayList();
         try (AutoCloseableLock ignore =
                      new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
+            List<Partition> rewrittenTempPartitions = Lists.newArrayList();
             for (OptimizeTask rewriteTask : rewriteTasks) {
                 if (rewriteTask.getOptimizeTaskState() != Constants.TaskRunState.SUCCESS) {
                     continue;
                 }
                 Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
-                if (tmpPartition != null && hasCommittedNotVisibleTxn(tmpPartition)) {
-                    pendingTempPartitionNames.add(rewriteTask.getTempPartitionName());
+                if (tmpPartition != null) {
+                    rewrittenTempPartitions.add(tmpPartition);
+                }
+            }
+            Set<Long> notVisibleTempPartitionIds = getNotVisibleTempPartitionIds(rewrittenTempPartitions);
+            for (Partition tmpPartition : rewrittenTempPartitions) {
+                if (notVisibleTempPartitionIds.contains(tmpPartition.getId())) {
+                    pendingTempPartitionNames.add(tmpPartition.getName());
                 }
             }
         }
@@ -508,11 +515,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     /**
-     * Whether the rewritten data of the given temp partition is published, see
-     * {@link PartitionUtils#hasCommittedNotVisibleTxn(long, long, Partition)}. Overridable for testability.
+     * Of the given temp partitions, the ones whose rewritten data is committed but not published yet, all looked
+     * up at once, see {@link PartitionUtils#getPartitionsWithCommittedNotVisibleTxn(long, long, Collection)}.
+     * Overridable for testability.
+     *
+     * @return ids of those temp partitions
      */
-    protected boolean hasCommittedNotVisibleTxn(Partition partition) {
-        return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
+    protected Set<Long> getNotVisibleTempPartitionIds(Collection<Partition> tempPartitions) {
+        return PartitionUtils.getPartitionsWithCommittedNotVisibleTxn(dbId, tableId, tempPartitions);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -548,6 +558,16 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
             );
 
+            // the rewritten data of all the temp partitions at once, this runs under the table write lock
+            List<Partition> rewrittenTempPartitions = Lists.newArrayList();
+            for (OptimizeTask rewriteTask : rewriteTasks) {
+                Partition tmpPartition = targetTable.getPartition(rewriteTask.getTempPartitionName(), true);
+                if (rewriteTask.getOptimizeTaskState() != Constants.TaskRunState.FAILED && tmpPartition != null) {
+                    rewrittenTempPartitions.add(tmpPartition);
+                }
+            }
+            Set<Long> notVisibleTempPartitionIds = getNotVisibleTempPartitionIds(rewrittenTempPartitions);
+
             boolean hasFailedTask = false;
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
@@ -566,7 +586,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         LOG.warn("optimize job {} temp partition {} not found for task {}",
                                 jobId, rewriteTask.getTempPartitionName(), rewriteTask.getName());
                         rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                    } else if (hasCommittedNotVisibleTxn(tmpPartition)) {
+                    } else if (notVisibleTempPartitionIds.contains(tmpPartition.getId())) {
                         LOG.warn("optimize job {} rewritten data of task {} is not visible yet, temp partition {}",
                                 jobId, rewriteTask.getName(), rewriteTask.getTempPartitionName());
                         rewriteNotVisible = true;

@@ -67,6 +67,7 @@ import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -450,7 +451,7 @@ public class MergePartitionJobTest extends DDLTestBase {
         Assertions.assertEquals(1, handler.getAlterJobsV2().size());
         MergePartitionJob job = Mockito.spy((MergePartitionJob) handler.getAlterJobsV2().values().iterator().next());
         Mockito.doReturn(true).when(job).isPreviousLoadFinished();
-        Mockito.doReturn(false).when(job).hasCommittedNotVisibleTxn(Mockito.any());
+        Mockito.doReturn(Collections.emptySet()).when(job).getNotVisibleTempPartitionIds(Mockito.any());
         return job;
     }
 
@@ -696,7 +697,7 @@ public class MergePartitionJobTest extends DDLTestBase {
      */
     private static MergePartitionJob submitMergeWithRealVisibility(OlapTable table) throws Exception {
         MergePartitionJob job = submitMerge(table);
-        Mockito.doCallRealMethod().when(job).hasCommittedNotVisibleTxn(Mockito.any());
+        Mockito.doCallRealMethod().when(job).getNotVisibleTempPartitionIds(Mockito.any());
         return job;
     }
 
