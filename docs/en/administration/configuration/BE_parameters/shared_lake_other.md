@@ -334,6 +334,24 @@ This topic introduces the following types of BE configurations:
 - Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
 - Introduced in: -
 
+### primary_key_index_memory_high_percent
+
+- Default: 85
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). A background thread checks the cache periodically. When the cache holds more than this percentage, it evicts the least recently used primary key indexes that are not in use until the cache is within this percentage. Indexes in use are never evicted.
+- Introduced in: -
+
+### primary_key_index_memory_middle_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level, expressed as a percentage of the cache capacity, to which the primary key index cache is shrunk when a publish of a Primary Key table in a shared-data cluster fails because it exceeds the memory limit. The primary key indexes that are not in use are evicted until the cache is within this percentage, which frees memory for the retried publish. Set it to a value lower than `primary_key_index_memory_high_percent`.
+- Introduced in: -
+
 ### s3_multipart_equal_part_size
 
 - Default: false

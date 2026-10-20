@@ -175,7 +175,8 @@ public:
 
     void expire_cache();
 
-    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+    // Shrink the primary index cache to |percent|% of its capacity if it holds more. Indexes in use are kept.
+    void evict_cache(int32_t percent);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt

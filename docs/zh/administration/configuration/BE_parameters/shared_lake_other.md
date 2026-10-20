@@ -331,6 +331,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
 - 引入版本: -
 
+### primary_key_index_memory_high_percent
+
+- 默认值: 85
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。缓存容量即更新相关内存的上限（参见 `update_memory_limit_percent`）。后台线程会定期检查该缓存，占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。正在使用的主键索引不会被淘汰。
+- 引入版本: -
+
+### primary_key_index_memory_middle_percent
+
+- 默认值: 50
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中主键表 Publish 因超出内存限制而失败时，主键索引缓存的回收目标，以缓存容量的百分比表示。此时系统会淘汰未在使用的主键索引，直至占用回落到该比例以内，为重试的 Publish 腾出内存。建议设置为小于 `primary_key_index_memory_high_percent` 的值。
+- 引入版本: -
+
 ### s3_multipart_equal_part_size
 
 - 默认值：false

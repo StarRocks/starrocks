@@ -325,6 +325,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
 - 導入バージョン: -
 
+### primary_key_index_memory_high_percent
+
+- デフォルト: 85
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタにおける主キーインデックスキャッシュの使用量の上限で、キャッシュ容量に対するパーセンテージで指定します。キャッシュ容量は更新関連のメモリの上限と同じです（`update_memory_limit_percent` を参照）。バックグラウンドスレッドが定期的にキャッシュを確認し、使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。使用中の主キーインデックスは追い出されません。
+- 導入バージョン: -
+
+### primary_key_index_memory_middle_percent
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタで主キーテーブルの Publish がメモリ制限を超えて失敗した場合に、主キーインデックスキャッシュを縮小する目標値で、キャッシュ容量に対するパーセンテージで指定します。使用中でない主キーインデックスを追い出して使用量をこの割合以内に収め、再試行される Publish のためにメモリを確保します。`primary_key_index_memory_high_percent` より小さい値を設定してください。
+- 導入バージョン: -
+
 ### s3_multipart_equal_part_size
 
 - デフォルト: false
