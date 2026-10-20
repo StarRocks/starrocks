@@ -815,6 +815,8 @@
         "experimental_lake_ignore_pk_consistency_check",
         "enable_primary_key_recover",
         "lake_pk_preload_memory_limit_percent",
+        "primary_key_index_memory_high_percent",
+        "primary_key_index_memory_middle_percent",
         "lake_pk_index_sst_min_compaction_versions",
         "lake_pk_index_sst_max_compaction_versions",
         "lake_pk_index_sst_verify_checksum",

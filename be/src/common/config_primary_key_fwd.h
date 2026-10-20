@@ -159,6 +159,14 @@ CONF_mBool(enable_primary_key_recover, "false");
 // Used for control memory usage of update state cache and compaction state cache in shared-data mode
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
+// Upper bound of the shared-data primary key index cache, as a percentage of its capacity. The background
+// update cache evict thread shrinks the cache to this level whenever it holds more.
+CONF_mInt32(primary_key_index_memory_high_percent, "85");
+
+// When a shared-data primary key publish fails because it exceeds the update memory limit, the primary key
+// index cache is shrunk to this percentage of its capacity, so that the retry has memory to work with.
+CONF_mInt32(primary_key_index_memory_middle_percent, "50");
+
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");

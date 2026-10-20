@@ -385,6 +385,17 @@ public:
         return result;
     }
 
+    // Put |num| unused indexes of |entry_size| bytes each into the primary index cache, keyed after the tablet
+    // under test, oldest first.
+    void fill_index_cache(int num, size_t entry_size) {
+        auto& index_cache = _primary_key_mgr->index_cache();
+        for (int i = 0; i < num; i++) {
+            auto* entry = index_cache.get_or_create(_tablet_metadata->id() + 1 + i);
+            index_cache.update_object_size(entry, entry_size);
+            index_cache.release(entry);
+        }
+    }
+
     IndexValue cached_point_get(int64_t tablet_id, int32_t key) {
         auto* entry = _primary_key_mgr->index_cache().get(tablet_id);
         CHECK(entry != nullptr);
@@ -1908,6 +1919,112 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_evict_cache_to_percent) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(10 * kEntrySize);
+    fill_index_cache(10, kEntrySize);
+    ASSERT_EQ(10 * kEntrySize, index_cache.size());
+
+    // At or below the target there is nothing to evict.
+    _primary_key_mgr->evict_cache(100);
+    EXPECT_EQ(10 * kEntrySize, index_cache.size());
+
+    // The least recently used indexes go first.
+    _primary_key_mgr->evict_cache(85);
+    EXPECT_EQ(8 * kEntrySize, index_cache.size());
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 1));
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 2));
+
+    _primary_key_mgr->evict_cache(50);
+    EXPECT_EQ(5 * kEntrySize, index_cache.size());
+
+    // An index in use stays, even when that leaves the cache above the target.
+    auto* pinned = index_cache.get(_tablet_metadata->id() + 10);
+    ASSERT_NE(nullptr, pinned);
+    _primary_key_mgr->evict_cache(0);
+    EXPECT_EQ(kEntrySize, index_cache.size());
+    index_cache.release(pinned);
+    _primary_key_mgr->evict_cache(0);
+    EXPECT_EQ(0, index_cache.size());
+}
+
+// A publish that fails on the update memory limit shrinks the primary index cache to
+// primary_key_index_memory_middle_percent of its capacity, so that the retry has room. A publish that fails
+// for any other reason leaves the cache alone.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_cache) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(20 * kEntrySize);
+    ASSERT_EQ(50, config::primary_key_index_memory_middle_percent);
+    const size_t middle_size = 10 * kEntrySize;
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Call publish_version itself: publish_single_version turns every error into InternalError.
+    auto publish = [&]() {
+        auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr))};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns, false).status();
+    };
+    // Publish with the primary index load failing with |error|.
+    auto publish_with_index_load_error = [&](const Status& error) {
+        SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) { *(Status*)arg = error; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        return publish();
+    };
+
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+
+    {
+        auto st = publish_with_index_load_error(Status::InternalError("ut_test"));
+        ASSERT_FALSE(st.ok());
+        ASSERT_FALSE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(16 * kEntrySize, index_cache.size());
+
+    // The publish runs past the update memory limit.
+    {
+        const int64_t old_limit = _primary_key_mgr->mem_tracker()->limit();
+        _primary_key_mgr->mem_tracker()->set_limit(1);
+        auto st = publish();
+        _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+        ASSERT_TRUE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(middle_size, index_cache.size());
+
+    // Loading the primary index runs out of memory.
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+    {
+        auto st = publish_with_index_load_error(Status::MemoryLimitExceeded("ut_test"));
+        ASSERT_TRUE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(middle_size, index_cache.size());
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, 2));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {

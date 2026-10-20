@@ -208,6 +208,10 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
+        // Keep a memory limit failure recognizable: publish_version shrinks the index cache on it.
+        if (st.is_mem_limit_exceeded()) {
+            return Status::MemoryLimitExceeded(msg);
+        }
         return Status::InternalError(msg);
     }
     _block_cache->update_memory_usage();
@@ -2011,22 +2015,21 @@ void PrimaryKeyManager::expire_cache() {
     }
 }
 
-void PrimaryKeyManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
-    int64_t capacity = _index_cache.capacity();
-    int64_t size = _index_cache.size();
-    int64_t memory_urgent = capacity * memory_urgent_level / 100;
-    int64_t memory_high = capacity * memory_high_level / 100;
-
-    if (size > memory_urgent) {
-        _index_cache.try_evict(memory_urgent);
+void PrimaryKeyManager::evict_cache(int32_t percent) {
+    percent = std::max(std::min(100, percent), 0);
+    // Divide first: an unlimited update memory tracker leaves the capacity at SIZE_MAX.
+    const size_t target = _index_cache.capacity() / 100 * percent;
+    const size_t orig_size = _index_cache.size();
+    if (orig_size <= target) {
+        return;
     }
-
-    size = _index_cache.size();
-    if (size > memory_high) {
-        int64_t target_memory = std::max((size * 9 / 10), memory_high);
-        _index_cache.try_evict(target_memory);
+    _index_cache.try_evict(target);
+    const size_t size = _index_cache.size();
+    if (size < orig_size) {
+        LOG(INFO) << "lake primary index cache evicted to " << percent << "% of capacity "
+                  << PrettyPrinter::print_bytes(_index_cache.capacity()) << ": "
+                  << PrettyPrinter::print_bytes(orig_size) << " -> " << PrettyPrinter::print_bytes(size);
     }
-    return;
 }
 
 size_t PrimaryKeyManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
