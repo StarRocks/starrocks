@@ -384,6 +384,15 @@ This topic introduces the following types of BE configurations:
 - Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the RuntimeEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
 - Introduced in: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to count the memory used by the JVM in the BE process memory tracker. The JVM maps its heap and non-heap memory (such as Metaspace and the code cache) itself, so this memory does not go through the BE memory allocator and is otherwise not counted toward the BE memory limit (`mem_limit`). When this item is `true`, BE sets a `jvm` memory tracker under the `process` tracker to the committed heap plus non-heap memory of the JVM each time the JVM metrics are collected (every 15 seconds when `enable_metric_calculator` is `true`). As a result, `process` memory usage and the BE memory limit include the JVM, and the `jvm` tracker appears on the `/mem_tracker` page. This item takes effect only when `enable_jvm_metrics` is `true`. Before a JVM is created in the BE process, the `jvm` tracker is 0.
+- Introduced in: -
+
 ### enable_jvm_metrics
 
 - Default: true

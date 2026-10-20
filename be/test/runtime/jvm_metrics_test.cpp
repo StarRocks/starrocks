@@ -25,6 +25,7 @@
 #include "common/system/cpu_info.h"
 #include "runtime/java/java_env.h"
 #include "runtime/java/jni_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
@@ -94,6 +95,35 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_GE(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_used_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
+}
+
+TEST_F(JVMMetricsTest, MemTrackerFollowsCommittedMemory) {
+    MetricRegistry registry("mem_tracker_test");
+    MemTracker process_tracker(MemTrackerType::PROCESS, -1, "process");
+    MemTracker jvm_tracker(MemTrackerType::JVM, -1, "jvm", &process_tracker);
+    JVMMetrics jvm_metrics;
+    jvm_metrics.set_mem_tracker(&jvm_tracker);
+    jvm_metrics.install(&registry);
+
+    // The fixture created the JVM, so the first round initializes and collects.
+    registry.trigger_hook();
+    int64_t committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_GT(committed, 0);
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // Each round sets the tracker to the latest value instead of adding to it.
+    registry.trigger_hook();
+    committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // After the tracker is detached, later rounds leave it alone.
+    jvm_metrics.set_mem_tracker(nullptr);
+    jvm_tracker.consume(-jvm_tracker.consumption());
+    registry.trigger_hook();
+    ASSERT_EQ(0, jvm_tracker.consumption());
+    ASSERT_EQ(0, process_tracker.consumption());
 }
 
 TEST_F(JVMMetricsTest, JavaEnvInstallsJvmMetrics) {

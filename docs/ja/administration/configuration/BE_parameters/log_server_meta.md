@@ -309,6 +309,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で RuntimeEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
 - 導入バージョン: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: JVM が使用するメモリを BE プロセスのメモリトラッカーに含めるかどうか。JVM のヒープメモリと非ヒープメモリ（Metaspace やコードキャッシュなど）は JVM 自身がマッピングするため、BE のメモリアロケータを経由せず、通常は BE のメモリ上限（`mem_limit`）にカウントされません。この項目が `true` の場合、BE は JVM メトリクスを収集するたびに（`enable_metric_calculator` が `true` の場合は 15 秒ごと）、`process` トラッカーの下にある `jvm` トラッカーを JVM のコミット済みヒープメモリと非ヒープメモリの合計に設定します。その結果、`process` のメモリ使用量と BE のメモリ上限に JVM が含まれ、`/mem_tracker` ページに `jvm` トラッカーが表示されます。この項目は `enable_jvm_metrics` が `true` の場合にのみ有効です。BE プロセス内で JVM が作成されるまでは、`jvm` トラッカーの値は 0 です。
+- 導入バージョン: -
+
 ### enable_jvm_metrics
 
 - デフォルト: true

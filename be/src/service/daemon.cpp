@@ -240,6 +240,8 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
     DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
     DUMP_METRIC(vector_index, mem_metrics->vector_index_mem_bytes.value())
+    auto* jvm_tracker = RuntimeEnv::GetInstance()->jvm_mem_tracker();
+    DUMP_METRIC(jvm, jvm_tracker != nullptr ? jvm_tracker->consumption() : 0)
 
     DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
     DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())

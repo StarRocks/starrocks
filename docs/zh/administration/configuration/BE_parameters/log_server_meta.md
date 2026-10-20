@@ -405,6 +405,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 RuntimeEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
 - 引入版本：v3.2.12
 
+### enable_jvm_memory_tracker
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否将 JVM 使用的内存计入 BE 进程的内存 Tracker。JVM 的堆内存和非堆内存（例如 Metaspace 和代码缓存）由 JVM 自行映射，不经过 BE 的内存分配器，因此默认不会计入 BE 的内存上限（`mem_limit`）。该参数为 `true` 时，BE 在每次采集 JVM 指标时（当 `enable_metric_calculator` 为 `true` 时每 15 秒一次），将 `process` Tracker 下的 `jvm` Tracker 设置为 JVM 已提交的堆内存与非堆内存之和。因此，`process` 的内存使用量和 BE 的内存上限都会包含 JVM，`/mem_tracker` 页面上也会显示 `jvm` Tracker。该参数仅在 `enable_jvm_metrics` 为 `true` 时生效。在 BE 进程中创建 JVM 之前，`jvm` Tracker 的值为 0。
+- 引入版本：-
+
 ### enable_jvm_metrics
 
 - 默认值：true

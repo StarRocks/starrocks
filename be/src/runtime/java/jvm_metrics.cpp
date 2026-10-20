@@ -26,6 +26,7 @@
 #include "runtime/java/java_runtime.h"
 #include "runtime/java/jni_env.h"
 #include "runtime/java/jvm_helper.h"
+#include "runtime/mem_tracker.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                       \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                       \
@@ -150,7 +151,25 @@ void JVMMetrics::_update_if_jvm_ready() {
     auto status = update();
     if (!status.ok()) {
         LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
+        return;
     }
+    _update_mem_tracker();
+}
+
+void JVMMetrics::set_mem_tracker(MemTracker* mem_tracker) {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    _mem_tracker = mem_tracker;
+}
+
+void JVMMetrics::_update_mem_tracker() {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    if (_mem_tracker == nullptr) {
+        return;
+    }
+    // Committed rather than used: the JVM keeps committed memory after a GC frees objects in it,
+    // and that memory is not available to the rest of BE.
+    int64_t committed = jvm_heap_committed_bytes.value() + jvm_non_heap_committed_bytes.value();
+    _mem_tracker->consume(committed - _mem_tracker->consumption());
 }
 
 void JVMMetrics::install(MetricRegistry* registry) {

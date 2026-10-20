@@ -30,6 +30,10 @@ CONF_Bool(enable_system_metrics, "true");
 // in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
 CONF_Bool(enable_jvm_metrics, "true");
 
+// Count the committed JVM heap and non-heap memory in the process memory tracker, so that the
+// memory limit of BE includes it. Requires enable_jvm_metrics, whose hook updates the tracker.
+CONF_Bool(enable_jvm_memory_tracker, "true");
+
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
 
