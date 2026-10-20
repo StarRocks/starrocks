@@ -155,12 +155,10 @@ StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
             result.append_null();
             continue;
         }
-        if constexpr (Type == TYPE_GEOMETRY) {
-            WkbCoordinate point;
-            if (decode_canonical_xy_point(input.wkb(row), &point)) {
-                result.append(X ? point.x : point.y);
-                continue;
-            }
+        if (WkbCoordinate point; decode_canonical_xy_point(input.wkb(row), &point) &&
+                                 (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point.x, point.y))) {
+            result.append(X ? point.x : point.y);
+            continue;
         }
         WkbGeometry geometry;
         RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, semantics));
