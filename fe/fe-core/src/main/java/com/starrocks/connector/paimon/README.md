@@ -3,7 +3,8 @@
 ## Verified baseline
 
 Capability investigation: **2026-10-15**. Selector and integration validation:
-**2026-10-16**. Implementation reference: StarRocks commit `c8f4807692d`.
+**2026-10-16**. Original implementation reference: StarRocks commit `c8f4807692d`.
+Explicit-mode precedence and system-table probes were rechecked on **2026-10-19**.
 
 | Component | Version / source |
 | --- | --- |
@@ -26,14 +27,15 @@ each split. [PaimonScanNode](../../planner/PaimonScanNode.java) constructs scan 
 
 Selection order:
 
-1. Non-DataSplit, including system-table splits: JNI, even when NATIVE is requested.
-2. IndexedSplit: native, even when JNI or `paimon_force_jni_reader` is requested.
-   Preserve index row ranges; never expand it into raw files. Incompatible native
-   splits fail instead of falling back. Indexed splits wrapping FallbackDataSplit
-   are rejected because the native binary decoder cannot handle that wrapper.
-3. Ordinary DataSplit: explicit JNI/NATIVE selects that SDK reader. The legacy
-   `paimon_force_jni_reader` setting overrides the requested mode with JNI.
-4. Ordinary AUTO: compatible SR raw files, then compatible native reads, then JNI.
+1. Explicit JNI is final for every split type. The legacy
+   `paimon_force_jni_reader` setting is equivalent to JNI and overrides NATIVE/AUTO.
+   Unsupported JNI columns fail rather than switching readers.
+2. Explicit NATIVE selects paimon-cpp or reports a planning error when the current
+   integration cannot support the split. It never silently selects JNI.
+3. AUTO selects compatible SR raw files, then compatible native reads, then JNI.
+   IndexedSplit retains its row ranges through either SDK; it never uses raw files.
+   An indexed fallback wrapper uses JNI because the native binary decoder cannot
+   handle that wrapper.
 
 Native compatibility failures are planning errors for explicit NATIVE. AUTO can
 fall back only if JNI supports the selected columns. Native execution failures do
@@ -42,6 +44,26 @@ not retry through JNI.
 FallbackDataSplit resolves the fallback branch's schema before selection. If its
 logical row type differs from the main branch, AUTO conservatively uses JNI;
 explicit NATIVE reports an error. Explicit JNI stays on Java.
+
+### System tables: library support versus SR integration
+
+Local probes on 2026-10-19 used the same packaged CPP 0.3.0 and Java 2.0.0 libraries:
+
+| System table | Direct CPP planning and reading | Current SR native path |
+| --- | --- | --- |
+| `snapshots`, `schemas`, `options`, `files`, `manifests` | Nonempty reads succeeded, with row counts matching Java | Not supported: Java metadata splits have no compatible binary serialization |
+| `branches` | Read succeeded, but returned the main branch as an extra row versus Java | Not supported by the split protocol; results also differ |
+| `tags`, `consumers` | Reader opened successfully on empty tables | No nonempty support claim; split protocol is unsupported |
+| `partitions` | CPP returned `NotImplemented` | Not supported |
+| `audit_log`, `binlog` | Nonempty reads succeeded; these use DataSplit | SR's selector lacks a FileStoreTable schema for these wrappers |
+| `ro` | The tested fixture had no splits | Empty scan does not prove support |
+
+CPP's own planner can produce SystemTableSplit for metadata tables, but
+`Split::Serialize`/`Deserialize` only handle data/index split protocols. SR plans
+in Java and sends splits to BE; direct CPP library reads do not establish support
+for that path. AUTO therefore keeps these metadata tables on JNI, while explicit
+NATIVE reports the unsupported condition. Java reader probes also verified an
+IndexedSplit query included both indexed and not-yet-indexed matching rows.
 
 ## Capability boundaries
 
@@ -73,16 +95,19 @@ top-level Paimon types.
 ## Evidence and diagnostics
 
 - [PaimonReaderSelectorTest](../../../../../../test/java/com/starrocks/connector/paimon/PaimonReaderSelectorTest.java):
-  18 tests for selection, compatibility reasons, historical schemas and wrappers.
+  19 tests for selection, compatibility reasons, historical schemas and wrappers.
 - [PaimonScanNodeTest](../../../../../../test/java/com/starrocks/planner/PaimonScanNodeTest.java):
   11 tests for task construction, serialization, routing and partition tracking.
-  Together with PaimonSplitUtilsTest, the 30 related FE tests passed on the baseline.
+  Together with PaimonSplitUtilsTest, the 31 related FE tests passed on 2026-10-19.
 - [SQL suite](../../../../../../../../../test/sql/test_paimon_catalog/README.md):
   40 static cases covering results, FE routing and native BE profiles.
 - Additional local validation used 460 small, nonempty fixture tables and passed
   1,837 checks: full rows, ID projection, counts, and routing/profile checks.
   This includes three expected MULTISET analysis rejections. These temporary
   generators and fixtures are not a checked-in or continuously run CI suite.
+- The explicit-mode change was also checked against 460 existing tables and 502
+  actual data splits: ordinary AUTO selections were unchanged, and explicit JNI
+  was never overridden. This is a planning check, not a rerun of SQL result checks.
 
 From the repository root, run the related FE tests:
 

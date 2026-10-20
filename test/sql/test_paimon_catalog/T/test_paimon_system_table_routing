@@ -13,10 +13,13 @@ select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_
 function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`", "pk_deduplicate_parquet_v1$snapshots", "jni")
 select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`;
 function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`", "pk_deduplicate_parquet_v1$schemas", "jni")
-set paimon_reader_mode = 'native';
+set paimon_reader_mode = 'jni';
 select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`;
 function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`", "pk_deduplicate_parquet_v1$snapshots", "jni")
 select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`;
 function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`", "pk_deduplicate_parquet_v1$schemas", "jni")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`", "SYSTEM_SPLIT")
+function: assert_query_error_contains("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`", "SYSTEM_SPLIT")
 set catalog default_catalog;
 drop catalog paimon_matrix_${uuid0};

@@ -29,7 +29,7 @@ function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paim
 -- result:
 None
 -- !result
-set paimon_reader_mode = 'native';
+set paimon_reader_mode = 'jni';
 -- result:
 -- !result
 select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`;
@@ -45,6 +45,17 @@ select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_
 1
 -- !result
 function: assert_paimon_reader("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`", "pk_deduplicate_parquet_v1$schemas", "jni")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+function: assert_query_error_contains("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$snapshots`", "SYSTEM_SPLIT")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("select count(*) from paimon_matrix_${uuid0}.paimon_test.`pk_deduplicate_parquet_v1$schemas`", "SYSTEM_SPLIT")
 -- result:
 None
 -- !result

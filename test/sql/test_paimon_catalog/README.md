@@ -116,8 +116,8 @@ rows to verify results as well as the reader path.
 | `statistics_append_only`, `statistics_primary_key` | Planner metadata source, row count, min/max, NULL fraction and NDV; missing-statistics fallback |
 | `reader_fallback` | AUTO selection for FILE/VARIANT, forced JNI rejection, and projection excluding unsupported columns |
 | `merge_first_row`, `merge_partial_update`, `merge_aggregation` | Parquet/ORC/Avro merge semantics, NULLs, aggregates and routing; deduplicate cases are in `primary_key_merge` |
-| `global_index` | Indexed and unindexed matches under FULL search; IndexedSplit forces native even when JNI is requested |
-| `system_table_routing` | Snapshot/schema system tables use JNI even when NATIVE is requested |
+| `global_index` | Indexed and unindexed matches under FULL search; AUTO/NATIVE use native, explicit JNI and the legacy force flag use JNI |
+| `system_table_routing` | Snapshot/schema system tables use JNI in AUTO/JNI; explicit NATIVE reports the unsupported split protocol |
 | `deletion_vectors` | Parquet/ORC/Avro × NATIVE/JNI/AUTO; deleted and superseded rows excluded from results, predicates and aggregates |
 
 Case names have the `test_paimon_` prefix. Scalar, partition, evolution, empty,
@@ -133,8 +133,10 @@ uses the StarRocks file reader. Native execution is also checked through the BE
 case each.
 
 AUTO prefers compatible StarRocks raw-file reads, then compatible paimon-cpp reads,
-and otherwise selects JNI. System tables remain on JNI; global-index splits remain
-native even when JNI is requested. Explicit JNI is preserved for ordinary data splits.
+and otherwise selects JNI. Explicit JNI, including `paimon_force_jni_reader=true`,
+is preserved for all split types. Explicit NATIVE reports unsupported reads instead
+of switching to JNI. AUTO uses JNI for metadata system-table splits and native for
+compatible global-index splits.
 See the [reader routing README](../../../fe/fe-core/src/main/java/com/starrocks/connector/paimon/README.md)
 for the verified versions, compatibility boundaries and fallback reasons.
 

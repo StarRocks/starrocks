@@ -275,7 +275,9 @@ class PaimonReaderSelectorTest {
         assertTrue(error.getMessage().contains("Reading VARIANT through the Paimon JNI reader is not yet supported"));
         assertEquals(JNI, selector(schema, "id").select(split, PaimonReaderMode.JNI).reader());
         var indexed = new IndexedSplit(split, List.of(new Range(0, 0)), null);
-        assertEquals(NATIVE, selector(schema, "v").select(indexed, PaimonReaderMode.JNI).reader());
+        assertThrows(StarRocksConnectorException.class,
+                () -> selector(schema, "v").select(indexed, PaimonReaderMode.JNI));
+        assertEquals(JNI, selector(schema, "id").select(indexed, PaimonReaderMode.JNI).reader());
     }
 
     @Test
@@ -325,9 +327,29 @@ class PaimonReaderSelectorTest {
                 return OptionalLong.empty();
             }
         };
-        assertEquals(JNI, selector.select(system, PaimonReaderMode.NATIVE).reader());
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(system, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("SYSTEM_SPLIT"));
+        assertEquals(JNI, selector.select(system, AUTO).reader());
+        assertEquals(JNI, selector.select(system, PaimonReaderMode.JNI).reader());
         var indexed = new IndexedSplit(split("parquet", true, 1, false), List.of(new Range(0, 0)), null);
         assertEquals(new PaimonReaderSelector.Decision(NATIVE, INDEXED_SPLIT),
-                selector.select(indexed, PaimonReaderMode.JNI));
+                selector.select(indexed, AUTO));
+        assertEquals(JNI, selector.select(indexed, PaimonReaderMode.JNI).reader());
+    }
+
+    @Test
+    void indexedSplitsCanFallBackToJniWithoutOverridingExplicitModes() {
+        var selector = selector(schema(1, DataTypes.INT(), false, Map.of("file.format", "json")), "id");
+        var indexed = new IndexedSplit(split("json", false, 1, false), List.of(new Range(0, 0)), null);
+        assertEquals(new PaimonReaderSelector.Decision(JNI, FILE_FORMAT), selector.select(indexed, AUTO));
+        assertEquals(JNI, selector.select(indexed, PaimonReaderMode.JNI).reader());
+        assertThrows(StarRocksConnectorException.class, () -> selector.select(indexed, PaimonReaderMode.NATIVE));
+
+        var fallback = FallbackReadFileStoreTable.toFallbackSplit(split("parquet", false, 1, false), true);
+        var wrapped = new IndexedSplit((DataSplit) fallback, List.of(new Range(0, 0)), null);
+        assertEquals(JNI, selector.select(wrapped, PaimonReaderMode.JNI).reader());
+        assertEquals(PaimonReaderSelector.Reason.SPLIT_PROTOCOL, selector.select(wrapped, AUTO).reason());
+        assertThrows(StarRocksConnectorException.class, () -> selector.select(wrapped, PaimonReaderMode.NATIVE));
     }
 }

@@ -61,9 +61,22 @@ set paimon_reader_mode = 'jni';
 1	10	100
 3	30	300
 -- !result
-function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "native")
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "jni")
 -- result:
 None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+set paimon_force_jni_reader = true;
+-- result:
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", "global_index_v1", "jni")
+-- result:
+None
+-- !result
+set paimon_force_jni_reader = false;
+-- result:
 -- !result
 set catalog default_catalog;
 -- result:
