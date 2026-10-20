@@ -1082,7 +1082,7 @@ public class LocalMetaStoreTest {
         AtomicBoolean oneArgInferOnZeroBuckets = new AtomicBoolean(false);
         new MockUp<OlapTable>() {
             @Mock
-            public void inferDistribution(Invocation invocation, DistributionInfo info) throws DdlException {
+            public void inferDistribution(Invocation invocation, DistributionInfo info) {
                 if (info.getBucketNum() == 0) {
                     oneArgInferOnZeroBuckets.set(true);
                 }

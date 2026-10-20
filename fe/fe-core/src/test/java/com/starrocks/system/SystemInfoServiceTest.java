@@ -826,8 +826,9 @@ public class SystemInfoServiceTest {
         Multimap<String, String> label = HashMultimap.create();
         label.put("rack", "data_1");
         Assertions.assertEquals(1, service.getLocationMatchedBackendIds(label).size());
+        Multimap<String, String> empty = HashMultimap.create();
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> service.getLocationMatchedBackendIds(HashMultimap.create()));
+                () -> service.getLocationMatchedBackendIds(empty));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> service.getLocationMatchedBackendIds(null));
     }
