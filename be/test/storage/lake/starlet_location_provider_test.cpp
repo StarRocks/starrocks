@@ -21,7 +21,9 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
+#include "common/config_staros_worker_fwd.h"
 #include "compute_env/staros/starlet_filesystem.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
@@ -65,6 +67,8 @@ TEST_F(StarletLocationProviderTest, test_location) {
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {
+    // Ask starmgr every time, so the re-mocked path below is the one resolved.
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto tablet_id = next_id();
     auto shard_info = staros::starlet::ShardInfo{};
     auto root_path = std::string{"/root/path/for/test"};
