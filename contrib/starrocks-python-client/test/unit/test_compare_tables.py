@@ -20,20 +20,20 @@ from alembic.operations.ops import UpgradeOps
 import pytest
 
 from starrocks.alembic.compare import compare_starrocks_table, extract_starrocks_dialect_attributes
-from starrocks.common.defaults import ReflectionTableDefaults
+from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults
 from starrocks.common.params import (
     AlterTableEnablement,
     DialectName,
     SRKwargsPrefix,
+    TableInfoKey,
     TableInfoKeyWithPrefix,
     TablePropertyForFuturePartitions,
 )
-from starrocks.common.types import TableType
+from starrocks.common.types import SystemRunMode, TableType
 
 
 LOG_ATTRIBUTE_NEED_SPECIFIED = "Please specify this attribute explicitly"
 LOG_NO_DEFAULT_VALUE = "no default is defined in ReflectionTableDefaults"
-LOG_ALTER_AUTO_GENERATED = "An ALTER TABLE SET operation will be generated"
 LOG_NO_ALERT_AUTO_GENERATED = "No ALTER TABLE SET operation will be generated"
 
 
@@ -1330,12 +1330,19 @@ class TestPropertiesChanges:
         assert LOG_NO_DEFAULT_VALUE in caplog.text
         assert LOG_NO_ALERT_AUTO_GENERATED in caplog.text
 
-    @pytest.mark.parametrize("prop_key, default_value, non_default_value", [
-        ("replication_num", "3", "2"),
-        ("storage_medium", "HDD", "SSD"),
+    @pytest.mark.parametrize("prop_key, non_default_value", [
+        ("replication_num", "2"),
+        ("storage_medium", "SSD"),
+        ("bucket_size", "1073741824"),
+        ("fast_schema_evolution", "false"),
+        ("compression", "ZSTD"),
     ])
-    def test_properties_non_default_to_none(self, prop_key, default_value, non_default_value, caplog):
-        """Test PROPERTIES from explicit non-default value to None (generate ALTER to reset to default)."""
+    def test_properties_non_default_to_none(self, prop_key, non_default_value, caplog):
+        """Test PROPERTIES from explicit non-default value to None (unmanaged: no op, no warning).
+
+        StarRocks fills these in, often from version- or config-dependent defaults, so a
+        property the metadata omits is left alone rather than reset to a hardcoded default.
+        """
         autogen_context = Mock(spec=AutogenContext)
         autogen_context.dialect.name = DialectName
         caplog.set_level("WARNING")
@@ -1345,18 +1352,12 @@ class TestPropertiesChanges:
         meta_table = Mock(kwargs={})  # Metadata has no properties
         meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
 
-        # Should generate an ALTER to effectively reset to default (meta_properties will include the default for this prop)
         upgrade_ops = UpgradeOps([])
         compare_starrocks_table(
             autogen_context, upgrade_ops, "test_table", "test_db", conn_table, meta_table
         )
-        result = upgrade_ops.ops
-        assert len(result) == 1
-        from starrocks.alembic.ops import AlterTablePropertiesOp
-        assert isinstance(result[0], AlterTablePropertiesOp)
-        assert result[0].properties == {TablePropertyForFuturePartitions.wrap(prop_key): default_value}
-        assert len(caplog.records) >= 1
-        assert LOG_ALTER_AUTO_GENERATED in caplog.text
+        assert upgrade_ops.ops == []
+        assert LOG_NO_DEFAULT_VALUE not in caplog.text
 
     @pytest.mark.parametrize("prop_key, value1, value2", [
         ("replication_num", "2", "1"),
@@ -1530,30 +1531,176 @@ class TestEnableStatisticCollectOnFirstLoad:
     def test_meta_absent_db_false_no_implicit_reset(self):
         """DB has it false but the model does not manage it -> NO spurious reset to default.
 
-        This property is exempt from implicit reset-to-default: when it is not specified in
-        the metadata, the database value is left untouched regardless of the default.
+        Like every property, when it is not specified in the metadata the database value is
+        left untouched regardless of the default.
         """
         result = self._run(conn_props={self.PROP: "false"}, meta_props={})
         assert len(result) == 0
 
-    def test_meta_absent_db_false_other_props_unaffected(self):
-        """The implicit-reset exemption is scoped to this property only.
-
-        A different non-default property absent from metadata still triggers a reset, while
-        the exempt property is left alone.
-        """
+    def test_meta_absent_db_false_managed_props_still_compared(self):
+        """Leaving this property unmanaged does not stop other declared properties diffing."""
         result = self._run(
             conn_props={self.PROP: "false", "replication_num": "2"},
-            meta_props={},
+            meta_props={"replication_num": "3"},
         )
         assert len(result) == 1
         from starrocks.alembic.ops import AlterTablePropertiesOp
         assert isinstance(result[0], AlterTablePropertiesOp)
-        # Only replication_num is reset (wrapped as a future-partition property);
-        # the exempt property is not in the op.
         prop_keys = set(result[0].properties)
         assert any("replication_num" in k for k in prop_keys)
         assert not any(self.PROP in k for k in prop_keys)
+
+
+class TestBucketSize:
+    """Tests for the `bucket_size` property of RANDOM-distributed tables.
+
+    Its default is the FE config `default_automatic_bucket_size`, which StarRocks lowered from
+    4294967296 to 1073741824 in 4.0 (#63168); a table keeps its value across upgrades. An
+    unmanaged `bucket_size` must therefore never be reset to a hardcoded default.
+    """
+
+    PROP = "bucket_size"
+    GIB_1 = "1073741824"
+    GIB_4 = "4294967296"
+
+    _run = TestEnableStatisticCollectOnFirstLoad._run
+
+    @pytest.mark.parametrize("conn_value", [GIB_1, GIB_4, "2147483648"])
+    def test_meta_absent_no_implicit_reset(self, conn_value):
+        """The reported bug: a 4.0+ table reports 1 GiB, the model omits it -> no reset."""
+        result = self._run(conn_props={self.PROP: conn_value, "replication_num": "3"},
+                           meta_props={"replication_num": "3"})
+        assert len(result) == 0
+
+    @pytest.mark.parametrize("conn_value, meta_value", [(GIB_1, GIB_4), (GIB_4, GIB_1), (GIB_1, "2147483648")])
+    def test_explicit_change_detected(self, conn_value, meta_value):
+        """A bucket_size set in the model is still managed."""
+        result = self._run(conn_props={self.PROP: conn_value}, meta_props={self.PROP: meta_value})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == meta_value
+
+    @pytest.mark.parametrize("value", [GIB_1, GIB_4])
+    def test_explicit_same_no_change(self, value):
+        result = self._run(conn_props={self.PROP: value}, meta_props={self.PROP: value})
+        assert len(result) == 0
+
+
+class TestUnmanagedDefaultProperties:
+    """A property in the defaults table that the metadata omits is never reset.
+
+    StarRocks fills these in from version- and FE-config-dependent defaults
+    (default_replication_num, default_automatic_bucket_size, ...), so a hardcoded default
+    cannot tell a user-set value from one StarRocks filled in.
+    """
+
+    @staticmethod
+    def _non_default(value):
+        return {"true": "false", "false": "true"}.get(str(value).lower(), f"{value}_changed")
+
+    @pytest.mark.parametrize("run_mode", [SystemRunMode.SHARED_NOTHING, SystemRunMode.SHARED_DATA])
+    @pytest.mark.parametrize("default_cls", [ReflectionTableDefaults, ReflectionMVDefaults])
+    def test_every_default_key_left_alone(self, default_cls, run_mode, caplog):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        caplog.set_level("WARNING")
+        conn_props = {k: self._non_default(v) for k, v in default_cls.properties(run_mode).items()}
+        to_set, to_reverse = _compare_table_properties_impl(
+            "test_db", "test_table",
+            {TableInfoKey.PROPERTIES: conn_props}, {TableInfoKey.PROPERTIES: {}},
+            run_mode, default_cls=default_cls,
+        )
+        assert to_set == {}
+        assert to_reverse == {}
+        # purify_dict warns about properties invalid in shared-data mode; only compare's own count
+        assert [r for r in caplog.records if r.name == "starrocks.alembic.compare"] == []
+
+    def test_unknown_property_still_warns(self, caplog):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        caplog.set_level("WARNING")
+        to_set, _ = _compare_table_properties_impl(
+            "test_db", "test_table",
+            {TableInfoKey.PROPERTIES: {"some_unknown_prop": "x"}}, {TableInfoKey.PROPERTIES: {}},
+            SystemRunMode.SHARED_NOTHING,
+        )
+        assert to_set == {}
+        assert LOG_NO_DEFAULT_VALUE in caplog.text
+        assert LOG_NO_ALERT_AUTO_GENERATED in caplog.text
+
+
+class TestPropertiesNotReportedByDatabase:
+    """The metadata sets a property the database does not report (conn side absent)."""
+
+    @staticmethod
+    def _run(conn_props, meta_props):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        to_set, _ = _compare_table_properties_impl(
+            "test_db", "test_table",
+            {TableInfoKey.PROPERTIES: conn_props}, {TableInfoKey.PROPERTIES: meta_props},
+            SystemRunMode.SHARED_NOTHING,
+        )
+        return to_set
+
+    @pytest.mark.parametrize("prop_key, value", [
+        # StarRocks only reports these when they differ from the default
+        ("write_quorum", "MAJORITY"),
+        ("write_quorum", "majority"),
+        ("compaction_strategy", "default"),
+        ("enable_load_profile", "false"),
+        ("mutable_bucket_num", "0"),
+        ("primary_index_cache_expire_sec", "0"),
+        ("storage_type", "COLUMN"),
+        ("enable_statistic_collect_on_first_load", "true"),
+        # Unreported, but set to the default
+        ("storage_format", "DEFAULT"),
+        ("bucket_size", "4294967296"),
+        ("enable_persistent_index", "true"),
+    ])
+    def test_default_value_not_reported_no_op(self, prop_key, value, caplog):
+        caplog.set_level("WARNING")
+        assert self._run({}, {prop_key: value}) == {}
+        assert caplog.records == []
+
+    @pytest.mark.parametrize("prop_key, value", [
+        ("write_quorum", "ONE"),
+        ("compaction_strategy", "REAL_TIME"),
+        ("enable_load_profile", "true"),
+        ("enable_statistic_collect_on_first_load", "false"),
+    ])
+    def test_non_default_value_not_reported_generates_op(self, prop_key, value):
+        """The database does not report it because it holds the default, so this is a real change."""
+        assert self._run({}, {prop_key: value}) == {prop_key: value}
+
+    @pytest.mark.parametrize("prop_key, value", [
+        ("storage_format", "V2"),
+        ("bucket_size", "1073741824"),  # on a HASH-distributed table
+        ("enable_persistent_index", "false"),  # on a non-PRIMARY KEY table
+    ])
+    def test_unreported_property_warns_no_op(self, prop_key, value, caplog):
+        caplog.set_level("WARNING")
+        assert self._run({}, {prop_key: value}) == {}
+        assert "the database does not report it" in caplog.text
+        assert LOG_NO_ALERT_AUTO_GENERATED in caplog.text
+
+    def test_unreported_property_compared_when_reported(self):
+        """bucket_size on a RANDOM-distributed table is reported, so it is compared as usual."""
+        assert self._run({"bucket_size": "4294967296"}, {"bucket_size": "1073741824"}) == {"bucket_size": "1073741824"}
+
+    @pytest.mark.parametrize("prop_key, conn_value, meta_value", [
+        ("write_quorum", "ONE", "one"),
+        ("compression", "LZ4", "lz4"),
+        ("storage_medium", "SSD", "ssd"),
+        ("compaction_strategy", "REAL_TIME", "real_time"),
+        ("replicated_storage", "false", "FALSE"),
+    ])
+    def test_value_case_insensitive(self, prop_key, conn_value, meta_value):
+        assert self._run({prop_key: conn_value}, {prop_key: meta_value}) == {}
+
+    def test_value_case_sensitive_otherwise(self):
+        assert self._run({"colocate_with": "grp"}, {"colocate_with": "GRP"}) == {"colocate_with": "GRP"}
 
 
 class TestORMTableObjects:
@@ -1620,8 +1767,8 @@ class TestORMTableObjects:
                 assert op.order_by == "id, name"
             elif isinstance(op, AlterTablePropertiesOp):
                 logger.info(f"ALTER TABLE SET PROPERTIES: {op.properties}")
-                # the compression property is added although it's not set in the metadata table
-                assert op.properties == {'default.replication_num': '3', 'default.storage_medium': 'SSD', 'compression': 'LZ4'}
+                # compression is not set in the metadata table, so it is unmanaged and left alone
+                assert op.properties == {'default.replication_num': '3', 'default.storage_medium': 'SSD'}
 
 
 class TestComplexScenarios:
