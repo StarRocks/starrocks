@@ -34,6 +34,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <atomic>
+#include <cinttypes>
+>>>>>>> 37a3909 ([Refactor] Make MemTracker::_limit a relaxed atomic (#81120))
 #include <cstdint>
 #include <cstdio>
 #include <limits>
@@ -372,11 +377,20 @@ public:
         return nullptr;
     }
 
-    bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
+    bool limit_exceeded() const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && limit < consumption();
+    }
 
-    bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
+    bool limit_exceeded_by_ratio(int64_t ratio) const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && (limit * ratio / 100) < consumption();
+    }
 
-    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+    bool limit_exceeded_precheck(int64_t consume) const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && limit < consumption() + consume;
+    }
 
     bool any_limit_exceeded_precheck(int64_t consume) const {
         for (auto& _limit_tracker : _limit_trackers) {
@@ -387,11 +401,13 @@ public:
         return false;
     }
 
-    void set_limit(int64_t limit) { _limit = limit; }
+    // The limit may be changed at runtime while other threads are consuming. Switching between limited (>= 0)
+    // and unlimited (< 0) is not reflected in _limit_trackers of descendants, which is built at construction.
+    void set_limit(int64_t limit) { _limit.store(limit, std::memory_order_relaxed); }
 
-    int64_t limit() const { return _limit; }
+    int64_t limit() const { return _limit.load(std::memory_order_relaxed); }
 
-    bool has_limit() const { return _limit >= 0; }
+    bool has_limit() const { return limit() >= 0; }
 
     void set_reserve_limit(int64_t reserve_limit) { _reserve_limit = reserve_limit; }
 
@@ -429,7 +445,7 @@ public:
 
     std::string debug_string() {
         std::stringstream msg;
-        msg << "limit: " << _limit << "; "
+        msg << "limit: " << limit() << "; "
             << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
             << "allocation: " << COUNTER_VALUE(_allocation) << "; "
@@ -472,8 +488,13 @@ private:
 
     MemTrackerType _type{MemTrackerType::NO_SET};
 
+<<<<<<< HEAD
     int64_t _level = 1;
     int64_t _limit;              // in bytes
+=======
+    int32_t _level = 1;
+    std::atomic<int64_t> _limit; // in bytes
+>>>>>>> 37a3909 ([Refactor] Make MemTracker::_limit a relaxed atomic (#81120))
     int64_t _reserve_limit = -1; // only used in spillable query
 
     std::string _label;
