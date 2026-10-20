@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 
 Status SpillProcessOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
-    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator) for the whole
+    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator / sort context) for the whole
     // spill-processing lifetime, so async spill tasks (which reference context-owned state such as the
     // build chunks / hash map) never dereference it after the owning operators free it on cancel/close.
     if (auto* context = _channel->guarded_context(); context != nullptr) {

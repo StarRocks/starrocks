@@ -20,6 +20,7 @@ namespace starrocks {
 
 void SpillProcessTask::reset() {
     _task = {};
+    _is_final = false;
 }
 
 SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequence) {
@@ -70,8 +71,12 @@ void SpillProcessChannel::close() {
         _spill_tasks.try_get(&task);
     }
 
-    // run the last task
-    if (task) {
+    // Run the last task only if it is the terminal handoff (add_last_task / execute()). _is_finishing
+    // alone is not enough: a cancelled sink still calls set_finishing() without enqueuing a final task,
+    // leaving a data task (e.g. the sorter's chunk iterator) at the tail. Such a task reads state owned
+    // by the sink, which may already be closed and freed at this point; running it is a use-after-free,
+    // and its output would be discarded anyway.
+    if (task && task.is_final()) {
         (void)task();
     }
 
