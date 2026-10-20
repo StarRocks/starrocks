@@ -61,6 +61,7 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.in_queue_time_sec += that.in_queue_time_sec;
     diff.pk_sst_merge_ns += that.pk_sst_merge_ns;
     diff.input_file_size += that.input_file_size;
+    diff.stream_buffer_shrunk_passes += that.stream_buffer_shrunk_passes;
     return diff;
 }
 
@@ -81,6 +82,7 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.in_queue_time_sec -= that.in_queue_time_sec;
     diff.pk_sst_merge_ns -= that.pk_sst_merge_ns;
     diff.input_file_size -= that.input_file_size;
+    diff.stream_buffer_shrunk_passes -= that.stream_buffer_shrunk_passes;
     return diff;
 }
 
@@ -102,6 +104,7 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("in_queue_sec", rapidjson::Value(s.in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(s.pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("input_file_size", rapidjson::Value(s.input_file_size), allocator);
+    root.AddMember("stream_buffer_shrunk_passes", rapidjson::Value(s.stream_buffer_shrunk_passes), allocator);
 }
 
 static std::string serialize(const rapidjson::Document& root) {
