@@ -34,11 +34,7 @@
 
 #pragma once
 
-<<<<<<< HEAD
-=======
 #include <atomic>
-#include <cinttypes>
->>>>>>> 37a3909 ([Refactor] Make MemTracker::_limit a relaxed atomic (#81120))
 #include <cstdint>
 #include <cstdio>
 #include <limits>
@@ -488,13 +484,8 @@ private:
 
     MemTrackerType _type{MemTrackerType::NO_SET};
 
-<<<<<<< HEAD
     int64_t _level = 1;
-    int64_t _limit;              // in bytes
-=======
-    int32_t _level = 1;
     std::atomic<int64_t> _limit; // in bytes
->>>>>>> 37a3909 ([Refactor] Make MemTracker::_limit a relaxed atomic (#81120))
     int64_t _reserve_limit = -1; // only used in spillable query
 
     std::string _label;
