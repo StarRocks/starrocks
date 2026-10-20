@@ -243,6 +243,42 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("catalog_slow_query", MetricUnit.REQUESTS,
                             "total slow query by catalog type"));
 
+    // Authentication observability: HTTP Bearer does a full authentication on every request, so
+    // these track auth volume and failures. Two independent labels rather than one flattened value:
+    // `channel` is which way the credential came in (mysql / http / arrow_flight / thrift_load /
+    // thrift_gateway) and `kind` is how it had to be read (mysql_handshake / plain_password /
+    // bearer_token). Keeping them apart is what lets an alert sum by one dimension - "is HTTP
+    // failing or is it Arrow Flight" and "is Bearer healthy overall" are different questions.
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_SUCCESS =
+            new MetricWithLabelGroup<>("channel", "kind",
+                    () -> new LongCounterMetric("authentication_success_total", MetricUnit.REQUESTS,
+                            "total successful authentications by access channel and credential kind"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_FAILURE =
+            new MetricWithLabelGroup<>("channel", "kind",
+                    () -> new LongCounterMetric("authentication_failure_total", MetricUnit.REQUESTS,
+                            "total failed authentications by access channel and credential kind"));
+    // Failure detail lives in its own metric, not as a third label on the counters above: a reason
+    // only exists for a failure, and folding it in would leave every success carrying an empty one.
+    // This is also the only place the reason is visible - the HTTP response deliberately says
+    // nothing beyond "invalid_token".
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_FAILURE_REASON =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("authentication_failure_reason_total", MetricUnit.REQUESTS,
+                            "total failed authentications by failure reason"));
+    // JWKS health, taken at the HTTP fetch itself (JwkMgr's resource retriever): one sample and one
+    // increment per fetch, whatever triggered it - a cache miss, a background refresh-ahead, an
+    // unknown kid, a retry. Not derived from the Nimbus refresh events on purpose: a background
+    // refresh raises both the caching layer's RefreshCompleted and the scheduler's
+    // ScheduledRefreshCompleted, and an outage answered from stale keys raises OutageEvent and
+    // RefreshCompleted together, so counting events either double-counts or calls a failed fetch a
+    // success.
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_JWKS_REFRESH =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric("jwks_refresh_total", MetricUnit.REQUESTS,
+                            "total JWKS fetches from the identity provider by result"));
+    public static final Histogram HISTO_JWKS_FETCH_LATENCY_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("jwks_fetch_latency_ms"));
+
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,

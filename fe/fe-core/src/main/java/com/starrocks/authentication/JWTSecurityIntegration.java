@@ -49,6 +49,12 @@ public class JWTSecurityIntegration extends SecurityIntegration {
     }
 
     @Override
+    public String[] getRequiredIssuer() {
+        String commaSeparatedIssuer = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER);
+        return commaSeparatedIssuer == null ? new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
+    }
+
+    @Override
     public void checkProperty() throws SemanticException {
         REQUIRED_PROPERTIES.forEach(s -> {
             if (!propertyMap.containsKey(s)) {

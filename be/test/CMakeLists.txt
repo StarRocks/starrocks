@@ -161,6 +161,7 @@ set(EXEC_FILES
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
+        ./base/auth/auth_info_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         )

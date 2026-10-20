@@ -85,6 +85,13 @@ public class OAuth2SecurityIntegration extends SecurityIntegration {
     }
 
     @Override
+    public String[] getRequiredIssuer() {
+        String commaSeparatedIssuer = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_REQUIRED_ISSUER,
+                Config.oauth2_required_issuer);
+        return commaSeparatedIssuer == null ? new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
+    }
+
+    @Override
     public void checkProperty() {
         requiredProperties.forEach(s -> {
             if (!propertyMap.containsKey(s)) {

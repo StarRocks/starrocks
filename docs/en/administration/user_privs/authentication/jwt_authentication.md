@@ -74,3 +74,9 @@ Example:
 ```Bash
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
+
+## Connect over HTTP or Arrow Flight with JWT
+
+Users of a JWT security integration can also send the token as `Authorization: Bearer <token>` to the HTTP API (SQL API, Stream Load, Web UI) and to Arrow Flight SQL, with no user name. See [Connect over HTTP and Arrow Flight](./security_integration.md#connect-over-http-and-arrow-flight).
+
+> A user created with `IDENTIFIED WITH authentication_jwt` can present its token only over the MySQL protocol, where the handshake carries the user name. To use a JWT on the HTTP API or Arrow Flight SQL, create a JWT [security integration](./security_integration.md) instead, and see [Where each authentication method works](./authentication.mdx#where-each-authentication-method-works).
