@@ -19,9 +19,21 @@
 #include <cstdio>
 #include <cstdlib>
 
+<<<<<<< HEAD:be/test/util/jvm_metrics_test.cpp
 #include "testutil/assert.h"
 #include "udf/java/java_udf.h"
 #include "util/metrics.h"
+=======
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
+#include "common/system/cpu_info.h"
+#include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_env_test_util.h"
+>>>>>>> 60408a5 ([Enhancement] Count JVM committed memory in the BE process memory tracker (#81127)):be/test/runtime/jvm_metrics_test.cpp
 
 namespace starrocks {
 
@@ -82,10 +94,117 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
 }
 
+<<<<<<< HEAD:be/test/util/jvm_metrics_test.cpp
 TEST_F(JVMMetricsTest, InstallCollectsOnceJvmExists) {
     MetricRegistry registry("install_test");
     JVMMetrics jvm_metrics;
     jvm_metrics.install(&registry);
+=======
+TEST_F(JVMMetricsTest, MemTrackerFollowsCommittedMemory) {
+    // This test binary never calls config::init(), so config fields hold zero values rather than
+    // their declared defaults. Set the switch explicitly.
+    const bool saved_switch = config::enable_jvm_memory_tracker;
+    DeferOp restore_switch([saved_switch]() { config::enable_jvm_memory_tracker = saved_switch; });
+    config::enable_jvm_memory_tracker = true;
+
+    MetricRegistry registry("mem_tracker_test");
+    MemTracker process_tracker(MemTrackerType::PROCESS, -1, "process");
+    MemTracker jvm_tracker(MemTrackerType::JVM, -1, "jvm", &process_tracker);
+    JVMMetrics jvm_metrics;
+    jvm_metrics.set_mem_tracker(&jvm_tracker);
+    jvm_metrics.install(&registry);
+
+    // The fixture created the JVM, so the first round initializes and collects.
+    registry.trigger_hook();
+    int64_t committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_GT(committed, 0);
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // Each round sets the tracker to the latest value instead of adding to it.
+    registry.trigger_hook();
+    committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // enable_jvm_memory_tracker is mutable: turning it off releases the tracked memory on the next
+    // round, and turning it back on counts the committed memory again.
+    config::enable_jvm_memory_tracker = false;
+    registry.trigger_hook();
+    ASSERT_EQ(0, jvm_tracker.consumption());
+    ASSERT_EQ(0, process_tracker.consumption());
+    config::enable_jvm_memory_tracker = true;
+    registry.trigger_hook();
+    committed = jvm_metrics.jvm_heap_committed_bytes.value() + jvm_metrics.jvm_non_heap_committed_bytes.value();
+    ASSERT_EQ(committed, jvm_tracker.consumption());
+    ASSERT_EQ(committed, process_tracker.consumption());
+
+    // After the tracker is detached, later rounds leave it alone.
+    jvm_metrics.set_mem_tracker(nullptr);
+    jvm_tracker.consume(-jvm_tracker.consumption());
+    registry.trigger_hook();
+    ASSERT_EQ(0, jvm_tracker.consumption());
+    ASSERT_EQ(0, process_tracker.consumption());
+}
+
+// No JVM needed: a failed collection is simulated by calling the private _update_mem_tracker()
+// directly with collected=false (this test target is built with -fno-access-control).
+TEST(JVMMetricsMemTrackerTest, OptOutReleasesChargeEvenIfCollectionFails) {
+    MemTracker process_tracker(MemTrackerType::PROCESS, -1, "process");
+    MemTracker jvm_tracker(MemTrackerType::JVM, -1, "jvm", &process_tracker);
+    JVMMetrics jvm_metrics;
+    jvm_metrics.set_mem_tracker(&jvm_tracker);
+    const bool saved_switch = config::enable_jvm_memory_tracker;
+    DeferOp restore_switch([saved_switch]() { config::enable_jvm_memory_tracker = saved_switch; });
+
+    // A successful round charges heap + non-heap committed.
+    config::enable_jvm_memory_tracker = true;
+    jvm_metrics.jvm_heap_committed_bytes.set_value(3000);
+    jvm_metrics.jvm_non_heap_committed_bytes.set_value(1000);
+    jvm_metrics._update_mem_tracker(/*collected=*/true);
+    ASSERT_EQ(4000, jvm_tracker.consumption());
+    ASSERT_EQ(4000, process_tracker.consumption());
+
+    // A failed round while tracking is on keeps the last charge, even if a gauge was partly updated.
+    jvm_metrics.jvm_heap_committed_bytes.set_value(9000);
+    jvm_metrics._update_mem_tracker(/*collected=*/false);
+    ASSERT_EQ(4000, jvm_tracker.consumption());
+    ASSERT_EQ(4000, process_tracker.consumption());
+
+    // Turning tracking off must release the charge although collection keeps failing.
+    config::enable_jvm_memory_tracker = false;
+    jvm_metrics._update_mem_tracker(/*collected=*/false);
+    ASSERT_EQ(0, jvm_tracker.consumption());
+    ASSERT_EQ(0, process_tracker.consumption());
+
+    // Turning it back on while collection still fails does not charge stale gauges.
+    config::enable_jvm_memory_tracker = true;
+    jvm_metrics._update_mem_tracker(/*collected=*/false);
+    ASSERT_EQ(0, jvm_tracker.consumption());
+
+    // The next successful round charges again.
+    jvm_metrics._update_mem_tracker(/*collected=*/true);
+    ASSERT_EQ(10000, jvm_tracker.consumption());
+    ASSERT_EQ(10000, process_tracker.consumption());
+    jvm_tracker.consume(-jvm_tracker.consumption());
+}
+
+TEST_F(JVMMetricsTest, JavaEnvInstallsJvmMetrics) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "JVM metrics initialization through JavaEnv is disabled on macOS";
+#else
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    MetricRegistry registry("java_env_test");
+    JavaEnv java_env;
+    DeferOp cleanup([&java_env]() {
+        java_env.shutdown();
+        java_env.destroy();
+    });
+
+    ASSERT_OK(java_env.init(&registry, true));
+>>>>>>> 60408a5 ([Enhancement] Count JVM committed memory in the BE process memory tracker (#81127)):be/test/runtime/jvm_metrics_test.cpp
 
     auto type_label = [](const std::string& type) { return MetricLabels().add("type", type); };
     ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("used")));

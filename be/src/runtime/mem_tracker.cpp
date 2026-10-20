@@ -79,6 +79,11 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::DEL_VEC_CACHE, "del_vec_cache"},
         {MemTrackerType::COMPACTION_STATE, "compaction_state"},
         {MemTrackerType::BUILTIN_INVERTED_INDEX, "builtin_inverted_index"},
+<<<<<<< HEAD
+=======
+        {MemTrackerType::VECTOR_INDEX, "vector_index"},
+        {MemTrackerType::JVM, "jvm"},
+>>>>>>> 60408a5 ([Enhancement] Count JVM committed memory in the BE process memory tracker (#81127))
 };
 
 static std::map<MemTrackerType, std::string> s_type_to_label_map;
