@@ -425,7 +425,6 @@
         "enable_table_metrics",
         "max_table_metrics_num",
         "enable_jvm_metrics",
-        "enable_jvm_memory_tracker",
         "report_datacache_metrics_interval_ms"
       ]
     },

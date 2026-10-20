@@ -227,8 +227,7 @@ void RuntimeEnv::stop() {
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
     RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
-    return _java_env.init(metrics, config::enable_jvm_metrics,
-                          config::enable_jvm_memory_tracker ? jvm_mem_tracker() : nullptr);
+    return _java_env.init(metrics, config::enable_jvm_metrics, jvm_mem_tracker());
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {
