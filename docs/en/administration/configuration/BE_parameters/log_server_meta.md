@@ -350,11 +350,11 @@ This topic introduces the following types of BE configurations:
 
 ### enable_jvm_metrics
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Controls whether the system initializes and registers JVM-specific metrics at startup. When enabled the metrics subsystem will create JVM-related collectors (for example, heap, GC and thread metrics) for export, and when disabled, those collectors are not initialized. This parameter is intended for forward compatibility and may be removed in a future release. Use `enable_system_metrics` to control system-level metric collection.
+- Description: Whether to collect JVM memory metrics on the BE. The metrics are `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` for heap and non-heap memory, and `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, `jvm_old_size_bytes`, and `jvm_perm_size_bytes` (Metaspace) for memory pools. The `type` label of each metric is `used`, `committed`, `max`, `peak_used`, or `peak_max`. Enabling this item does not start a JVM. The BE starts collecting the metrics only after a JVM is created in the BE process by a feature that uses Java, such as HDFS access, JNI-based readers, or Java UDFs. Until then, the metrics are 0. The metrics are refreshed every 15 seconds when `enable_metric_calculator` is `true`. If `JAVA_HOME` is not set, the metrics are not registered. A `max` or `peak_max` value of -1 means that the memory pool has no defined maximum. With the default G1 garbage collector, this applies to `jvm_young_size_bytes` and `jvm_survivor_size_bytes` (the Eden and Survivor spaces), and to `jvm_perm_size_bytes` (Metaspace) unless `MaxMetaspaceSize` is set. The memory pool metrics are populated only for the Serial, Parallel, and G1 garbage collectors. Use `enable_system_metrics` to control system-level metric collection.
 - Introduced in: v4.0.0
 
 ### get_pindex_worker_count
