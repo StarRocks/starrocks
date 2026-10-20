@@ -52,6 +52,54 @@ public interface AuthenticationProvider {
     }
 
     /**
+     * Whether the configured group providers take part in this login's group set.
+     *
+     * <p>Only a provider that can resolve groups by itself has a reason to say no, and then they are
+     * not merely dropped from the result - they are not called at all: calling and discarding would
+     * pay for a read we said we do not want, and a broken group provider would still be able to
+     * affect a mode that explicitly excludes it.
+     */
+    default boolean isGroupProviderUsed() {
+        return true;
+    }
+
+    /**
+     * Whether this provider resolved groups by itself while authenticating, and they take part in
+     * this login's group set. The counterpart of {@link #isGroupProviderUsed()}: both sides of the
+     * union are gated by the configured group source, so neither can silently keep contributing
+     * after the other is turned off.
+     *
+     * <p>A provider that says true writes them with
+     * {@code AccessControlContext#setAuthenticatorGroups} during {@link #authenticate}.
+     */
+    default boolean isAuthenticatorGroupsUsed() {
+        return false;
+    }
+
+    /**
+     * True when this login's groups cannot be known yet: they come from a credential that reaches
+     * the connection only after the handshake, as in the OAuth 2.0 authorization-code flow over
+     * MySQL, where the token arrives through the browser callback. Deciding the groups - and with
+     * them the {@code permitted_groups} gate - on the handshake would then decide them on nothing.
+     *
+     * <p>A provider that says true receives the group resolution through
+     * {@link #deferGroupResolution} and must run it before the first statement is allowed to
+     * execute ({@link #checkLoginSuccess}), refusing the statement - and every later one - if it
+     * throws.
+     */
+    default boolean isGroupResolutionDeferred() {
+        return false;
+    }
+
+    /**
+     * Hand over the group resolution a provider asked to defer. Only called when
+     * {@link #isGroupResolutionDeferred()} is true; a provider that never defers has nothing to run.
+     */
+    default void deferGroupResolution(DeferredGroupResolution resolution) {
+        throw new IllegalStateException(getClass().getSimpleName() + " does not defer group resolution");
+    }
+
+    /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */

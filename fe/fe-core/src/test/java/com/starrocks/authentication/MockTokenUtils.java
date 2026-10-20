@@ -37,6 +37,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.text.ParseException;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 
 public class MockTokenUtils {
     String getOpenIdConnect(String fileName) throws IOException {
@@ -145,6 +146,35 @@ public class MockTokenUtils {
         SignedJWT signedJWT = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.HS256).keyID(rsa.getKeyID()).build(), claimsSet);
         signedJWT.sign(new MACSigner(secret));
+        return signedJWT.serialize();
+    }
+
+    /**
+     * Sign an RS256 token with the mock key, with arbitrary extra claims on top of the standard
+     * ones. Nested claims are written as nested maps, which is exactly what Nimbus parses a nested
+     * JSON object into, so a fixture here has the same shape as a real identity provider's token.
+     */
+    public String generateTokenWithClaims(Map<String, Object> extraClaims, String audience, long validityMs)
+            throws Exception {
+        MockJwkMgr mockJwkMgr = new MockJwkMgr();
+        RSASSASigner signer = new RSASSASigner(MockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
+        JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
+
+        JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
+                .issuer("http://localhost:38080/realms/master")
+                .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
+                .audience(audience)
+                .issueTime(new Date())
+                .expirationTime(new Date(new Date().getTime() + validityMs))
+                .claim("preferred_username", "harbor");
+        if (extraClaims != null) {
+            extraClaims.forEach(builder::claim);
+        }
+
+        SignedJWT signedJWT = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(jwkSet.getKeys().get(0).getKeyID()).build(),
+                builder.build());
+        signedJWT.sign(signer);
         return signedJWT.serialize();
     }
 

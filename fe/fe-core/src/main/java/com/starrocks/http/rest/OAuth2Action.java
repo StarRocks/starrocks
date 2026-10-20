@@ -16,6 +16,7 @@ package com.starrocks.http.rest;
 
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
@@ -137,12 +138,15 @@ public class OAuth2Action extends RestBaseAction {
             JSONObject authResponse = new JSONObject(oidcToken);
             String idToken = authResponse.getString("id_token");
 
-            OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSource,
+            JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSource,
                     oAuth2Context.principalFiled(),
                     oAuth2Context.requiredIssuer(),
                     oAuth2Context.requiredAudience());
 
-            context.setAuthToken(idToken);
+            // Not context.setAuthToken: the provider reads the groups out of the verified token
+            // first, so the connection sees them as soon as it sees the token.
+            ((OAuth2AuthenticationProvider) authenticationProvider)
+                    .acceptVerifiedToken(context.getAccessControlContext(), idToken, claims);
 
             response.appendContent(OAuth2ResultMessage.generateLoginSuccessPage(
                     "Successful",

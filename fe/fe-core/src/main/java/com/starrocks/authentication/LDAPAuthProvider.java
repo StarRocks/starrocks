@@ -58,7 +58,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     private final String ldapSearchFilter;
     private final String ldapUserDN;
     private final String ldapBindDNPattern;
-    private final LdapGroupSource ldapGroupSource;
+    private final GroupSource ldapGroupSource;
     private final String ldapMemberOfAttr;
 
     /**
@@ -78,7 +78,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapBindDNPattern) {
         this(ldapServerHost, ldapServerPort, useSSL, trustStorePath, trustStorePwd, ldapBindRootDN, ldapBindRootPwd,
                 ldapBindBaseDN, ldapSearchFilter, ldapUserDN, ldapBindDNPattern,
-                LdapGroupSource.GROUP_PROVIDER, "memberOf");
+                GroupSource.GROUP_PROVIDER, "memberOf");
     }
 
     public LDAPAuthProvider(String ldapServerHost,
@@ -92,9 +92,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapSearchFilter,
                             String ldapUserDN,
                             String ldapBindDNPattern,
-                            LdapGroupSource ldapGroupSource,
+                            GroupSource ldapGroupSource,
                             String ldapMemberOfAttr) {
-        this.ldapGroupSource = ldapGroupSource == null ? LdapGroupSource.GROUP_PROVIDER : ldapGroupSource;
+        this.ldapGroupSource = ldapGroupSource == null ? GroupSource.GROUP_PROVIDER : ldapGroupSource;
         this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
@@ -124,7 +124,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
         // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
-        boolean readMemberOf = ldapGroupSource.readsMemberOf() && !legacyPerUserDN;
+        boolean readMemberOf = ldapGroupSource.usesAuthenticatorGroups() && !legacyPerUserDN;
         // The entry's own spelling of the name, wanted only when the session identity is going to be
         // taken from the directory rather than from what the client typed.
         boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
@@ -198,19 +198,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             // Authentication already succeeded at this point. A group-resolution failure must never
             // turn into an authentication failure, so everything below is contained.
             try {
-                authContext.setMemberOfGroups(
+                authContext.setAuthenticatorGroups(
                         resolveMemberOfGroups(user, distinguishedName,
                                 userEntry == null ? null : userEntry.attributes(), directBind));
             } catch (Exception e) {
                 LOG.warn("failed to resolve memberOf groups for user: {}, dn: {}", user, distinguishedName, e);
-                authContext.setMemberOfGroups(Set.of());
+                authContext.setAuthenticatorGroups(Set.of());
             }
-        } else {
-            // Write the field in this branch too, so it always states what *this* authentication
-            // resolved instead of keeping whatever it happened to hold. Leaving it untouched would
-            // make correctness depend on "nobody wrote it earlier", which is exactly the kind of
-            // assumption that breaks when the field gets reused somewhere else later.
-            authContext.setMemberOfGroups(Set.of());
         }
         return userIdentity;
     }
@@ -255,6 +249,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * called at all: calling and discarding would pay for a read we said we do not want, and a broken
      * group provider would still be able to affect a mode that explicitly excludes it.
      */
+    @Override
     public boolean isGroupProviderUsed() {
         return ldapGroupSource.usesGroupProvider();
     }
@@ -265,8 +260,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * configured group source, so neither can silently keep contributing after the other is turned
      * off.
      */
-    public boolean isMemberOfUsed() {
-        return ldapGroupSource.readsMemberOf();
+    @Override
+    public boolean isAuthenticatorGroupsUsed() {
+        return ldapGroupSource.usesAuthenticatorGroups();
     }
 
     /**
@@ -288,7 +284,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * empty result is never an error here, it just means the caller keeps the group providers only
      */
     public TargetUserGroups resolveMemberOfGroupsForUser(String user) {
-        if (!ldapGroupSource.readsMemberOf()) {
+        if (!ldapGroupSource.usesAuthenticatorGroups()) {
             // Nothing to read, and deliberately no request: the default configuration must not pay
             // for a directory round trip it does not need.
             return TargetUserGroups.NONE;
@@ -367,7 +363,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         private static final TargetUserGroups NONE = new TargetUserGroups(null, Set.of());
     }
 
-    public LdapGroupSource getGroupSource() {
+    public GroupSource getGroupSource() {
         return ldapGroupSource;
     }
 

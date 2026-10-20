@@ -949,6 +949,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
 - 導入時期：v4.2, v4.1.6
 
+### `authentication_group_case_insensitive`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：ログインで得られたグループ名が、大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` または `permitted_groups` のエントリーと一致するとみなすかどうか。LDAP の `cn` はディレクトリー内で大文字小文字を区別しないため、ディレクトリーが返す表記と異なる大文字小文字で書かれた GRANT が黙って無効になってはならず、デフォルトで有効です。グループの背後にある ID システムが大文字小文字を区別する場合（たとえば JWT の claim から読み取ったグループ）は `false` に設定し、`Admins` と `admins` を別のグループのままにしてください。影響するのは比較だけです。名前は到着したままの表記で保存・表示され、Apache Ranger にもそのまま渡されます。
+- 導入時期：v4.2
+
 ### `authentication_ldap_case_insensitive`
 
 - デフォルト：false

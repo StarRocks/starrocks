@@ -39,7 +39,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -69,7 +68,7 @@ public class AuthenticationHandler {
         // cannot miss an entry point the way per-entry-point instrumentation would (MetricRepo
         // COUNTER_AUTH_*).
         try {
-            UserIdentity authenticated = authenticateInternal(context, cred);
+            AuthenticationResult result = authenticateInternal(context, cred);
             // A provider may answer "OK" without having verified anything, expecting the protocol
             // to finish the handshake later: OAuth2AuthenticationProvider returns immediately when
             // the client did not declare the OAuth2 plugin, and the MySQL channel only closes that
@@ -86,8 +85,14 @@ public class AuthenticationHandler {
                     provider.checkLoginSuccess(context.getConnectionId(), context.getAccessControlContext());
                 }
             }
-            recordAuthSuccess(cred);
-            return authenticated;
+            // When the groups and the permitted_groups gate are deferred (a stock MySQL client on an
+            // OAuth2 integration that reads a claim), the handshake has not decided the login yet:
+            // the deferred step records the final verdict, so a user the gate refuses is counted
+            // as a failure and not as a success followed by nothing.
+            if (!result.groupResolutionDeferred) {
+                recordAuthSuccess(cred);
+            }
+            return result.authenticatedUser;
         } catch (AuthenticationException e) {
             recordAuthFailure(cred, e);
             throw e;
@@ -109,9 +114,16 @@ public class AuthenticationHandler {
         MetricRepo.COUNTER_AUTH_FAILURE_REASON.getMetric(reason.label()).increase(1L);
     }
 
-    private static UserIdentity authenticateInternal(ConnectContext context, AuthCredentials cred)
+    private static AuthenticationResult authenticateInternal(ConnectContext context, AuthCredentials cred)
             throws AuthenticationException {
         AccessControlContext authContext = context.getAccessControlContext();
+
+        // The context outlives one authentication (COM_CHANGE_USER authenticates again on the same
+        // one), and only a provider that resolves groups by itself writes this field. Every
+        // authentication starts from an empty set, so a provider that reports authenticator groups
+        // but resolves none for this login - LDAP skipping memberOf for a legacy `AS '<dn>'` user -
+        // cannot hand the previous user's groups to the new one.
+        authContext.setAuthenticatorGroups(Set.of());
 
         // Input validation, not dispatch: anything but a token has to name the user it is for.
         // A token does not - the name is inside it.
@@ -142,8 +154,8 @@ public class AuthenticationHandler {
                             ? AuthFailureReason.NO_MATCHING_SI : AuthFailureReason.BAD_CREDENTIAL);
         }
 
-        setAuthenticationResultToContext(context, authenticationResult);
-        return authenticationResult.authenticatedUser;
+        setAuthenticationResultToContext(context, authenticationResult, cred);
+        return authenticationResult;
     }
 
     /**
@@ -505,8 +517,10 @@ public class AuthenticationHandler {
     }
 
     private static void setAuthenticationResultToContext(ConnectContext context,
-                                                         AuthenticationResult authenticationResult)
+                                                         AuthenticationResult authenticationResult,
+                                                         AuthCredentials cred)
             throws AuthenticationException {
+        AuthChannel channel = cred.channel();
         String user = authenticationResult.authenticatedUser.getUser();
 
         // Step 1: Set user identity to context
@@ -529,41 +543,27 @@ public class AuthenticationHandler {
             context.setSecurityIntegration(authenticationResult.securityIntegration);
         }
 
-        // Step 4: union the two group sources - the configured group providers, and what the
-        // authentication provider read from the user's own entry (LDAP `memberOf`). It has to happen
-        // here, before roles are derived and before the permitted_groups gate, so both sources take
-        // part in both. Each side is gated on the group source the provider reports.
-        AccessControlContext accessControlContext = context.getAccessControlContext();
-        Set<String> groups = new HashSet<>();
-        if (isGroupProviderUsed(accessControlContext)) {
-            groups.addAll(resolveGroupsFromProviders(context.getCurrentUserIdentity(),
-                    context.getDistinguishedName(), authenticationResult.groupProviderName));
-        }
-        if (isMemberOfUsed(accessControlContext)) {
-            groups.addAll(accessControlContext.getMemberOfGroups());
-        }
-        context.setGroups(groups);
-        // Set current role IDs based on the authenticated user and groups
-        context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
-
-        // Step 5: Validate group access permissions
-        // `permitted_groups` is a gate, not a filter: the user is refused unless at least one of its
-        // groups is on the list, but the group set itself is left whole - a user admitted by one
-        // group keeps all of them, and they all take part in role mapping and Ranger.
-        if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
-            // Matched ignoring case: an LDAP `cn` is case-insensitive in the directory, so a group
-            // name that differs only in case must not silently fail the gate. The group names
-            // themselves are never rewritten - they are handed to Ranger, which matches
-            // case-sensitively. The same relaxation is applied to the group-to-role lookup in
-            // AuthorizationMgr#getRoleIdListByGroup, and the two must stay in sync.
-            Set<String> allowedLowerCase = LDAPMemberOfExtractor.toLowerCaseSet(authenticationResult.authenticatedGroupList);
-            boolean allowed = groups.stream()
-                    .anyMatch(group -> group != null && allowedLowerCase.contains(group.toLowerCase(Locale.ROOT)));
-            if (!allowed) {
-                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user,
-                        Joiner.on(",").join(groups),
-                        Joiner.on(",").join(authenticationResult.authenticatedGroupList));
-            }
+        // Steps 4 and 5 decide the session's groups, its roles and the permitted_groups gate. They
+        // normally run now. A provider whose groups come from a credential that has not arrived yet
+        // - the OAuth2 authorization-code flow over MySQL, where the token comes through the browser
+        // callback - takes them over instead and runs them before the first statement executes.
+        AuthenticationProvider provider = context.getAuthenticationProvider();
+        if (provider != null && provider.isGroupResolutionDeferred()) {
+            context.setGroups(new HashSet<>());
+            context.setCurrentRoleIds(authenticationResult.authenticatedUser, Set.of());
+            authenticationResult.groupResolutionDeferred = true;
+            // The metrics record the verdict here rather than on the handshake, see authenticate().
+            provider.deferGroupResolution(() -> {
+                try {
+                    resolveGroupsAndCheckAccess(context, authenticationResult, channel);
+                    recordAuthSuccess(cred);
+                } catch (AuthenticationException e) {
+                    recordAuthFailure(cred, e);
+                    throw e;
+                }
+            });
+        } else {
+            resolveGroupsAndCheckAccess(context, authenticationResult, channel);
         }
 
         // Step 6: Apply user properties for non-ephemeral users
@@ -576,11 +576,86 @@ public class AuthenticationHandler {
         }
     }
 
+    /**
+     * Steps 4 and 5 of {@link #setAuthenticationResultToContext}: the session's groups, the roles
+     * derived from them, and the permitted_groups gate. Separate so a provider can run it later on
+     * the same connection, see {@link AuthenticationProvider#isGroupResolutionDeferred()}.
+     */
+    private static void resolveGroupsAndCheckAccess(ConnectContext context, AuthenticationResult authenticationResult,
+                                                    AuthChannel channel) throws AuthenticationException {
+        String user = authenticationResult.authenticatedUser.getUser();
+
+        // Step 4: union the two group sources - the configured group providers, and what the
+        // authenticator resolved by itself (LDAP `memberOf`, or a claim of the verified JWT). It has
+        // to happen here, before roles are derived and before the permitted_groups gate, so both
+        // sources take part in both. Each side is gated on the group source the provider reports.
+        AccessControlContext accessControlContext = context.getAccessControlContext();
+        boolean fromProviders = isGroupProviderUsed(accessControlContext);
+        boolean fromAuthenticator = isAuthenticatorGroupsUsed(accessControlContext);
+        Set<String> providerGroups = fromProviders
+                ? resolveGroupsFromProviders(context.getCurrentUserIdentity(),
+                        context.getDistinguishedName(), authenticationResult.groupProviderName)
+                : Set.of();
+        Set<String> authenticatorGroups = fromAuthenticator
+                ? accessControlContext.getAuthenticatorGroups() : Set.of();
+        Set<String> groups = new HashSet<>(providerGroups);
+        groups.addAll(authenticatorGroups);
+        context.setGroups(groups);
+
+        // Both sources at once is the only case where `current_group()` alone cannot say where a
+        // group came from - with a single source the integration's own `group_source` answers it.
+        // So say it here rather than inventing a SQL surface for the attribution.
+        //
+        // The level depends on how often the channel authenticates, because the same line is either
+        // once per session or once per request: MySQL and Arrow Flight authenticate when the session
+        // opens, so one INFO line per login is what an operator wants; HTTP and the load RPCs
+        // authenticate on every single request, and an INFO line there would be one log line per
+        // query on a busy cluster. On those, the attribution is available by turning on DEBUG for
+        // this class.
+        if (fromProviders && fromAuthenticator) {
+            boolean oncePerSession = channel == AuthChannel.MYSQL || channel == AuthChannel.ARROW_FLIGHT;
+            String message = "authenticated {} via {}: group_source=both, from group providers {}, " +
+                    "from authenticator {} -> effective {}";
+            if (oncePerSession) {
+                LOG.info(message, user, authenticationResult.securityIntegration,
+                        providerGroups, authenticatorGroups, groups);
+            } else if (LOG.isDebugEnabled()) {
+                LOG.debug(message, user, authenticationResult.securityIntegration,
+                        providerGroups, authenticatorGroups, groups);
+            }
+        }
+
+        // Set current role IDs based on the authenticated user and groups
+        context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
+
+        // Step 5: Validate group access permissions
+        // `permitted_groups` is a gate, not a filter: the user is refused unless at least one of its
+        // groups is on the list, but the group set itself is left whole - a user admitted by one
+        // group keeps all of them, and they all take part in role mapping and Ranger.
+        if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
+            // Compared through GroupNameMatch, the same predicate the group-to-role lookup uses
+            // (AuthorizationMgr#getRoleIdListByGroup), so the gate and the role mapping cannot
+            // disagree on whether case counts. The group names themselves are never rewritten -
+            // they are handed to Ranger, which matches case-sensitively.
+            List<String> allowedGroups = authenticationResult.authenticatedGroupList;
+            boolean allowed = groups.stream().anyMatch(group ->
+                    allowedGroups.stream().anyMatch(allowedGroup -> GroupNameMatch.equal(group, allowedGroup)));
+            if (!allowed) {
+                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user,
+                        Joiner.on(",").join(groups),
+                        Joiner.on(",").join(authenticationResult.authenticatedGroupList));
+            }
+        }
+    }
+
     private static class AuthenticationResult {
         private final UserIdentity authenticatedUser;
         private final List<String> groupProviderName;
         private final List<String> authenticatedGroupList;
         private final String securityIntegration;
+        // Set when the groups and the permitted_groups gate were handed to the provider to run
+        // later (AuthenticationProvider#isGroupResolutionDeferred): the login is not decided yet.
+        private boolean groupResolutionDeferred;
 
         public AuthenticationResult(UserIdentity authenticatedUser,
                                     List<String> groupProviderName,
@@ -594,27 +669,30 @@ public class AuthenticationHandler {
     }
 
     /**
-     * Whether the configured group providers contribute to this login's group set. Only an LDAP login
-     * can turn them off (`group_source = memberof`), and the question is asked of the provider rather
-     * than of the config, which would disable them for native users too.
+     * Whether the configured group providers contribute to this login's group set. Only a provider
+     * that resolves groups by itself can turn them off (`group_source = authenticator`), and the
+     * question is asked of the provider rather than of the config, which would disable them for
+     * native users too.
      */
     private static boolean isGroupProviderUsed(AccessControlContext accessControlContext) {
         AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
-        if (!(provider instanceof LDAPAuthProvider)) {
+        if (provider == null) {
             return true;
         }
-        // enable_auth_check = false skips provider.authenticate() above, so memberOf was never read:
-        // letting `memberof` suppress the providers too would leave the login with no groups at all.
-        return !Config.enable_auth_check || ((LDAPAuthProvider) provider).isGroupProviderUsed();
+        // enable_auth_check = false skips provider.authenticate() above, so the authenticator never
+        // read its own groups: letting `authenticator` suppress the providers too would leave the
+        // login with no groups at all.
+        return !Config.enable_auth_check || provider.isGroupProviderUsed();
     }
 
     /**
-     * The mirror of {@link #isGroupProviderUsed}. Any other provider leaves the field empty, so this
-     * is belt and braces - but it keeps the two sources from drifting apart.
+     * The mirror of {@link #isGroupProviderUsed}. A provider that resolves no groups of its own
+     * leaves the field empty and answers false by default, so this is belt and braces - but it keeps
+     * the two sources from drifting apart.
      */
-    private static boolean isMemberOfUsed(AccessControlContext accessControlContext) {
+    private static boolean isAuthenticatorGroupsUsed(AccessControlContext accessControlContext) {
         AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
-        return provider instanceof LDAPAuthProvider && ((LDAPAuthProvider) provider).isMemberOfUsed();
+        return provider != null && provider.isAuthenticatorGroupsUsed();
     }
 
     /**

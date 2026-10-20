@@ -131,7 +131,7 @@ LDAP 関連の設定には統一した答えはありません。FE が比較す
 | `authentication_ldap_simple_group_source` | FE | **区別しません。** 前後の空白も無視されます。認識できない値は `CREATE` / `ALTER SECURITY INTEGRATION` では拒否され、FE 設定項目から渡された場合は `group_provider` にフォールバックしてログに ERROR を出します。 |
 | DN の値: `authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | ディレクトリー | **ディレクトリー次第です。** DN 内の属性タイプ（`cn=`、`ou=`、`dc=`）は常に大文字小文字を区別しません。値を区別するかは各属性のマッチングルールによりますが、一般的な `cn` / `ou` / `dc` は区別しません。 |
 | ログイン名 | FE、ディレクトリーに送る前 | **区別しません。** 検索フィルターに入れる前、またはバインド DN パターンに代入する前に小文字に変換されます。これは Active Directory がアカウント名を扱う方式に合わせたものです。 |
-| グループ名 | FE | **照合では区別せず、表示では原文を保ちます。** `GRANT ... TO EXTERNAL GROUP` と `permitted_groups` は大文字小文字を無視して照合されますが、グループ名の文字列自体は書き換えられません。`current_group()` と Apache Ranger に渡されるグループ集合は、ディレクトリーが返した表記をそのまま保ちます。Ranger はグループ名を大文字小文字を区別して照合するため、そのポリシーはディレクトリー側の表記に合わせる必要があります。 |
+| グループ名 | FE | **照合では区別せず、表示では原文を保ちます。** `GRANT ... TO EXTERNAL GROUP` と `permitted_groups` はデフォルトで大文字小文字を無視して照合されますが（FE 設定項目 `authentication_group_case_insensitive`。`false` にすると厳密に照合します）、グループ名の文字列自体は書き換えられません。`current_group()` と Apache Ranger に渡されるグループ集合は、ディレクトリーが返した表記をそのまま保ちます。Ranger はグループ名を大文字小文字を区別して照合するため、そのポリシーはディレクトリー側の表記に合わせる必要があります。 |
 
 ## LDAP でユーザーを作成する
 

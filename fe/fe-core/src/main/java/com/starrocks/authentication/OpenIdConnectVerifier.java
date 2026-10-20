@@ -56,15 +56,18 @@ public class OpenIdConnectVerifier {
      * Flight Bearer and the MySQL JWT provider, with key rotation and outage tolerance handled by
      * the source).
      */
-    public static void verify(String idToken,
-                              String userName,
-                              JWKSource<SecurityContext> jwkSource,
-                              String principalFiled,
-                              String[] requiredIssuer,
-                              String[] requiredAudience) throws AuthenticationException {
+    public static JWTClaimsSet verify(String idToken,
+                                      String userName,
+                                      JWKSource<SecurityContext> jwkSource,
+                                      String principalFiled,
+                                      String[] requiredIssuer,
+                                      String[] requiredAudience) throws AuthenticationException {
         try {
             SignedJWT signedJWT = verifySignature(idToken, jwkSource);
             checkClaims(signedJWT, userName, principalFiled, requiredIssuer, requiredAudience);
+            // Handed back so a caller that also reads a claim (group resolution) works on the set
+            // this method already parsed and verified, instead of parsing the token a second time.
+            return signedJWT.getJWTClaimsSet();
         } catch (AuthenticationException e) {
             throw e;
         } catch (ParseException e) {
@@ -87,13 +90,14 @@ public class OpenIdConnectVerifier {
      * same verification core, so those callers also get RSA/EC support and the algorithm
      * allow-list.
      */
-    public static void verify(String idToken,
-                              String userName,
-                              JWKSet jwkSet,
-                              String principalFiled,
-                              String[] requiredIssuer,
-                              String[] requiredAudience) throws AuthenticationException {
-        verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalFiled, requiredIssuer, requiredAudience);
+    public static JWTClaimsSet verify(String idToken,
+                                      String userName,
+                                      JWKSet jwkSet,
+                                      String principalFiled,
+                                      String[] requiredIssuer,
+                                      String[] requiredAudience) throws AuthenticationException {
+        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalFiled, requiredIssuer,
+                requiredAudience);
     }
 
     /**
