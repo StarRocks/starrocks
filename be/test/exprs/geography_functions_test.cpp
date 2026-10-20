@@ -2534,29 +2534,52 @@ TEST_F(geographyFunctionsTest, nativeGeoMeasurementsAndCollections) {
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResults) {
-    // DOUBLE bits from main 77815dba, including normalized loops, holes and empty MULTIPOLYGON children.
-    struct Case {
-        const char* wkt;
-        uint64_t area;
-        uint64_t perimeter;
+    // Rebuild the polygon as main's second pass did, using this build's S2/libm results.
+    const auto reference_polygon = [](const WkbGeometry& geometry, bool area, long double* value) {
+        if (geometry.empty) {
+            *value = 0;
+            return GEO_PARSE_OK;
+        }
+        GeoCoordinateListList rings;
+        for (const auto& ring : geometry.rings) {
+            auto coordinates = std::make_unique<GeoCoordinateList>();
+            for (const auto& point : ring) coordinates->add({point.x, point.y});
+            rings.add(coordinates.release());
+        }
+        GeoPolygon polygon;
+        const auto status = polygon.from_coords(rings);
+        if (status == GEO_PARSE_OK) {
+            *value = area ? polygon.area_square_meters() : polygon.perimeter_meters();
+        }
+        return status;
     };
-    const Case cases[] = {
-            {"POLYGON ((0 0,1 0,1 1,0 1,0 0))", 0x420707a1ceb89c7cULL, 0x411b256ddffa2224ULL},
-            {"POLYGON ((0 0,0 1,1 1,1 0,0 0))", 0x420707a1ceb89c81ULL, 0x411b256ddffa2224ULL},
-            {"POLYGON ((0 0,10 0,10 10,0 10,0 0),(1 1,2 1,2 2,1 2,1 1),(6 6,8 6,8 8,6 8,6 6))", 0x42710d1f2200da09ULL,
-             0x4155fab3a7691bcfULL},
-            {"MULTIPOLYGON (EMPTY,((0 0,1 0,1 1,0 1,0 0)),EMPTY,((20 10,21 10,21 11,20 11,20 10)),EMPTY)",
-             0x4216d65fa86bc6a7ULL, 0x412b086705597c27ULL},
-            {"POLYGON ((-170 -70,170 -70,170 70,-170 70,-170 -70))", 0x42b83f2a989a36a5ULL, 0x417f22f569843d6dULL},
-            {"POLYGON ((-135 80,-45 80,45 80,135 80,-135 80))", 0x42821579ac16af4fULL, 0x4157ef0b04cdf681ULL},
-            {"POLYGON ((179 -1,-179 -1,-179 1,179 1,179 -1))", 0x42270814b9b78b97ULL, 0x412b252a1ee3da9fULL},
-            {"POLYGON ((0 0,0.000000001 0,0.000000001 0.000000001,0 0.000000001,0 0))", 0x3e4a8d5fa35e302bULL,
-             0x3f3d262d4ac915d8ULL},
+    const char* cases[] = {
+            "POLYGON ((0 0,1 0,1 1,0 1,0 0))",
+            "POLYGON ((0 0,0 1,1 1,1 0,0 0))",
+            "POLYGON ((0 0,10 0,10 10,0 10,0 0),(1 1,2 1,2 2,1 2,1 1),(6 6,8 6,8 8,6 8,6 6))",
+            "MULTIPOLYGON (EMPTY,((0 0,1 0,1 1,0 1,0 0)),EMPTY,((20 10,21 10,21 11,20 11,20 10)),EMPTY)",
+            "POLYGON ((-170 -70,170 -70,170 70,-170 70,-170 -70))",
+            "POLYGON ((-135 80,-45 80,45 80,135 80,-135 80))",
+            "POLYGON ((179 -1,-179 -1,-179 1,179 1,179 -1))",
+            "POLYGON ((0 0,0.000000001 0,0.000000001 0.000000001,0 0.000000001,0 0))",
     };
-    for (const auto& test : cases) {
-        SCOPED_TRACE(test.wkt);
-        auto input = geography({test.wkt, nullptr, "POLYGON EMPTY"});
+    for (const auto* wkt : cases) {
+        SCOPED_TRACE(wkt);
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkt(wkt, &geometry, WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        auto input = geography({wkt, nullptr, "POLYGON EMPTY"});
         for (bool area : {true, false}) {
+            long double reference = 0;
+            if (geometry.type == WkbGeometryType::MULTIPOLYGON) {
+                for (const auto& child : geometry.children) {
+                    long double value = 0;
+                    ASSERT_EQ(GEO_PARSE_OK, reference_polygon(child, area, &value));
+                    reference += value;
+                }
+            } else {
+                ASSERT_EQ(GEO_PARSE_OK, reference_polygon(geometry, area, &reference));
+            }
+            const auto expected = std::bit_cast<uint64_t>(static_cast<double>(reference));
             const auto evaluate = [&](const ColumnPtr& column) {
                 return area ? GeoFunctions::st_geography_area(nullptr, {column})
                             : GeoFunctions::st_geography_perimeter(nullptr, {column});
@@ -2564,17 +2587,17 @@ TEST_F(geographyFunctionsTest, nativeGeographyMeasurementsRetainExactPolygonResu
             auto result = evaluate(input);
             ASSERT_TRUE(result.ok()) << result.status();
             ColumnViewer<TYPE_DOUBLE> values(*result);
-            EXPECT_EQ(area ? test.area : test.perimeter, std::bit_cast<uint64_t>(values.value(0)));
+            EXPECT_EQ(expected, std::bit_cast<uint64_t>(values.value(0)));
             EXPECT_TRUE(values.is_null(1));
             EXPECT_EQ(0, std::bit_cast<uint64_t>(values.value(2)));
 
-            auto constant = ConstColumn::create(geography({test.wkt}), 3);
+            auto constant = ConstColumn::create(geography({wkt}), 3);
             auto constant_result = evaluate(constant);
             ASSERT_TRUE(constant_result.ok()) << constant_result.status();
             EXPECT_TRUE((*constant_result)->is_constant());
             EXPECT_EQ(3, (*constant_result)->size());
             ColumnViewer<TYPE_DOUBLE> constant_values(*constant_result);
-            EXPECT_EQ(area ? test.area : test.perimeter, std::bit_cast<uint64_t>(constant_values.value(2)));
+            EXPECT_EQ(expected, std::bit_cast<uint64_t>(constant_values.value(2)));
             auto null_result = evaluate(ColumnHelper::create_const_null_column(3));
             ASSERT_TRUE(null_result.ok()) << null_result.status();
             EXPECT_TRUE((*null_result)->only_null());
