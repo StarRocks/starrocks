@@ -103,14 +103,14 @@ TEST_F(JVMMetricsTest, normal) {
         IntGauge* max;
         IntGauge* peak_max;
     };
-    for (const auto& pool : {PoolMaxGauges{"jvm_young_size_bytes", &jvm_metrics.jvm_young_max_bytes,
-                                           &jvm_metrics.jvm_young_peak_max_bytes},
-                             PoolMaxGauges{"jvm_old_size_bytes", &jvm_metrics.jvm_old_max_bytes,
-                                           &jvm_metrics.jvm_old_peak_max_bytes},
-                             PoolMaxGauges{"jvm_survivor_size_bytes", &jvm_metrics.jvm_survivor_max_bytes,
-                                           &jvm_metrics.jvm_survivor_peak_max_bytes},
-                             PoolMaxGauges{"jvm_perm_size_bytes", &jvm_metrics.jvm_perm_max_bytes,
-                                           &jvm_metrics.jvm_perm_peak_max_bytes}}) {
+    for (const auto& pool :
+         {PoolMaxGauges{"jvm_young_size_bytes", &jvm_metrics.jvm_young_max_bytes,
+                        &jvm_metrics.jvm_young_peak_max_bytes},
+          PoolMaxGauges{"jvm_old_size_bytes", &jvm_metrics.jvm_old_max_bytes, &jvm_metrics.jvm_old_peak_max_bytes},
+          PoolMaxGauges{"jvm_survivor_size_bytes", &jvm_metrics.jvm_survivor_max_bytes,
+                        &jvm_metrics.jvm_survivor_peak_max_bytes},
+          PoolMaxGauges{"jvm_perm_size_bytes", &jvm_metrics.jvm_perm_max_bytes,
+                        &jvm_metrics.jvm_perm_peak_max_bytes}}) {
         if (registry.get_metric(pool.metric_name, type_label("max")) != nullptr) {
             ASSERT_GE(pool.max->value(), 0) << pool.metric_name;
         }
