@@ -77,7 +77,7 @@ Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metri
     }
 
     if (std::getenv("JAVA_HOME") == nullptr) {
-        LOG(WARNING) << "JAVA_HOME is not set, skip installing jvm metrics";
+        LOG(INFO) << "JAVA_HOME is not set, skip installing jvm metrics";
         return Status::OK();
     }
 

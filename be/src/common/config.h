@@ -917,7 +917,9 @@ CONF_Bool(enable_stop_be_action, "true");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
-CONF_Bool(enable_jvm_metrics, "false");
+// Collect JVM memory metrics. No JVM is created for this: collection starts once a JVM exists
+// in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
+CONF_Bool(enable_jvm_metrics, "true");
 
 CONF_mBool(enable_prefetch, "true");
 
