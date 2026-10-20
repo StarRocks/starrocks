@@ -191,7 +191,9 @@ public:
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
+    // Re-derive the index cache capacity, the block cache capacity and the update/compaction state tracker
+    // limits from the current primary key mem tracker limit, after it changed.
+    void refresh_mem_limits();
 
     // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
     void refresh_preload_mem_limit();
