@@ -2643,7 +2643,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasColocateChild |= hasColocateScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChild(child);
             }
             return hasColocateChild;
         }
