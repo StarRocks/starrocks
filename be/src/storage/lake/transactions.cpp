@@ -181,9 +181,10 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
     return txn_logs_vector;
 }
 
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, InitialMetadataOrder base_version_order) {
+static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                                      int64_t base_version, int64_t new_version,
+                                                      std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
+                                                      InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -568,6 +569,20 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     delete_files_async(std::move(files_to_delete));
 
     return new_metadata;
+}
+
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata, InitialMetadataOrder base_version_order) {
+    auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
+                                  base_version_order);
+    // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
+    // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
+    // that the retry has memory to load into.
+    if (res.status().is_mem_limit_exceeded()) {
+        tablet_mgr->update_mgr()->evict_cache(config::primary_key_index_memory_middle_percent);
+    }
+    return res;
 }
 
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
