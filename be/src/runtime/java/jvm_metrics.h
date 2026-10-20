@@ -104,7 +104,9 @@ public:
 
 private:
     void _update_if_jvm_ready();
-    void _update_mem_tracker();
+    // collected: whether this round's collection succeeded. When it failed and tracking is on, the
+    // last charge is kept; when tracking is off, the charge is released either way.
+    void _update_mem_tracker(bool collected);
 
     std::mutex _init_lock;
     std::atomic<bool> _initialized{false};
