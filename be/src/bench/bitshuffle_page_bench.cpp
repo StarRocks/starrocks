@@ -93,8 +93,14 @@ std::vector<rowid_t> make_rowids(size_t selectivity_pct) {
     return all;
 }
 
+// column_mode:
+//   0: non-nullable destination column
+//   1: nullable destination column, null-free page (ParsedPageV2 passes outer NullableColumn* directly)
+//   2: nullable destination column, page with nullmap (ParsedPageV2 unwraps nc->data_column_raw_ptr() + null_flags)
 template <LogicalType Type>
-void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivity_pct) {
+void run_read_by_rowids(benchmark::State& state, int column_mode, size_t selectivity_pct) {
+    const bool nullable = (column_mode != 0);
+    const bool has_nullmap = (column_mode == 2);
     PageFixture<Type> page;
     if (Status st = page.init(); !st.ok()) {
         state.SkipWithError(st.to_string().c_str());
@@ -112,19 +118,25 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
             state.SkipWithError("reference decode failed");
             return;
         }
+        if (nullable) {
+            auto* nc_ref = down_cast<NullableColumn*>(ref.get());
+            if (has_nullmap) {
+                nc_ref->null_column_raw_ptr()->append_numbers(page.null_flags.data(), page.null_flags.size());
+                nc_ref->update_has_null();
+            } else {
+                nc_ref->null_column_data().resize(kPageRows, 0);
+            }
+        }
+
         auto out = ChunkFactory::column_from_field_type(Type, nullable);
         size_t count = rowids.size();
-        Column* target_out = nullable ? down_cast<NullableColumn*>(out.get())->data_column_raw_ptr() : out.get();
+        Column* target_out = has_nullmap ? down_cast<NullableColumn*>(out.get())->data_column_raw_ptr() : out.get();
         if (Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, target_out);
             !st.ok() || count != rowids.size() || target_out->size() != rowids.size()) {
             state.SkipWithError("read_by_rowids failed or returned a short count");
             return;
         }
-        if (nullable) {
-            auto* nc_ref = down_cast<NullableColumn*>(ref.get());
-            nc_ref->null_column_raw_ptr()->append_numbers(page.null_flags.data(), page.null_flags.size());
-            nc_ref->update_has_null();
-
+        if (has_nullmap) {
             std::vector<uint8_t> null_flags;
             null_flags.reserve(count);
             for (size_t i = 0; i < count; i++) {
@@ -149,7 +161,7 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
     for (auto _ : state) {
         column->resize(0);
         size_t count = rowids.size();
-        if (nullable) {
+        if (has_nullmap) {
             auto* nc = down_cast<NullableColumn*>(column.get());
             Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, nc->data_column_raw_ptr());
             std::vector<uint8_t> null_flags;
@@ -174,12 +186,12 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
 
 template <LogicalType Type>
 void register_type(const char* type_name) {
-    for (int nullable : {0, 1}) {
+    for (int column_mode : {0, 1, 2}) {
         for (int pct : {1, 10, 50}) {
             const std::string name = std::string("BM_BitShuffleReadByRowids/") + type_name + "/" +
-                                     std::to_string(nullable) + "/" + std::to_string(pct);
-            benchmark::RegisterBenchmark(name.c_str(), [nullable, pct](benchmark::State& state) {
-                run_read_by_rowids<Type>(state, nullable != 0, static_cast<size_t>(pct));
+                                     std::to_string(column_mode) + "/" + std::to_string(pct);
+            benchmark::RegisterBenchmark(name.c_str(), [column_mode, pct](benchmark::State& state) {
+                run_read_by_rowids<Type>(state, column_mode, static_cast<size_t>(pct));
             });
         }
     }
