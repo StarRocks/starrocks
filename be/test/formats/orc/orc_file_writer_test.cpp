@@ -254,16 +254,26 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
 
 // TINYINT min/max must be signed even where plain char is unsigned (aarch64).
 TEST_F(OrcFileWriterTest, TestWriteTinyintStatistics) {
-    std::vector<TypeDescriptor> type_descs{TYPE_TINYINT_DESC};
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_TINYINT)};
     auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
-    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(_orc_stream), column_names, type_descs,
-                                                           std::move(column_evaluators),
-                                                           TCompressionType::NO_COMPRESSION, _write_options, []() {});
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnTestHelper::build_column<int8_t>({5, -1, INT8_MIN, -99}), 0);
+    {
+        auto col0 = ColumnHelper::create_column(type_descs[0], false);
+        std::vector<int8_t> int8_nums{5, -1, INT8_MIN, -99};
+        auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
+        ASSERT_EQ(4, count);
+        chunk->append_column(std::move(col0), chunk->num_columns());
+    }
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
 
