@@ -48,3 +48,40 @@ SHOW CREATE ROUTINE LOAD testherbavro;
 STOP ROUTINE LOAD for testherbavro;
 -- result:
 -- !result
+-- name: test_show_create_routine_load_without_partitions
+create database test_show_create_routine_load_no_parts;
+-- result:
+-- !result
+use test_show_create_routine_load_no_parts;
+-- result:
+-- !result
+create table no_parts_tbl (k int, v bigint)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+CREATE ROUTINE LOAD test_show_create_routine_load_no_parts.no_parts_job on no_parts_tbl
+PROPERTIES (
+"desired_concurrent_number"="1",
+"format"="json")
+FROM KAFKA (
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="herb-avro"
+);
+-- result:
+-- !result
+SHOW CREATE ROUTINE LOAD no_parts_job;
+-- result:
+[REGEX](?s)no_parts_job\tCREATE ROUTINE LOAD test_show_create_routine_load_no_parts\.no_parts_job on no_parts_tbl
+PROPERTIES
+\(.*\)
+FROM KAFKA
+\(
+"kafka_broker_list"="172\.26\.194\.239:9092",
+"kafka_topic"="herb-avro"
+\);
+-- !result
+STOP ROUTINE LOAD for no_parts_job;
+-- result:
+-- !result
