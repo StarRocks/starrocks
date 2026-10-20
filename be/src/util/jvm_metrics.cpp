@@ -16,9 +16,11 @@
 
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
+#include "runtime/mem_tracker.h"
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
@@ -139,6 +141,34 @@ void JVMMetrics::_update_if_jvm_ready() {
     if (!status.ok()) {
         LOG(WARNING) << "update jvm metrics failed: " << status.to_string();
     }
+    // Run even when the collection failed, so that turning enable_jvm_memory_tracker off still
+    // releases the charge while the JVM keeps failing to report, e.g. on a Java OutOfMemoryError.
+    _update_mem_tracker(status.ok());
+}
+
+void JVMMetrics::set_mem_tracker(MemTracker* mem_tracker) {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    _mem_tracker = mem_tracker;
+}
+
+void JVMMetrics::_update_mem_tracker(bool collected) {
+    std::lock_guard<std::mutex> l(_mem_tracker_lock);
+    if (_mem_tracker == nullptr) {
+        return;
+    }
+    int64_t tracked = 0;
+    if (config::enable_jvm_memory_tracker) {
+        if (!collected) {
+            // Keep the last charge: the JVM still holds that memory, and after a partial failure
+            // the gauges mix values from different rounds.
+            return;
+        }
+        // Committed rather than used: the JVM keeps committed memory after a GC frees objects in
+        // it, and that memory is not available to the rest of BE.
+        tracked = jvm_heap_committed_bytes.value() + jvm_non_heap_committed_bytes.value();
+    }
+    // enable_jvm_memory_tracker is mutable; when it is off, release whatever was tracked before.
+    _mem_tracker->consume(tracked - _mem_tracker->consumption());
 }
 
 void JVMMetrics::install(MetricRegistry* registry) {

@@ -125,10 +125,7 @@ public:
     ~GlobalEnv() { _is_init = false; }
 
     Status init();
-    void stop() {
-        _is_init = false;
-        _reset_tracker();
-    }
+    void stop();
 
     static bool is_init();
 
@@ -167,6 +164,7 @@ public:
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* jvm_mem_tracker() { return _jvm_mem_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
@@ -187,6 +185,8 @@ private:
 
     // Track usage of jemalloc
     std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
+    // JVM heap and non-heap committed memory
+    std::shared_ptr<MemTracker> _jvm_mem_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
