@@ -448,7 +448,8 @@ public class ExpressionStatisticCalculator {
             final var resultBuilder = ColumnStatistic.builder()
                     .setMinValue(0)
                     .setMaxValue(1)
-                    .setDistinctValuesCount(2);
+                    .setDistinctValuesCount(2)
+                    .setAverageRowSize(operator.getType().getTypeSize());
 
             final boolean matchListContainsNull = constantOperatorMatchList.stream().anyMatch(ConstantOperator::isNull);
             if (matchListContainsNull) {
@@ -472,8 +473,9 @@ public class ExpressionStatisticCalculator {
             }
 
             final var inputNullsFraction = inputColumnStatistics.getNullsFraction();
-            resultBuilder.setNullsFraction(inputNullsFraction);
-
+            if (!matchListContainsNull) {
+                resultBuilder.setNullsFraction(inputNullsFraction);
+            }
             if (inputColumnStatistics.getHistogram() == null) {
                 return resultBuilder.build();
             }
@@ -502,9 +504,10 @@ public class ExpressionStatisticCalculator {
             final double histogramTotalRows = Math.max(1.0, (double) inputColumnStatistics.getHistogram().getTotalRows());
 
             final double knownNonMatchingFraction = Math.clamp((double) foundFalseMcvRows / histogramTotalRows, 0.0, 1.0);
+            final double foundMcvRowsFraction = Math.clamp((double) foundMCVRowsSum / histogramTotalRows, 0.0, 1.0);
             // histogramTotalRows >=1 so we don't run into divByZero; foundMCVRowsSum <= histogramTotalRows,
             // so 0<= nonMatchingFraction <=1
-            double nonMatchingFraction = Math.clamp((1.0 - ((double) foundMCVRowsSum / histogramTotalRows)), 0.0, 1.0);
+            double nonMatchingFraction = Math.clamp(1.0 - foundMcvRowsFraction, 0.0, 1.0);
             final double clampedNumDistinctValues = 
                     !Double.isNaN(inputColumnStatistics.getDistinctValuesCount())
                     ? Math.max(1, inputColumnStatistics.getDistinctValuesCount() 
@@ -516,9 +519,9 @@ public class ExpressionStatisticCalculator {
 
             final double notFoundMatchListRowFractionEstimation = Math.clamp(uniformDistributionFractionPerNonMatching * 
                     notFoundMatchListValues, 0.0, 1.0);
-            nonMatchingFraction -= notFoundMatchListRowFractionEstimation;
-            final long estimatedMatchedValues = foundMCVRowsSum + 
-                    Math.round(notFoundMatchListRowFractionEstimation * rowCount);
+            nonMatchingFraction = Math.clamp(nonMatchingFraction - notFoundMatchListRowFractionEstimation, 0.0, 1.0);
+            final long estimatedMatchedValues =
+                    Math.round((notFoundMatchListRowFractionEstimation + foundMcvRowsFraction) * rowCount);
             if (matchListContainsNull) {
                 // Anything that does not match becomes NULL
                 final double nullsFraction = (1 - inputNullsFraction) * nonMatchingFraction + inputNullsFraction;
