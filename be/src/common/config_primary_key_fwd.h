@@ -156,7 +156,7 @@ CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 
 CONF_mBool(enable_primary_key_recover, "false");
 
-// Used for control memory usage of update state cache and compaction state cache
+// Used for control memory usage of update state cache and compaction state cache in shared-data mode
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
