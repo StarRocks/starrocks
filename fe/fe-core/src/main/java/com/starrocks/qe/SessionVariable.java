@@ -3844,6 +3844,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadMemLimit;
     }
 
+    public long getQueryMemLimit() {
+        return queryMemLimit;
+    }
+
     public int getQueryTimeoutS() {
         return queryTimeoutS;
     }
