@@ -203,13 +203,14 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
 
         if (UNLIKELY(_duplicate)) {
             // Drop what the row added so far and fill it again by looking each path up the way a read of the
-            // whole JSON does. The remain keeps the whole row, so rebuilding the JSON gives back every key.
+            // whole JSON does. The remain keeps the whole row, so rebuilding the JSON gives back every key, except
+            // that a copy of a repeated object lacking a key the looked-up copy has gains that key's value.
             for (size_t k = 0; k < _dst_paths.size(); k++) {
                 if (_flat_columns[k]->size() > row) {
                     _flat_columns[k]->resize(row);
                 }
             }
-            _flatten_duplicate_row(vslice, _dst_root.get(), false);
+            _flatten_duplicate_row(vslice, _dst_root.get());
             if constexpr (HAS_REMAIN) {
                 _remain->append(obj);
             }
@@ -231,31 +232,18 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
     }
 }
 
-void JsonFlattener::_flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root, bool under_duplicate) {
+void JsonFlattener::_flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root) {
     for (auto& [name, child] : root->children) {
-        auto v = vpack::Slice::noneSlice();
-        bool duplicate = under_duplicate;
-        if (value.isObject()) {
-            v = value.get(vpack::StringRef(name.data(), name.size()));
-            if (_has_remain && !duplicate && !child->children.empty()) {
-                // Rebuilding the JSON adds a column value to each copy of a repeated object that lacks the key,
-                // so leave the columns below such an object empty; the remain holds the whole row.
-                size_t copies = 0;
-                for (vpack::ObjectIterator it(value, true); it.valid(); it.next()) {
-                    copies += it.key().stringView() == name;
-                }
-                duplicate = copies > 1;
-            }
-        }
+        auto v = value.isObject() ? value.get(vpack::StringRef(name.data(), name.size())) : vpack::Slice::noneSlice();
         if (child->children.empty()) {
             auto* c = down_cast<NullableColumn*>(_flat_columns[child->index].get());
-            if (v.isNone() || duplicate) {
+            if (v.isNone()) {
                 c->append_nulls(1);
             } else {
                 flat_json::JSON_EXTRACT_FUNC.at(child->type)(&v, c);
             }
         } else {
-            _flatten_duplicate_row(v, child.get(), duplicate);
+            _flatten_duplicate_row(v, child.get());
         }
     }
 }

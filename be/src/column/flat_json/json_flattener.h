@@ -50,7 +50,7 @@ private:
                        uint32_t* hit_count);
 
     // Fill one row that repeats a key of the layout, see _flatten().
-    void _flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root, bool under_duplicate);
+    void _flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root);
 
 private:
     bool _has_remain = false;

@@ -30,6 +30,17 @@
 
 namespace starrocks {
 
+namespace {
+// Whether `key` occurs more than once in the object `obj`; stored JSON keeps repeated keys.
+bool is_repeated_key(const vpack::Slice& obj, std::string_view key) {
+    size_t copies = 0;
+    for (vpack::ObjectIterator it(obj, true); it.valid() && copies < 2; it.next()) {
+        copies += it.key().stringView() == key;
+    }
+    return copies > 1;
+}
+} // namespace
+
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
         : _src_paths(paths), _has_remain(has_remain) {
     _src_root = std::make_shared<JsonFlatPath>();
@@ -178,6 +189,12 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         }
         auto* child = iter->second.get();
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
+            // An excluded path moves to a sub-column, which holds a single value (JsonFlattener takes the one a
+            // read of the whole JSON finds). Keep every copy of a repeated key here instead, so rebuilding the
+            // JSON, which prefers the remain, still gives back each of them.
+            if (is_repeated_key(*remain, k)) {
+                builder->addUnchecked(k.data(), k.size(), v);
+            }
             continue;
         }
         if (v.isObject()) {
