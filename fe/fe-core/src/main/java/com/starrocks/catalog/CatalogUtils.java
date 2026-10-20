@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
@@ -500,9 +501,14 @@ public class CatalogUtils {
 
     private static int backendNumForBucketSizing(OlapTable olapTable, short replicationNum) {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
+        Multimap<String, String> location = olapTable.getLocation();
+        // No location constraint → size against the whole cluster.
+        if (location == null || location.isEmpty()) {
+            return clusterInfo.getTotalBackendNumber();
+        }
+        int backendNum = clusterInfo.getLocationMatchedBackendIds(location).size();
         boolean enoughMatchedBackends = GlobalStateMgr.getCurrentState().getTabletChecker()
-                .preCheckEnoughLocationMatchedBackends(olapTable.getLocation(), replicationNum);
+                .preCheckEnoughLocationMatchedBackends(location, replicationNum);
         if (backendNum == 0 || !enoughMatchedBackends) {
             backendNum = clusterInfo.getTotalBackendNumber();
         }

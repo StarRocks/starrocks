@@ -34,6 +34,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -1041,13 +1042,16 @@ public class SystemInfoService implements GsonPostProcessable {
         return resultBackends;
     }
 
-    public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-        if (locationLabel == null || locationLabel.isEmpty()) {
-            return getBackendIds();
-        }
-
+    /**
+     * Returns backend ids whose location matches {@code location}.
+     * Callers with a null/empty location should use {@link #getBackendIds()} / {@link #getTotalBackendNumber()}
+     * instead — matching against an empty requirement is undefined for unlabelled BEs.
+     */
+    public List<Long> getLocationMatchedBackendIds(Multimap<String, String> location) {
+        Preconditions.checkArgument(location != null && !location.isEmpty(),
+                "location must be non-null and non-empty");
         return idToBackendRef.values().stream()
-                .filter(backend -> TabletChecker.isLocationMatch(locationLabel, backend.getSingleLevelLocationKV()))
+                .filter(backend -> TabletChecker.isLocationMatch(location, backend.getSingleLevelLocationKV()))
                 .map(Backend::getId)
                 .toList();
     }

@@ -814,7 +814,7 @@ public class SystemInfoServiceTest {
     }
 
     @Test
-    public void testLabelledBackendsIds() {
+    public void testLocationMatchedBackendIds() {
         Backend be1 = new Backend(100, "originalHost", 1000);
         be1.setLocation(Map.of("rack", "data_1"));
 
@@ -825,8 +825,10 @@ public class SystemInfoServiceTest {
         service.addBackend(be2);
         Multimap<String, String> label = HashMultimap.create();
         label.put("rack", "data_1");
-        Assertions.assertEquals(1, service.getLabelledBackendsIds(label).size());
-        Assertions.assertEquals(2, service.getLabelledBackendsIds(HashMultimap.create()).size());
-        Assertions.assertEquals(2, service.getLabelledBackendsIds(null).size());
+        Assertions.assertEquals(1, service.getLocationMatchedBackendIds(label).size());
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(HashMultimap.create()));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.getLocationMatchedBackendIds(null));
     }
 }

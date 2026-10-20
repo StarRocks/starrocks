@@ -84,8 +84,8 @@ public class CatalogUtilsTest extends StarRocksTestBase {
 
         new MockUp<SystemInfoService>() {
             @mockit.Mock
-            public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-                return LongStream.rangeClosed(1, 3).boxed().toList();
+            public int getTotalBackendNumber() {
+                return 3;
             }
         };
 
@@ -128,11 +128,6 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Keep backend-based estimate at 0 so the data-size path determines the result.
         new MockUp<SystemInfoService>() {
             @mockit.Mock
-            public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-                return new ArrayList<>();
-            }
-
-            @mockit.Mock
             public int getTotalBackendNumber() {
                 return 0;
             }
@@ -153,15 +148,12 @@ public class CatalogUtilsTest extends StarRocksTestBase {
 
         new MockUp<SystemInfoService>() {
             @mockit.Mock
-            public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-                if (locationLabel != null && locationLabel.containsEntry("rack", "r1")) {
+            public List<Long> getLocationMatchedBackendIds(Multimap<String, String> location) {
+                if (location.containsEntry("rack", "r1")) {
                     return LongStream.rangeClosed(1, 6).boxed().toList();
                 }
                 // no matching BEs for other labels
-                if (locationLabel != null && !locationLabel.isEmpty()) {
-                    return new ArrayList<>();
-                }
-                return LongStream.rangeClosed(1, 30).boxed().toList();
+                return new ArrayList<>();
             }
 
             @mockit.Mock
@@ -209,7 +201,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         assertEquals(CatalogUtils.divisibleBucketNum(30),
                 CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
 
-        // null / empty location uses all BEs via getLabelledBackendsIds (30) -> 36
+        // null / empty location short-circuits to total BE count (30) -> 36
         when(olapTable.getLocation()).thenReturn(null);
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),
