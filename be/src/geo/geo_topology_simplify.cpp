@@ -15,7 +15,9 @@
 #include "geo/geo_topology_simplify.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <set>
@@ -214,18 +216,148 @@ struct Index {
         }
         budget.check();
     }
+    static constexpr size_t none = std::numeric_limits<size_t>::max();
+    struct Links {
+        size_t previous;
+        size_t next;
+    };
+    std::vector<Links> links;
+    std::vector<size_t> offsets, outgoing, first, last;
+    std::vector<Item> items;
+
+    size_t first_edge() const { return edges.empty() ? none : 0; }
+    size_t next_edge(size_t id) const {
+        return links.empty() ? (id + 1 < edges.size() ? id + 1 : none) : links[id].next;
+    }
+    void initialize_updates(const std::vector<Path>& paths) {
+        size_t vertices = 0;
+        for (const auto& path : paths) vertices += path.points.size();
+        offsets.resize(paths.size() + 1, 0);
+        for (size_t i = 0; i < paths.size(); ++i) offsets[i + 1] = offsets[i] + paths[i].points.size();
+        outgoing.assign(vertices, none);
+        first.assign(paths.size(), none);
+        last.assign(paths.size(), none);
+        links.resize(edges.size());
+        items.resize(edges.size());
+        for (size_t id = 0; id < edges.size(); ++id) {
+            const auto& edge = edges[id];
+            links[id] = {id == 0 ? none : id - 1, id + 1 < edges.size() ? id + 1 : none};
+            outgoing[offsets[edge.path] + edge.a] = id;
+            if (first[edge.path] == none) first[edge.path] = id;
+            last[edge.path] = id;
+        }
+        for (const auto& item : tree) items[item.second] = item;
+    }
+    void replace(size_t path, uint32_t a, uint32_t b, uint32_t c, const std::vector<Path>& paths, Budget& budget) {
+        budget.check();
+        const bool first_update = links.empty();
+        if (first_update) {
+            // Before the lazy tables exist, use rebuild's rule for skipped zero-length edges.
+            const auto& raw = *paths[path].raw;
+            const size_t removed = (raw[a] != raw[b]) + (raw[b] != raw[c]);
+            budget.charge(tree.size() - removed + 1);
+            initialize_updates(paths);
+        }
+        const size_t left = outgoing[offsets[path] + a], right = outgoing[offsets[path] + b];
+        const size_t id = left != none ? left : right;
+        if (!first_update) {
+            const size_t removed = (left != none) + (right != none);
+            budget.charge(std::min(removed + 1, tree.size() - removed + 1));
+        }
+        // Use the saved value before changing endpoints; equal boxes still have distinct IDs.
+        for (size_t old : {left, right}) {
+            if (old == none) continue;
+            [[maybe_unused]] const auto removed = tree.remove(items[old]);
+            assert(removed == 1);
+        }
+        if (left != none && right != none) {
+            assert(links[left].next == right);
+            const size_t next = links[right].next;
+            links[left].next = next;
+            if (next != none) links[next].previous = left;
+            links[right] = {none, none};
+            if (last[path] == right) last[path] = left;
+            --counts[path];
+        }
+        edges[id].a = a;
+        edges[id].b = c;
+        outgoing[offsets[path] + a] = id;
+        outgoing[offsets[path] + b] = none;
+        items[id] = {bounds((*paths[path].raw)[a], (*paths[path].raw)[c]), id};
+        tree.insert(items[id]);
+        budget.check();
+    }
     std::vector<Item> query(const Box& box, Budget& budget) const {
-        // Charge a conservative leaf-scan bound, including an empty result.
-        budget.charge(edges.size());
+        // Charge live leaves, including an empty result, rather than inactive slots.
+        budget.charge(tree.size());
         std::vector<Item> result;
         tree.query(bgi::intersects(box), std::back_inserter(result));
         return result;
     }
     bool adjacent(const Edge& a, const Edge& b, const std::vector<Path>& paths) const {
         if (a.path != b.path) return false;
-        const auto lo = std::min(a.order, b.order), hi = std::max(a.order, b.order);
-        return hi == lo + 1 || (paths[a.path].closed && lo == 0 && hi + 1 == counts[a.path]);
+        if (links.empty()) {
+            const auto lo = std::min(a.order, b.order), hi = std::max(a.order, b.order);
+            return hi == lo + 1 || (paths[a.path].closed && lo == 0 && hi + 1 == counts[a.path]);
+        }
+        const size_t x = outgoing[offsets[a.path] + a.a], y = outgoing[offsets[b.path] + b.a];
+        return links[x].next == y || links[y].next == x ||
+               (paths[a.path].closed &&
+                ((x == first[a.path] && y == last[a.path]) || (y == first[a.path] && x == last[a.path])));
     }
+#if defined(BE_TEST) && !defined(NDEBUG)
+    void check_rebuild(const std::vector<Path>& paths, const Retained& retained) const {
+        // Keep exhaustive diagnostic rebuilding out of large tests and all production builds.
+        constexpr size_t kDebugMaxLiveEdges = 512;
+        if (tree.size() > kDebugMaxLiveEdges) return;
+        const std::function<Status()> checkpoint;
+        Budget diagnostic(std::numeric_limits<size_t>::max(), checkpoint);
+        Index reference;
+        reference.rebuild(paths, retained, diagnostic);
+        assert(counts == reference.counts && tree.size() == reference.tree.size());
+        std::vector<size_t> ids, rank(edges.size(), none);
+        for (size_t id = first_edge(); id != none; id = next_edge(id)) {
+            const size_t i = ids.size();
+            assert(i < reference.edges.size());
+            const auto& a = edges[id];
+            const auto& b = reference.edges[i];
+            assert(a.path == b.path && a.a == b.a && a.b == b.b);
+            assert(outgoing[offsets[a.path] + a.a] == id);
+            rank[id] = i;
+            ids.push_back(id);
+        }
+        assert(ids.size() == tree.size());
+        for (size_t i = 0; i < ids.size(); ++i) {
+            const auto id = ids[i], path = edges[id].path;
+            assert(links[id].previous == (i == 0 ? none : ids[i - 1]));
+            assert(links[id].next == (i + 1 == ids.size() ? none : ids[i + 1]));
+            if (reference.edges[i].order == 0) assert(first[path] == id);
+            if (reference.edges[i].order + 1 == counts[path]) assert(last[path] == id);
+        }
+        std::vector<bool> seen(edges.size(), false);
+        for (const auto& item : tree) {
+            const size_t id = item.second;
+            assert(id < edges.size() && rank[id] != none && !seen[id]);
+            seen[id] = true;
+            const auto s = segment(edges[id], paths);
+            assert(bg::equals(item.first, bounds(s.raw_a, s.raw_b)));
+            assert(bg::equals(item.first, items[id].first));
+        }
+        for (size_t path = 0; path < paths.size(); ++path) {
+            for (size_t v = offsets[path]; v < offsets[path + 1]; ++v) {
+                const auto id = outgoing[v];
+                assert(id == none || (rank[id] != none && edges[id].path == path && edges[id].a == v - offsets[path]));
+            }
+        }
+        // Equal predecessor/successor/wrap sets above prove all pairs; exhaust small cases too.
+        if (ids.size() <= 64) {
+            for (size_t i = 0; i < ids.size(); ++i)
+                for (size_t j = 0; j < ids.size(); ++j)
+                    assert(adjacent(edges[ids[i]], edges[ids[j]], paths) ==
+                           reference.adjacent(reference.edges[i], reference.edges[j], paths));
+        }
+    }
+#endif
 };
 
 // A midpoint is represented doubled, so even subnormal input edges get an
@@ -319,7 +451,7 @@ void validate_paths(const std::vector<Path>& paths, const Retained& kept, const 
             throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology LINESTRING is degenerate")};
         }
     }
-    for (size_t i = 0; i < index.edges.size(); ++i) {
+    for (size_t i = index.first_edge(); i != Index::none; i = index.next_edge(i)) {
         const auto& a = index.edges[i];
         auto sa = segment(a, paths);
         for (const auto& item : index.query(bounds(sa.raw_a, sa.raw_b), budget)) {
@@ -656,9 +788,13 @@ StatusOr<std::string> PreparedGeoTopologySimplify::simplify(double tolerance,
                 for (size_t j = 1; j + 1 < retained[i].size();) {
                     budget.charge();
                     if (path.closed && retained[i].size() <= 4) break;
+                    const auto a = retained[i][j - 1], b = retained[i][j], c = retained[i][j + 1];
                     if (removable(_impl->paths, index, retained, areas, i, j, tolerance2, distance_shift, budget)) {
                         changed = true;
-                        index.rebuild(_impl->paths, retained, budget);
+                        index.replace(i, a, b, c, _impl->paths, budget);
+#if defined(BE_TEST) && !defined(NDEBUG)
+                        index.check_rebuild(_impl->paths, retained);
+#endif
                     } else {
                         ++j;
                     }
