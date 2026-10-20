@@ -74,7 +74,7 @@ You can set the thresholds that trigger query queues via the following global se
 
 :::note
 
-- After Query Queue v2 is enabled, `query_queue_mem_used_pct_limit` and `query_queue_cpu_used_permille_limit` are no longer supported for queue triggering.
+- After Query Queue v2 is enabled, `query_queue_cpu_used_permille_limit` is no longer supported for queue triggering, and `query_queue_mem_used_pct_limit` still applies. See [Memory admission](#memory-admission).
 - By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
 
 :::
@@ -142,11 +142,12 @@ Query Queue v2 is enabled and tuned through FE configuration items. Changes to `
 | `query_queue_v2_schedule_strategy` | `SWRR` | The scheduling policy used by Query Queue V2 to order pending queries. Supported values (case-insensitive) are `SWRR` (Smooth Weighted Round Robin) — the default, suitable for mixed/hybrid workloads that need fair weighted sharing — and `SJF` (Short Job First + Aging) — prioritizes short jobs while using aging to avoid starvation. The value is parsed with case-insensitive enum lookup; an unrecognized value is logged as an error and the default policy is used. This configuration only affects behavior when Query Queue V2 is enabled and interacts with V2 sizing settings such as `query_queue_v2_concurrency_level`. |
 | `query_queue_v2_mem_bytes_per_slot` | `0` | Per-slot memory target used by the memory-cost-based estimator (MBE). When `query_queue_slots_estimator_strategy` is `MBE`, the total slots are derived from the warehouse memory budget, and a query's slots are estimated from its total memory cost divided by this value, capped by `number_of_workers * max(1, pipeline_dop / 2)`. If it is non-positive, Query Queue V2 uses the average worker memory per core. |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | Per-slot CPU cost threshold used by the CPU-cost-based estimator (CBE) to estimate how many slots a query needs from its plan CPU cost. The scheduler computes slots as `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` and clamps the result to the range `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]`. A non-positive value is normalized to `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. |
+| `query_queue_mem_used_pct_limit` | `0` | A global session variable. The memory usage limit of a node, as a fraction of the memory limit of the node. While the process memory usage of any alive node reaches this value, new queries wait in the queue. Range: [0, 1]. `0` means no memory gating. See [Memory admission](#memory-admission). |
 | query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
 
 :::note
 
-`query_queue_mem_used_pct_limit` and `query_queue_cpu_used_permille_limit` apply only to Query Queue v1. After Query Queue v2 is enabled, these parameters no longer take effect.
+`query_queue_cpu_used_permille_limit` applies only to Query Queue v1. For how Query Queue v2 applies `query_queue_mem_used_pct_limit`, see [Memory admission](#memory-admission).
 
 :::
 
@@ -161,7 +162,7 @@ Query Queue v2 represents BE resources as logical slots:
 
 When the number of slots required by a query exceeds the current number of remaining slots, the query waits in the queue. Query Queue v2 preferentially satisfies queries that require fewer slots, allowing small queries to obtain resources first and avoiding head-of-line blocking where a large query at the head of the queue blocks later small queries.
 
-The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Query Queue v2 does not schedule based on the actual resource usage of BEs.
+The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Slot scheduling does not depend on the actual resource usage of BEs. The only input taken from actual usage is the optional memory usage limit `query_queue_mem_used_pct_limit`, which makes new queries wait while a node uses too much memory. See [Memory admission](#memory-admission).
 
 ### Choose an estimation strategy
 
@@ -266,6 +267,71 @@ ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
 
 Use `query_queue_v2_concurrency_level` to tune resource capacity first. Use `query_queue_concurrency_limit` only when you need to explicitly limit the number of queries run at the same time.
+
+### Memory admission
+
+Slots do not measure the memory that queries use. Memory admission controls memory with two settings:
+
+- `query_queue_mem_used_pct_limit`: the memory usage limit of a node. While the process memory usage of any alive node reaches this fraction of the node's memory limit, new queries wait in the queue. It is the same global session variable that Query Queue v1 uses.
+- `query_mem_limit`: the existing session variable that sets the memory limit of a query on each BE node.
+
+`query_queue_mem_used_pct_limit` defaults to `0`, which means that no query waits because of memory. Set it with `SET GLOBAL`.
+
+#### Memory usage limit
+
+`query_queue_mem_used_pct_limit` is a fraction in [0, 1], such as `0.8` for 80%. It is compared with the memory usage of each node: the process memory that the node uses, divided by the memory limit of the node. The process memory includes not only queries but also loads, compaction, metadata, and the in-memory data cache. A query fails when either its query pool or the BE process runs out of memory, so comparing the process memory keeps a buffer against both limits, and new queries wait before a node runs out of memory.
+
+The memory usage limit works as follows:
+
+- Each BE and CN node reports its memory usage every second, as set by the BE configuration item `report_resource_usage_interval_ms`. Only the leader FE receives these reports, and the leader FE makes the admission decisions.
+- While the memory usage of any alive node is at or above the limit, new queries wait in the queue. Running queries are not affected. Once every node is below the limit, the queued queries are admitted again. The decision is binary: there is no gradual throttling between the two states.
+- The memory usage limit is checked together with the slot pool and `query_queue_concurrency_limit`. A query is admitted only when all three allow it.
+- When no query that was admitted by the queue is running, one query is still admitted even if a node is over the limit. The memory may be held by loads, caches, or queries that bypass the queue, and keeping queued queries waiting cannot release it.
+- A node whose latest report is older than the global variable `query_queue_fresh_resource_usage_interval_ms` (`5000` milliseconds by default) does not take part in the decision, so that a node that stops reporting cannot keep new queries waiting. A node that is not alive does not take part either.
+- The memory usage limit does not read or depend on resource groups.
+
+Memory admission is part of the admission decision of Query Queue v2, so it applies only to queries that go through the query queue. The nodes are all BE and CN nodes of the cluster in a shared-nothing cluster, and all CN nodes of the cluster in a shared-data cluster.
+
+#### Choose a limit
+
+A large part of the process memory is usually the in-memory data cache, which holds the decompressed pages that queries read from segment files. Its size is limited by the BE configuration item `datacache_mem_size` (`20%` of the process memory limit by default), and it grows as queries read data. BE gives this memory back when the process memory is high: above the BE configuration item `memory_high_level` (`75` percent of the process memory limit by default), BE evicts the cache gradually, and above `memory_urgent_level` (`85` by default), BE shrinks the cache immediately.
+
+We recommend a limit between `0.75` and `0.85`:
+
+- Within this range, when queries need more memory, the cache gives memory back as the process memory usage rises above 75%, and new queries wait only until the cache has shrunk.
+- Below `0.75`, BE does not release the cache, so a node with a large cache can keep new queries waiting. The cluster then admits one query at a time, when nothing is running.
+- A lower limit leaves more room for the queries that are already running to grow. On a node that holds little besides queries, the room left before the query pool limit (90% of the process memory limit by default, as set by the BE configuration item `query_max_memory_limit_percent`) is 0.9 minus the limit.
+
+#### Per-query memory limit on each node
+
+The session variable `query_mem_limit` sets the memory limit of a query on each BE node, in bytes. The default value `0` means no limit. To set it for the current session, run `SET query_mem_limit = <bytes>;`. To set it for all future sessions, run `SET GLOBAL query_mem_limit = <bytes>;`. For more information, see [query_mem_limit](../../../sql-reference/System_variable.md#query_mem_limit).
+
+On each node, BE applies the smallest of `query_mem_limit`, the resource group property `big_query_mem_limit`, and the limits of the parent memory trackers. When a query exceeds `query_mem_limit`, the error message contains `Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.`
+
+#### Configure memory admission
+
+The following example sets the memory usage limit:
+
+```SQL
+SET GLOBAL query_queue_mem_used_pct_limit = 0.8;
+```
+
+The following example limits each query to 8 GB of memory on each BE node in all future sessions:
+
+```SQL
+SET GLOBAL query_mem_limit = 8589934592;
+```
+
+Whenever you set `query_queue_mem_used_pct_limit`, also set `query_mem_limit`. See [Limitations](#limitations) for the reason.
+
+#### Monitor memory admission
+
+To see the memory usage that is compared with the limit, run [SHOW BACKENDS](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md) in a shared-nothing cluster or [SHOW COMPUTE NODES](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_COMPUTE_NODES.md) in a shared-data cluster. The `MemUsedPct` column is the memory usage of each node, as a percentage of its memory limit. Only the leader FE receives the memory usage that the nodes report, so run the statement on the leader FE.
+
+#### Limitations
+
+- Admission reserves no memory. A newly admitted query adds to the usage only after it allocates memory and the next report arrives, so the queries admitted in one batch can together overshoot the limit. The slot pool and `query_queue_concurrency_limit` bound how many queries a batch admits, but only `query_mem_limit` bounds how much memory each of them can use on a node. This is why the FE log records a warning, once for each limit value, when the memory usage limit is set but the global default of `query_mem_limit` is `0`.
+- One node at or above the limit makes all new queries wait, even if the other nodes have free memory, because queries usually run on all nodes.
 
 ## Monitor query queues
 
