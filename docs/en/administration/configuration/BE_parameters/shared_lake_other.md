@@ -237,11 +237,11 @@ This topic introduces the following types of BE configurations:
 
 ### primary_key_index_memory_high_percent
 
-- Default: 85
+- Default: 75
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). A background thread checks the cache periodically. When the cache holds more than this percentage, it evicts the least recently used primary key indexes that are not in use until the cache is within this percentage. Indexes in use are never evicted.
+- Description: The level to which a background thread periodically shrinks the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). When the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. Indexes in use are never evicted. Set it to a value lower than `primary_key_index_memory_urgent_percent`.
 - Introduced in: -
 
 ### primary_key_index_memory_middle_percent
@@ -251,6 +251,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The level, expressed as a percentage of the cache capacity, to which the primary key index cache is shrunk when a publish of a Primary Key table in a shared-data cluster fails because it exceeds the memory limit. The primary key indexes that are not in use are evicted until the cache is within this percentage, which frees memory for the retried publish. Set it to a value lower than `primary_key_index_memory_high_percent`.
+- Introduced in: -
+
+### primary_key_index_memory_urgent_percent
+
+- Default: 85
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. It is checked after every publish that does not fail because it exceeds the memory limit: when the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. It is a backstop for when the cache grows faster than the background thread brings it down to `primary_key_index_memory_high_percent`, so set it to a value higher than that item.
 - Introduced in: -
 
 ### starlet_filesystem_instance_cache_capacity
