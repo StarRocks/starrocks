@@ -121,7 +121,8 @@ enum class MemTrackerType {
     DEL_VEC_CACHE,
     COMPACTION_STATE,
     BUILTIN_INVERTED_INDEX,
-    VECTOR_INDEX
+    VECTOR_INDEX,
+    JVM
 };
 
 class MemTracker {

@@ -921,6 +921,11 @@ CONF_Bool(enable_system_metrics, "true");
 // in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
 CONF_Bool(enable_jvm_metrics, "true");
 
+// Count the committed JVM heap and non-heap memory in the "jvm" memory tracker under the process
+// tracker, so the BE memory limit includes it. Updated by the JVM metrics hook, so it needs
+// enable_jvm_metrics. When turned off, the next round releases the tracked memory.
+CONF_mBool(enable_jvm_memory_tracker, "true");
+
 CONF_mBool(enable_prefetch, "true");
 
 // Number of cores StarRocks will used, this will effect only when it's greater than 0.

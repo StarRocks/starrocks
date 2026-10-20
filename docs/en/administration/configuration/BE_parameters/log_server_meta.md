@@ -384,13 +384,22 @@ This topic introduces the following types of BE configurations:
 - Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the RuntimeEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
 - Introduced in: v3.2.12
 
+### enable_jvm_memory_tracker
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to count the memory used by the JVM toward the BE memory limit (`mem_limit`). The JVM maps its heap and non-heap memory (such as Metaspace and the code cache) itself, outside the BE memory allocator, so this memory is otherwise not counted. When this item is `true`, each time the JVM metrics are collected (every 15 seconds when `enable_metric_calculator` is `true`), BE sets the `jvm` memory tracker, under the `process` tracker, to the committed heap plus non-heap memory of the JVM. The `jvm` tracker is shown on the `/mem_tracker` page. When this item is changed to `false`, the next collection resets the `jvm` tracker to 0. This item takes effect only when `enable_jvm_metrics` is `true`. Before a JVM is created in the BE process, the `jvm` tracker is 0.
+- Introduced in: -
+
 ### enable_jvm_metrics
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to collect JVM memory metrics on the BE. The metrics are `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` for heap and non-heap memory, and `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, `jvm_old_size_bytes`, and `jvm_perm_size_bytes` (Metaspace) for memory pools. The `type` label of each metric is `used`, `committed`, `max`, `peak_used`, or `peak_max`. Enabling this item does not start a JVM. The BE starts collecting the metrics only after a JVM is created in the BE process by a feature that uses Java, such as HDFS access, JNI-based readers, or Java UDFs. Until then, the metrics are 0. The metrics are refreshed every 15 seconds when `enable_metric_calculator` is `true`. If `JAVA_HOME` is not set, the metrics are not registered. A `max` or `peak_max` value of -1 means that the memory pool has no defined maximum. With the default G1 garbage collector, this applies to `jvm_young_size_bytes` and `jvm_survivor_size_bytes` (the Eden and Survivor spaces), and to `jvm_perm_size_bytes` (Metaspace) unless `MaxMetaspaceSize` is set. The memory pool metrics are populated only for the Serial, Parallel, and G1 garbage collectors. Use `enable_system_metrics` to control system-level metric collection.
+- Description: Whether to collect JVM memory metrics on the BE. The metrics are `jvm_heap_size_bytes` and `jvm_non_heap_size_bytes` for heap and non-heap memory, and `jvm_young_size_bytes`, `jvm_survivor_size_bytes`, `jvm_old_size_bytes`, and `jvm_perm_size_bytes` (Metaspace) for memory pools. The `type` label of each metric is `used`, `committed`, `max`, `peak_used`, or `peak_max`. Enabling this item does not start a JVM. The BE starts collecting the metrics only after a JVM is created in the BE process by a feature that uses Java, such as HDFS access, JNI-based readers, or Java UDFs. Until then, the metrics are 0. The metrics are refreshed every 15 seconds when `enable_metric_calculator` is `true`. When `enable_jvm_memory_tracker` is `true`, each refresh also counts the memory of the JVM toward the BE memory limit. See `enable_jvm_memory_tracker`. If `JAVA_HOME` is not set, the metrics are not registered. A `max` or `peak_max` value of -1 means that the memory pool has no defined maximum. With the default G1 garbage collector, this applies to `jvm_young_size_bytes` and `jvm_survivor_size_bytes` (the Eden and Survivor spaces), and to `jvm_perm_size_bytes` (Metaspace) unless `MaxMetaspaceSize` is set. The memory pool metrics are populated only for the Serial, Parallel, and G1 garbage collectors. Use `enable_system_metrics` to control system-level metric collection.
 - Introduced in: v4.0.0
 
 ### get_pindex_worker_count

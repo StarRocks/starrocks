@@ -227,7 +227,7 @@ void RuntimeEnv::stop() {
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
     RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
-    return _java_env.init(metrics, config::enable_jvm_metrics);
+    return _java_env.init(metrics, config::enable_jvm_metrics, jvm_mem_tracker());
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {
@@ -265,6 +265,9 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     // a segment; see the hooks above.
     set_dict_dctx_alloc_scope(&enter_dctx_alloc_scope, &leave_dctx_alloc_scope);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
+    // JVM heap and non-heap memory are mapped by the JVM itself rather than allocated through the
+    // malloc hook, so they are invisible to the other trackers. The JVM metrics hook sets this one.
+    _jvm_mem_tracker = regist_tracker(MemTrackerType::JVM, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker = regist_tracker(MemTrackerType::QUERY_POOL, query_pool_mem_limit, process_mem_tracker());
