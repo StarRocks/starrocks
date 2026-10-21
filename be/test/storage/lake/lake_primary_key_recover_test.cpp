@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <ctime>
 #include <map>
 #include <numeric>
@@ -535,8 +536,7 @@ INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverColumnModeTest, LakePrimaryKeyReco
 // base version's delete vector, which recover meant to discard. Here the base version wrongly deletes a row;
 // recover brings it back, but the re-publish rebuilds its index from the stale delete vector, so the index
 // misses the row and the next upsert of that key leaves it live as a duplicate.
-// Disabled: an empty rebuilt delete vector still falls back to the base version.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_back_to_base_version) {
+TEST_F(LakePrimaryKeyRecoverTest, recovered_empty_delvec_does_not_fall_back_to_base_version) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
@@ -554,8 +554,11 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
         const uint32_t rowid = 0;
         delvec->init(corrupted->version(), &rowid, 1);
         builder.append_delvec(delvec, corrupted->rowsets(1).id());
+        corrupted->mutable_rowsets(1)->set_num_dels(1);
         ASSERT_OK(builder.finalize(next_id()));
     }
+    ASSERT_EQ(1, corrupted->delvec_meta().version_to_file_size());
+    const std::string stale_delvec_file = corrupted->delvec_meta().version_to_file().begin()->second.name();
     _version++;
     _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
     ASSERT_EQ(expected.size() - 1, read(_version).size());
@@ -565,13 +568,19 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
     publish(write_rows(later), true);
     apply(&expected, later);
     ASSERT_EQ(expected, read(_version));
+    // The rowset statistics follow the rebuilt delete vectors, and vacuum gets the dropped delete vector file.
+    ASSIGN_OR_ABORT(auto recovered, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& rowset : recovered->rowsets()) {
+        EXPECT_EQ(0, rowset.num_dels()) << rowset.id();
+    }
+    EXPECT_TRUE(std::any_of(recovered->orphan_files().begin(), recovered->orphan_files().end(),
+                            [&](const FileMetaPB& f) { return f.name() == stale_delvec_file; }));
     check_index_agrees(&expected);
 }
 
 // A publish attempt that fails after appending its delete vectors leaves them in the MetaFileBuilder. Recover
 // rebuilds every delete vector from scratch, so none of those may survive it.
-// Disabled: recover only clears the delete vectors already in the metadata, not the ones pending in the builder.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_attempt) {
+TEST_F(LakePrimaryKeyRecoverTest, recover_discards_delvecs_of_failed_attempt) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
