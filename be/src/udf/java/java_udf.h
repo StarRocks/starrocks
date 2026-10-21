@@ -149,7 +149,7 @@ public:
     }
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
-    jobject batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
+    StatusOr<jobject> batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end);
 
     // batch update single
     void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows);
