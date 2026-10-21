@@ -252,6 +252,17 @@ struct Ring {
 struct Component {
     uint32_t row, first, count;
 };
+struct EdgeInterval {
+    uint32_t occurrence, ymin, ymax;
+};
+struct RingIndex {
+    uint32_t first, xmin, xmax, ymin, ymax;
+};
+struct LocationIndex {
+    std::pmr::vector<EdgeInterval> edges;
+    std::pmr::vector<RingIndex> rings;
+    explicit LocationIndex(Memory& memory) : edges(&memory), rings(&memory) {}
+};
 struct Node {
     Point point;
     std::pmr::vector<uint32_t> occurrences;
@@ -532,41 +543,101 @@ struct GeoCoverageSimplify::Impl {
             nodes[i].fixed = degree[i] != 2;
         }
     }
-    // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
-    int location(const Integer& x, const Integer& y, const Ring& ring) {
-        bool inside = false;
-        uint32_t o = ring.first;
-        do {
+    LocationIndex prepare_locations() {
+        LocationIndex result(memory);
+        size_t count = 0;
+        for (const auto& ring : rings) {
             tick();
+            count += ring.count;
+        }
+        result.edges.reserve(count);
+        result.rings.reserve(rings.size());
+        for (const auto& ring : rings) {
+            uint32_t o = ring.first, n = occurrences[o].node;
+            RingIndex entry{index(result.edges.size()), n, n, n, n};
+            do {
+                tick();
+                uint32_t a = occurrences[o].node, b = occurrences[occurrences[o].next].node;
+                const auto& p = nodes[a].point;
+                if (p.x < nodes[entry.xmin].point.x) entry.xmin = a;
+                if (p.x > nodes[entry.xmax].point.x) entry.xmax = a;
+                if (p.y < nodes[entry.ymin].point.y) entry.ymin = a;
+                if (p.y > nodes[entry.ymax].point.y) entry.ymax = a;
+                result.edges.push_back({o, p.y <= nodes[b].point.y ? a : b, p.y >= nodes[b].point.y ? a : b});
+                o = occurrences[o].next;
+            } while (o != ring.first);
+            auto first = result.edges.begin() + entry.first;
+            std::sort(first, result.edges.end(), [&](const EdgeInterval& a, const EdgeInterval& b) {
+                tick();
+                double ay = nodes[a.ymin].point.y, by = nodes[b.ymin].point.y;
+                return ay != by ? ay < by : a.occurrence < b.occurrence;
+            });
+            uint32_t ymax = first->ymax;
+            for (auto it = first; it != result.edges.end(); ++it) {
+                tick();
+                if (nodes[it->ymax].point.y > nodes[ymax].point.y) ymax = it->ymax;
+                it->ymax = ymax; // Prefix maximum, not this edge's upper endpoint.
+            }
+            result.rings.push_back(entry);
+        }
+        return result;
+    }
+    // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
+    int location(const Integer& x, const Integer& y, const Ring& ring, const LocationIndex& locations) {
+        tick(); // Bbox rejection must still poll across successive midpoint queries.
+        const auto& box = locations.rings[&ring - rings.data()];
+        if (x < 2 * nodes[box.xmin].point.ex || x > 2 * nodes[box.xmax].point.ex || y < 2 * nodes[box.ymin].point.ey ||
+            y > 2 * nodes[box.ymax].point.ey)
+            return -1;
+        auto first = locations.edges.begin() + box.first, last = first + ring.count;
+        first = std::lower_bound(first, last, y, [&](const EdgeInterval& edge, const Integer& value) {
+            tick();
+            return 2 * nodes[edge.ymax].point.ey < value;
+        });
+        last = std::upper_bound(first, last, y, [&](const Integer& value, const EdgeInterval& edge) {
+            tick();
+            return value < 2 * nodes[edge.ymin].point.ey;
+        });
+        bool inside = false;
+        for (auto it = first; it != last; ++it) {
+            tick();
+            uint32_t o = it->occurrence;
             const auto& a = nodes[occurrences[o].node].point;
             const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            Integer side = (b.ex - a.ex) * (y - 2 * a.ey) - (b.ey - a.ey) * (x - 2 * a.ex);
-            if (side == 0 && 2 * std::min(a.ex, b.ex) <= x && x <= 2 * std::max(a.ex, b.ex) &&
-                2 * std::min(a.ey, b.ey) <= y && y <= 2 * std::max(a.ey, b.ey))
-                return 0;
-            if ((2 * a.ey > y) != (2 * b.ey > y) && sign(side) == sign(b.ey - a.ey)) inside = !inside;
-            o = occurrences[o].next;
-        } while (o != ring.first);
+            const Integer ay = 2 * a.ey, by = 2 * b.ey;
+            // Closed ranges retain boundary hits; the half-open test retains vertex parity.
+            if (y < std::min(ay, by) || y > std::max(ay, by)) continue;
+            const Integer ax = 2 * a.ex, bx = 2 * b.ex;
+            if (x > std::max(ax, bx)) continue;
+            const bool crosses = (ay > y) != (by > y);
+            if (x < std::min(ax, bx)) {
+                if (crosses) inside = !inside;
+                continue;
+            }
+            Integer side = (b.ex - a.ex) * (y - ay) - (b.ey - a.ey) * (x - ax);
+            if (side == 0) return 0; // Both coordinates are within the closed edge bounds.
+            if (crosses && sign(side) == sign(b.ey - a.ey)) inside = !inside;
+        }
         return inside ? 1 : -1;
     }
-    int location(const Integer& x, const Integer& y, const Component& component) {
+    int location(const Integer& x, const Integer& y, const Component& component, const LocationIndex& locations) {
         if (component.count == 0) return -1;
-        int outer = location(x, y, rings[component.first]);
+        int outer = location(x, y, rings[component.first], locations);
         if (outer != 1) return outer;
         for (uint32_t r = 1; r < component.count; ++r) {
-            int hole = location(x, y, rings[component.first + r]);
+            int hole = location(x, y, rings[component.first + r], locations);
             if (hole >= 0) return -hole;
         }
         return 1;
     }
     template <class Region>
-    int relation(const Ring& ring, const Region& region) {
+    int relation(const Ring& ring, const Region& region, const LocationIndex& locations) {
         int relation = 0;
         uint32_t o = ring.first;
         do {
             const auto& a = nodes[occurrences[o].node].point;
             const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            int next = location(a.ex + b.ex, a.ey + b.ey, region);
+            int next = location(a.ex + b.ex, a.ey + b.ey, region, locations);
             if (next != 0) {
                 if (relation != 0 && relation != next) invalid("ST_CoverageSimplify crossing polygon interiors");
                 relation = next;
@@ -645,6 +716,7 @@ struct GeoCoverageSimplify::Impl {
                     }
             });
         }
+        const auto locations = prepare_locations();
         Tree polygons{bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)};
         for (uint32_t c = 0; c < components.size(); ++c) {
             const auto& component = components[c];
@@ -652,34 +724,24 @@ struct GeoCoverageSimplify::Impl {
             const auto& outer = rings[component.first];
             for (uint32_t h = 1; h < component.count; ++h) {
                 const auto& hole = rings[component.first + h];
-                if (relation(hole, outer) != 1 || relation(outer, hole) >= 0)
+                if (relation(hole, outer, locations) != 1 || relation(outer, hole, locations) >= 0)
                     invalid("ST_CoverageSimplify hole outside its shell");
                 for (uint32_t k = 1; k < h; ++k)
-                    if (relation(hole, rings[component.first + k]) >= 0 ||
-                        relation(rings[component.first + k], hole) >= 0)
+                    if (relation(hole, rings[component.first + k], locations) >= 0 ||
+                        relation(rings[component.first + k], hole, locations) >= 0)
                         invalid("ST_CoverageSimplify overlapping holes");
             }
-            uint32_t o = outer.first;
-            const auto& first = nodes[occurrences[o].node].point;
-            long double xmin = first.x, xmax = first.x, ymin = first.y, ymax = first.y;
-            do {
-                tick();
-                const auto& p = nodes[occurrences[o].node].point;
-                xmin = std::min(xmin, (long double)p.x);
-                xmax = std::max(xmax, (long double)p.x);
-                ymin = std::min(ymin, (long double)p.y);
-                ymax = std::max(ymax, (long double)p.y);
-                o = occurrences[o].next;
-            } while (o != outer.first);
-            Box box{{xmin, ymin}, {xmax, ymax}};
+            const auto& bounds = locations.rings[component.first];
+            Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
+                    {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
             tick(components.size());
             query(polygons, box, [&](const Item& item) {
                 const auto& other = components[item.second];
                 for (uint32_t r = 0; r < component.count; ++r)
-                    if (relation(rings[component.first + r], other) > 0)
+                    if (relation(rings[component.first + r], other, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
                 for (uint32_t r = 0; r < other.count; ++r)
-                    if (relation(rings[other.first + r], component) > 0)
+                    if (relation(rings[other.first + r], component, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
             });
             polygons.insert({box, c});
