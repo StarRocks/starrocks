@@ -44,6 +44,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
 #include "storage/tablet_schema.h"
