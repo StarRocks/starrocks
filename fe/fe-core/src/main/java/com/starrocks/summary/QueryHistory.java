@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
@@ -47,7 +48,7 @@ public class QueryHistory {
     }
 
     QueryHistory(ConnectContext ctx, ExecPlan plan) {
-        originSQL = ctx.getExecutor().getOriginStmtInString();
+        setOriginSQL(ctx.getExecutor().getOriginStmtInString());
         statement = ctx.getExecutor().getParsedStmt();
         datetime = LocalDateTime.now();
         queryMs = System.currentTimeMillis() - ctx.getStartTime();
@@ -66,7 +67,8 @@ public class QueryHistory {
     }
 
     public void setOriginSQL(String originSQL) {
-        this.originSQL = originSQL;
+        // Redact the history copy before it is persisted or included in diagnostic logs.
+        this.originSQL = SqlCredentialRedactor.redact(originSQL);
     }
 
     public void setQueryMs(double queryMs) {
@@ -117,7 +119,7 @@ public class QueryHistory {
         jsonMaps.put("other", other);
 
         SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
-        sqlDigest = builder.build((QueryStatement) statement);
+        sqlDigest = SqlCredentialRedactor.redact(builder.build((QueryStatement) statement));
 
         Explain explain = new Explain(true, true, " ", " |");
         String planStr = explain.print(plan.getPhysicalPlan(), plan.getOutputColumns());
