@@ -78,7 +78,6 @@ Status PrimaryKeyRecover::recover() {
                             continue;
                         }
                         uint32_t rssid = rowset_id + itr_index;
-                        uint32_t row_id_start = 0;
                         new_deletes[rssid] = {};
                         while (true) {
                             chunk->reset();
@@ -89,12 +88,16 @@ Status PrimaryKeyRecover::recover() {
                             } else if (!st.ok()) {
                                 return st;
                             } else {
+                                if (chunk->num_rows() == 0) {
+                                    continue;
+                                }
                                 pk_column->reset_column();
                                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
                                                           encoding_type);
-                                // upsert and generate new deletes
-                                RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
-                                row_id_start += pk_column->size();
+                                // A segment shared by a split tablet is read through the tablet's key range, so
+                                // its first row is not physical row 0. Use the physical rowids, which the iterator
+                                // returns contiguously within a chunk.
+                                RETURN_IF_ERROR(index.upsert(rssid, rowids[0], *pk_column, &new_deletes));
                             }
                         }
                         itr->close();
