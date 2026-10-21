@@ -822,23 +822,27 @@ TEST_F(JsonFlattenerTest, testCompactionMovingRepeatedKeyOutOfRemainKeepsEveryCo
             R"({"a": 2, "x": {"y": 6}})",
             R"({"a": 3, "x": 7, "x": 8})",
             R"({"a": 4})",
+            R"({"a": 5, "x": 9, "y": 1, "y": 2, "z": 3})",
     };
-    // Segment layout: "a" flattened, "x" in the remain.
+    // Segment layout: "a" flattened, "x", "y" and "z" in the remain.
     auto src = test_json(inputs, {"a"}, {TYPE_BIGINT}, true);
 
-    // Output layout: "x" flattened too.
-    std::vector<std::string> paths = {"a", "x"};
-    std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_JSON};
+    // Output layout: "x", "y" and "z" flattened too.
+    std::vector<std::string> paths = {"a", "x", "y", "z"};
+    std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_JSON, TYPE_JSON, TYPE_JSON};
     HyperJsonTransformer transformer(paths, types, true);
     transformer.init_compaction_task({"a"}, {TYPE_BIGINT}, true);
     ASSERT_OK(transformer.trans(src));
     auto dst = ColumnHelper::to_columns(transformer.mutable_result());
-    ASSERT_EQ(3, dst.size());
+    ASSERT_EQ(5, dst.size());
 
     for (size_t row = 0; row < inputs.size(); row++) {
         ASSIGN_OR_ABORT(auto json, JsonValue::parse(inputs[row]));
-        auto x = json.to_vslice().get("x");
-        EXPECT_EQ(x.isNone() ? "NULL" : JsonValue(x).to_string_uncheck(), dst[1]->debug_item(row)) << "row " << row;
+        for (size_t k = 1; k < paths.size(); k++) {
+            auto v = json.to_vslice().get(paths[k]);
+            EXPECT_EQ(v.isNone() ? "NULL" : JsonValue(v).to_string_uncheck(), dst[k]->debug_item(row))
+                    << "row " << row << " path " << paths[k];
+        }
     }
 
     JsonMerger merger(paths, types, true);

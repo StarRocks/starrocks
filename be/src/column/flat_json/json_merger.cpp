@@ -18,10 +18,12 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -31,13 +33,17 @@
 namespace starrocks {
 
 namespace {
-// Whether `key` occurs more than once in the object `obj`; stored JSON keeps repeated keys.
-bool is_repeated_key(const vpack::Slice& obj, std::string_view key) {
-    size_t copies = 0;
-    for (vpack::ObjectIterator it(obj, true); it.valid() && copies < 2; it.next()) {
-        copies += it.key().stringView() == key;
+// The keys that occur more than once in the object `obj`; stored JSON keeps repeated keys.
+phmap::flat_hash_set<std::string_view> repeated_keys(const vpack::Slice& obj) {
+    phmap::flat_hash_set<std::string_view> seen;
+    phmap::flat_hash_set<std::string_view> repeated;
+    for (vpack::ObjectIterator it(obj, true); it.valid(); it.next()) {
+        auto key = it.key().stringView();
+        if (!seen.insert(key).second) {
+            repeated.insert(key);
+        }
     }
-    return copies > 1;
+    return repeated;
 }
 } // namespace
 
@@ -174,6 +180,8 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
+    // The keys this object repeats, collected once, on its first excluded key.
+    std::optional<phmap::flat_hash_set<std::string_view>> repeated;
     vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
@@ -192,7 +200,10 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             // An excluded path moves to a sub-column, which holds a single value (JsonFlattener takes the one a
             // read of the whole JSON finds). Keep every copy of a repeated key here instead, so rebuilding the
             // JSON, which prefers the remain, still gives back each of them.
-            if (is_repeated_key(*remain, k)) {
+            if (!repeated.has_value()) {
+                repeated = repeated_keys(*remain);
+            }
+            if (repeated->contains(k)) {
                 builder->addUnchecked(k.data(), k.size(), v);
             }
             continue;
