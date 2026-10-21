@@ -1494,4 +1494,61 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                     "to the size of the first partition expr maps: 1."));
         }
     }
+<<<<<<< HEAD
 }
+=======
+
+    /** An external ref base table's version map is pruned on its own path, so it must keep drop evidence too. */
+    @Test
+    public void testBatchedRefreshDoesNotLoseDropEvidenceOfExternalTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test.hive_orders_by_year\n" +
+                "partition by date_trunc('year', o_orderdate)\n" +
+                "distributed by hash(o_orderkey) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
+                "as select o_orderkey, o_orderdate from hive0.partitioned_db.orders;");
+        MockedHiveMetadata mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        List<String> droppedDays = List.of("o_orderdate=1991-01-01", "o_orderdate=1992-01-01");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "hive_orders_by_year");
+            Task task = TaskBuilder.buildMvTask(mv, "test");
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
+
+            Map<String, Long> versionsBeforeDrop = Maps.newHashMap();
+            for (String mvPartition : mv.getVisiblePartitionNames()) {
+                versionsBeforeDrop.put(mvPartition,
+                        mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion());
+            }
+            droppedDays.forEach(day -> mockedHiveMetadata.dropPartition("partitioned_db", "orders", day));
+
+            TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(firstBatch);
+            TaskRun secondBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            Assertions.assertNotNull(secondBatch);
+            Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
+            executeAllBatches(secondBatch);
+
+            for (String year : List.of("1991", "1992")) {
+                String mvPartition = mv.getVisiblePartitionNames().stream()
+                        .filter(n -> n.startsWith("p" + year)).findFirst().orElseThrow();
+                long after = mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion();
+                Assertions.assertTrue(after > versionsBeforeDrop.get(mvPartition),
+                        mvPartition + " was not recomputed after its base partition was dropped: version stayed at "
+                                + after);
+            }
+
+            TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(steadyRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan());
+        } finally {
+            droppedDays.forEach(day -> mockedHiveMetadata.addPartition("partitioned_db", "orders", day));
+            starRocksAssert.dropMaterializedView("hive_orders_by_year");
+        }
+    }
+}
+>>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
