@@ -154,6 +154,103 @@ class TestBuildParallelism(unittest.TestCase):
                 {
                     "STARROCKS_LINKER": "",
                     "STARROCKS_GCC_HOME": tmpdir,
+                    "CC": "gcc",
+                    "CXX": mock_cxx,
+                },
+            )
+            self.assertEqual(linker_type, "modern")
+
+    def test_detect_linker_type_cxx_without_cc_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            mock_cxx = os.path.join(tmpdir, "custom-cxx")
+            with open(mock_cxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_cxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "STARROCKS_GCC_HOME": tmpdir,
+                    "CC": "",
+                    "CXX": mock_cxx,
+                },
+            )
+            self.assertEqual(linker_type, "legacy")
+
+    def test_detect_linker_type_cc_without_cxx_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            mock_cxx = os.path.join(tmpdir, "custom-cxx")
+            with open(mock_cxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_cxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "STARROCKS_GCC_HOME": tmpdir,
+                    "CC": mock_cxx,
+                    "CXX": "",
+                },
+            )
+            self.assertEqual(linker_type, "legacy")
+
+    def test_detect_linker_type_cc_and_cxx_pair_overrides_starrocks_gcc_home(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            mock_cxx = os.path.join(tmpdir, "custom-cxx")
+            with open(mock_cxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_cxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            linker_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "STARROCKS_GCC_HOME": tmpdir,
+                    "CC": "gcc",
                     "CXX": mock_cxx,
                 },
             )
