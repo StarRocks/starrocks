@@ -710,27 +710,7 @@ public class ColumnTypeConverter {
             case UUID:
                 return Type.VARBINARY;
             case TIME:
-<<<<<<< HEAD
                 return Type.TIME;
-=======
-                return com.starrocks.type.DateType.TIME;
-            case VARIANT:
-                return VariantType.VARIANT;
-            case UNKNOWN:
-                // Iceberg v3 `unknown`: always null and never stored in data files, so it reads as NULL.
-                // A concrete type keeps an enclosing struct/list/map readable.
-                return NullType.NULL;
-            case GEOGRAPHY:
-                Types.GeographyType geography = (Types.GeographyType) icebergType;
-                if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
-                        && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
-                    return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
-                }
-                return UnknownType.UNKNOWN_TYPE;
->>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
             case FIXED:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;

@@ -17,21 +17,12 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.cost.IcebergFileStats;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
->>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprMinMaxValue;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.TableProperties;
-import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -51,45 +42,6 @@ public class IcebergUtilTest {
         assertEquals("2.orc", IcebergUtil.fileName("cos://tans/user/hive/warehouse/max-test/2.orc"));
         assertEquals("3.orc", IcebergUtil.fileName("s3://tans/user/hive/warehouse/max-test/3.orc"));
         assertEquals("4.orc", IcebergUtil.fileName("gs://tans/user/hive/warehouse/max-test/4.orc"));
-    }
-
-    @Test
-    public void testPromotedDateBoundsAreDropped() {
-        // A date column promoted to timestamp keeps 4-byte day-count bounds in old files. Decoding them as
-        // micros gives values near 1970, so neither the min/max fast path nor CBO stats may use them.
-        Schema schema = new Schema(required(1, "ts", Types.TimestampType.withoutZone()));
-        SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "ts", DateType.DATETIME, true);
-        slot.setColumn(new Column("ts", DateType.DATETIME, true));
-        // 19723 days = 2024-01-01, 19733 days = 2024-01-11
-        var lowerBounds = Map.of(1, Conversions.toByteBuffer(Types.DateType.get(), 19723));
-        var upperBounds = Map.of(1, Conversions.toByteBuffer(Types.DateType.get(), 19733));
-        var counts = Map.of(1, (long) 10);
-        var nullCounts = Map.of(1, (long) 0);
-        Assertions.assertTrue(IcebergUtil.isPromotedDateBound(Types.TimestampType.withoutZone(), lowerBounds.get(1)));
-        Assertions.assertTrue(IcebergUtil.parseMinMaxValueBySlots(
-                schema, lowerBounds, upperBounds, nullCounts, counts, List.of(slot)).isEmpty());
-
-        // Another column of the same file loses its min/max too: BE would otherwise substitute it per batch
-        // while reading the promoted column from the file.
-        Schema twoCols = new Schema(required(1, "ts", Types.TimestampType.withoutZone()),
-                required(2, "id", Types.IntegerType.get()));
-        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(2), "id", IntegerType.INT, true);
-        idSlot.setColumn(new Column("id", IntegerType.INT, true));
-        Assertions.assertTrue(IcebergUtil.parseMinMaxValueBySlots(twoCols,
-                Map.of(1, lowerBounds.get(1), 2, Conversions.toByteBuffer(Types.IntegerType.get(), 1)),
-                Map.of(1, upperBounds.get(1), 2, Conversions.toByteBuffer(Types.IntegerType.get(), 9)),
-                Map.of(1, (long) 0, 2, (long) 0), Map.of(1, (long) 10, 2, (long) 10),
-                List.of(idSlot, slot)).isEmpty());
-        Assertions.assertTrue(IcebergFileStats.toMap(
-                Map.of(1, Types.TimestampType.withoutZone()), lowerBounds).isEmpty());
-
-        // 8-byte timestamp bounds and 4-byte int->long bounds are still decoded.
-        var tsBound = Conversions.toByteBuffer(Types.TimestampType.withoutZone(), 1_700_000_000_000_000L);
-        Assertions.assertFalse(IcebergUtil.isPromotedDateBound(Types.TimestampType.withoutZone(), tsBound));
-        Assertions.assertEquals(1_700_000_000_000_000L, IcebergFileStats.toMap(
-                Map.of(1, Types.TimestampType.withoutZone()), Map.of(1, tsBound)).get(1));
-        Assertions.assertFalse(IcebergUtil.isPromotedDateBound(Types.LongType.get(),
-                Conversions.toByteBuffer(Types.IntegerType.get(), 7)));
     }
 
     @Test

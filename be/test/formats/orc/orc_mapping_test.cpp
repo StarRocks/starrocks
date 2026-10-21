@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
 #include "common/statusor.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 

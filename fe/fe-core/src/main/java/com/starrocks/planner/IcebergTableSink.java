@@ -17,11 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
-<<<<<<< HEAD
 import com.starrocks.connector.CatalogConnector;
-=======
-import com.starrocks.connector.iceberg.IcebergApiConverter;
->>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -59,7 +55,6 @@ public class IcebergTableSink extends DataSink {
                             SessionVariable sessionVariable, String targetBranch) {
         icebergTable.checkSupportedFormat();
         Table nativeTable = icebergTable.getNativeTable();
-        IcebergApiConverter.checkPartitionTransformsWritable(nativeTable.spec());
         this.desc = desc;
         this.tableLocation = nativeTable.location();
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
