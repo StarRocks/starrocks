@@ -150,13 +150,14 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
         _custom_properties.emplace(item.first, item.second);
     }
 
-    // Report the client.rack that is actually in effect: a job-level property overrides the node config.
+    // Report the client.rack that is actually in effect: a job-level property overrides the node config, and an
+    // empty job value (which turns follower fetching off for that job) is reported too.
     auto rack_it = ctx->kafka_info->properties.find("client.rack");
-    const std::string& effective_rack = rack_it != ctx->kafka_info->properties.end() ? rack_it->second : node_rack;
-    if (!effective_rack.empty()) {
-        LOG(INFO) << "kafka consumer client.rack: " << effective_rack
-                  << (rack_it != ctx->kafka_info->properties.end() ? " (job property)"
-                                                                   : " (node config routine_load_kafka_client_rack)");
+    const bool from_job = rack_it != ctx->kafka_info->properties.end();
+    const std::string& effective_rack = from_job ? rack_it->second : node_rack;
+    if (from_job || !node_rack.empty()) {
+        LOG(INFO) << "kafka consumer client.rack: " << (effective_rack.empty() ? "<empty>" : effective_rack)
+                  << (from_job ? " (job property)" : " (node config routine_load_kafka_client_rack)");
     }
 
     if (conf->set("event_cb", &_k_event_cb, errstr) != RdKafka::Conf::CONF_OK) {

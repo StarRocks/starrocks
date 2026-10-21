@@ -378,6 +378,20 @@ TEST_F(KafkaDataConsumerTest, job_client_rack_overrides_node_value) {
     EXPECT_TRUE(consumer.match(&context));
 }
 
+// An empty "property.client.rack" on the job turns the node-level value off for that job.
+TEST_F(KafkaDataConsumerTest, empty_job_client_rack_disables_node_value) {
+    config::routine_load_kafka_client_rack = "rack-a";
+    StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    // match() only accepts Kafka contexts, and StreamLoadContext leaves load_src_type uninitialized.
+    context.load_src_type = TLoadSourceType::KAFKA;
+    context.kafka_info = kafka_load_info({{"group.id", "g1"}, {"client.rack", ""}});
+
+    KafkaDataConsumer consumer(&context);
+    ASSERT_OK(consumer.init(&context));
+    EXPECT_EQ("", effective_conf(consumer, "client.rack"));
+    EXPECT_TRUE(consumer.match(&context));
+}
+
 // Without a node-level value nothing is added: client.rack stays at librdkafka's empty default.
 TEST_F(KafkaDataConsumerTest, no_node_client_rack_leaves_property_unset) {
     config::routine_load_kafka_client_rack = "";
