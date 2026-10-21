@@ -60,9 +60,7 @@ private:
     const std::vector<std::string>* column_names() const {
         return _iceberg_column_names.empty() ? _scanner_ctx.hive_column_names : &_iceberg_column_names;
     }
-    bool use_orc_column_names() const {
-        return _iceberg_column_names.empty() && _scanner_ctx.orc_use_column_names;
-    }
+    bool use_orc_column_names() const { return _iceberg_column_names.empty() && _scanner_ctx.orc_use_column_names; }
 
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
