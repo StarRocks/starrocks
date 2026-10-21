@@ -559,6 +559,81 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+<<<<<<< HEAD
+=======
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
+
+### `lake_scheduler_enable_colocate_group_sample`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Tablet 调度器是否通过抽样 Tablet 来估算大型 Colocate Group 的副本分布，而不是扫描该 Group 中的全部 Tablet。调度一个属于 Colocate Group 的 Tablet 时，调度器需要在整个 Group 上构建各 Compute Node 的副本直方图，以决定新副本的落点。对于包含数万个 Tablet 的 Group，这次全量扫描会成为调度开销的主要来源，而健康的 Colocate Group 本身分布均匀，其中每个 Tablet 给出的信号都相同。当该配置项设置为 `true` 时，对于 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 的 Group，调度器改为随机抽取 `lake_scheduler_colocate_group_sample_size` 个 Tablet，并将抽样得到的各 Compute Node 计数按 Group 实际大小等比放大。健康且已完全放置的 Colocate Group，其全部 Tablet 位于相同的 Compute Node 上，因此抽样结果与真实分布完全一致；正在均衡中的 Group 会引入有界误差，最坏情况下只会产生次优（而非非法）的放置，后续由后台 Tablet 均衡流程修正。抽样仅适用于 Colocate Group。设置为 `false` 表示始终扫描全部 Tablet。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- 默认值: 256
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: Colocate Group 的 Tablet 数超过该值后才会被抽样。Tablet 数不超过该值的 Group 始终全量扫描，因为此时全量扫描本身开销很低，抽样只会额外引入误差。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- 默认值: 128
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: 当 Colocate Group 的 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 时，抽样的 Tablet 数量。抽样数越大，对分布倾斜（正在均衡中）的 Group 估算误差越小，但每次调度决策的开销也越高，即以调度延迟换取放置精度。该值应明显小于 `lake_scheduler_colocate_group_sample_threshold`，否则抽样相比全量扫描节省有限。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- 默认值: 40
+- 类型: Int
+- 单位: 百分比
+- 是否可变: Yes
+- 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_enable_incremental_shard_replica_journal`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：StarMgr 是否将仅涉及副本的 Tablet 变更以副本增量的形式记入元数据日志，而非记录完整的 Tablet 快照。否则，新增、删除或变更单个副本都会重新序列化整条 Tablet 元数据，包括文件路径、存储凭证、属性以及全部副本，其中约 95% 的内容描述的是任何副本操作都不会改变的状态。在 Tablet 调度频繁的集群中，这些快照会成为元数据日志的主要来源。所有提供该配置项的 FE 在回放时都能识别该增量日志条目，该配置项仅约束写入方。因此，应先部署提供该配置项的版本并保持其为 `false`，使集群具备回放该条目的能力，之后再将其设置为 `true`。当集群中仍有 FE 运行较早版本时，请勿启用：此类 FE 会跳过所有副本更新（而非单条），并在不报错的情况下将由此产生的元数据分歧写入自身的 Checkpoint。如需回退，请先将该项设置为 `false`，强制触发一次元数据 Checkpoint 以使镜像吸收已写入的日志条目，然后再降级版本，因为将该项设置为 `false` 并不会撤销日志中已有的条目。仅 Leader FE 上的取值生效。运行时修改是安全的，因为同时包含两种条目的日志可以被正确回放。
+- 引入版本：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：StarMgr 是否维护 Compute Node 到 Tablet 的反向索引。否则，重新调度已重启 Compute Node 上的 Tablet，以及校验 Compute Node 每次心跳上报的副本，都需要扫描完整的 Tablet 映射并逐个判断该 Tablet 在该 Compute Node 上是否存在副本，对每个 Compute Node 的开销与集群 Tablet 总数成正比。启用该索引后，开销仅与该 Compute Node 自身的 Tablet 数量相关。该索引属于派生状态：在加载元数据镜像时根据 Tablet 映射重建，此后在同一把锁的保护下维护；当该项为 `false` 时既不构建也不占用内存，因此保持关闭不会带来额外开销。StarMgr 仅在加载元数据镜像时读取该项一次，因此修改后需重启 FE 才会生效。
+- 引入版本：v4.2.0
+
+### `lake_online_rewrite_partition_retry_timeout_second`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 存算分离模式下 Range 分布表的在线数据重写在某个分区的重写 `INSERT` 失败后，持续重试该分区的时长上限，超过该时长才取消整个作业。在线数据重写（Range 排序键 Schema Change、Range Rollup、物化视图排序键重写）按 Alter 调度周期逐个分区重建数据，因此某个 Compute Node 在 `INSERT` 执行期间重启或崩溃时，只会导致该分区失败。在该时长内，作业只会在后续调度周期重跑失败的那个分区，并保留已经重写完成的所有分区；该时长耗尽后，作业被取消并报告最后一次重写错误。该时长只会被该分区自身失败的重试尝试消耗：每次失败按「该次尝试实际运行的时长 + 一个 `alter_scheduler_interval_millisecond`」计入，一旦某次尝试的计入使其达到该时长，作业立即取消。每个分区至少会获得一次重试，即使单次尝试的开销已超过整个时长——否则一个本就需要运行更久的重写会在首次瞬时故障时即被取消。分区因等待而非失败所消耗的时间——例如没有可用的 Compute Node 执行重写，或重写已 `COMMITTED` 但仍在等待 publish——不会消耗该时长，作业处理其他分区所花的时间同样不会；此类等待由 `alter_table_timeout_second` 限制。该值应大于 Compute Node 恢复可用所需的时间，同时应远小于 `alter_table_timeout_second`，因为在线数据重写运行期间该表的 Compaction 会被推迟。设置为 `0` 表示首次失败即取消作业。
+- 引入版本: v4.2.0
+
+>>>>>>> 7e1193e ([BugFix] Bound the shards per batched getShardInfo call (#81197))
 ## 数据湖
 
 ### `files_enable_insert_push_down_schema`
