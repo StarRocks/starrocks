@@ -52,7 +52,10 @@ public:
     Cache* cache() { return _cache.get(); }
 
 private:
+    // Protects _memory_usage and its sync to _mem_tracker.
     std::mutex _mutex;
+    // Serializes set_capacity() so the cache capacity and the tracker limit change together.
+    std::mutex _capacity_mutex;
     size_t _memory_usage{0};
     std::unique_ptr<Cache> _cache;
     std::unique_ptr<MemTracker> _mem_tracker;
