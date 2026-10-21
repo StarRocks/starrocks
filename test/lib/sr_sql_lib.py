@@ -751,6 +751,9 @@ class StarrocksSQLApiLib(object):
         Hive-metastore-backed iceberg catalog over OSS S3. Consumes:
           ${iceberg_catalog_hive_metastore_uris}, ${oss_ak}, ${oss_sk},
           ${oss_endpoint} — all shipped in [env] of the stock sr.conf.
+        An optional [replace] iceberg_catalog_hive_warehouse selects the
+        client-side warehouse for isolated HMS fixtures. Omit it to retain
+        the cluster's existing warehouse configuration.
         """
         sql = (
             'create external catalog %s properties ('
@@ -759,9 +762,13 @@ class StarrocksSQLApiLib(object):
             '"iceberg.catalog.hive.metastore.uris" = "%s", '
             '"aws.s3.access_key" = "%s", '
             '"aws.s3.secret_key" = "%s", '
-            '"aws.s3.endpoint" = "%s")'
+            '"aws.s3.endpoint" = "%s"'
         ) % (catalog_name, self.iceberg_catalog_hive_metastore_uris,
              self.oss_ak, self.oss_sk, self.oss_endpoint)
+        warehouse = getattr(self, "iceberg_catalog_hive_warehouse", "")
+        if warehouse:
+            sql += ', "warehouse" = %s' % json.dumps(warehouse)
+        sql += ')'
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hive iceberg catalog failed: %s" % res.get("msg"))
 
@@ -2621,7 +2628,7 @@ class StarrocksSQLApiLib(object):
             if orig_value is not None:
                 self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
 
-    def print_hit_materialized_view(self, query, *expects, timeout=10, interval=0.2) -> str:
+    def print_hit_materialized_view(self, query, *expects, timeout=10, interval=0.2, expect_hit=True) -> str:
         """
         assert every name in ``expects`` appears in the plan for query
 
@@ -2633,14 +2640,22 @@ class StarrocksSQLApiLib(object):
         repeats until every marker appears. Without it the return value is free-form output that
         lands in an R file, and there is nothing to wait for except stability, so the original
         one-second settle wait is kept.
+
+        Pass expect_hit=False when the R file expects absence. Polling for presence
+        would otherwise return on the first transient hit after an external write.
         """
         tools.assert_true(timeout > 0, "print_hit_materialized_view: timeout must be positive, got %s" % timeout)
         tools.assert_true(interval > 0, "print_hit_materialized_view: interval must be positive, got %s" % interval)
+        tools.assert_true(isinstance(expect_hit, bool), "expect_hit must be a boolean")
+        tools.assert_true(expects or expect_hit, "expect_hit=False requires plan markers")
 
         def check_mv():
             sql = "explain %s" % (query)
             res = self.retry_execute_sql(sql, True)
             if not res["status"]:
+                # A failed EXPLAIN does not prove that an MV is absent.
+                if not expect_hit:
+                    tools.assert_true(False, "EXPLAIN failed while checking MV absence: %s" % res)
                 print(res)
                 return False
             plan = str(res["result"])
@@ -2665,10 +2680,13 @@ class StarrocksSQLApiLib(object):
 
         deadline = time.monotonic() + timeout
         while True:
-            if self._with_materialized_view_rewrite(check_mv):
-                return True
+            hit = self._with_materialized_view_rewrite(check_mv)
+            if not expect_hit:
+                log.info("MV absence check: hit=%s" % hit)
+            if hit == expect_hit:
+                return hit
             if time.monotonic() >= deadline:
-                return False
+                return hit
             time.sleep(interval)
 
     def print_hit_materialized_views(self, query, *expects, timeout=10, interval=0.2) -> str:
