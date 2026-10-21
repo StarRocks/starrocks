@@ -88,8 +88,7 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
     const int64_t primary_key_mem_limit = _primary_key_mem_tracker->limit();
-    const int64_t preload_mem_limit =
-            primary_key_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
@@ -2319,6 +2318,17 @@ int64_t PrimaryKeyManager::get_primary_index_data_version(int64_t tablet_id) {
         return version;
     }
     return 0;
+}
+
+int64_t PrimaryKeyManager::_calc_preload_mem_limit() const {
+    const int32_t preload_mem_percent = std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * preload_mem_percent / 100;
+}
+
+void PrimaryKeyManager::refresh_preload_mem_limit() {
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
+    _update_state_mem_tracker->set_limit(preload_mem_limit);
+    _compaction_state_mem_tracker->set_limit(preload_mem_limit);
 }
 
 Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {

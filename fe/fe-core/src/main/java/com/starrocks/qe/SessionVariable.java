@@ -551,6 +551,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
+    public static final String BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR =
+            "broadcast_mem_exceeded_penalty_factor";
+    public static final double MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR = 1_000_000.0;
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
@@ -2022,6 +2025,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
+
+    // Cost penalty for estimated broadcast inputs above the memory threshold.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)
+    private double broadcastMemExceededPenaltyFactor = 1000.0;
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
@@ -4897,6 +4904,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getMaxTransformReorderJoins() {
         return this.cboMaxReorderNodeUseExhaustive;
+    }
+
+    public double getBroadcastMemExceededPenaltyFactor() {
+        return broadcastMemExceededPenaltyFactor;
+    }
+
+    public void setBroadcastMemExceededPenaltyFactor(double multiplier) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        this.broadcastMemExceededPenaltyFactor = checkBroadcastMemExceededPenaltyFactor(multiplier);
+    }
+
+    public static double checkBroadcastMemExceededPenaltyFactor(double multiplier) {
+        if (!Double.isFinite(multiplier) || multiplier < 1.0 || multiplier > MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, multiplier,
+                    "a finite number in [1.0, " + MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR + "]");
+        }
+        return multiplier;
     }
 
     public long getBroadcastRowCountLimit() {

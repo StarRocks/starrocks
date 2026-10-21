@@ -65,6 +65,8 @@ public:
     uint32_t hits = 0;
     // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
     uint64_t max_uint = 0;
+    // the most negative integer seen; with max_uint, tells whether a numeric type holds every integer exactly
+    int64_t min_int = 0;
     // same key may appear many times in json, so we need avoid duplicate compute hits
     uint32_t last_row = -1;
     uint32_t multi_times = 0;

@@ -649,6 +649,15 @@ This topic introduces the following types of FE configurations:
 - Description:
 - Introduced in: -
 
+### `star_client_get_shard_info_batch_size`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the FE looks up in one StarMgr request when it resolves the Compute Nodes of many tablets at once in a shared-data cluster, for example when it plans a query or a load on a large table, or when AutoVacuum cleans up a partition or the FE deletes tablets. A larger lookup is split into consecutive requests of at most this many tablets. StarMgr holds a lock on its tablet metadata while it answers one request, which blocks StarMgr metadata changes and, on Follower FEs, the replay of StarMgr metadata. A request for all tablets of a large table can therefore stall them for seconds. A smaller value shortens each stall at the cost of more requests. Values less than `1` are treated as `1`.
+- Introduced in: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - Default: true

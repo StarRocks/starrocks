@@ -188,6 +188,9 @@ public:
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
 
+    // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
+    void refresh_preload_mem_limit();
+
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
@@ -254,6 +257,8 @@ public:
     int64_t get_index_memory_size(int64_t tablet_id) const;
 
 private:
+    int64_t _calc_preload_mem_limit() const;
+
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
