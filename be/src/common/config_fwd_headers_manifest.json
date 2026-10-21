@@ -336,6 +336,8 @@
       "configs": [
         "enable_json_flat",
         "enable_compaction_flat_json",
+        "enable_compaction_flat_json_mixed_inputs",
+        "enable_compaction_flat_json_partial_paths",
         "enable_lazy_dynamic_flat_json",
         "enable_json_flat_remain_filter",
         "enable_json_flat_complex_type",

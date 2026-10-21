@@ -89,7 +89,7 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
             mk.src_index.emplace_back(equals[0]);
             mk.dst_index = i;
             if (_dst_types[i] != _src_types[equals[0]]) {
-                _init_conversion(&mk, i, _src_types[equals[0]]);
+                _init_conversion(&mk, i, _src_types[equals[0]], false);
             }
         } else if (!merges.empty() || (_dst_paths[i].empty() && has_remain)) {
             // the root is rebuilt from every flat path and the remain, even when only the remain was read
@@ -220,7 +220,7 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
                 mk.src_index.emplace_back(j);
                 mk.dst_index = i;
                 if (_dst_types[i] != _src_types[j]) {
-                    _init_conversion(&mk, i, _src_types[j]);
+                    _init_conversion(&mk, i, _src_types[j], true);
                 }
                 break;
             }
@@ -325,8 +325,14 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
     return Status::OK();
 }
 
-void HyperJsonTransformer::_init_conversion(MergeTask* task, int dst_index, LogicalType src_type) {
+void HyperJsonTransformer::_init_conversion(MergeTask* task, int dst_index, LogicalType src_type, bool compaction) {
     task->need_cast = true;
+    if (compaction && src_type == TYPE_JSON && flat_json::JSON_EXTRACT_FUNC.contains(_dst_types[dst_index])) {
+        // A compaction types a JSON sub-column by the value stats of its values (JsonValueStatsPB); extract each
+        // value as loading it would have, which the stats guarantee to be exact, rather than casting it.
+        task->from_json = true;
+        return;
+    }
     if (_dst_types[dst_index] == TYPE_JSON && flat_json::JSON_MERGE_FUNC.contains(src_type)) {
         // A cast to JSON parses a VARCHAR that looks like JSON text ("[1,2]" becomes an array) and renders
         // LARGEINT differently; rebuild each value the way JsonMerger does instead.
@@ -344,6 +350,9 @@ Status HyperJsonTransformer::_equals(const MergeTask& task, const Columns& colum
     DCHECK(task.src_index.size() == 1);
     if (task.to_json) {
         return _to_json(task, columns[task.src_index[0]]);
+    }
+    if (task.from_json) {
+        return _from_json(task, columns[task.src_index[0]]);
     }
     if (task.need_cast) {
         auto& col = columns[task.src_index[0]];
@@ -402,6 +411,31 @@ Status HyperJsonTransformer::_to_json(const MergeTask& task, const ColumnPtr& co
         nulls->append(0);
     }
     auto res = NullableColumn::create(std::move(json), std::move(nulls));
+    res->set_delete_state(col->delete_state());
+    _dst_columns[task.dst_index] = std::move(res);
+    return Status::OK();
+}
+
+Status HyperJsonTransformer::_from_json(const MergeTask& task, const ColumnPtr& col) {
+    DCHECK(task.from_json);
+    const auto extract = flat_json::JSON_EXTRACT_FUNC.at(_dst_types[task.dst_index]);
+    auto res = ColumnHelper::create_column(TypeDescriptor(_dst_types[task.dst_index]), true);
+    auto* dst = down_cast<NullableColumn*>(res.get());
+    dst->reserve(col->size());
+    if (!col->only_null()) {
+        const auto* json = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(col.get()));
+        for (size_t row = 0; row < col->size(); row++) {
+            if (col->is_null(row)) {
+                dst->append_nulls(1);
+                continue;
+            }
+            auto v = json->get_object(col->is_constant() ? 0 : row)->to_vslice();
+            extract(&v, dst);
+        }
+    } else {
+        dst->append_nulls(col->size());
+    }
+    dst->update_has_null();
     res->set_delete_state(col->delete_state());
     _dst_columns[task.dst_index] = std::move(res);
     return Status::OK();
