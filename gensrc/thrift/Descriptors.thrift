@@ -617,6 +617,10 @@ struct TIcebergSchemaField {
 
     4: optional TIcebergGeoMetadata geo_metadata
 
+    // Iceberg initial-default of the field as a string BE parses with the field's type. Readers use it for a
+    // struct subfield missing from a data file; top-level columns use TColumn.default_value instead.
+    5: optional string initial_default
+
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }
