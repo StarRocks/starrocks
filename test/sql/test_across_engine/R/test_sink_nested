@@ -13,7 +13,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
 );
 -- result:
 -- !result
-create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/hive_sink_db_${uuid0}"
+);
 -- result:
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
@@ -64,7 +66,7 @@ drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 drop catalog hive_sink_${uuid0};
 -- result:
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/ > /dev/null
 -- result:
 0
 
@@ -84,7 +86,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
 );
 -- result:
 -- !result
-create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/hive_sink_db_${uuid0}"
+);
 -- result:
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
@@ -132,7 +136,7 @@ drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 drop catalog hive_sink_${uuid0};
 -- result:
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/ > /dev/null
 -- result:
 0
 
@@ -152,7 +156,9 @@ create external catalog hive_sink_${uuid0} PROPERTIES (
 );
 -- result:
 -- !result
-create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/hive_sink_db_${uuid0}"
+);
 -- result:
 -- !result
 create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
@@ -192,7 +198,7 @@ drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
 drop catalog hive_sink_${uuid0};
 -- result:
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/ > /dev/null
 -- result:
 0
 
