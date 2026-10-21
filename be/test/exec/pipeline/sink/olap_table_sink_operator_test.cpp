@@ -226,7 +226,7 @@ TEST_F(OlapTableSinkOperatorTest, closes_inline_without_a_close_pool) {
     EXPECT_EQ(std::this_thread::get_id(), _sink.close_thread);
 }
 
-TEST_F(OlapTableSinkOperatorTest, enqueue_exception_returns_close_ownership_to_cancellation) {
+TEST_F(OlapTableSinkOperatorTest, enqueue_exception_preserves_cancellation_in_inline_close) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry",
                                           [](void*) { throw std::bad_alloc(); });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -235,16 +235,16 @@ TEST_F(OlapTableSinkOperatorTest, enqueue_exception_returns_close_ownership_to_c
         SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
     });
 
-    EXPECT_THROW((void)_op->pending_finish(), std::bad_alloc);
-    SyncPoint::GetInstance()->DisableProcessing();
-    EXPECT_EQ(0, _sink.close_calls);
     _fragment_ctx->cancel(Status::Cancelled("close submission allocation failed"));
+    EXPECT_NO_THROW(EXPECT_FALSE(_op->pending_finish()));
+    SyncPoint::GetInstance()->DisableProcessing();
     EXPECT_OK(_op->set_cancelled(_runtime_state));
     EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_EQ(std::this_thread::get_id(), _sink.close_thread);
     EXPECT_TRUE(_sink.last_exec_status.is_cancelled()) << _sink.last_exec_status;
 }
 
-TEST_F(OlapTableSinkOperatorTest, enqueue_exception_allows_a_later_close_to_finish) {
+TEST_F(OlapTableSinkOperatorTest, enqueue_exception_closes_inline_once) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry",
                                           [](void*) { throw std::bad_alloc(); });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -253,11 +253,29 @@ TEST_F(OlapTableSinkOperatorTest, enqueue_exception_allows_a_later_close_to_fini
         SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
     });
 
-    EXPECT_THROW((void)_op->pending_finish(), std::bad_alloc);
+    EXPECT_NO_THROW(EXPECT_FALSE(_op->pending_finish()));
     SyncPoint::GetInstance()->DisableProcessing();
+    _runtime_state->query_execution_services()->execution->load_sink_close_thread_pool->wait();
     ASSERT_TRUE(wait_until_close_finished());
     EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_EQ(std::this_thread::get_id(), _sink.close_thread);
     EXPECT_FALSE(_runtime_state->is_cancelled());
+}
+
+TEST_F(OlapTableSinkOperatorTest, enqueue_exception_preserves_inline_close_failure) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry",
+                                          [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
+    });
+    _sink.close_result = Status::IOError("injected combined txn log write failure");
+
+    EXPECT_NO_THROW(EXPECT_FALSE(_op->pending_finish()));
+    EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_TRUE(_runtime_state->is_cancelled());
+    EXPECT_TRUE(_fragment_ctx->final_status().is_io_error()) << _fragment_ctx->final_status();
 }
 
 TEST_F(OlapTableSinkOperatorTest, shutdown_joins_running_close_and_cancels_queued_close_before_context_destruction) {
