@@ -194,7 +194,13 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+<<<<<<< HEAD
+=======
+import java.time.DateTimeException;
+import java.time.LocalDateTime;
+>>>>>>> 4f78cb0 ([BugFix] Fix time zone direction of Trino TIMESTAMP WITH TIME ZONE literals (#81256))
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -212,7 +218,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
+import static com.starrocks.common.util.TimeUtils.parseLocalDateTimeFromString;
 import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
@@ -1060,6 +1066,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
+<<<<<<< HEAD
             String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
             ZoneId zoneId = parseTimeZoneFromString(formattedValue);
             if (zoneId == null) {
@@ -1072,8 +1079,44 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 ));
             }
         } catch (AnalysisException e) {
+=======
+            ZoneId zoneId = parseTimeZoneFromString(value);
+            LocalDateTime dateTime = parseLocalDateTimeFromString(value);
+            if (zoneId == null) {
+                return new DateLiteral(dateTime, DateType.DATETIME);
+            } else {
+                // The literal is an instant given as a wall clock in `zoneId`. StarRocks has no
+                // TIMESTAMP WITH TIME ZONE, so represent it as the session-time-zone wall clock of
+                // that instant, the same way timestamptz columns are read.
+                // Resolve the offset here like Trino does: a wall clock skipped by a DST transition is
+                // invalid, and an ambiguous one takes the earlier offset. convert_tz then only converts from
+                // a fixed offset, which FE folding and BE evaluate the same way.
+                List<ZoneOffset> offsets = zoneId.getRules().getValidOffsets(dateTime);
+                if (offsets.isEmpty()) {
+                    throw new IllegalArgumentException("Invalid TIMESTAMP due to daylight savings transition");
+                }
+                return new FunctionCallExpr("convert_tz", List.of(
+                        new DateLiteral(dateTime, DateType.DATETIME),
+                        new com.starrocks.sql.ast.expression.StringLiteral(toConvertTzZone(zoneId, offsets.get(0))),
+                        new VariableExpr("time_zone")
+                ));
+            }
+        } catch (IllegalArgumentException | DateTimeException e) {
+>>>>>>> 4f78cb0 ([BugFix] Fix time zone direction of Trino TIMESTAMP WITH TIME ZONE literals (#81256))
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
+    }
+
+    // BE convert_tz takes `UTC` and `+hh:mm` from -12:59 to +14:59, but not ids such as `Z` or `UT`. Offsets it
+    // cannot parse (local mean time before ~1900, e.g. -14:21 or +05:41:16) keep the zone id, which has no DST
+    // ambiguity at those dates.
+    private static String toConvertTzZone(ZoneId zoneId, ZoneOffset offset) {
+        int seconds = offset.getTotalSeconds();
+        int hours = Math.abs(seconds) / 3600;
+        if (seconds % 60 != 0 || (seconds < 0 && hours > 12) || hours > 14) {
+            return zoneId.getId();
+        }
+        return offset.equals(ZoneOffset.UTC) ? "UTC" : offset.getId();
     }
 
     @Override
