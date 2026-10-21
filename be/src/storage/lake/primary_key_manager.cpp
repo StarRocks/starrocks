@@ -122,8 +122,14 @@ PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, in
 }
 
 void PersistentIndexBlockCache::set_capacity(int64_t cache_limit) {
-    _mem_tracker->set_limit(cache_limit);
-    _cache->set_capacity(cache_limit);
+    {
+        // Config-update callbacks run outside the registry lock, so serialize the paired writes to keep the
+        // tracker limit and the cache capacity consistent across concurrent resizes.
+        std::lock_guard<std::mutex> lg(_mutex);
+        _mem_tracker->set_limit(cache_limit);
+        _cache->set_capacity(cache_limit);
+    }
+    // update_memory_usage() takes _mutex itself.
     update_memory_usage();
 }
 
