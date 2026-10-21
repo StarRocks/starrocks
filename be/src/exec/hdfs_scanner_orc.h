@@ -57,6 +57,10 @@ private:
     Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
     Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
     Status resolve_columns(orc::Reader* reader);
+    const std::vector<std::string>* column_names() const {
+        return _iceberg_column_names.empty() ? _scanner_ctx.hive_column_names : &_iceberg_column_names;
+    }
+    bool use_orc_column_names() const { return _iceberg_column_names.empty() && _scanner_ctx.orc_use_column_names; }
 
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
@@ -69,6 +73,8 @@ private:
     Filter _chunk_filter;
     SkipRowsContextPtr _skip_rows_ctx;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
+    // Current Iceberg name of each top-level ORC column, set when the file carries Iceberg field ids.
+    std::vector<std::string> _iceberg_column_names;
 };
 
 } // namespace starrocks
