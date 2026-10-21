@@ -135,9 +135,13 @@ private:
 
 class StructColumnReader final : public ColumnReader {
 public:
+    // default_columns: one-row columns with the initial-default of subfields the file lacks (absent = NULL).
     explicit StructColumnReader(const ParquetField* parquet_field,
-                                std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers)
-            : ColumnReader(parquet_field), _child_readers(std::move(child_readers)) {}
+                                std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers,
+                                std::map<std::string, ColumnPtr>&& default_columns = {})
+            : ColumnReader(parquet_field),
+              _child_readers(std::move(child_readers)),
+              _default_columns(std::move(default_columns)) {}
     ~StructColumnReader() override = default;
 
     Status prepare() override {
@@ -265,6 +269,7 @@ private:
 
     // _children_readers order is the same as TypeDescriptor children order.
     std::map<std::string, ColumnReaderPtr> _child_readers;
+    std::map<std::string, ColumnPtr> _default_columns;
     // Child ColumnReader whose levels give this struct's def & rep levels, picked in prepare().
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };

@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -62,6 +63,7 @@ public class IcebergDeleteSink extends DataSink {
                              SessionVariable sessionVariable) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
+        IcebergApiConverter.checkPartitionTransformsWritable(nativeTable.spec());
         this.desc = desc;
         this.tableLocation = nativeTable.location();
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);

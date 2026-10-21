@@ -54,7 +54,8 @@ enum class GlobalDictReaderKind {
 struct StructSubfieldMapping {
     // The parquet child read for the type child, nullptr if the file does not have it (read as null).
     std::vector<const ParquetField*> parquet_children;
-    // The Iceberg schema child of the type child; only filled on the Iceberg path (else nullptr).
+    // The Iceberg schema child of the type child, also when the file lacks it; only filled on the Iceberg path
+    // (else nullptr).
     std::vector<const TIcebergSchemaField*> lake_children;
 };
 
