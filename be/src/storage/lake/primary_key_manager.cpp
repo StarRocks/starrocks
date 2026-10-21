@@ -2330,8 +2330,7 @@ int64_t PrimaryKeyManager::_calc_preload_mem_limit() const {
 }
 
 int64_t PrimaryKeyManager::_calc_block_cache_mem_limit() const {
-    const int32_t block_cache_mem_percent =
-            std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0);
+    const int32_t block_cache_mem_percent = std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0);
     return _primary_key_mem_tracker->limit() * block_cache_mem_percent / 100;
 }
 
