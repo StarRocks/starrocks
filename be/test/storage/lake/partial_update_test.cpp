@@ -52,6 +52,7 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -2187,6 +2188,145 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
 
 INSTANTIATE_TEST_SUITE_P(ComplexTypes, LakeNestedSegmentCacheTest, ::testing::Values("STRUCT", "JSON", "ARRAY", "MAP"),
                          [](const testing::TestParamInfo<const char*>& info) { return std::string(info.param); });
+
+class LakeZstdSegmentCacheTest : public LakePartialUpdateTestBase {
+public:
+    LakeZstdSegmentCacheTest() : LakePartialUpdateTestBase("test_lake_zstd_segment_cache") {}
+};
+
+TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compression_dictionary) {
+    constexpr int kRows = 400;
+    constexpr int64_t kCacheCapacity = 128 * 1024;
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    const bool saved_write_dictionary = config::enable_zstd_compression_dict;
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        config::enable_zstd_compression_dict = saved_write_dictionary;
+        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    config::lake_pk_partial_update_use_segment_cache = true;
+    config::enable_zstd_compression_dict = true;
+
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    auto* dictionary_column = schema_pb->mutable_column(2);
+    dictionary_column->set_type("VARCHAR");
+    dictionary_column->set_length(65535);
+    dictionary_column->clear_default_value();
+    dictionary_column->set_use_zstd_compression(true);
+    dictionary_column->set_zstd_compression_page_size(4096);
+    const TabletSchemaPtr tablet_schema = TabletSchema::create(*schema_pb);
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), kRows);
+    // Each distinct value exceeds one data page. A plain page cannot exploit the common random
+    // prefix, whereas a dictionary sampled from the first value can. This keeps a real dictionary
+    // under the normal writer's gain threshold, without forcing retention through test options.
+    uint64_t random_state = 12345678901234567ULL;
+    auto next_char = [&]() {
+        random_state ^= random_state << 13;
+        random_state ^= random_state >> 7;
+        random_state ^= random_state << 17;
+        return static_cast<char>('a' + (random_state % 26));
+    };
+    std::string prefix(5000, ' ');
+    std::generate(prefix.begin(), prefix.end(), next_char);
+    for (int row = 0; row < kRows; ++row) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(row));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(100 + row));
+        std::string value = prefix;
+        for (int byte = 0; byte < 1200; ++byte) {
+            value.push_back(next_char());
+        }
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(Slice(value)));
+    }
+
+    const auto tablet_id = metadata->id();
+    const auto filename = fmt::format("zstd_cache_{}.dat", next_id());
+    FileInfo file_info{.path = _tablet_mgr->segment_location(tablet_id, filename)};
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
+    ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_info.path));
+    SegmentWriter writer(std::move(file), 0, tablet_schema, SegmentWriterOptions{});
+    ASSERT_OK(writer.init());
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0, index_size = 0, footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    file_info.size = file_size;
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(file_info.path));
+    SegmentFooterPB footer;
+    ASSERT_OK(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, nullptr).status());
+    ASSERT_EQ(3, footer.columns_size());
+    ASSERT_TRUE(footer.columns(2).has_zstd_compression_dict_page());
+    ASSERT_GT(footer.columns(2).zstd_compression_dict_page().size(), 0);
+    RecordProperty("persisted_dictionary_page_bytes", footer.columns(2).zstd_compression_dict_page().size());
+
+    std::vector<uint32_t> rowids(kRows);
+    std::iota(rowids.begin(), rowids.end(), 0);
+    {
+        ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
+        const auto* reader = probe->column_with_uid(dictionary_column->unique_id());
+        ASSERT_NE(nullptr, reader);
+        ASSERT_TRUE(reader->has_zstd_compression_dict());
+        ASSIGN_OR_ABORT(auto iter, probe->new_column_iterator(tablet_schema->column(2), nullptr));
+        OlapReaderStatistics stats;
+        ColumnIteratorOptions options;
+        options.stats = &stats;
+        options.read_file = read_file.get();
+        ASSERT_OK(iter->init(options));
+        const auto before_dictionary_load = probe->mem_usage();
+        auto values = chunk->get_column_by_index(2)->clone_empty();
+        ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
+        ASSERT_EQ(kRows, values->size());
+        // The old top-level-column estimate admits this segment, although loading its persisted
+        // dictionary alone adds more than a shard's entire budget and makes it evict itself.
+        ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
+        const auto dictionary_bytes = probe->mem_usage() - before_dictionary_load;
+        RecordProperty("loaded_dictionary_bytes", static_cast<int>(dictionary_bytes));
+        RecordProperty("cache_shard_bytes", static_cast<int>(kCacheCapacity / kNumShards));
+        ASSERT_GT(dictionary_bytes, kCacheCapacity / kNumShards);
+    }
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(kRows);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename(filename);
+    segment_meta->set_size(file_size);
+    RssidFileInfoContainer container;
+    container.add_rssid_to_file(*metadata);
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    const TabletMetadataPtr read_metadata = metadata;
+    const TxnLogPB_OpWrite op_write;
+    const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
+    const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
+    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    std::vector<bool> decisions;
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    // Disabling new dictionary writes cannot remove dictionaries from existing files. Check both
+    // switch values and a scalar-only projection: the bypass belongs to the construction schema.
+    for (bool write_dictionary : {true, false}) {
+        config::enable_zstd_compression_dict = write_dictionary;
+        for (const auto& projection : {std::vector<uint32_t>{1}, std::vector<uint32_t>{1, 2}}) {
+            decisions.clear();
+            MutableColumns values;
+            for (auto column_id : projection) {
+                values.emplace_back(chunk->get_column_by_index(column_id)->clone_empty());
+            }
+            ASSERT_OK(_primary_key_mgr->get_column_values(params, projection, false, rowids_by_rssid, &values));
+            ASSERT_EQ(1, decisions.size());
+            EXPECT_FALSE(decisions.front()) << "bypass must be decided before the first cache insertion";
+            for (size_t column = 0; column < projection.size(); ++column) {
+                ASSERT_EQ(kRows, values[column]->size());
+                for (int row = 0; row < kRows; ++row) {
+                    EXPECT_EQ(1, values[column]->equals(row, *chunk->get_column_by_index(projection[column]), row));
+                }
+            }
+        }
+    }
+}
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:

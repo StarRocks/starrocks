@@ -1892,15 +1892,16 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
     // there, so this can under-estimate; this constant is the knob to raise if that ever shows up.
     constexpr size_t kEstimatedSegmentBytesPerColumn = 1024;
     const size_t estimated_segment_bytes = params.tablet_schema->num_columns() * kEstimatedSegmentBytesPerColumn;
-    // Complex columns build child readers that the top-level column estimate does not account for;
-    // flat JSON's child readers additionally depend on the file's data. Check the full construction
-    // schema, even for a scalar-only projection, once per call before any segment can enter the cache.
+    // Child readers and ZSTD compression dictionaries are not covered by the top-level column
+    // estimate. Existing files can retain dictionaries even when new dictionary writes are disabled.
+    // Check the full construction schema, even for a scalar-only projection, before any cache insert.
     const auto& schema_columns = params.tablet_schema->columns();
     const bool use_segment_cache_for_schema =
             config::lake_pk_partial_update_use_segment_cache &&
             std::none_of(schema_columns.begin(), schema_columns.end(), [](const TabletColumn& column) {
                 const auto type = column.type();
-                return type == TYPE_JSON || type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT;
+                return column.use_zstd_compression() || type == TYPE_JSON || type == TYPE_ARRAY || type == TYPE_MAP ||
+                       type == TYPE_STRUCT;
             });
     auto fetch_values_from_segment =
             [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
