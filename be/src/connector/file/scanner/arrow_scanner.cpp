@@ -112,6 +112,8 @@ int64_t saturating_add(int64_t a, int64_t b) {
     return __builtin_add_overflow(a, b, &out) ? std::numeric_limits<int64_t>::max() : out;
 }
 
+constexpr int64_t kMaxDeclaredRowsPerRejectedMessage = std::numeric_limits<int32_t>::max();
+
 // Inspects all RECORD_BATCH message headers in an Arrow IPC stream buffer
 // without decompressing or allocating body buffers so rejected messages
 // report their true declared row count even when ReadNext() fails mid-stream
@@ -138,14 +140,14 @@ int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc
             break;
         }
         if (metadata_len < 0 || total_size - offset < metadata_len) {
-            declared_rows += 1;
+            declared_rows = saturating_add(declared_rows, 1);
             break;
         }
         auto metadata_buf = arrow::SliceBuffer(ipc_buffer, offset, metadata_len);
         offset += metadata_len;
         auto msg_res = arrow::ipc::Message::Open(metadata_buf, nullptr);
         if (!msg_res.ok() || msg_res.ValueUnsafe() == nullptr) {
-            declared_rows += 1;
+            declared_rows = saturating_add(declared_rows, 1);
             break;
         }
         auto msg = std::move(msg_res).MoveValueUnsafe();
@@ -155,13 +157,13 @@ int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc
             if (batch_res.ok() && batch_res.ValueUnsafe() != nullptr) {
                 declared_rows = saturating_add(declared_rows, batch_res.ValueUnsafe()->num_rows());
             } else {
-                declared_rows += 1;
+                declared_rows = saturating_add(declared_rows, 1);
             }
         }
         int64_t body_len = msg->body_length();
         if (body_len < 0 || total_size - offset < body_len) {
             if (msg->type() != arrow::ipc::MessageType::RECORD_BATCH) {
-                declared_rows += 1;
+                declared_rows = saturating_add(declared_rows, 1);
             }
             break;
         }
@@ -741,8 +743,9 @@ void ArrowScanner::reject_discrete_message(const std::string& reason, int64_t fi
         LOG(WARNING) << "Arrow routine load: further rejected-message warnings are suppressed; see "
                         "ArrowMessagesRejected and num_rows_filtered for totals";
     }
-    // Declared row counts come from untrusted metadata, so both the per-message value and the running total saturate.
-    _counter->num_rows_filtered = saturating_add(_counter->num_rows_filtered, std::max<int64_t>(filtered_rows, 1));
+    // Declared row counts come from untrusted metadata, so the per-message value is clamped and the running total saturates.
+    _counter->num_rows_filtered = saturating_add(
+            _counter->num_rows_filtered, std::clamp<int64_t>(filtered_rows, 1, kMaxDeclaredRowsPerRejectedMessage));
     _counter->arrow_messages_rejected++;
     if (_arrow_messages_rejected_counter != nullptr) {
         COUNTER_UPDATE(_arrow_messages_rejected_counter, 1);
