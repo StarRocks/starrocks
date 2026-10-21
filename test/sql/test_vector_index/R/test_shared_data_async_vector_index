@@ -1,0 +1,28 @@
+-- name: test_sd_async_vector_index_query_before_build @cloud
+create database db_sd_async_vidx_${uuid0};
+-- result:
+-- !result
+use db_sd_async_vidx_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (
+    id BIGINT NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40", "index_build_mode" = "async", "index_build_threshold" = "1")
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1, [1,0,0,0]), (2, [0,1,0,0]), (3, [0,0,1,0]), (4, [0,0,0,1]);
+-- result:
+-- !result
+select id from t order by approx_l2_distance([1,0,0,0], v) limit 1;
+-- result:
+1
+-- !result
+select id from t order by approx_l2_distance([0,0,1,0], v) limit 1;
+-- result:
+3
+-- !result
+drop database db_sd_async_vidx_${uuid0} force;
+-- result:
+-- !result
