@@ -24,15 +24,6 @@
 
 namespace starrocks {
 
-struct GeoCoverageLimits {
-    size_t rows = 10000;
-    size_t vertices = 1000000;
-    size_t input_bytes = 67108864;
-    size_t working_bytes = 268435456;
-    // A defensive bound on the kernel's own operations, not a time guarantee.
-    size_t work = 100000000;
-};
-
 // Non-owning callback/context: the query owns that context for the partition
 // lifetime. No opaque heap-allocated std::function bypasses the memory budget.
 struct GeoCoverageCheckpoint {
@@ -46,12 +37,11 @@ struct GeoCoverageCheckpoint {
 // owns descriptor compatibility and must count any additionally retained column
 // backing through retain_external before that backing is allocated/retained.
 // The supplied allocator must report allocation size classes through nallox and
-// outlive this object. All variable-size kernel storage uses its bounded wrapper;
+// outlive this object. All variable-size kernel storage uses its tracked wrapper;
 // allocations and frees retain that owner across sequential worker migration.
 class GeoCoverageSimplify {
 public:
     static StatusOr<std::unique_ptr<GeoCoverageSimplify>> create(memory::Allocator* allocator,
-                                                                 GeoCoverageLimits limits = {},
                                                                  GeoCoverageCheckpoint checkpoint = {});
     ~GeoCoverageSimplify();
     static void operator delete(void* pointer) noexcept;

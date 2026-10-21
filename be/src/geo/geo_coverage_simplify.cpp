@@ -56,19 +56,22 @@ struct StateAllocation {
     throw Stop{Status::InvalidArgument(message)};
 }
 
-// Bounded individually freed allocations, including temporary peaks. An aligned
+// uint32_t graph indices reserve the largest value for absent links.
+uint32_t index(size_t size) {
+    if (size >= kAbsent) invalid("ST_CoverageSimplify graph index range exceeded");
+    return static_cast<uint32_t>(size);
+}
+
+// Tracked individually freed allocations, including temporary peaks. An aligned
 // view retains its raw allocation header; accounting uses the underlying size
 // class before alloc, not requested WKB length or a model expansion estimate.
 class Memory final : public std::pmr::memory_resource {
 public:
-    Memory(memory::Allocator* allocator, size_t limit) : allocator(allocator), limit(limit) {}
+    explicit Memory(memory::Allocator* allocator) : allocator(allocator) {}
     void retain(size_t count) {
         size_t current = used.load(std::memory_order_relaxed);
-        do {
-            if (count > limit - current)
-                throw Stop{Status::MemoryLimitExceeded(
-                        "ST_CoverageSimplify exceeds geo_coverage_max_working_bytes_per_partition")};
-        } while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed));
+        while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed)) {
+        }
         size_t previous = peak.load(std::memory_order_relaxed);
         while (previous < current + count &&
                !peak.compare_exchange_weak(previous, current + count, std::memory_order_relaxed)) {
@@ -76,7 +79,6 @@ public:
     }
     void release(size_t count) { used.fetch_sub(count, std::memory_order_relaxed); }
     memory::Allocator* allocator;
-    size_t limit;
     // The algorithm is single-owner. Immutable native output buffers can be
     // released by independent downstream workers after it has finished.
     std::atomic<size_t> used{0}, peak{0};
@@ -158,8 +160,8 @@ struct Alloc {
     }
 };
 // Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
-// ring sums with at most 1M positions <4219. 16384 checked bits also cover
-// tolerance^2 and doubled midpoint samples. Dynamic limbs use the budget.
+// ring sums with native WKB positions <4219. 16384 checked bits also cover
+// tolerance^2 and doubled midpoint samples. Dynamic limbs use the tracked allocator.
 using Integer = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
                                                boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
@@ -322,7 +324,6 @@ void write(std::pmr::vector<uint8_t>& output, T value) {
 
 struct GeoCoverageSimplify::Impl {
     Memory memory;
-    GeoCoverageLimits limits;
     GeoCoverageCheckpoint checkpoint;
     std::pmr::vector<Row> rows;
     std::pmr::vector<uint8_t> output_bytes;
@@ -335,11 +336,11 @@ struct GeoCoverageSimplify::Impl {
     std::pmr::vector<Edge> edges;
     std::pmr::vector<Candidate> heap;
     Tree edge_tree, node_tree;
-    size_t input_bytes = 0, vertices = 0, work = 0, last_check = 0, calls = 0, external = 0;
+    size_t input_bytes = 0, calls = 0, external = 0;
+    size_t since_check = 0;
     bool finished = false, failed = false, null_parameter = false;
-    Impl(memory::Allocator* allocator, GeoCoverageLimits limits, GeoCoverageCheckpoint checkpoint, size_t metadata)
-            : memory(allocator, limits.working_bytes),
-              limits(limits),
+    Impl(memory::Allocator* allocator, GeoCoverageCheckpoint checkpoint, size_t metadata)
+            : memory(allocator),
               checkpoint(std::move(checkpoint)),
               rows(&memory),
               output_bytes(&memory),
@@ -356,18 +357,21 @@ struct GeoCoverageSimplify::Impl {
         memory.retain(metadata);
     }
     void check() {
-        last_check = work;
+        since_check = 0;
         if (checkpoint.check) {
             auto status = checkpoint.check(checkpoint.context);
             if (!status.ok()) throw Stop{std::move(status)};
         }
     }
     void tick(size_t count = 1) {
-        if (count > limits.work - work) invalid("ST_CoverageSimplify exceeds kernel work limit");
-        work += count;
-        if (work - last_check >= 128) check();
+        // Preserve the 128-unit query-state polling cadence without bounding total kernel work.
+        constexpr size_t kCheckInterval = 128;
+        if (count >= kCheckInterval - since_check)
+            check();
+        else
+            since_check += count;
     }
-    void preflight(Reader& reader, bool child, size_t& count) {
+    void preflight(Reader& reader, bool child) {
         check();
         const GeoWkbLimits native_limits;
         if (reader.bytes.size > native_limits.max_bytes)
@@ -389,18 +393,15 @@ struct GeoCoverageSimplify::Impl {
         for (uint32_t i = 0; i < n; ++i) {
             tick();
             if (type == 6) {
-                preflight(reader, true, count);
+                preflight(reader, true);
                 continue;
             }
             const uint32_t positions = reader.number<uint32_t>(little);
             if (positions > native_limits.max_coordinates - reader.coordinates)
                 invalid("ST_CoverageSimplify exceeds native WKB coordinate limit");
             reader.coordinates += positions;
-            if (positions > limits.vertices - count)
-                invalid("ST_CoverageSimplify exceeds geo_coverage_max_vertices_per_partition");
             if (positions > (reader.bytes.size - reader.position) / 16)
                 invalid("ST_CoverageSimplify truncated WKB ring");
-            count += positions;
             for (uint32_t j = 0; j < positions; ++j) {
                 tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
@@ -409,15 +410,18 @@ struct GeoCoverageSimplify::Impl {
         }
     }
     uint32_t intern(double x, double y) {
-        auto [it, fresh] = node_map.emplace(std::make_pair(x, y), nodes.size());
-        if (fresh) nodes.emplace_back(Point{x, y, scaled(x), scaled(y)}, memory);
+        auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
+        if (fresh) {
+            it->second = index(nodes.size());
+            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)}, memory);
+        }
         return it->second;
     }
     void polygon(Reader& reader, uint32_t row, bool little) {
-        uint32_t n = reader.number<uint32_t>(little), component = components.size();
+        uint32_t n = reader.number<uint32_t>(little), component = index(components.size());
         components.push_back({row, uint32_t(rings.size()), n});
         for (uint32_t r = 0; r < n; ++r) {
-            const uint32_t positions = reader.number<uint32_t>(little), ring = rings.size();
+            const uint32_t positions = reader.number<uint32_t>(little), ring = index(rings.size());
             if (positions < 4) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t first = kAbsent, previous = kAbsent, first_node = kAbsent, last_node = kAbsent;
             for (uint32_t j = 0; j < positions; ++j) {
@@ -432,7 +436,7 @@ struct GeoCoverageSimplify::Impl {
                 // Consecutive repeated positions contribute to admission, but
                 // a zero-length edge is not a distinct coverage segment.
                 if (node == last_node) continue;
-                uint32_t occurrence = occurrences.size();
+                uint32_t occurrence = index(occurrences.size());
                 occurrences.push_back({node, ring, previous, kAbsent});
                 nodes[node].occurrences.push_back(occurrence);
                 if (previous != kAbsent)
@@ -496,8 +500,9 @@ struct GeoCoverageSimplify::Impl {
     void add_edge(uint32_t occurrence) {
         tick();
         uint32_t a = occurrences[occurrence].node, b = occurrences[occurrences[occurrence].next].node;
-        auto [it, fresh] = edge_map.emplace(key(a, b), edges.size());
+        auto [it, fresh] = edge_map.emplace(key(a, b), 0);
         if (fresh) {
+            it->second = index(edges.size());
             edges.push_back({std::min(a, b), std::max(a, b)});
             edge_tree.insert({bounds(nodes[a].point, nodes[b].point), it->second});
         }
@@ -593,8 +598,11 @@ struct GeoCoverageSimplify::Impl {
         };
         auto link = [&](uint32_t ring, uint32_t node) {
             uint32_t component = rings[ring].component;
-            auto [it, fresh] = contacts.emplace(Key{component, node}, parent.size());
-            if (fresh) parent.push_back(parent.size());
+            auto [it, fresh] = contacts.emplace(Key{component, node}, 0);
+            if (fresh) {
+                it->second = index(parent.size());
+                parent.push_back(it->second);
+            }
             if (!links.emplace(Key{ring, it->second}, true).second) return;
             uint32_t a = root(ring), b = root(it->second);
             if (a == b) invalid("ST_CoverageSimplify disconnected polygon interior");
@@ -838,15 +846,11 @@ struct GeoCoverageSimplify::Impl {
 };
 
 StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memory::Allocator* allocator,
-                                                                           GeoCoverageLimits limits,
                                                                            GeoCoverageCheckpoint checkpoint) {
-    if (!allocator || !limits.rows || !limits.vertices || !limits.input_bytes || !limits.working_bytes || !limits.work)
-        return Status::InvalidArgument("ST_CoverageSimplify requires positive coverage limits and an allocator");
+    if (!allocator) return Status::InvalidArgument("ST_CoverageSimplify requires an allocator");
     const size_t request = sizeof(StateAllocation) + sizeof(GeoCoverageSimplify) + sizeof(Impl) +
                            alignof(StateAllocation) + alignof(Impl);
     const int64_t metadata = allocator->nallox(request);
-    if (metadata <= 0 || uint64_t(metadata) > limits.working_bytes)
-        return Status::MemoryLimitExceeded("ST_CoverageSimplify exceeds geo_coverage_max_working_bytes_per_partition");
     void* raw = nullptr;
     Impl* impl = nullptr;
     try {
@@ -859,7 +863,7 @@ StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memor
         void* impl_location = static_cast<char*>(public_location) + sizeof(GeoCoverageSimplify);
         space = request - (static_cast<char*>(impl_location) - static_cast<char*>(raw));
         std::align(alignof(Impl), sizeof(Impl), impl_location, space);
-        impl = new (impl_location) Impl(allocator, limits, checkpoint, metadata);
+        impl = new (impl_location) Impl(allocator, checkpoint, metadata);
         impl->check();
         auto* result = new (public_location) GeoCoverageSimplify(impl);
         return std::unique_ptr<GeoCoverageSimplify>(result);
@@ -888,13 +892,10 @@ Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
     try {
         MemoryScope scope(s.memory);
         s.check();
-        if (s.rows.size() == s.limits.rows) invalid("ST_CoverageSimplify exceeds geo_coverage_max_rows_per_partition");
-        size_t count = s.vertices;
+        index(s.rows.size());
         if (wkb) {
-            if (wkb->size > s.limits.input_bytes - s.input_bytes)
-                invalid("ST_CoverageSimplify exceeds geo_coverage_max_input_bytes_per_partition");
             Reader reader(*wkb);
-            s.preflight(reader, false, count);
+            s.preflight(reader, false);
             reader.done();
         }
         s.rows.emplace_back(s.memory);
@@ -904,7 +905,6 @@ Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
             row.bytes.assign(reinterpret_cast<const uint8_t*>(wkb->data),
                              reinterpret_cast<const uint8_t*>(wkb->data) + wkb->size);
             s.input_bytes += wkb->size;
-            s.vertices = count;
         }
         return Status::OK();
     } catch (const Stop& stop) {
