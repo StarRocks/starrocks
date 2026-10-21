@@ -200,6 +200,12 @@ public final class IcebergUtil {
             if (!nullValueCounts.containsKey(field.fieldId()) || !valueCounts.containsKey(field.fieldId())) {
                 continue;
             }
+            // BE substitutes min/max only when it does not read the file at all; once one column must be read,
+            // substituting the others per batch is wrong, so give up the whole file.
+            if (isPromotedDateBound(type, lowerBounds.get(field.fieldId())) ||
+                    isPromotedDateBound(type, upperBounds.get(field.fieldId()))) {
+                return new HashMap<>();
+            }
             // create the min/max value object to put into map
             MinMaxValue minMaxValue = new MinMaxValue();
             minMaxValues.put(field.fieldId(), minMaxValue);
@@ -227,6 +233,14 @@ public final class IcebergUtil {
             }
         }
         return minMaxValues;
+    }
+
+    // A date column promoted to timestamp (Iceberg v3) keeps 4-byte day-count bounds in files written before the
+    // promotion. Conversions.fromByteBuffer reads such a buffer as microseconds, giving values near 1970, so
+    // callers drop these bounds.
+    public static boolean isPromotedDateBound(Type type, ByteBuffer bound) {
+        return bound != null && bound.remaining() < 8 &&
+                (type.typeId() == Type.TypeID.TIMESTAMP || type.typeId() == Type.TypeID.TIMESTAMP_NANO);
     }
 
     private static long adjustTimestampMicrosToSessionTz(long micros) {

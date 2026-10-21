@@ -85,6 +85,8 @@ import org.apache.logging.log4j.Logger;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -386,6 +388,7 @@ public class IcebergApiConverter {
         return toDefaultValueString(field, false);
     }
 
+
     public static String toWriteDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, true);
     }
@@ -511,7 +514,13 @@ public class IcebergApiConverter {
                 case DOUBLE:
                 case DECIMAL:
                 case STRING:
+                case UUID:
                     return defaultValue.toString();
+                case BINARY:
+                    // BE parses a VARBINARY default from the raw bytes of the thrift string, which only
+                    // round-trips through a Java String when the bytes are valid UTF-8.
+                    return StandardCharsets.UTF_8.newDecoder()
+                            .decode(((ByteBuffer) defaultValue).duplicate()).toString();
                 case DATE:
                     return DateTimeUtil.daysToIsoDate(((Number) defaultValue).intValue());
                 case TIME:
@@ -525,7 +534,7 @@ public class IcebergApiConverter {
                 default:
                     return null;
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | CharacterCodingException e) {
             LOG.warn("Failed to convert {} default value for iceberg field {}",
                     useWriteDefault ? "write" : "initial", field.name(), e);
             return null;
@@ -835,6 +844,32 @@ public class IcebergApiConverter {
 
     public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
         return toPartitionField(spec.schema(), field, withTransfomPrefix);
+    }
+
+    // True when toPartitionField can express this field's transform. Per the Iceberg spec, a reader
+    // ignores a partition field whose transform it does not know (no pruning on it, no error).
+    public static boolean isKnownPartitionTransform(PartitionField field) {
+        String transform = field.transform().toString();
+        switch (transform) {
+            case "identity":
+            case "year":
+            case "month":
+            case "day":
+            case "hour":
+            case "void":
+                return true;
+        }
+        return ICEBERG_BUCKET_PATTERN.matcher(transform).matches() ||
+                ICEBERG_TRUNCATE_PATTERN.matcher(transform).matches();
+    }
+
+    // A writer cannot compute the partition tuple of a field whose transform it does not know.
+    public static void checkPartitionTransformsWritable(PartitionSpec spec) {
+        for (PartitionField field : spec.fields()) {
+            if (!isKnownPartitionTransform(field)) {
+                throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+            }
+        }
     }
 
     public static String toPartitionField(Schema schema, PartitionField field, Boolean withTransfomPrefix) {

@@ -732,6 +732,24 @@ public class IcebergApiConverterTest {
     }
 
     @Test
+    public void testInitialDefaultForBinaryAndUuid() {
+        // BINARY and UUID initial-defaults used to read as NULL silently.
+        java.util.UUID uuid = java.util.UUID.fromString("f79c3e09-677c-4bbd-a479-3f349cb785e7");
+        Types.NestedField binary = Types.NestedField.optional("c_bin").withId(1).ofType(Types.BinaryType.get())
+                .withInitialDefault(ByteBuffer.wrap("abc".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .build();
+        Types.NestedField uuidField = Types.NestedField.optional("c_uuid").withId(2).ofType(Types.UUIDType.get())
+                .withInitialDefault(uuid).build();
+        assertEquals("abc", IcebergApiConverter.toInitialDefaultValueString(binary));
+        assertEquals(uuid.toString(), IcebergApiConverter.toInitialDefaultValueString(uuidField));
+
+        // Bytes that are not valid UTF-8 cannot reach BE intact through the thrift string, so no default is sent.
+        Types.NestedField rawBinary = Types.NestedField.optional("c_raw").withId(3).ofType(Types.BinaryType.get())
+                .withInitialDefault(ByteBuffer.wrap(new byte[] {(byte) 0xff, (byte) 0xfe})).build();
+        Assertions.assertNull(IcebergApiConverter.toInitialDefaultValueString(rawBinary));
+    }
+
+    @Test
     public void testToFullSchemasWithInitialDefaultValue() {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional("c_bool").withId(1)
