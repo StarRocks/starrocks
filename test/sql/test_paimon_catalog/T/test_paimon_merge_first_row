@@ -21,8 +21,7 @@ set paimon_reader_mode = 'native';
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount >= 10 order by id;
 [ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount is null order by id;
 select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1;
-function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "native")
-function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id")
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "starrocks")
 set paimon_reader_mode = 'jni';
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
 function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "jni")
@@ -52,8 +51,7 @@ set paimon_reader_mode = 'native';
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount >= 10 order by id;
 [ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount is null order by id;
 select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1;
-function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "native")
-function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id")
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "starrocks")
 set paimon_reader_mode = 'jni';
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
 function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "jni")

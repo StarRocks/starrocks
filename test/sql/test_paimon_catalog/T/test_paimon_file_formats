@@ -31,12 +31,12 @@ set paimon_reader_mode = 'native';
 select count(*), count(amount), sum(amount), min(amount), max(amount) from paimon_static_${uuid0}.paimon_test.append_parquet_v1;
 select id from paimon_static_${uuid0}.paimon_test.append_parquet_v1 where amount is null;
 [ORDER]select id from paimon_static_${uuid0}.paimon_test.append_parquet_v1 where amount >= 30 order by id;
-function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.append_parquet_v1 order by id", "append_parquet_v1", "native")
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.append_parquet_v1 order by id", "append_parquet_v1", "starrocks")
 [ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.append_orc_v1 order by id;
 select count(*), count(amount), sum(amount), min(amount), max(amount) from paimon_static_${uuid0}.paimon_test.append_orc_v1;
 select id from paimon_static_${uuid0}.paimon_test.append_orc_v1 where amount is null;
 [ORDER]select id from paimon_static_${uuid0}.paimon_test.append_orc_v1 where amount >= 30 order by id;
-function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.append_orc_v1 order by id", "append_orc_v1", "native")
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.append_orc_v1 order by id", "append_orc_v1", "starrocks")
 [ORDER]select id, amount, score from paimon_static_${uuid0}.paimon_test.append_avro_v1 order by id;
 [ORDER]select score, id from paimon_static_${uuid0}.paimon_test.append_avro_v1 order by id;
 [ORDER]select id, amount, score from paimon_static_${uuid0}.paimon_test.append_avro_v1 where amount >= 10 order by id;

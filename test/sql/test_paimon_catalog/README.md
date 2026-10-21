@@ -70,9 +70,9 @@ these statements to a T file:
 
 ```sql
 set paimon_reader_mode = 'native';
-[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
-function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "native")
-function: assert_paimon_native_profile("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id")
+[ORDER]select id, amount, note from paimon_readers_${uuid0}.paimon_test.pk_merge_v1 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_readers_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
+function: assert_paimon_native_profile("select id, amount, note from paimon_readers_${uuid0}.paimon_test.pk_merge_v1 order by id")
 ```
 
 - `assert_paimon_reader(query, table, expected)` checks FE routing with
@@ -127,15 +127,16 @@ behavior; errors are not accepted as golden results.
 
 The merge-engine and deletion-vector matrices use one case per format. AUTO runs
 the full result checks; explicit NATIVE and JNI retain representative result and
-routing checks. Native format, first-row and DV checks remain broader where AUTO
-uses the StarRocks file reader. Native execution is also checked through the BE
+routing checks. Compatible raw-file reads use the StarRocks file reader under both AUTO and
+NATIVE. Cases requiring the Paimon SDK also check native execution through the BE
 `PaimonNativeReader` profile. Global-index and system-table mode checks share one
 case each.
 
 AUTO prefers compatible StarRocks raw-file reads, then compatible paimon-cpp reads,
 and otherwise selects JNI. Explicit JNI, including `paimon_force_jni_reader=true`,
-is preserved for all split types. Explicit NATIVE reports unsupported reads instead
-of switching to JNI. AUTO uses JNI for metadata system-table splits and native for
+is preserved for all split types. Explicit NATIVE first permits compatible SR
+raw-file reads, then applies the same native compatibility checks as AUTO. It
+reports unsupported reads instead of switching to JNI. AUTO uses JNI for metadata system-table splits and native for
 compatible global-index splits.
 See the [reader routing README](../../../fe/fe-core/src/main/java/com/starrocks/connector/paimon/README.md)
 for the verified versions, compatibility boundaries and fallback reasons.

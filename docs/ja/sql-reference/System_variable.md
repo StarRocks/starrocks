@@ -1346,7 +1346,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
   * `AUTO`: StarRocks が適切な Reader を自動的に選択します。
   * `JNI`: JNI 経由で Paimon Java Reader を使用します。
-  * `NATIVE`: paimon-cpp Reader を使用します。要求された読み取りに対応していない場合、クエリはエラーになります。
+  * `NATIVE`: 対応可能な場合は StarRocks ファイル Reader を使用し、それ以外は対応可能な paimon-cpp Reader を必要とします。JNI にフォールバックせず、対応できない場合はエラーになります。
   * `paimon_force_jni_reader=true` は `JNI` の選択と同等で、この変数の設定より優先されます。
 * **デフォルト**: AUTO
 * **データ型**: String

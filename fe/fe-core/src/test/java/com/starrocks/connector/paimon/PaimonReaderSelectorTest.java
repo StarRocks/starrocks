@@ -31,6 +31,10 @@ import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +100,7 @@ class PaimonReaderSelectorTest {
         var raw = split("parquet", true, 1, false);
         assertAuto(selector, raw, STARROCKS, RAW_FILES);
         assertEquals(JNI, selector.select(raw, PaimonReaderMode.JNI).reader());
-        assertEquals(NATIVE, selector.select(raw, PaimonReaderMode.NATIVE).reader());
+        assertEquals(STARROCKS, selector.select(raw, PaimonReaderMode.NATIVE).reader());
         assertAuto(selector, split("parquet", false, 1, false), NATIVE, NATIVE_SUPPORTED);
         assertAuto(selector, split("avro", true, 1, false), NATIVE, NATIVE_SUPPORTED);
     }
@@ -113,6 +117,27 @@ class PaimonReaderSelectorTest {
         }
         var selector = selector(schema(1, DataTypes.INT(), false, Map.of()), "v");
         assertAuto(selector, split("csv", false, 1, false), JNI, FILE_FORMAT);
+    }
+
+    @Test
+    void unspecifiedModeUsesAutoSelection() {
+        var selector = selector(schema(1, DataTypes.INT(), false, Map.of()), "v");
+        for (String format : List.of("parquet", "avro", "json")) {
+            var split = split(format, true, 1, false);
+            assertEquals(selector.select(split, AUTO), selector.select(split, null));
+        }
+    }
+
+    @Test
+    void unsupportedMergeDoesNotLoadHistoricalSchemas() {
+        var schema = schema(1, DataTypes.INT(), true,
+                Map.of("merge-engine", "aggregation", "fields.v.aggregate-function", "product"));
+        var selector = selector(schema, "v");
+        var split = split("parquet", false, 0, false);
+        assertAuto(selector, split, JNI, MERGE_FUNCTION);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(split, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("MERGE_FUNCTION"));
     }
 
     @Test
@@ -173,6 +198,33 @@ class PaimonReaderSelectorTest {
     }
 
     @Test
+    void compositeSequenceGroupsIncludeEveryOrderingField() {
+        for (boolean timestampFirst : List.of(false, true)) {
+            var schema = new TableSchema(1, List.of(DataTypes.FIELD(0, "id", DataTypes.INT().notNull()),
+                    DataTypes.FIELD(1, "v", DataTypes.INT()),
+                    DataTypes.FIELD(2, "seq1", timestampFirst ? DataTypes.TIMESTAMP(9) : DataTypes.INT()),
+                    DataTypes.FIELD(3, "seq2", timestampFirst ? DataTypes.INT() : DataTypes.TIMESTAMP(9))),
+                    3, List.of(), List.of("id"), Map.of("merge-engine", "partial-update",
+                    "fields.seq1,seq2.sequence-group", "v"), "");
+            var selector = selector(schema, "v");
+            assertAuto(selector, split("parquet", false, 1, false), JNI, TIMESTAMP);
+            var error = assertThrows(StarRocksConnectorException.class,
+                    () -> selector.select(split("parquet", false, 1, false), PaimonReaderMode.NATIVE));
+            assertTrue(error.getMessage().contains("TIMESTAMP"));
+        }
+
+        Map<String, String> options = new LinkedHashMap<>();
+        options.put("merge-engine", "partial-update");
+        options.put("fields.seq0.sequence-group", "seq2");
+        options.put("fields.seq1,seq2.sequence-group", "v");
+        var schema = new TableSchema(1, List.of(DataTypes.FIELD(0, "id", DataTypes.INT().notNull()),
+                DataTypes.FIELD(1, "v", DataTypes.INT()), DataTypes.FIELD(2, "seq1", DataTypes.INT()),
+                DataTypes.FIELD(3, "seq2", DataTypes.INT()), DataTypes.FIELD(4, "seq0", DataTypes.TIMESTAMP(9))),
+                4, List.of(), List.of("id"), options, "");
+        assertAuto(selector(schema, "v"), split("parquet", false, 1, false), JNI, TIMESTAMP);
+    }
+
+    @Test
     void nestedEvolutionIsDifferentFromNestedReading() {
         var old = schema(0, DataTypes.ROW(DataTypes.FIELD(2, "a", DataTypes.INT())), true, Map.of());
         var current = schema(1, DataTypes.ROW(DataTypes.FIELD(2, "a", DataTypes.BIGINT())), true, Map.of());
@@ -212,8 +264,10 @@ class PaimonReaderSelectorTest {
         var text = schema(1, DataTypes.STRING(), false, Map.of());
         var selector = new PaimonReaderSelector(text, List.of("v"), id -> old);
         assertAuto(selector, split("parquet", true, 0, false), JNI, SCHEMA_EVOLUTION);
-        // INT -> STRING works in CPP, even though AUTO conservatively delegates it to Java.
-        assertEquals(NATIVE, selector.select(split("parquet", true, 0, false), PaimonReaderMode.NATIVE).reader());
+        // Explicit NATIVE and AUTO share the same conservative SDK compatibility checks.
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(split("parquet", true, 0, false), PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("SCHEMA_EVOLUTION"));
     }
 
     @Test
@@ -241,13 +295,15 @@ class PaimonReaderSelectorTest {
         var timestamp = selector(schema(1, DataTypes.TIMESTAMP(6), false, Map.of()), "v");
         assertAuto(timestamp, split("parquet", true, 1, false), STARROCKS, RAW_FILES);
         assertAuto(timestamp, split("avro", true, 1, false), JNI, TIMESTAMP);
-        assertEquals(NATIVE, timestamp.select(split("avro", true, 1, false), PaimonReaderMode.NATIVE).reader());
+        assertThrows(StarRocksConnectorException.class,
+                () -> timestamp.select(split("avro", true, 1, false), PaimonReaderMode.NATIVE));
         var nano = selector(schema(1, DataTypes.TIMESTAMP(9), false, Map.of()), "v");
         assertAuto(nano, split("parquet", true, 1, false), JNI, TIMESTAMP);
         var map = selector(schema(1, DataTypes.MAP(DataTypes.STRING(), DataTypes.INT()), false, Map.of()), "v");
         assertAuto(map, split("parquet", true, 1, false), STARROCKS, RAW_FILES);
         assertAuto(map, split("avro", true, 1, false), JNI, NULLABLE_MAP_KEY);
-        assertEquals(NATIVE, map.select(split("avro", true, 1, false), PaimonReaderMode.NATIVE).reader());
+        assertThrows(StarRocksConnectorException.class,
+                () -> map.select(split("avro", true, 1, false), PaimonReaderMode.NATIVE));
         var nonnull = selector(schema(1, DataTypes.MAP(DataTypes.STRING().notNull(), DataTypes.INT()), false, Map.of()), "v");
         assertAuto(nonnull, split("avro", true, 1, false), NATIVE, NATIVE_SUPPORTED);
     }
@@ -345,11 +401,48 @@ class PaimonReaderSelectorTest {
         assertEquals(new PaimonReaderSelector.Decision(JNI, FILE_FORMAT), selector.select(indexed, AUTO));
         assertEquals(JNI, selector.select(indexed, PaimonReaderMode.JNI).reader());
         assertThrows(StarRocksConnectorException.class, () -> selector.select(indexed, PaimonReaderMode.NATIVE));
+    }
 
-        var fallback = FallbackReadFileStoreTable.toFallbackSplit(split("parquet", false, 1, false), true);
-        var wrapped = new IndexedSplit((DataSplit) fallback, List.of(new Range(0, 0)), null);
-        assertEquals(JNI, selector.select(wrapped, PaimonReaderMode.JNI).reader());
-        assertEquals(PaimonReaderSelector.Reason.SPLIT_PROTOCOL, selector.select(wrapped, AUTO).reason());
-        assertThrows(StarRocksConnectorException.class, () -> selector.select(wrapped, PaimonReaderMode.NATIVE));
+    @Test
+    void indexedFallbackProtocolIsRejectedForEveryMode() {
+        var selector = selector(schema(1, DataTypes.INT(), false, Map.of()), "id");
+        for (boolean fallback : List.of(false, true)) {
+            var data = FallbackReadFileStoreTable.toFallbackSplit(split("parquet", true, 1, false), fallback);
+            var indexed = new IndexedSplit((DataSplit) data, List.of(new Range(0, 2)), null);
+            for (PaimonReaderMode mode : new PaimonReaderMode[] {null, AUTO,
+                    PaimonReaderMode.JNI, PaimonReaderMode.NATIVE}) {
+                var error = assertThrows(StarRocksConnectorException.class, () -> selector.select(indexed, mode));
+                assertTrue(error.getMessage().contains("IndexedSplit"));
+                assertTrue(error.getMessage().contains("FallbackDataSplit"));
+                assertTrue(error.getMessage().contains("SPLIT_PROTOCOL"));
+            }
+        }
+    }
+
+    @Test
+    void primaryKeyIndexedSplitFallsBackToJniAndPreservesRanges() throws Exception {
+        var selector = selector(schema(1, DataTypes.INT(), true, Map.of()), "v");
+        for (boolean raw : List.of(false, true)) {
+            var indexed = new IndexedSplit(split("parquet", raw, 1, false),
+                    List.of(new Range(0, 2), new Range(6, 7)), null);
+            var decision = selector.select(indexed, AUTO);
+            assertEquals(JNI, decision.reader());
+            assertEquals("PRIMARY_KEY_INDEXED_SPLIT", decision.reason().name());
+            assertEquals(decision, selector.select(indexed, null));
+            assertEquals(JNI, selector.select(indexed, PaimonReaderMode.JNI).reader());
+            var error = assertThrows(StarRocksConnectorException.class,
+                    () -> selector.select(indexed, PaimonReaderMode.NATIVE));
+            assertTrue(error.getMessage().contains("PRIMARY_KEY_INDEXED_SPLIT"));
+
+            // JNI uses Java object serialization; ordinary indexed splits must retain every row range.
+            var bytes = new ByteArrayOutputStream();
+            try (var out = new ObjectOutputStream(bytes)) {
+                out.writeObject(indexed);
+            }
+            try (var in = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+                var restored = (IndexedSplit) in.readObject();
+                assertEquals(indexed.rowRanges(), restored.rowRanges());
+            }
+        }
     }
 }

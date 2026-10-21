@@ -56,7 +56,7 @@ select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 
 1
 4
 -- !result
-function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "native")
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "starrocks")
 -- result:
 None
 -- !result

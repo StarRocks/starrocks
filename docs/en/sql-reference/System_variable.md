@@ -1622,7 +1622,7 @@ Used for MySQL client compatibility. No practical usage.
 
   * `AUTO`: StarRocks automatically selects an appropriate reader.
   * `JNI`: Forces the Paimon Java reader through JNI.
-  * `NATIVE`: Forces the paimon-cpp reader. The query fails if the requested read is unsupported.
+  * `NATIVE`: Uses the StarRocks file reader when compatible; otherwise requires a compatible paimon-cpp read. The query fails instead of falling back to JNI.
   * Setting `paimon_force_jni_reader=true` is equivalent to selecting `JNI` and takes precedence over this variable.
 * **Default**: AUTO
 * **Data type**: String

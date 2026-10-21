@@ -19,7 +19,7 @@ function: assert_paimon_reader("select id, amount, flag from paimon_static_${uui
 select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
 select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount in (10,20) or id=2;
 [ORDER]select id from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 where amount >= 40 order by id;
-function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "native")
+function: assert_paimon_reader("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1 order by id", "pk_parquet_compacted_v1", "starrocks")
 set paimon_reader_mode = 'jni';
 [ORDER]select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 order by id;
 select count(*), sum(amount), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;

@@ -20,11 +20,7 @@ set paimon_reader_mode = 'native';
 3	None	None
 4	3	2
 -- !result
-function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "native")
--- result:
-None
--- !result
-function: assert_paimon_native_profile("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id")
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "starrocks")
 -- result:
 None
 -- !result

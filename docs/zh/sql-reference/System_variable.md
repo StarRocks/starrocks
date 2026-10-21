@@ -1390,7 +1390,7 @@ FROM test;
 
   * `AUTO`：由 StarRocks 自动选择合适的读取模式。
   * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
-  * `NATIVE`：强制使用 paimon-cpp Reader；不支持所请求的读取时，查询会报错。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
   * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String

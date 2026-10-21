@@ -40,14 +40,15 @@ import java.util.Set;
 import java.util.function.LongFunction;
 import java.util.function.Predicate;
 
-/** Plan-time compatibility checks for the packaged paimon-cpp 0.3.0 reader. */
+/** Reader selection with ordered compatibility checks for the packaged paimon-cpp 0.3.0 reader. */
 public final class PaimonReaderSelector {
     public enum Reader { STARROCKS, NATIVE, JNI }
 
     public enum Reason {
         RAW_FILES, NATIVE_SUPPORTED, EXPLICIT_MODE, SYSTEM_SPLIT, INDEXED_SPLIT,
         UNKNOWN_SCHEMA, FILE_FORMAT, TABLE_SCHEMA, SCHEMA_EVOLUTION, MERGE_FUNCTION,
-        DELETION_VECTOR, ORC_LEGACY_TIMESTAMP, TIMESTAMP, NULLABLE_MAP_KEY, SPLIT_PROTOCOL
+        DELETION_VECTOR, ORC_LEGACY_TIMESTAMP, TIMESTAMP, NULLABLE_MAP_KEY, SPLIT_PROTOCOL,
+        PRIMARY_KEY_INDEXED_SPLIT
     }
 
     public record Decision(Reader reader, Reason reason) { }
@@ -63,8 +64,9 @@ public final class PaimonReaderSelector {
     private final LongFunction<TableSchema> schemaLoader;
     // A selector belongs to one scan node. Schema ids are immutable within its table/branch.
     private final Map<Long, TableSchema> schemas = new HashMap<>();
+
     private final Map<Long, SchemaFields> schemaFields = new HashMap<>();
-    private PaimonReaderSelector fallback;
+    private PaimonReaderSelector fallbackSelector;
 
     private record SchemaFields(Map<String, DataField> names, Map<Integer, DataField> ids) {
         SchemaFields(TableSchema schema) {
@@ -94,161 +96,299 @@ public final class PaimonReaderSelector {
     }
 
     public Decision select(Split split, PaimonReaderMode mode) {
-        // An explicit JNI choice is final, including for indexed and system-table splits.
+        // Neither SDK can deserialize this wrapper without corrupting its row ranges.
+        if (PaimonSplitUtils.isGlobalIndexSplit(split) &&
+                PaimonSplitUtils.getDataSplit(split).orElse(null) instanceof FallbackDataSplit) {
+            throw new StarRocksConnectorException(
+                    "Paimon cannot read IndexedSplit wrapping FallbackDataSplit: neither JNI nor native supports " +
+                            "this split protocol (%s).", Reason.SPLIT_PROTOCOL);
+        }
         if (mode == PaimonReaderMode.JNI) {
-            return jni(Reason.EXPLICIT_MODE);
+            checkJniSupported(Reason.EXPLICIT_MODE);
+            return new Decision(Reader.JNI, Reason.EXPLICIT_MODE);
         }
-        DataSplit data = PaimonSplitUtils.getDataSplit(split).orElse(null);
-        if (data == null) {
-            // CPP can plan some system tables itself, but cannot deserialize Java system splits.
-            return useJniOrRejectNative(mode, Reason.SYSTEM_SPLIT);
-        }
-        boolean indexed = PaimonSplitUtils.isGlobalIndexSplit(split);
-        if (indexed && data instanceof FallbackDataSplit) {
-            return useJniOrRejectNative(mode, Reason.SPLIT_PROTOCOL);
-        }
-        if (data instanceof FallbackDataSplit && ((FallbackDataSplit) data).isFallback()) {
-            return selectFallbackSplit(data, mode);
-        }
-        return selectDataSplit(data, mode, indexed);
-    }
-
-    private Decision selectFallbackSplit(DataSplit data, PaimonReaderMode mode) {
-        if (table == null) {
-            return useJniOrRejectNative(mode, Reason.UNKNOWN_SCHEMA);
-        }
-        if (fallback == null) {
-            String branch = schema.options().get("scan.fallback-branch");
-            if (branch == null) {
-                return useJniOrRejectNative(mode, Reason.UNKNOWN_SCHEMA);
-            }
-            fallback = new PaimonReaderSelector(table.switchToBranch(branch), List.copyOf(fields));
-        }
-        // CPP reads the fallback branch's schema, but the SR output tuple uses the main schema.
-        if (!schema.logicalRowType().equals(fallback.schema.logicalRowType())) {
-            return useJniOrRejectNative(mode, Reason.SCHEMA_EVOLUTION);
-        }
-        // FallbackDataSplit.wrapped() returns itself; do not re-enter branch resolution.
-        return fallback.selectDataSplit(data, mode, false);
-    }
-
-    private Decision selectDataSplit(DataSplit data, PaimonReaderMode mode, boolean indexed) {
-        if (schema == null) {
-            return useJniOrRejectNative(mode, Reason.UNKNOWN_SCHEMA);
-        }
-        // Only AUTO considers the SR file reader. Indexed splits must retain their row ranges.
-        if (!indexed && mode == PaimonReaderMode.AUTO && rawSupported(data)) {
+        if (canUseStarRocksRawFile(split)) {
             return new Decision(Reader.STARROCKS, Reason.RAW_FILES);
         }
-        Reason unsupported = nativeIncompatibility(data, mode);
-        if (unsupported != null) {
-            return useJniOrRejectNative(mode, unsupported);
-        }
-        if (mode == PaimonReaderMode.NATIVE) {
-            return new Decision(Reader.NATIVE, Reason.EXPLICIT_MODE);
-        }
-        return new Decision(Reader.NATIVE, indexed ? Reason.INDEXED_SPLIT :
-                Reason.NATIVE_SUPPORTED);
-    }
-
-    private Decision useJniOrRejectNative(PaimonReaderMode mode, Reason reason) {
-        if (mode == PaimonReaderMode.NATIVE) {
+        Decision decision = selectMode(split);
+        if (mode == PaimonReaderMode.NATIVE && decision.reader() != Reader.NATIVE) {
             throw new StarRocksConnectorException(
-                    "Paimon native reader cannot read this split: %s. Select a compatible reader or exclude " +
-                            "unsupported columns.", reason);
+                    "Paimon native reader cannot read this split: %s", decision.reason());
         }
-        return jni(reason);
+        if (decision.reader() == Reader.JNI) {
+            checkJniSupported(decision.reason());
+        }
+        return decision;
     }
 
-    private Decision jni(Reason reason) {
-        for (DataTypeRoot unsupported : List.of(DataTypeRoot.BLOB, DataTypeRoot.VARIANT)) {
-            if (selectedTypes.stream().anyMatch(type -> contains(type, t -> t.is(unsupported)))) {
-                String message = unsupported == DataTypeRoot.VARIANT ?
-                        "Reading VARIANT through the Paimon JNI reader is not yet supported" :
-                        "Unsupported type: BLOB in Paimon JNI reader";
-                throw new StarRocksConnectorException(
-                        "%s. Native reader is required for this column (%s).", message, reason);
-            }
+    private Decision selectMode(Split split) {
+        DataSplit data = PaimonSplitUtils.getDataSplit(split).orElse(null);
+        if (data == null) {
+            // The current CPP split protocol cannot deserialize Java system-table or other non-data splits.
+            return new Decision(Reader.JNI, Reason.SYSTEM_SPLIT);
         }
-        return new Decision(Reader.JNI, reason);
+        PaimonReaderSelector selector = selectorFor(data);
+        if (selector == null || selector.schema == null) {
+            return new Decision(Reader.JNI, Reason.UNKNOWN_SCHEMA);
+        }
+        if (!hasCompatibleFallbackSchema(data, selector)) {
+            return new Decision(Reader.JNI, Reason.SCHEMA_EVOLUTION);
+        }
+        // CPP's primary-key reader requires DataSplit; Java can retain indexed row ranges.
+        if (PaimonSplitUtils.isGlobalIndexSplit(split) && !selector.schema.primaryKeys().isEmpty()) {
+            return new Decision(Reader.JNI, Reason.PRIMARY_KEY_INDEXED_SPLIT);
+        }
+        if (!selector.supportsFileFormats(data)) {
+            return new Decision(Reader.JNI, Reason.FILE_FORMAT);
+        }
+        if (!nativeSchemaSupported(selector.schema)) {
+            return new Decision(Reader.JNI, Reason.TABLE_SCHEMA);
+        }
+
+        boolean needsMerge = selector.requiresMerge(data);
+        if (!selector.supportsMergeEngine(needsMerge)) {
+            return new Decision(Reader.JNI, Reason.MERGE_FUNCTION);
+        }
+
+        Set<String> required = selector.requiredFields(needsMerge);
+        if (!selector.supportsAggregateFunctions(needsMerge, required)) {
+            return new Decision(Reader.JNI, Reason.MERGE_FUNCTION);
+        }
+        // Delay historical schema loads until the cheaper merge checks have passed.
+        if (!selector.supportsHistoricalFileFormats(data)) {
+            return new Decision(Reader.JNI, Reason.FILE_FORMAT);
+        }
+        if (!selector.supportsHistoricalSchemaTypes(data)) {
+            return new Decision(Reader.JNI, Reason.TABLE_SCHEMA);
+        }
+        if (!selector.supportsDeletionVectors(data)) {
+            return new Decision(Reader.JNI, Reason.DELETION_VECTOR);
+        }
+        if (!selector.supportsOrcTimestampEncoding(data)) {
+            return new Decision(Reader.JNI, Reason.ORC_LEGACY_TIMESTAMP);
+        }
+        if (!selector.supportsSchemaEvolution(data, required)) {
+            return new Decision(Reader.JNI, Reason.SCHEMA_EVOLUTION);
+        }
+        if (!selector.supportsTimestampConversion(required)) {
+            return new Decision(Reader.JNI, Reason.TIMESTAMP);
+        }
+        if (!selector.supportsNullableMapKeys(data, required)) {
+            return new Decision(Reader.JNI, Reason.NULLABLE_MAP_KEY);
+        }
+
+        return new Decision(Reader.NATIVE,
+                PaimonSplitUtils.isGlobalIndexSplit(split) ? Reason.INDEXED_SPLIT : Reason.NATIVE_SUPPORTED);
     }
 
-    private boolean rawSupported(DataSplit split) {
-        var rawFiles = split.convertToRawFiles();
-        if (rawFiles.isEmpty() || selectedTypes.stream()
-                .anyMatch(type -> contains(type, t -> t.is(DataTypeRoot.BLOB)))) {
+    // ==================== SR raw-file selection ====================
+
+    private boolean canUseStarRocksRawFile(Split split) {
+        DataSplit data = PaimonSplitUtils.getDataSplit(split).orElse(null);
+        if (data == null || PaimonSplitUtils.isGlobalIndexSplit(split)) {
             return false;
         }
-        return rawFiles.get().stream().allMatch(raw -> {
-            if (!raw.format().equals("parquet") && !raw.format().equals("orc")) {
-                return false;
-            }
-            if (selectedTypes.stream().anyMatch(type -> contains(type, t -> timestampPrecision(t) > 6 ||
-                    (raw.format().equals("orc") && isTemporal(t))))) {
-                return false;
-            }
-            TableSchema fileSchema = fileSchema(raw.schemaId());
-            return fields.stream().allMatch(name -> sameField(fileSchema, name));
-        });
+        PaimonReaderSelector selector = selectorFor(data);
+        return selector != null && selector.schema != null && hasCompatibleFallbackSchema(data, selector) &&
+                selector.canReadRawFiles(data);
     }
 
-    // Return the first incompatibility, or null when all checks pass.
-    private Reason nativeIncompatibility(DataSplit split, PaimonReaderMode mode) {
-        if (!CPP_FORMATS.contains(schema.options().getOrDefault("file.format", "parquet")) ||
-                split.dataFiles().stream().anyMatch(file -> !CPP_FORMATS.contains(file.fileFormat()))) {
-            return Reason.FILE_FORMAT;
+    private boolean canReadRawFiles(DataSplit split) {
+        var rawFiles = split.convertToRawFiles();
+        if (rawFiles.isEmpty()) {
+            return false;
         }
-        if (!nativeSchemaSupported(schema)) {
-            // CPP parses the complete table schema before applying column projection.
-            return Reason.TABLE_SCHEMA;
+        for (DataType type : selectedTypes) {
+            if (contains(type, t -> t.is(DataTypeRoot.BLOB))) {
+                return false;
+            }
         }
-        boolean needsMerge = requiresMerge(split);
-        Set<String> required = requiredFields(needsMerge);
-        if (needsMerge && !mergeSupported(required)) {
-            return Reason.MERGE_FUNCTION;
+        for (var file : rawFiles.get()) {
+            String format = file.format();
+            if (!format.equals("parquet") && !format.equals("orc")) {
+                return false;
+            }
+            for (DataType type : selectedTypes) {
+                if (contains(type, t -> isUnsupportedRawTimeType(t, format))) {
+                    return false;
+                }
+            }
+            if (!hasCompatibleSchema(fileSchema(file.schemaId()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean hasCompatibleSchema(TableSchema fileSchema) {
+        SchemaFields currentFields = fieldMaps(schema);
+        SchemaFields fileFields = fieldMaps(fileSchema);
+        for (String name : fields) {
+            DataField current = currentFields.names().get(name);
+            if (current == null) {
+                return false;
+            }
+            DataField previous = fileFields.ids().get(current.id());
+            if (previous == null) {
+                // A newly added field is safe unless the file has a different field with the same name.
+                if (fileFields.names().containsKey(name)) {
+                    return false;
+                }
+            } else if (!previous.name().equals(name) || !previous.type().equalsIgnoreNullable(current.type())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isUnsupportedRawTimeType(DataType type, String format) {
+        if (type instanceof TimestampType) {
+            return ((TimestampType) type).getPrecision() > 6 || format.equals("orc");
+        }
+        if (type instanceof LocalZonedTimestampType) {
+            return ((LocalZonedTimestampType) type).getPrecision() > 6 || format.equals("orc");
+        }
+        return format.equals("orc") && type.is(DataTypeRoot.TIME_WITHOUT_TIME_ZONE);
+    }
+
+    // ==================== Paimon native compatibility checks ====================
+
+    private boolean supportsFileFormats(DataSplit split) {
+        if (!CPP_FORMATS.contains(schema.options().getOrDefault("file.format", "parquet"))) {
+            return false;
         }
         for (var file : split.dataFiles()) {
+            if (!CPP_FORMATS.contains(file.fileFormat())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsHistoricalFileFormats(DataSplit split) {
+        for (var file : split.dataFiles()) {
+            if (!CPP_FORMATS.contains(fileSchema(file.schemaId()).options().getOrDefault("file.format", "parquet"))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsHistoricalSchemaTypes(DataSplit split) {
+        // CPP parses complete schemas before applying the selected columns.
+        for (var file : split.dataFiles()) {
+            if (!nativeSchemaSupported(fileSchema(file.schemaId()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsMergeEngine(boolean needsMerge) {
+        if (!needsMerge) {
+            return true;
+        }
+        return switch (schema.options().getOrDefault("merge-engine", "deduplicate")) {
+            case "deduplicate", "first-row", "aggregation", "partial-update" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean supportsAggregateFunctions(boolean needsMerge, Set<String> required) {
+        if (!needsMerge) {
+            return true;
+        }
+        String engine = schema.options().getOrDefault("merge-engine", "deduplicate");
+        if (!engine.equals("aggregation") && !engine.equals("partial-update")) {
+            return true;
+        }
+        Set<String> sequences = new HashSet<>();
+        addNames(sequences, schema.options().get("sequence.field"));
+        for (String name : required) {
+            if (schema.primaryKeys().contains(name) || sequences.contains(name)) {
+                continue;
+            }
+            DataField field = fieldMaps(schema).names().get(name);
+            String function = schema.options().getOrDefault("fields." + name + ".aggregate-function",
+                    schema.options().getOrDefault("fields.default-aggregate-function", "last_non_null_value"));
+            if (field != null && !aggregateSupported(function, field.type())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsDeletionVectors(DataSplit split) {
+        if (split.deletionFiles().isEmpty() || split.deletionFiles().get().stream().noneMatch(file -> file != null)) {
+            return true;
+        }
+        if (option(schema, "deletion-vectors.bitmap64", false)) {
+            return false;
+        }
+        for (var file : split.dataFiles()) {
+            if (option(fileSchema(file.schemaId()), "deletion-vectors.bitmap64", false)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsOrcTimestampEncoding(DataSplit split) {
+        for (var file : split.dataFiles()) {
+            if (!file.fileFormat().equals("orc")) {
+                continue;
+            }
             TableSchema old = fileSchema(file.schemaId());
-            if (!nativeSchemaSupported(old)) {
-                return Reason.TABLE_SCHEMA;
-            }
-            if (!CPP_FORMATS.contains(old.options().getOrDefault("file.format", "parquet"))) {
-                return Reason.FILE_FORMAT;
-            }
-            if (split.deletionFiles().isPresent() && split.deletionFiles().get().stream().anyMatch(f -> f != null) &&
-                    (option(schema, "deletion-vectors.bitmap64", false) ||
-                            option(old, "deletion-vectors.bitmap64", false))) {
-                return Reason.DELETION_VECTOR;
-            }
-            // The ORC adapter may initialize unprojected fields from the file schema as well.
-            if (file.fileFormat().equals("orc") && (option(schema, "orc.timestamp-ltz.legacy.type", true) ||
+            if ((option(schema, "orc.timestamp-ltz.legacy.type", true) ||
                     option(old, "orc.timestamp-ltz.legacy.type", true)) &&
-                    old.fields().stream().anyMatch(f -> contains(f.type(),
-                            t -> t.is(DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE)))) {
-                return Reason.ORC_LEGACY_TIMESTAMP;
+                    old.fields().stream().anyMatch(field -> contains(field.type(),
+                            type -> type.is(DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE)))) {
+                return false;
             }
+        }
+        return true;
+    }
+
+    private boolean supportsSchemaEvolution(DataSplit split, Set<String> required) {
+        for (var file : split.dataFiles()) {
+            TableSchema old = fileSchema(file.schemaId());
             for (String name : required) {
                 DataField current = fieldMaps(schema).names().get(name);
                 if (current == null) {
                     continue;
                 }
                 DataField previous = fieldMaps(old).ids().get(current.id());
-                // Explicit NATIVE retains CPP's conversion semantics; AUTO only uses proven conversions.
-                if (mode == PaimonReaderMode.AUTO && previous != null &&
-                        !safeNativeEvolution(previous.type(), current.type())) {
-                    return Reason.SCHEMA_EVOLUTION;
-                }
-                if (mode == PaimonReaderMode.AUTO && contains(current.type(), PaimonReaderSelector::isTimestamp)) {
-                    // Negative fractional timestamps and nanosecond overflow cannot be ruled out by type alone.
-                    return Reason.TIMESTAMP;
-                }
-                if (mode == PaimonReaderMode.AUTO && !file.fileFormat().equals("parquet") && contains(current.type(),
-                        t -> t instanceof MapType && ((MapType) t).getKeyType().isNullable())) {
-                    return Reason.NULLABLE_MAP_KEY;
+                if (previous != null && !safeNativeEvolution(previous.type(), current.type())) {
+                    return false;
                 }
             }
         }
-        return null;
+        return true;
+    }
+
+    private boolean supportsTimestampConversion(Set<String> required) {
+        // Negative fractional values and nanosecond overflow cannot be ruled out by type alone.
+        for (String name : required) {
+            DataField field = fieldMaps(schema).names().get(name);
+            if (field != null && contains(field.type(), PaimonReaderSelector::isTimestamp)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean supportsNullableMapKeys(DataSplit split, Set<String> required) {
+        if (split.dataFiles().stream().allMatch(file -> file.fileFormat().equals("parquet"))) {
+            return true;
+        }
+        for (String name : required) {
+            DataField field = fieldMaps(schema).names().get(name);
+            if (field != null && contains(field.type(),
+                    type -> type instanceof MapType && ((MapType) type).getKeyType().isNullable())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean requiresMerge(DataSplit split) {
@@ -271,35 +411,12 @@ public final class PaimonReaderSelector {
             schema.options().forEach((key, value) -> {
                 if (key.startsWith("fields.") && key.endsWith(".sequence-group") &&
                         Arrays.stream(value.split(",")).map(String::trim).anyMatch(required::contains)) {
-                    required.add(key.substring("fields.".length(), key.length() - ".sequence-group".length()));
+                    String sequenceFields = key.substring("fields.".length(), key.length() - ".sequence-group".length());
+                    addNames(required, sequenceFields);
                 }
             });
         } while (required.size() != previousSize);
         return required;
-    }
-
-    private boolean mergeSupported(Set<String> required) {
-        String engine = schema.options().getOrDefault("merge-engine", "deduplicate");
-        if (engine.equals("deduplicate") || engine.equals("first-row")) {
-            return true;
-        }
-        if (!engine.equals("aggregation") && !engine.equals("partial-update")) {
-            return false;
-        }
-        Set<String> sequences = new HashSet<>();
-        addNames(sequences, schema.options().get("sequence.field"));
-        for (String name : required) {
-            if (schema.primaryKeys().contains(name) || sequences.contains(name)) {
-                continue;
-            }
-            DataField field = fieldMaps(schema).names().get(name);
-            String function = schema.options().getOrDefault("fields." + name + ".aggregate-function",
-                    schema.options().getOrDefault("fields.default-aggregate-function", "last_non_null_value"));
-            if (field != null && !aggregateSupported(function, field.type())) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static boolean aggregateSupported(String function, DataType type) {
@@ -316,31 +433,6 @@ public final class PaimonReaderSelector {
                     DataTypeRoot.CHAR, DataTypeRoot.VARCHAR, DataTypeRoot.BINARY, DataTypeRoot.VARBINARY, DataTypeRoot.DATE);
             default -> false;
         };
-    }
-
-    private TableSchema fileSchema(long id) {
-        return schemas.computeIfAbsent(id, schemaLoader::apply);
-    }
-
-    private SchemaFields fieldMaps(TableSchema schema) {
-        return schemaFields.computeIfAbsent(schema.id(), id -> new SchemaFields(schema));
-    }
-
-    private static List<DataType> selectedTypes(List<DataField> schemaFields, Set<String> fields) {
-        return schemaFields.stream().filter(field -> fields.contains(field.name()))
-                .map(DataField::type).toList();
-    }
-
-    private boolean sameField(TableSchema old, String name) {
-        DataField current = fieldMaps(schema).names().get(name);
-        if (current == null) {
-            return false;
-        }
-        DataField previous = fieldMaps(old).ids().get(current.id());
-        if (previous == null) {
-            return !fieldMaps(old).names().containsKey(name);
-        }
-        return previous.name().equals(name) && previous.type().equalsIgnoreNullable(current.type());
     }
 
     private static boolean safeNativeEvolution(DataType old, DataType current) {
@@ -381,15 +473,55 @@ public final class PaimonReaderSelector {
         return type.isAnyOf(DataTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE, DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE);
     }
 
-    private static boolean isTemporal(DataType type) {
-        return isTimestamp(type) || type.is(DataTypeRoot.TIME_WITHOUT_TIME_ZONE);
+    // ==================== JNI compatibility checks ====================
+
+    private void checkJniSupported(Reason reason) {
+        for (DataTypeRoot unsupported : List.of(DataTypeRoot.BLOB, DataTypeRoot.VARIANT)) {
+            for (DataType type : selectedTypes) {
+                if (contains(type, nested -> nested.is(unsupported))) {
+                    String message = unsupported == DataTypeRoot.VARIANT ?
+                            "Reading VARIANT through the Paimon JNI reader is not yet supported" :
+                            "Unsupported type: BLOB in Paimon JNI reader";
+                    throw new StarRocksConnectorException(
+                            "%s (reader selection reason: %s). " +
+                                    "Exclude unsupported columns or use a compatible native read.", message, reason);
+                }
+            }
+        }
     }
 
-    private static int timestampPrecision(DataType type) {
-        if (type instanceof TimestampType) {
-            return ((TimestampType) type).getPrecision();
+    // ==================== Shared schema and type helpers ====================
+
+    private PaimonReaderSelector selectorFor(DataSplit split) {
+        if (!(split instanceof FallbackDataSplit) || !((FallbackDataSplit) split).isFallback()) {
+            return this;
         }
-        return type instanceof LocalZonedTimestampType ? ((LocalZonedTimestampType) type).getPrecision() : 0;
+        if (table == null || schema == null) {
+            return null;
+        }
+        if (fallbackSelector == null) {
+            String branch = schema.options().get("scan.fallback-branch");
+            if (branch == null) {
+                return null;
+            }
+            fallbackSelector = new PaimonReaderSelector(table.switchToBranch(branch), List.copyOf(fields));
+        }
+        return fallbackSelector;
+    }
+
+    private boolean hasCompatibleFallbackSchema(DataSplit split, PaimonReaderSelector selector) {
+        if (!(split instanceof FallbackDataSplit) || !((FallbackDataSplit) split).isFallback()) {
+            return true;
+        }
+        return schema != null && schema.logicalRowType().equals(selector.schema.logicalRowType());
+    }
+
+    private TableSchema fileSchema(long id) {
+        return schemas.computeIfAbsent(id, schemaLoader::apply);
+    }
+
+    private SchemaFields fieldMaps(TableSchema schema) {
+        return schemaFields.computeIfAbsent(schema.id(), id -> new SchemaFields(schema));
     }
 
     private static boolean contains(DataType type, Predicate<DataType> predicate) {
@@ -407,5 +539,10 @@ public final class PaimonReaderSelector {
                     contains(((MapType) type).getValueType(), predicate);
         }
         return false;
+    }
+
+    private static List<DataType> selectedTypes(List<DataField> schemaFields, Set<String> fields) {
+        return schemaFields.stream().filter(field -> fields.contains(field.name()))
+                .map(DataField::type).toList();
     }
 }

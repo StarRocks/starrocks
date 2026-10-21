@@ -5,6 +5,7 @@
 Capability investigation: **2026-10-15**. Selector and integration validation:
 **2026-10-16**. Original implementation reference: StarRocks commit `c8f4807692d`.
 Explicit-mode precedence and system-table probes were rechecked on **2026-10-19**.
+Selector refactoring and local regression were rechecked on **2026-10-21**.
 
 | Component | Version / source |
 | --- | --- |
@@ -27,15 +28,20 @@ each split. [PaimonScanNode](../../planner/PaimonScanNode.java) constructs scan 
 
 Selection order:
 
-1. Explicit JNI is final for every split type. The legacy
+Unsupported split protocols are rejected before mode selection. In particular,
+IndexedSplit wrapping FallbackDataSplit cannot preserve row ranges through either
+Java 2.0.0 or CPP 0.3.0 serialization, even when `isFallback()` is false.
+
+1. Explicit JNI is final for supported split protocols. The legacy
    `paimon_force_jni_reader` setting is equivalent to JNI and overrides NATIVE/AUTO.
    Unsupported JNI columns fail rather than switching readers.
-2. Explicit NATIVE selects paimon-cpp or reports a planning error when the current
-   integration cannot support the split. It never silently selects JNI.
-3. AUTO selects compatible SR raw files, then compatible native reads, then JNI.
-   IndexedSplit retains its row ranges through either SDK; it never uses raw files.
-   An indexed fallback wrapper uses JNI because the native binary decoder cannot
-   handle that wrapper.
+2. Every other mode first selects compatible SR raw files.
+3. When raw files are unsuitable, AUTO and explicit NATIVE share the same native
+   compatibility checks. AUTO selects native or JNI; explicit NATIVE reports a
+   planning error if those checks select JNI.
+   IndexedSplit never uses raw files. Append-only indexed splits remain eligible
+   for native; primary-key indexed splits use JNI in AUTO because CPP's primary-key
+   reader requires DataSplit. Explicit NATIVE reports `PRIMARY_KEY_INDEXED_SPLIT`.
 
 Native compatibility failures are planning errors for explicit NATIVE. AUTO can
 fall back only if JNI supports the selected columns. Native execution failures do
@@ -69,9 +75,8 @@ IndexedSplit query included both indexed and not-yet-indexed matching rows.
 
 The native checks below apply after the raw-file fast path is ruled out.
 "Conservative" means metadata cannot prove the actual values are safe; it does
-not mean every value or conversion fails. Explicit NATIVE bypasses the
-conservative timestamp, nullable MAP-key and schema-conversion checks, while
-retaining checks for known unsupported conditions.
+not mean every value or conversion fails. AUTO and explicit NATIVE apply the
+same conservative timestamp, nullable MAP-key and schema-conversion checks.
 
 | Condition | Boundary and routing policy |
 | --- | --- |
@@ -79,7 +84,7 @@ retaining checks for known unsupported conditions.
 | File formats | Native supports Parquet, ORC, Avro and BLOB. JSON/CSV/TEXT use JNI in AUTO. Check actual files and current/historical schema format options. |
 | Whole-schema parsing | TIME, MULTISET and VECTOR in current or historical schemas block native, even if unselected. JNI fallback does not imply SR supports selecting that type; selected MULTISET is rejected by FE. |
 | Primary-key tables | Fixed and dynamic buckets, including `bucket=-1`, were tested for reads. Bucket mode alone is not a JNI criterion. This does not establish native write support. |
-| Merge semantics | Deduplicate, first-row, partial-update and aggregation were tested. Required aggregates depend on the selected fields, primary keys, sequence dependencies and file layout. `product`, `collect` and `merge_map` require JNI when actually needed for merging. Other aggregate/type combinations are constrained by `mergeSupported()`. |
+| Merge semantics | Deduplicate, first-row, partial-update and aggregation were tested. Required aggregates depend on the selected fields, primary keys, sequence dependencies and file layout. `product`, `collect` and `merge_map` require JNI when actually needed for merging. Other aggregate/type combinations are constrained by `supportsAggregateFunctions()`. |
 | Legacy raw-convertible files | Missing delete-row counts can still trigger the native merge reader. Raw-convertible alone does not prove SDK reads need no merge. |
 | Schema evolution | AUTO accepts unchanged types, integral widening and FLOAT-to-DOUBLE. Other changes conservatively use JNI. Tests found nested evolution failures and scalar conversion differences; ordinary nested reads without evolution were also tested. |
 | Deletion vectors | Actual bitmap64 deletion vectors block native when enabled in current or historical options. Safe SR raw-file reads remain eligible. |
@@ -89,25 +94,32 @@ retaining checks for known unsupported conditions.
 | BLOB / VARIANT | Selected BLOB requires native. JNI rejects selected BLOB/VARIANT, including nested occurrences. Excluding those columns may permit JNI; an impossible combination fails planning. |
 
 Merge dependencies are included in compatibility checks, not just output columns.
+Every ordering field in a comma-separated sequence-group key is included, along
+with transitive sequence-group dependencies.
 Nested access paths are currently checked conservatively using the selected
 top-level Paimon types.
 
 ## Evidence and diagnostics
 
 - [PaimonReaderSelectorTest](../../../../../../test/java/com/starrocks/connector/paimon/PaimonReaderSelectorTest.java):
-  19 tests for selection, compatibility reasons, historical schemas and wrappers.
+  24 tests for selection, compatibility reasons, historical schemas and wrappers.
 - [PaimonScanNodeTest](../../../../../../test/java/com/starrocks/planner/PaimonScanNodeTest.java):
   11 tests for task construction, serialization, routing and partition tracking.
-  Together with PaimonSplitUtilsTest, the 31 related FE tests passed on 2026-10-19.
+  Together with PaimonSplitUtilsTest, the 36 related FE tests passed on 2026-10-21.
 - [SQL suite](../../../../../../../../../test/sql/test_paimon_catalog/README.md):
   40 static cases covering results, FE routing and native BE profiles.
 - Additional local validation used 460 small, nonempty fixture tables and passed
   1,837 checks: full rows, ID projection, counts, and routing/profile checks.
   This includes three expected MULTISET analysis rejections. These temporary
   generators and fixtures are not a checked-in or continuously run CI suite.
-- The explicit-mode change was also checked against 460 existing tables and 502
-  actual data splits: ordinary AUTO selections were unchanged, and explicit JNI
-  was never overridden. This is a planning check, not a rerun of SQL result checks.
+- The refactored selector was compared with the original selector across 1,025 split/projection
+  combinations and 4,100 mode checks, including unspecified mode. AUTO/JNI reader
+  choices were unchanged; explicit NATIVE follows the updated raw-file and shared
+  compatibility policy. These are planning checks, not SQL result checks.
+- Additional reads across 62 existing local tables passed 453 checks, comparing
+  AUTO/NATIVE results with JNI and checking reader traces or expected NATIVE
+  rejections. This includes fallback branches, historical schemas, bitmap64 DV,
+  timestamps, and separate MAP-size/key/value projections on merged primary keys.
 
 From the repository root, run the related FE tests:
 

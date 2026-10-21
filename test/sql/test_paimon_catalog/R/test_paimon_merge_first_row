@@ -76,11 +76,7 @@ select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_t
 -- result:
 4	3	70
 -- !result
-function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "native")
--- result:
-None
--- !result
-function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id")
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "starrocks")
 -- result:
 None
 -- !result
@@ -183,11 +179,7 @@ select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_t
 -- result:
 4	3	70
 -- !result
-function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "native")
--- result:
-None
--- !result
-function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id")
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "starrocks")
 -- result:
 None
 -- !result
