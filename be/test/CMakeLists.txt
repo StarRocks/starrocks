@@ -23,6 +23,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
+        ./exec/pipeline/iceberg_v3_lookup_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
