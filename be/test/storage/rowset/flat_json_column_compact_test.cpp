@@ -2315,6 +2315,64 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWit
 // of compaction with every value unchanged: past INT64_MAX, negative next to unsigned, past 2^53 next to doubles,
 // and strings that look like JSON text next to numbers. A numeric mix that a numeric type holds exactly keeps
 // that type, so the path stays flattened.
+// Without a zone map (json_flat_create_zonemap=false, or segments written before it) a BIGINT sub-column's range is
+// unknown, so it is taken as the whole BIGINT range: met with DOUBLE it no longer fits exactly and the path is read as
+// JSON, where the same data with a zone map stays DOUBLE. Values are kept either way.
+TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutWithoutZoneMap) {
+    config::enable_json_flat_complex_type = false;
+    config::json_flat_sparsity_factor = 0.3;
+    const bool saved_zonemap = config::json_flat_create_zonemap;
+    DeferOp restore([&]() { config::json_flat_create_zonemap = saved_zonemap; });
+    const std::vector<std::vector<std::string>> segments = {{R"({"a": 5, "k": 1})", R"({"a": -3, "k": 2})"},
+                                                            {R"({"a": 1.5, "k": 3})"}};
+    for (bool zonemap : {true, false}) {
+        SCOPED_TRACE(zonemap ? "zone map" : "no zone map");
+        config::json_flat_create_zonemap = zonemap;
+        std::vector<std::string> expected;
+        std::vector<SegmentHandle> handles;
+        for (size_t k = 0; k < segments.size(); k++) {
+            MutableColumns cols;
+            for (const auto& json : segments[k]) {
+                cols.emplace_back(normal_json(json, false));
+                expected.emplace_back(json);
+            }
+            handles.emplace_back(write_segment(cols, true, fmt::format("/zonemap_{}_{}.data", zonemap, k), false));
+        }
+        std::vector<const ColumnReader*> readers;
+        for (auto& h : handles) {
+            readers.emplace_back(h.reader.get());
+        }
+        JsonPathDeriver deriver;
+        deriver.derived(readers);
+        const auto& paths = deriver.flat_paths();
+        auto it = std::find(paths.begin(), paths.end(), "a");
+        ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
+        EXPECT_EQ(zonemap ? TYPE_DOUBLE : TYPE_JSON, deriver.flat_types()[it - paths.begin()]);
+
+        ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
+        for (size_t j = 0; j < paths.size(); j++) {
+            ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
+        }
+        root->set_from_compaction(true);
+        MutableColumns chunks;
+        for (auto& h : handles) {
+            MutableColumnPtr col = JsonColumn::create();
+            ASSERT_OK(read_segment(h, ReadMode::kBatch, col.get(), root.get()));
+            chunks.emplace_back(std::move(col));
+        }
+        auto out = write_segment(chunks, true, fmt::format("/zonemap_{}_out.data", zonemap));
+        MutableColumnPtr col = JsonColumn::create();
+        ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
+        ASSERT_EQ(expected.size(), col->size());
+        auto* json_col = get_json_column(col);
+        for (size_t row = 0; row < expected.size(); row++) {
+            ASSIGN_OR_ABORT(auto want, JsonValue::parse(expected[row]));
+            EXPECT_EQ(0, want.compare(*json_col->get_object(row)))
+                    << "row " << row << ": want " << expected[row] << ", got " << col->debug_item(row);
+        }
+    }
+}
+
 TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegmentTypes) {
     config::enable_json_flat_complex_type = false;
     config::json_flat_sparsity_factor = 0.3;
