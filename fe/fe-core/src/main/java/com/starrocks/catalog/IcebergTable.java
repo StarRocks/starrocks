@@ -512,6 +512,7 @@ public class IcebergTable extends Table {
         Schema schema = getReadSchema();
         return getReadSpec().fields().stream()
                 .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .filter(IcebergApiConverter::isKnownPartitionTransform)
                 .collect(Collectors.toList());
     }
 

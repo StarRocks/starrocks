@@ -621,10 +621,13 @@ struct TIcebergSchemaField {
     // struct subfield missing from a data file; top-level columns use TColumn.default_value instead.
     5: optional string initial_default
 
+<<<<<<< HEAD
     // Names the field may have in data files without field ids, from the table's schema.name-mapping.default
     // (all names kept across renames). Readers resolve such files by these names instead of the current name.
     6: optional list<string> mapped_names
 
+=======
+>>>>>>> 2739b9408a2... [BugFix][RB-225] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#66093)
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }

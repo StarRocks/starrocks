@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 
 #include <boost/algorithm/string.hpp>
+#include <optional>
 #include <orc/OrcFile.hh>
 #include <unordered_map>
 #include <variant>
@@ -38,6 +39,9 @@ struct OrcMappingOptions {
     // Only used by hive
     // TODO(SmithCruise) Not develop now
     bool invalid_as_null;
+    // Set for an Iceberg file whose ORC types carry `iceberg.id`: complex-type children are then matched
+    // by field id instead of by name, so a renamed subfield still reads its data.
+    const TIcebergSchema* iceberg_schema = nullptr;
 };
 
 // For a primitive type, it only contain orc_type
@@ -130,6 +134,12 @@ public:
                                                                const std::vector<std::string>* hive_column_names,
                                                                const OrcMappingOptions& options);
 
+    // Iceberg resolves ORC columns by the field id in the `iceberg.id` attribute, not by name. Returns the
+    // current Iceberg name of each top-level ORC column ("" when its id is no longer in the schema), for use as
+    // positional hive_column_names. Returns nullopt when the file carries no field ids.
+    static std::optional<std::vector<std::string>> iceberg_column_names(const orc::Type& root_orc_type,
+                                                                        const TIcebergSchema& schema);
+
 private:
     static Status _check_orc_type_can_convert_2_logical_type(const orc::Type* orc_source_type,
                                                              const TypeDescriptor& slot_target_type,
@@ -146,8 +156,10 @@ private:
                                                            const std::vector<std::string>* hive_column_names,
                                                            const OrcMappingOptions& options);
 
+    // lake_field is the Iceberg schema field of origin_type when children are matched by field id, else nullptr.
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
-                                     const orc::Type* orc_type, const OrcMappingOptions& options);
+                                     const orc::Type* orc_type, const OrcMappingOptions& options,
+                                     const TIcebergSchemaField* lake_field);
 };
 
 } // namespace starrocks

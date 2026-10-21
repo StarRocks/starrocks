@@ -15,14 +15,34 @@
 #include "formats/parquet/column_reader_factory.h"
 
 #include "base/failpoint/fail_point.h"
+#include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "column/variant_path_parser.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
+#include "runtime/mem_pool.h"
+#include "runtime/type_info_allocator_adapter.h"
+#include "types/type_info.h"
 
 namespace starrocks::parquet {
+
+// A one-row nullable column holding an Iceberg initial-default, parsed with the subfield's type.
+static StatusOr<ColumnPtr> create_default_column(const TypeDescriptor& type, const std::string& default_value) {
+    auto type_info = get_type_info(type);
+    if (type_info == nullptr) {
+        return Status::NotSupported(fmt::format("unsupported initial-default type {}", type.debug_string()));
+    }
+    MemPool mem_pool;
+    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
+    Datum datum;
+    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
+    auto column = ColumnHelper::create_column(type, true);
+    column->append_datum(datum);
+    return column;
+}
 
 DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
@@ -448,11 +468,24 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                                                                  lake_schema_field, parquet_has_field_id);
 
         std::map<std::string, ColumnReaderPtr> children_readers;
+        std::map<std::string, ColumnPtr> default_columns;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             const ParquetField* parquet_child = mapping.parquet_children[i];
             if (parquet_child == nullptr) {
                 // subfield not existed in the file; we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
+                const TIcebergSchemaField* lake_child = mapping.lake_children[i];
+                if (lake_child != nullptr && lake_child->__isset.initial_default &&
+                    !col_type.children[i].is_complex_type()) {
+                    // A type the default parser does not support (e.g. TIME) keeps reading NULL, as before
+                    // defaults were filled; any other failure still fails the scan.
+                    auto default_column = create_default_column(col_type.children[i], lake_child->initial_default);
+                    if (default_column.ok()) {
+                        default_columns.emplace(col_type.field_names[i], std::move(default_column).value());
+                    } else if (!default_column.status().is_not_supported()) {
+                        return default_column.status();
+                    }
+                }
                 continue;
             }
             ASSIGN_OR_RETURN(
@@ -463,7 +496,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
         // maybe struct subfield ColumnReader is null
         if (any_reader_not_null(children_readers)) {
-            return std::make_unique<StructColumnReader>(field, std::move(children_readers));
+            return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns));
         } else {
             return nullptr;
         }
@@ -604,10 +637,9 @@ StructSubfieldMapping ColumnReaderFactory::resolve_struct_subfields(const Parque
             }
             const ParquetField* parquet_child =
                     parquet_has_field_id ? find_by_id(lake_it->second->field_id) : find_by_name(parquet_name(i));
-            if (parquet_child != nullptr) {
-                mapping.parquet_children[i] = parquet_child;
-                mapping.lake_children[i] = lake_it->second;
-            }
+            // Keep the lake child even when the file lacks the subfield: its initial-default fills the subfield.
+            mapping.parquet_children[i] = parquet_child;
+            mapping.lake_children[i] = lake_it->second;
         }
         return mapping;
     }

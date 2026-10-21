@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import org.apache.iceberg.PartitionSpec;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,6 +90,7 @@ public class IcebergDeleteSinkTest {
         // Mock IcebergTable
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
@@ -111,6 +113,7 @@ public class IcebergDeleteSinkTest {
         // Mock IcebergTable
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
@@ -138,6 +141,7 @@ public class IcebergDeleteSinkTest {
         // Mock IcebergTable
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("hdfs://localhost:9000/iceberg");
         when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -173,6 +177,7 @@ public class IcebergDeleteSinkTest {
         // Mock IcebergTable
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
         when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -202,6 +207,7 @@ public class IcebergDeleteSinkTest {
         // Mock IcebergTable
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
@@ -236,6 +242,7 @@ public class IcebergDeleteSinkTest {
 
         IcebergTable icebergTable = mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
@@ -249,6 +256,39 @@ public class IcebergDeleteSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testFormatVersionPropagatedToThrift() {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+        Column fileColumn = new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(0), desc);
+        fileSlot.setColumn(fileColumn);
+        desc.addSlot(fileSlot);
+        Column posColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT);
+        SlotDescriptor posSlot = new SlotDescriptor(new SlotId(1), desc);
+        posSlot.setColumn(posColumn);
+        desc.addSlot(posSlot);
+
+        for (int version : new int[] {2, 3}) {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+            when(nativeTable.properties()).thenReturn(new HashMap<>());
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), version);
+            sink.init();
+
+            TIcebergTableSink icebergSink = sink.toThrift().getIceberg_table_sink();
+            assertTrue(icebergSink.isSetFormat_version());
+            assertEquals(version, icebergSink.getFormat_version());
+        }
+    }
+
+    @Test
+>>>>>>> 2739b9408a2... [BugFix][RB-225] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#66093)
     public void testCompressionTypePriority() {
         // Create a valid tuple descriptor
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
@@ -267,6 +307,7 @@ public class IcebergDeleteSinkTest {
         {
             IcebergTable icebergTable = mock(IcebergTable.class);
             org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
             when(icebergTable.getNativeTable()).thenReturn(nativeTable);
             when(nativeTable.location()).thenReturn("/tmp/iceberg");
             when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -287,6 +328,7 @@ public class IcebergDeleteSinkTest {
         {
             IcebergTable icebergTable = mock(IcebergTable.class);
             org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
             when(icebergTable.getNativeTable()).thenReturn(nativeTable);
             when(nativeTable.location()).thenReturn("/tmp/iceberg");
             when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -307,6 +349,7 @@ public class IcebergDeleteSinkTest {
         {
             IcebergTable icebergTable = mock(IcebergTable.class);
             org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
             when(icebergTable.getNativeTable()).thenReturn(nativeTable);
             when(nativeTable.location()).thenReturn("/tmp/iceberg");
             when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -329,6 +372,7 @@ public class IcebergDeleteSinkTest {
         {
             IcebergTable icebergTable = mock(IcebergTable.class);
             org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
             when(icebergTable.getNativeTable()).thenReturn(nativeTable);
             when(nativeTable.location()).thenReturn("/tmp/iceberg");
             when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -348,6 +392,7 @@ public class IcebergDeleteSinkTest {
         {
             IcebergTable icebergTable = mock(IcebergTable.class);
             org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
             when(icebergTable.getNativeTable()).thenReturn(nativeTable);
             when(nativeTable.location()).thenReturn("/tmp/iceberg");
             when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
@@ -365,5 +410,25 @@ public class IcebergDeleteSinkTest {
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
             assertEquals(TCompressionType.LZ4, icebergSink.getDelete_compression_type());
         }
+    }
+
+    @Test
+    public void testRejectsUnknownPartitionTransform() {
+        // Reads ignore a partition field whose transform is unknown, but a writer cannot compute it.
+        org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(
+                org.apache.iceberg.types.Types.NestedField.required(1, "id",
+                        org.apache.iceberg.types.Types.IntegerType.get()));
+        PartitionSpec spec = org.apache.iceberg.PartitionSpecParser.fromJson(schema, "{\"spec-id\": 0, \"fields\": [" +
+                "{\"name\": \"id_future\", \"transform\": \"future_transform[3]\", \"source-id\": 1, " +
+                "\"field-id\": 1000}]}");
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(nativeTable.spec()).thenReturn(spec);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
+                () -> new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2));
+        assertTrue(exception.getMessage().contains("Unsupported partition transform"), exception.getMessage());
     }
 }
