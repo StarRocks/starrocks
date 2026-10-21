@@ -22,6 +22,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"

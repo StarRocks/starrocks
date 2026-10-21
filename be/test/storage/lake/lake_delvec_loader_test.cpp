@@ -22,6 +22,7 @@
 #include <thread>
 #include <vector>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"

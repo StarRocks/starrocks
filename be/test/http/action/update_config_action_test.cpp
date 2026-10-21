@@ -20,6 +20,7 @@
 #include <string>
 
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
