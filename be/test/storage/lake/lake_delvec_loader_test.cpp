@@ -16,19 +16,6 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include <atomic>
-#include <chrono>
-#include <new>
-#include <thread>
-#include <vector>
-
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/scoped_updater.h"
-#include "common/config_primary_key_fwd.h"
->>>>>>> cd4f63a ([BugFix] Apply lake_pk_preload_memory_limit_percent at runtime (#81164))
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
@@ -41,6 +28,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/scoped_updater.h"
 
 namespace starrocks::lake {
 
@@ -384,7 +372,7 @@ TEST_F(LakeDelvecLoaderTest, test_update_primary_index_memory_limit) {
 TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
     SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
     MemTracker primary_key_tracker(1000, "primary_key");
-    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    UpdateManager manager(_location_provider, &primary_key_tracker);
     ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
     ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
 
