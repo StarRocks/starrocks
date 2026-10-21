@@ -137,7 +137,7 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0
 0
 
 -- !result
--- name: test_sink_nested_struct
+-- name: rerun_test_sink_nested_struct
 shell: ossutil64 cp ./sql/test_across_engine/data/nested_structs.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
 -- result:
 0
