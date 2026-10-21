@@ -25,6 +25,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/runtime_env.h"
 #include "storage/del_vector.h"
