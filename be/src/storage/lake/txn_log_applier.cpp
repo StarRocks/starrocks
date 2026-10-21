@@ -497,24 +497,23 @@ public:
         if (log.has_partition_id()) {
             _partition_id = log.partition_id();
         }
+        RETURN_IF_ERROR(recover_if_needed());
         RETURN_IF_ERROR(check_rebuild_index());
         if (log.has_op_write()) {
             if (log.op_write().has_schema_key() && log.op_write().schema_key().has_table_id()) {
                 _table_id = log.op_write().schema_key().table_id();
             }
-            RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
+            RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
         if (log.has_op_compaction()) {
-            RETURN_IF_ERROR(
-                    check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
+            RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), log.txn_id()));
             if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
                 _metadata->set_last_base_compaction_time(
                         std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
             }
         }
         if (log.has_op_parallel_compaction()) {
-            RETURN_IF_ERROR(check_and_recover(
-                    [&]() { return apply_parallel_compaction_log(log.op_parallel_compaction(), log.txn_id()); }));
+            RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction(), log.txn_id()));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -566,6 +565,7 @@ public:
                         "Transaction log without op_write operation is not supported in batch apply");
             }
         }
+        RETURN_IF_ERROR(recover_if_needed());
         RETURN_IF_ERROR(check_rebuild_index());
 
         // At this point, all logs contain only op_write operations
@@ -634,44 +634,42 @@ public:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id, _skip_write_tablet_metadata));
         _has_finalized = true;
+        if (_recovered) {
+            _tablet.primary_key_mgr()->clear_need_recover(_tablet.id());
+        }
         return Status::OK();
     }
 
 private:
-    bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
-    bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
     bool is_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) const {
         auto mode = op_write.txn_meta().partial_update_mode();
         return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
-    Status check_and_recover(const std::function<Status()>& publish_func) {
-        auto ret = publish_func();
-        if (config::enable_primary_key_recover && need_recover(ret)) {
-            {
-                TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
-                LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-                // release and remove index entry's reference
-                _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
-                _guard.reset(nullptr);
-                _index_entry = nullptr;
-                // rebuild delvec and pk index
-                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.recover());
-                LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
-                          << " base_ver: " << _base_version;
-            }
-            if (need_re_publish(ret)) {
-                _builder.set_recover_flag(RecoverFlag::OK);
-                // duplicate primary key happen when prepare index, so we need to re-publish it.
-                return publish_func();
-            } else {
-                _builder.set_recover_flag(RecoverFlag::OK);
-                // No need to re-publish, make sure txn log already apply
-                return Status::OK();
-            }
+    // A publish that found this tablet inconsistent marked it and failed. Its retry -- this publish, which starts
+    // from a fresh copy of the base version and a fresh builder -- recovers the tablet before it applies any txn
+    // log, and then applies them all on the recovered state. Nothing of the failed attempt survives it, so there
+    // is nothing to roll back. The mark is cleared in finish(); if this attempt fails too, the next retry
+    // recovers again.
+    Status recover_if_needed() {
+        if (_recover_checked) {
+            return Status::OK();
         }
-        return ret;
+        _recover_checked = true;
+        if (!config::enable_primary_key_recover || !_tablet.primary_key_mgr()->need_recover(_tablet.id())) {
+            return Status::OK();
+        }
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
+        LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        // get lock to avoid gc
+        _tablet.primary_key_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.primary_key_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+        LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata, _base_version);
+        RETURN_IF_ERROR(recover.recover());
+        LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id() << " base_ver: " << _base_version
+                  << " duplicate rows deleted: " << recover.num_duplicate_rows();
+        _recovered = true;
+        return Status::OK();
     }
 
     // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
@@ -1055,6 +1053,9 @@ private:
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
+    // Whether recover_if_needed() has run, and whether it recovered the tablet.
+    bool _recover_checked = false;
+    bool _recovered = false;
     // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
     bool _is_lake_replication = false;
     // Timestamp when prepare_primary_index was first called (for publish SST logging)

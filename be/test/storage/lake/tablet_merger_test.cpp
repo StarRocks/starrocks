@@ -1350,8 +1350,15 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_issue11935_falls_back_then_dml_
     writable_target->clear_range();
     ASSERT_OK(put_tablet_metadata(writable_target));
     _primary_key_manager->unload_and_remove_primary_index(target_id);
+    // Rebuilding the index from the merged rowsets meets key 0 live twice, so the first write fails and marks the
+    // tablet for recover; the next one recovers it first.
+    auto failed = publish_followup_upsert_delete(target_id, fixture.new_version, /*upsert_key=*/1,
+                                                 /*upsert_value=*/111, /*delete_key=*/60);
+    ASSERT_FALSE(failed.ok());
+    ASSERT_TRUE(_primary_key_manager->need_recover(target_id));
     ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(target_id, fixture.new_version, /*upsert_key=*/1,
                                                                    /*upsert_value=*/111, /*delete_key=*/60));
+    EXPECT_FALSE(_primary_key_manager->need_recover(target_id));
     expect_issue11935_oracle(after_dml);
 
     ASSIGN_OR_ABORT(auto compacted, compact_tablet(target_id, after_dml->version(), /*force_base=*/true));

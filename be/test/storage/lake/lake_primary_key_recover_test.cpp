@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Primary key recover (LakePrimaryKeyRecover) drops a tablet's delete vectors and persistent index and rebuilds
-// them by replaying every rowset in order: segments as upserts, origin del files as deletes. These tests drive
-// each load type through the real write and publish path, force a recover on chosen publishes, and check the
+// Primary key recover (LakePrimaryKeyRecover) keeps a tablet's delete vectors, deletes every live row that a newer
+// live row with the same key supersedes, and discards the persistent index so that it is rebuilt. It runs on the
+// retry of a publish that found the tablet inconsistent: that publish marks the tablet and fails. These tests drive
+// each load type through the real write and publish path, make chosen publishes fail that way, and check the
 // recovered version row by row against a model of what the loads should have produced. A follow-up upsert of
-// every key then checks that the rebuilt index agrees with the rebuilt delete vectors: a key the index lost
-// would come back as a duplicate.
+// every key then checks that the rebuilt index agrees with the delete vectors: a key the index lost would come
+// back as a duplicate.
 
 #include "storage/lake/lake_primary_key_recover.h"
 
 #include <gtest/gtest.h>
 
 #include <ctime>
+#include <functional>
 #include <map>
 #include <numeric>
 #include <optional>
@@ -48,11 +50,13 @@
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
+#include "storage/options.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
@@ -231,26 +235,85 @@ protected:
         return txn_id;
     }
 
-    // Publish `txn_id` as the next version. With `recover`, the publish meets a duplicate primary key while
-    // loading the index, so it recovers the tablet and publishes the load again on the recovered state.
+    // Publish `txn_id` as the next version. With `recover`, the publish goes through recover: see
+    // publish_through_recover().
     void publish(int64_t txn_id, bool recover) {
+        auto attempt = [&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); };
         if (recover) {
-            // Only a load reaches the injection point, so make sure this publish does not reuse a cached index.
-            _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-            _fail_next_index_load = true;
-        }
-        const int64_t recover_before = recover_count();
-        auto st = publish_single_version(tablet_id(), _version + 1, txn_id).status();
-        _fail_next_index_load = false;
-        ASSERT_OK(st);
-        _version++;
-        if (recover) {
-            ASSERT_EQ(recover_before + 1, recover_count()) << "publish did not go through recover";
+            publish_through_recover(attempt);
+        } else {
+            ASSERT_OK(attempt());
+            _version++;
         }
     }
 
-    // Recover is entered once per injected duplicate key; the error-state counter counts exactly those.
-    static int64_t recover_count() { return StorageMetrics::instance()->primary_key_table_error_state_total.value(); }
+    // Publish the next version, meeting a duplicate primary key while loading the index on the first attempt.
+    void publish_through_recover(const std::function<Status()>& attempt) {
+        // Only a load reaches the injection point, so make sure this publish does not reuse a cached index.
+        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+        _fail_next_index_load = true;
+        const int64_t errors_before = error_count();
+        publish_failing_once(attempt);
+        EXPECT_FALSE(_fail_next_index_load) << "the publish did not load the index";
+        _fail_next_index_load = false;
+        EXPECT_EQ(errors_before + 1, error_count());
+    }
+
+    // Publish the next version through recover, the way FE drives it: the first attempt finds the tablet
+    // inconsistent, marks it and fails; the retry recovers the tablet and succeeds. Only a retry that recovered
+    // clears the mark.
+    void publish_failing_once(const std::function<Status()>& attempt) {
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id()));
+        auto st = attempt();
+        ASSERT_FALSE(st.ok()) << "the publish did not fail";
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id()))
+                << "the failed publish did not mark the tablet: " << st;
+        ASSERT_OK(attempt());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id())) << "the retry did not recover";
+        _version++;
+    }
+
+    // Each inconsistency a publish finds in the tablet itself counts here once.
+    static int64_t error_count() { return StorageMetrics::instance()->primary_key_table_error_state_total.value(); }
+
+    // Persist the whole index into sstables in a version of its own, as a publish eventually does.
+    void flush_index() {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+        auto next = std::make_shared<TabletMetadata>(*flushed);
+        next->set_version(_version + 1);
+        ASSERT_GT(next->sstable_meta().sstables_size(), 0);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
+        _version++;
+        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    }
+
+    // A copy of the current version to corrupt, and the call that makes it the next version.
+    MutableTabletMetadataPtr copy_version() {
+        ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        auto copy = std::make_shared<TabletMetadata>(*base);
+        copy->set_version(_version + 1);
+        return copy;
+    }
+    void put_version(const MutableTabletMetadataPtr& metadata) {
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        _version++;
+        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    }
+
+    // The row ids the delete vector of segment `rssid` deletes at `version`.
+    std::vector<uint32_t> deleted_rows(int64_t version, uint32_t rssid) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), version));
+        DelVector delvec;
+        CHECK_OK(get_del_vec(_tablet_mgr.get(), *metadata, rssid, false, LakeIOOptions(), &delvec));
+        std::vector<uint32_t> rows;
+        if (!delvec.empty()) {
+            for (uint32_t rowid : *delvec.roaring()) {
+                rows.push_back(rowid);
+            }
+        }
+        return rows;
+    }
 
     // Every row visible at `version`, keyed by c0. A duplicate primary key fails the test.
     Rows read(int64_t version) {
@@ -384,17 +447,15 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 // A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
 // keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
 // if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone, so either way the deleted keys must still be
-// deleted afterwards.
+// sstables already have it. Either way the delete vector of the first rowset deletes those keys, and recover keeps
+// it, so the deleted keys stay deleted.
 class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
 public:
     LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
 };
 
-// Disabled: recover skips a del file the compaction output inherited, and has nothing to replay once the
-// compaction dropped it, so the deleted keys come back.
-TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
-    const bool flush_index = GetParam();
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction) {
+    const bool with_sstables = GetParam();
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {
             {upserts(0, 16, 0, 0)}, {upserts(100, 104, 0, 0)}, {deletes(0, 8)}, {upserts(200, 204, 0, 0)}};
@@ -403,18 +464,10 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
         apply(&expected, load);
     }
     ASSERT_EQ(expected, read(_version));
-    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    if (flush_index) {
-        // Persist the whole index into sstables, as a publish eventually does, in a version of its own.
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
-        auto next = std::make_shared<TabletMetadata>(*flushed);
-        next->set_version(_version + 1);
-        ASSERT_GT(next->sstable_meta().sstables_size(), 0);
-        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
-        _version++;
-        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-        metadata = next;
+    if (with_sstables) {
+        flush_index();
     }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
 
     // Compact everything but the first rowset, which still holds the deleted keys.
     auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
@@ -432,21 +485,22 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
     ASSERT_EQ(2, metadata->rowsets_size());
     ASSERT_EQ(first_rowset_id, metadata->rowsets(0).id());
     // The del file goes with the compaction output only while the sstables do not cover it yet.
-    ASSERT_EQ(flush_index ? 0 : 1, metadata->rowsets(1).del_files_size());
+    ASSERT_EQ(with_sstables ? 0 : 1, metadata->rowsets(1).del_files_size());
 
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,
                          testing::Values(false, true));
 
 // A conditional upsert keeps the stored row when the incoming one does not win the condition; the losing new
-// row stays in its segment, masked only by that segment's delete vector. Recover must not bring it back.
-// Disabled: recover replays every row as a plain upsert, so the rows that lost the condition win.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_conditional_update) {
+// row stays in its segment, masked only by that segment's delete vector. Recover keeps that delete vector, so the
+// losing rows stay deleted.
+TEST_F(LakePrimaryKeyRecoverTest, conditional_update) {
     Rows expected;
     const std::vector<std::vector<Op>> base = {upserts(0, 12, 100, 0)};
     publish(write_rows(base), false);
@@ -530,13 +584,10 @@ TEST_P(LakePrimaryKeyRecoverColumnModeTest, column_mode_partial_update) {
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverColumnModeTest, LakePrimaryKeyRecoverColumnModeTest,
                          testing::Values(PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::COLUMN_UPSERT_MODE));
 
-// Recover clears the tablet's delete vectors and appends the rebuilt ones to the publish's MetaFileBuilder, but
-// an empty one is never appended. A lookup within the same publish that misses the builder falls back to the
-// base version's delete vector, which recover meant to discard. Here the base version wrongly deletes a row;
-// recover brings it back, but the re-publish rebuilds its index from the stale delete vector, so the index
-// misses the row and the next upsert of that key leaves it live as a duplicate.
-// Disabled: an empty rebuilt delete vector still falls back to the base version.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_back_to_base_version) {
+// Recover takes the base version's delete vectors as the truth, even where one deletes a row no load deleted. Here
+// a version wrongly deletes key 100: recover keeps it deleted, the rebuilt index agrees, and a later upsert of key
+// 100 brings it back exactly once.
+TEST_F(LakePrimaryKeyRecoverTest, recover_keeps_deletes_of_base_version) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
@@ -544,9 +595,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
         apply(&expected, load);
     }
     // A version whose only change is a wrong delete of the second rowset's first row (key 100).
-    ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    auto corrupted = std::make_shared<TabletMetadata>(*base);
-    corrupted->set_version(_version + 1);
+    auto corrupted = copy_version();
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id()));
     {
         MetaFileBuilder builder(tablet, corrupted);
@@ -558,95 +607,254 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
     }
     _version++;
     _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-    ASSERT_EQ(expected.size() - 1, read(_version).size());
+    expected.erase(100);
+    ASSERT_EQ(expected, read(_version));
 
-    // Recover treats the segments as the truth, so key 100 is back.
     const std::vector<std::vector<Op>> later = {upserts(200, 202, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     ASSERT_EQ(expected, read(_version));
     check_index_agrees(&expected);
+
+    const std::vector<std::vector<Op>> again = {{{100, 7, 7}}};
+    publish(write_rows(again), false);
+    apply(&expected, again);
+    EXPECT_EQ(expected, read(_version));
 }
 
-// A publish attempt that fails after appending its delete vectors leaves them in the MetaFileBuilder. Recover
-// rebuilds every delete vector from scratch, so none of those may survive it.
-// Disabled: recover only clears the delete vectors already in the metadata, not the ones pending in the builder.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_attempt) {
+// A publish attempt can fail after it has updated the index and appended delete vectors to its MetaFileBuilder.
+// None of that survives: the retry starts from the base version with a fresh builder and recovers the tablet. The
+// parameter is the point where the attempt fails.
+class LakePrimaryKeyRecoverFailedAttemptTest : public LakePrimaryKeyRecoverTest,
+                                               public testing::WithParamInterface<const char*> {
+public:
+    LakePrimaryKeyRecoverFailedAttemptTest()
+            : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_failed_attempt") {}
+};
+
+TEST_P(LakePrimaryKeyRecoverFailedAttemptTest, recover_discards_delvecs_of_failed_attempt) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
         publish(write_rows(load), false);
         apply(&expected, load);
     }
-    ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    auto metadata = std::make_shared<TabletMetadata>(*base);
-    metadata->set_version(_version + 1);
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id()));
-    MetaFileBuilder builder(tablet, metadata);
-    // What the failed attempt left behind: a delete of a row nothing supersedes.
-    auto delvec = std::make_shared<DelVector>();
-    const uint32_t rowid = 0;
-    delvec->init(metadata->version(), &rowid, 1);
-    builder.append_delvec(delvec, metadata->rowsets(1).id());
-    LakePrimaryKeyRecover recover(&builder, &tablet, metadata);
-    ASSERT_OK(recover.recover());
-    ASSERT_OK(builder.finalize(next_id()));
-    _version++;
+    const std::string sync_point = GetParam();
+    bool fail = true;
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        if (fail) {
+            fail = false;
+            *(Status*)arg = Status::InternalError("injected publish failure");
+        }
+    });
+    DeferOp clear_callback([&]() { SyncPoint::GetInstance()->ClearCallBack(sync_point); });
+    // Replaces keys of both earlier loads, so the attempt deletes rows of both rowsets before it fails.
+    const std::vector<std::vector<Op>> load = {upserts(6, 106, 500, 500)};
+    const int64_t txn_id = write_rows(load);
+    publish_failing_once([&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); });
+    EXPECT_FALSE(fail) << "the publish did not reach " << sync_point;
+    apply(&expected, load);
     EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
 }
 
-// A tablet split leaves each child reading the parent's shared segments through its own key range, so a
-// segment iterator over such a segment starts at the first in-range row, not at row 0. Recover must address
-// the rows it replays by their physical row ids, or the delete vectors it rebuilds mark the wrong rows.
-// Disabled: recover numbers the replayed rows from 0 instead of using the row ids the iterator returns.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_shared_segment_read_through_tablet_range) {
-    // Range distribution requires the order-preserving primary key encoding.
-    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
-    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
-    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
-    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverFailedAttemptTest, LakePrimaryKeyRecoverFailedAttemptTest,
+                         testing::Values("update_num_del_stat", "delvec_inconsistent"));
 
+// The three ways a publish finds a tablet inconsistent, each with a real inconsistency rather than an injected
+// failure: the index load meets a key live twice, the index points at a row a delete vector already deletes, and
+// the index points at a segment the tablet does not have.
+
+// A version whose delete vector misses the older copy of keys a later load replaced, so those keys are live twice
+// and rebuilding the index meets them as duplicates. Recover deletes the older copies, keeps the newer ones, and
+// leaves every other delete vector as it was.
+TEST_F(LakePrimaryKeyRecoverTest, duplicate_keys_keep_the_newest_row) {
     Rows expected;
-    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(6, 10, 100, 100)}};
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 8, 0, 0)},
+                                                             {upserts(4, 12, 100, 100)},
+                                                             {upserts(20, 24, 0, 0)},
+                                                             {deletes(20, 22)},
+                                                             {upserts(10, 12, 200, 200)}};
     for (const auto& load : loads) {
         publish(write_rows(load), false);
         apply(&expected, load);
     }
-    // Turn the tablet into a split child that owns [6, +inf) and shares both rowsets' segments with its sibling.
-    constexpr int32_t kLowerBound = 6;
-    ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    auto child = std::make_shared<TabletMetadata>(*base);
-    child->set_version(_version + 1);
-    {
-        auto* range_pb = child->mutable_range();
-        DatumVariant lower(get_type_info(LogicalType::TYPE_INT), Datum(kLowerBound));
-        VariantTuple tuple;
-        tuple.append(lower);
-        tuple.to_proto(range_pb->mutable_lower_bound());
-        range_pb->set_lower_bound_included(true);
-    }
-    for (auto& rowset : *child->mutable_rowsets()) {
-        for (auto& segment : *rowset.mutable_segment_metas()) {
-            segment.set_shared(true);
+    ASSERT_EQ(expected, read(_version));
+    const int64_t good_version = _version;
+    ASSIGN_OR_ABORT(auto good, _tablet_mgr->get_tablet_metadata(tablet_id(), good_version));
+    const uint32_t first_rssid = good->rowsets(0).id();
+    // The second load deleted keys 4..7 from the first rowset.
+    ASSERT_EQ((std::vector<uint32_t>{4, 5, 6, 7}), deleted_rows(good_version, first_rssid));
+
+    // Lose that delete vector, and the sstables that would let the index load skip the rebuild.
+    auto corrupted = copy_version();
+    corrupted->mutable_delvec_meta()->mutable_delvecs()->erase(first_rssid);
+    corrupted->clear_sstable_meta();
+    put_version(corrupted);
+
+    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
+    const int64_t txn_id = write_rows(later);
+    const int64_t errors_before = error_count();
+    publish_failing_once([&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); });
+    EXPECT_EQ(errors_before + 1, error_count());
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    EXPECT_EQ((std::vector<uint32_t>{4, 5, 6, 7}), deleted_rows(_version, first_rssid));
+    for (int i = 1; i < good->rowsets_size(); i++) {
+        const auto& rowset = good->rowsets(i);
+        for (int j = 0; j < rowset.segment_metas_size(); j++) {
+            const uint32_t rssid = rowset.id() + get_segment_idx(rowset, j);
+            EXPECT_EQ(deleted_rows(good_version, rssid), deleted_rows(_version, rssid)) << "segment " << rssid;
         }
     }
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*child));
+    check_index_agrees(&expected);
+}
+
+// The index in the sstables still points at a row that a delete vector of a later version deletes, so the next
+// upsert of that key finds a delete vector that already deletes the row it replaces.
+TEST_F(LakePrimaryKeyRecoverTest, index_points_at_deleted_row) {
+    Rows expected;
+    const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 0)};
+    publish(write_rows(base), false);
+    apply(&expected, base);
+    flush_index();
+    // A version that deletes key 5 without the index knowing.
+    auto corrupted = copy_version();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id()));
+    {
+        MetaFileBuilder builder(tablet, corrupted);
+        auto delvec = std::make_shared<DelVector>();
+        const uint32_t rowid = 5;
+        delvec->init(corrupted->version(), &rowid, 1);
+        builder.append_delvec(delvec, corrupted->rowsets(0).id());
+        ASSERT_OK(builder.finalize(next_id()));
+    }
     _version++;
     _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-    std::erase_if(expected, [](const auto& entry) { return entry.first < kLowerBound; });
+    expected.erase(5);
+    ASSERT_EQ(expected, read(_version));
+
+    const std::vector<std::vector<Op>> later = {upserts(4, 8, 100, 100)};
+    const int64_t txn_id = write_rows(later);
+    const int64_t errors_before = error_count();
+    publish_failing_once([&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); });
+    EXPECT_EQ(errors_before + 1, error_count());
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// The index in the sstables still points at the rows of a rowset that a later version no longer has, so the next
+// upsert of those keys deletes rows of a segment the tablet does not have.
+TEST_F(LakePrimaryKeyRecoverTest, index_points_at_missing_segment) {
+    Rows expected;
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 8, 0, 0)}, {upserts(100, 108, 0, 0)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    flush_index();
+    // A version without the first rowset.
+    auto corrupted = copy_version();
+    corrupted->mutable_rowsets()->DeleteSubrange(0, 1);
+    put_version(corrupted);
+    std::erase_if(expected, [](const auto& entry) { return entry.first < 8; });
+    ASSERT_EQ(expected, read(_version));
+
+    const std::vector<std::vector<Op>> later = {upserts(0, 4, 50, 50)};
+    const int64_t txn_id = write_rows(later);
+    const int64_t errors_before = error_count();
+    publish_failing_once([&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); });
+    EXPECT_EQ(errors_before + 1, error_count());
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// A tablet split leaves each child reading the parent's shared segments through its own key range, so a segment
+// iterator over such a segment starts at the first in-range row, not at row 0. Recover must address the rows it
+// reads by their physical row ids, or the delete vectors it writes mark the wrong rows.
+class LakePrimaryKeyRecoverSplitTest : public LakePrimaryKeyRecoverTest {
+public:
+    LakePrimaryKeyRecoverSplitTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_split") {}
+
+protected:
+    // Two loads, {0..11} and then {6..9}, on a tablet that then becomes a split child owning [6, +inf) and
+    // sharing both rowsets' segments with its sibling.
+    void make_split_child(Rows* expected) {
+        constexpr int32_t kLowerBound = 6;
+        // Range distribution requires the order-preserving primary key encoding.
+        _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(
+                PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+        const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(6, 10, 100, 100)}};
+        for (const auto& load : loads) {
+            publish(write_rows(load), false);
+            apply(expected, load);
+        }
+        auto child = copy_version();
+        {
+            auto* range_pb = child->mutable_range();
+            DatumVariant lower(get_type_info(LogicalType::TYPE_INT), Datum(kLowerBound));
+            VariantTuple tuple;
+            tuple.append(lower);
+            tuple.to_proto(range_pb->mutable_lower_bound());
+            range_pb->set_lower_bound_included(true);
+        }
+        for (auto& rowset : *child->mutable_rowsets()) {
+            for (auto& segment : *rowset.mutable_segment_metas()) {
+                segment.set_shared(true);
+            }
+        }
+        put_version(child);
+        std::erase_if(*expected, [](const auto& entry) { return entry.first < kLowerBound; });
+    }
+};
+
+TEST_F(LakePrimaryKeyRecoverSplitTest, shared_segment_read_through_tablet_range) {
+    Rows expected;
+    make_split_child(&expected);
     ASSERT_EQ(expected, read(_version));
 
     const std::vector<std::vector<Op>> later = {upserts(100, 102, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
 }
 
-// A multi-statement transaction publishes all its statements' txn logs through one batch apply. It has to
-// recover from a duplicate primary key like a single-statement load does.
-// Disabled: the batch apply of a multi-statement transaction has no recover path.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_multi_statement_transaction) {
+// The split child loses the delete vector that deletes the first rowset's keys 6..9, at its physical rows 6..9, so
+// the second load's copies of those keys are live twice. Recover has to delete rows 6..9, not the rows the range
+// iterator happens to return first.
+TEST_F(LakePrimaryKeyRecoverSplitTest, shared_segment_duplicate_keys) {
+    Rows expected;
+    make_split_child(&expected);
+    ASSIGN_OR_ABORT(auto child, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    const uint32_t first_rssid = child->rowsets(0).id();
+    ASSERT_EQ((std::vector<uint32_t>{6, 7, 8, 9}), deleted_rows(_version, first_rssid));
+    auto corrupted = copy_version();
+    corrupted->mutable_delvec_meta()->mutable_delvecs()->erase(first_rssid);
+    corrupted->clear_sstable_meta();
+    put_version(corrupted);
+
+    const std::vector<std::vector<Op>> later = {upserts(100, 102, 0, 0)};
+    const int64_t txn_id = write_rows(later);
+    const int64_t errors_before = error_count();
+    publish_failing_once([&]() { return publish_single_version(tablet_id(), _version + 1, txn_id).status(); });
+    EXPECT_EQ(errors_before + 1, error_count());
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    EXPECT_EQ((std::vector<uint32_t>{6, 7, 8, 9}), deleted_rows(_version, first_rssid));
+    check_index_agrees(&expected);
+}
+
+// A multi-statement transaction publishes all its statements' txn logs through one batch apply. Its retry has to
+// recover before that batch apply like a single-statement load does.
+TEST_F(LakePrimaryKeyRecoverTest, multi_statement_transaction) {
     Rows expected;
     const std::vector<std::vector<Op>> base = {upserts(0, 12, 0, 0)};
     publish(write_rows(base), false);
@@ -706,15 +914,13 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_multi_statement_transaction) {
     for (const auto& load_id : load_ids) {
         info.add_load_ids()->CopyFrom(load_id);
     }
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-    _fail_next_index_load = true;
     std::vector<TxnInfoPB> txns{info};
-    auto st = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
-                      .status();
-    _fail_next_index_load = false;
-    ASSERT_OK(st);
-    _version++;
+    publish_through_recover([&]() {
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
+                .status();
+    });
     EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
 }
 
 } // namespace starrocks::lake

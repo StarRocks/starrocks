@@ -14,47 +14,31 @@
 
 #include "storage/lake/lake_primary_key_recover.h"
 
+#include <fmt/format.h>
+
+#include <algorithm>
+#include <map>
+
+#include "base/utility/defer_op.h"
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks::lake {
-
-Status LakePrimaryKeyRecover::pre_cleanup() {
-    // 1. reset delvec & sst in metadata and clean delvec in builder
-    // TODO reclaim delvec files
-    _metadata->clear_delvec_meta();
-    _metadata->clear_sstable_meta();
-    // 2. reset primary index
-    RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
-    DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
-    if (data_dir != nullptr) {
-        // clear local persistent index's index meta from rocksdb, and index files.
-        RETURN_IF_ERROR(TabletMetaManager::remove_tablet_persistent_index_meta(data_dir, _tablet->id()));
-        std::string tablet_pk_path =
-                strings::Substitute("$0/$1/", data_dir->get_persistent_index_path(), _tablet->id());
-        RETURN_IF_ERROR(fs::remove_all(tablet_pk_path));
-    }
-    return Status::OK();
-}
-
-// Primary key schema
-starrocks::Schema LakePrimaryKeyRecover::generate_pkey_schema() {
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
-    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
-    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
-        pk_columns[i] = (ColumnId)i;
-    }
-    return ChunkHelper::convert_schema(tablet_schema, pk_columns);
-}
 
 Status LakePrimaryKeyRecover::sort_rowsets(std::vector<RowsetPtr>* rowsets) {
     std::sort(rowsets->begin(), rowsets->end(), [](const RowsetPtr& a, const RowsetPtr& b) {
@@ -72,105 +56,129 @@ Status LakePrimaryKeyRecover::sort_rowsets(std::vector<RowsetPtr>* rowsets) {
     return Status::OK();
 }
 
-Status LakePrimaryKeyRecover::rowset_iterator(
-        const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-        const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, const std::vector<uint32_t>&,
-                                   uint32_t)>& handler) {
+Status LakePrimaryKeyRecover::recover() {
+    PrimaryIndex::DeletesMap duplicates;
+    RETURN_IF_ERROR(find_duplicates(&duplicates));
+    RETURN_IF_ERROR(delete_duplicates(duplicates));
+    return discard_index();
+}
+
+Status LakePrimaryKeyRecover::find_duplicates(PrimaryIndex::DeletesMap* duplicates) {
+    auto tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
+    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    ASSIGN_OR_RETURN(auto encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+    MutableColumnPtr pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
+
+    // A temporary in-memory index: key -> the newest live row seen so far.
+    PrimaryIndex index(pkey_schema, encoding_type);
+    OlapReaderStatistics stats;
+    auto chunk_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    auto* chunk = chunk_ptr.get();
+    std::vector<uint32_t> rowids;
+    rowids.reserve(DEFAULT_CHUNK_SIZE);
+
     auto rowsets = _tablet->get_rowsets(_metadata);
-    // Sort the rowsets in order of primary key occurrence,
-    // so we can generate correct delvecs
     RETURN_IF_ERROR(sort_rowsets(&rowsets));
-    for (auto& rowset : rowsets) {
-        auto res = rowset->get_each_segment_iterator(pkey_schema, false, &stats);
-        if (!res.ok()) {
-            return res.status();
-        }
-        // iterator for each segment
-        auto& itrs = res.value();
-        // iterator for each del files
-        std::vector<std::unique_ptr<RandomAccessFile>> del_rfs;
-        for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
-            const auto& del = rowset->metadata().del_files(del_idx);
-            if (del.origin_rowset_id() != rowset->id()) {
-                // if del file is not origin from this rowset, skip it
-                // because that means this rowset is generated by compaction
-                break;
+    for (const auto& rowset : rowsets) {
+        // Skips the rows the base version's delete vectors delete, and reads a segment shared with a split
+        // sibling through this tablet's range.
+        ASSIGN_OR_RETURN(auto itrs,
+                         rowset->get_each_segment_iterator_with_delvec(pkey_schema, _base_version, _builder, &stats));
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
+        for (size_t i = 0; i < itrs.size(); i++) {
+            auto* itr = itrs[i].get();
+            if (itr == nullptr) {
+                continue;
             }
-            RandomAccessFileOptions ropts;
-            if (!del.encryption_meta().empty()) {
-                ASSIGN_OR_RETURN(ropts.encryption_info,
-                                 KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
-            }
-            ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(ropts, _tablet->tablet_mgr()->del_location(
-                                                                                       _metadata->id(), del.name())));
-            // Recovery rebuilds every delvec from these deletes, so a corrupt del file that still
-            // deserializes would bake the wrong rows into the recovered delvecs -- permanently, since
-            // recovery treats the result as the new source of truth. The shared PrimaryKeyRecover
-            // consumes plain file handles (it also serves shared-nothing, which has no del checksum),
-            // so verify here before handing the handle over; it re-reads positionally from offset 0.
-            // Only pays the extra read when a checksum was actually recorded.
-            if (del.has_crc32c()) {
-                auto verified = read_and_verify_del_file(read_file.get(), del, _metadata->id());
-                RETURN_IF_ERROR(verified.status());
-            }
-            del_rfs.push_back(std::move(read_file));
-        }
-        // Position of each del file in the merged (segments + dels) replay sequence consumed by the
-        // handler. A del file logically follows segment index op_offset, so the segments preceding it
-        // are this rowset's iterators with segment index <= op_offset (segs_before, counted below) and
-        // the del files preceding it are the j already collected; hence its merged position is
-        // segs_before + j. This interleaves deletes at the same point the apply path does, so recover
-        // reproduces the same delvec. del_rfs only holds origin del files (the loop above breaks on
-        // non-origin), so op_offset is in this rowset's segment-index space. Reduces to the legacy
-        // "after all segments" when op_offset is the max segment index.
-        std::vector<uint32_t> delidxs;
-        delidxs.reserve(del_rfs.size());
-        for (uint32_t j = 0; j < del_rfs.size(); ++j) {
-            const auto& del = rowset->metadata().del_files(j);
-            // Fall back to the max segment id when op_offset was not recorded (older metadata): the
-            // delete then sorts after all segments (num_segments + j), i.e. the legacy recover
-            // behavior. Matches the apply/persist fallback in resolve_del_op_offset().
-            const uint32_t op_offset = del.has_op_offset() ? del.op_offset() : get_max_segment_idx(rowset->metadata());
-            // Segments preceding this del in the replay = this rowset's segment iterators whose segment
-            // index is <= op_offset. Counting them (rather than using op_offset + 1) stays correct when
-            // segment_idx is no longer contiguous -- e.g. after tablet split/pruning a rowset can retain
-            // sparse segment indices, where op_offset + 1 would over- or under-count and replay the
-            // delete at the wrong point (erasing a row live publish kept, or vice versa). It also covers
-            // a segmentless delete-only rowset (count == 0, so the del lands at a position the handler
-            // reaches) and reduces to op_offset + 1 for the common contiguous case. itrs[k] corresponds
-            // to the k-th segment_meta, whose index is get_segment_idx(metadata, k).
-            uint32_t segs_before = 0;
-            for (uint32_t k = 0; k < itrs.size(); ++k) {
-                if (get_segment_idx(rowset->metadata(), static_cast<int32_t>(k)) <= op_offset) {
-                    ++segs_before;
+            DeferOp close_itr([&] { itr->close(); });
+            const uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+            while (true) {
+                chunk->reset();
+                rowids.clear();
+                auto st = itr->get_next(chunk, &rowids);
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                RETURN_IF_ERROR(st);
+                RETURN_ERROR_IF_FALSE(rowids.size() == chunk->num_rows(), "rowids.size != chunk rows");
+                pk_column->reset_column();
+                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), encoding_type);
+                // The rows come with their physical row ids, which skip deleted and out-of-range rows. The index
+                // assigns row id (rowid_start + i) to pks[i], so upsert each run of consecutive row ids on its own.
+                // Row ids ascend, so rowids[begin] >= begin and rowid_start never underflows.
+                size_t begin = 0;
+                while (begin < rowids.size()) {
+                    size_t end = begin + 1;
+                    while (end < rowids.size() && rowids[end] == rowids[end - 1] + 1) {
+                        end++;
+                    }
+                    const auto rowid_start = static_cast<uint32_t>(rowids[begin] - begin);
+                    RETURN_IF_ERROR(index.upsert(rssid, rowid_start, *pk_column, static_cast<uint32_t>(begin),
+                                                 static_cast<uint32_t>(end), duplicates));
+                    begin = end;
                 }
             }
-            delidxs.push_back(segs_before + j);
         }
-        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->id()));
     }
     return Status::OK();
 }
 
-// generate delvec and save
-Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) {
-    for (auto& new_delete : new_deletes) {
-        auto delvec_ptr = std::make_shared<DelVector>();
-        auto& del_ids = new_delete.second;
-        delvec_ptr->init(_metadata->version(), del_ids.data(), del_ids.size());
-        _builder->append_delvec(delvec_ptr, new_delete.first);
+Status LakePrimaryKeyRecover::delete_duplicates(const PrimaryIndex::DeletesMap& duplicates) {
+    std::map<uint32_t, RowsetMetadataPB*> rssid_to_rowset;
+    for (auto& rowset : *_metadata->mutable_rowsets()) {
+        for (int i = 0; i < rowset.segment_metas_size(); i++) {
+            rssid_to_rowset[rowset.id() + get_segment_idx(rowset, i)] = &rowset;
+        }
+    }
+    for (const auto& [rssid, rowids] : duplicates) {
+        if (rowids.empty()) {
+            continue;
+        }
+        auto it = rssid_to_rowset.find(rssid);
+        RETURN_ERROR_IF_FALSE(it != rssid_to_rowset.end(),
+                              fmt::format("recover found no rowset for segment {} of tablet {}", rssid, _tablet->id()));
+        TabletSegmentId tsid;
+        tsid.tablet_id = _tablet->id();
+        tsid.segment_id = rssid;
+        DelVectorPtr old_delvec;
+        RETURN_IF_ERROR(_tablet->primary_key_mgr()->get_del_vec(tsid, _base_version, _builder, false /* fill cache */,
+                                                                &old_delvec));
+        DelVectorPtr new_delvec;
+        old_delvec->add_dels_as_new_version(rowids, _metadata->version(), &new_delvec);
+        _builder->append_delvec(new_delvec, rssid);
+        it->second->set_num_dels(it->second->num_dels() + rowids.size());
+        _num_duplicate_rows += rowids.size();
     }
     return Status::OK();
 }
 
-int64_t LakePrimaryKeyRecover::tablet_id() {
-    return _tablet->id();
-}
-
-StatusOr<PrimaryKeyEncodingType> LakePrimaryKeyRecover::primary_key_encoding_type() const {
-    auto tablet_schema = std::make_unique<TabletSchema>(_metadata->schema());
-    return tablet_schema->primary_key_encoding_type_or_error();
+Status LakePrimaryKeyRecover::discard_index() {
+    // Same as a forced index rebuild: vacuum reclaims the sstables, and the publish's index load rebuilds the index
+    // from the rowsets and the delete vectors in |_builder|.
+    for (const auto& sstable : _metadata->sstable_meta().sstables()) {
+        FileMetaPB file_meta;
+        file_meta.set_name(sstable.filename());
+        file_meta.set_size(sstable.filesize());
+        file_meta.set_shared(sstable.shared());
+        file_meta.set_version(sstable.generation_version());
+        _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+    }
+    _metadata->clear_sstable_meta();
+    RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
+    DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
+    if (data_dir != nullptr) {
+        // clear local persistent index's index meta from rocksdb, and index files.
+        RETURN_IF_ERROR(TabletMetaManager::remove_tablet_persistent_index_meta(data_dir, _tablet->id()));
+        std::string tablet_pk_path =
+                strings::Substitute("$0/$1/", data_dir->get_persistent_index_path(), _tablet->id());
+        RETURN_IF_ERROR(fs::remove_all(tablet_pk_path));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

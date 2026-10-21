@@ -2298,8 +2298,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        // Publish version
+        // The first attempt fails and marks the tablet; the retry recovers it.
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id));
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
@@ -2348,8 +2351,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        // Publish version
+        // The first attempt fails and marks the tablet; the retry recovers it.
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id));
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
@@ -2404,8 +2410,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
         }
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
-        // Publish version
+        // The first attempt fails and marks the tablet; the retry recovers it.
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id));
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
@@ -2472,8 +2481,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         config::write_buffer_size = old_size;
         delta_writer->close();
-        // Publish version
+        // The first attempt fails and marks the tablet; the retry recovers it.
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id));
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
@@ -2491,10 +2503,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
     config::enable_primary_key_recover = false;
 }
 
-// Recover rebuilds the delvecs through a temporary in-memory primary index. The fixture's key is a single INT
+// Recover looks for duplicate keys through a temporary in-memory primary index. The fixture's key is a single INT
 // column, which V1 keeps as a native integer column but V2 encodes into a binary string, so that index must be
-// built for the tablet's encoding. Every publish below fails its index load once and recovers, which replays the
-// earlier rowsets: their segments as upserts and their del files as deletes.
+// built for the tablet's encoding. Every publish below fails its index load once, and its retry recovers, which
+// scans the live rows of the earlier rowsets.
 TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
     ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
     _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
@@ -2543,7 +2555,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
         }
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
+        // The first attempt fails and marks the tablet; the retry recovers it.
+        ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
+        ASSERT_TRUE(_primary_key_mgr->need_recover(tablet_id));
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_FALSE(_primary_key_mgr->need_recover(tablet_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));

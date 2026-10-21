@@ -199,7 +199,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     if (!st.ok()) {
         if (st.is_already_exist()) {
             StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
-            builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+            mark_need_recover(metadata->id());
         }
         // If load failed, release lock guard and remove index entry
         // MUST release lock guard before remove index entry
@@ -690,11 +690,11 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
-            // For test purpose, we can set recover flag to test recover mode.
+            // For test purpose, inject this failure to test recover.
             Status test_status = Status::OK();
             TEST_SYNC_POINT_CALLBACK("delvec_inconsistent", &test_status);
             if (!test_status.ok()) {
-                builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+                mark_need_recover(tablet->id());
                 return test_status;
             }
             if (cur_old + cur_add != cur_new) {
@@ -706,7 +706,7 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
                 LOG(ERROR) << error_msg;
                 StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
                 if (!config::experimental_lake_ignore_pk_consistency_check) {
-                    builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+                    mark_need_recover(tablet->id());
                     return Status::InternalError(error_msg);
                 }
             }
@@ -1040,7 +1040,12 @@ Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_
         tablet_reshard_helper::inherit_or_set_uid(new_rows_op.mutable_rowset(), op_write.rowset());
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
-            (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
+            auto st = builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
+            // A failure here has marked the tablet for recover, which only runs on the publish retry, so
+            // fail this publish. Without recover the failure stays ignored, as it always was.
+            if (!st.ok() && config::enable_primary_key_recover) {
+                return st;
+            }
             segment_id_to_add_dels_new_acc.clear();
         }
     }
@@ -2478,6 +2483,25 @@ bool PrimaryKeyManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t ex
     }
     _index_cache.release(index_entry);
     return index_entry->get_ref() == expected_cnt;
+}
+
+void PrimaryKeyManager::mark_need_recover(int64_t tablet_id) {
+    if (!config::enable_primary_key_recover) {
+        return;
+    }
+    LOG(WARNING) << "Primary Key tablet " << tablet_id << " is inconsistent, recover it on the publish retry";
+    std::lock_guard<std::mutex> lg(_need_recover_lock);
+    _need_recover_tablets.insert(tablet_id);
+}
+
+bool PrimaryKeyManager::need_recover(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_need_recover_lock);
+    return _need_recover_tablets.contains(tablet_id);
+}
+
+void PrimaryKeyManager::clear_need_recover(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_need_recover_lock);
+    _need_recover_tablets.erase(tablet_id);
 }
 
 int64_t PrimaryKeyManager::get_index_memory_size(int64_t tablet_id) const {

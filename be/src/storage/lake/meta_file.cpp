@@ -1263,11 +1263,11 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
                     &_pending_rowset_data.rowset_pb;
         }
     }
-    // For test purpose, we can set recover flag to test recover mode.
+    // For test purpose, inject this failure to test recover.
     Status test_status = Status::OK();
     TEST_SYNC_POINT_CALLBACK("update_num_del_stat", &test_status);
     if (!test_status.ok()) {
-        set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
+        _primary_key_mgr->mark_need_recover(_tablet_meta->id());
         return test_status;
     }
     for (const auto& each : segment_id_to_add_dels) {
@@ -1278,7 +1278,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             LOG(ERROR) << err_msg;
             StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
             if (!config::experimental_lake_ignore_pk_consistency_check) {
-                set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
+                _primary_key_mgr->mark_need_recover(_tablet_meta->id());
                 return Status::InternalError(err_msg);
             }
         } else {

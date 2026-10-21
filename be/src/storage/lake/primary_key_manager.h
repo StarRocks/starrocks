@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cache/dynamic_cache.h"
 #include "runtime/runtime_fwd.h"
@@ -254,6 +256,16 @@ public:
 
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+    // Primary key recover (enable_primary_key_recover) does not run inside the publish that finds the
+    // tablet inconsistent. That publish marks the tablet and fails; the retry recovers the tablet on a
+    // fresh copy of the base version before it applies any txn log, and clears the mark once its
+    // metadata is finalized. The mark lives in memory only: after a restart the next publish meets
+    // the inconsistency again and marks the tablet again.
+    // Marks nothing when enable_primary_key_recover is off.
+    void mark_need_recover(int64_t tablet_id);
+    bool need_recover(int64_t tablet_id);
+    void clear_need_recover(int64_t tablet_id);
+
     int64_t get_index_memory_size(int64_t tablet_id) const;
 
 private:
@@ -338,6 +350,9 @@ private:
     std::vector<PkIndexShard> _pk_index_shards;
 
     std::unique_ptr<PersistentIndexBlockCache> _block_cache;
+
+    std::mutex _need_recover_lock;
+    std::unordered_set<int64_t> _need_recover_tablets;
 };
 
 } // namespace lake

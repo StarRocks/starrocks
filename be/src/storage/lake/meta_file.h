@@ -36,8 +36,6 @@ namespace lake {
 
 class PrimaryKeyManager;
 
-enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
-
 // Segment index stored in SegmentMetadataPB.
 // Initially contiguous, but may become non-contiguous after partial compaction or batch merge.
 // Backward compatibility: old metadata may not have segment_idx, fallback to positional index.
@@ -144,9 +142,6 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
-    void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
-    RecoverFlag recover_flag() const { return _recover_flag; }
-
     // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
     uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
 
@@ -205,8 +200,6 @@ private:
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
-    // When recover flag isn't ok, need recover later
-    RecoverFlag _recover_flag = RecoverFlag::OK;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
 };
