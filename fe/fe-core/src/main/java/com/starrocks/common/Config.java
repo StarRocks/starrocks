@@ -3906,20 +3906,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int star_client_write_timeout_seconds = 30;
 
-<<<<<<< HEAD
-=======
     @ConfField(mutable = true, comment = "Max number of shards in one StarMgr getShardInfo call when FE resolves the "
             + "compute nodes of many tablets at once (query planning, loads, vacuum, shard deletion). StarMgr holds "
             + "its shard lock while it builds the reply, which blocks StarMgr writes and journal replay, so a larger "
             + "batch blocks them for longer; values < 1 are treated as 1.")
     public static int star_client_get_shard_info_batch_size = 1024;
 
-    @ConfField(mutable = true, comment = "When enabled, colocate groups are always reported as stable " +
-            "instead of checking their real balance status from the metadata service. Turn this on if the " +
-            "stability check is slow or unavailable and is blocking colocate group operations.")
-    public static boolean lake_skip_colocate_group_stable_check = false;
-
->>>>>>> c7f4c38c5d7... [BugFix][RB-526] Bound the shards per batched getShardInfo call (#66037)
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
