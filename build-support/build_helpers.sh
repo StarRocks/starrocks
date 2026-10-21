@@ -138,7 +138,8 @@ starrocks_detect_linker_type() {
 
     if [[ "$(uname -m)" != "aarch64" ]]; then
         local cxx_compiler=""
-        if [[ -n "${CXX:-}" ]]; then
+        # Mirrors be/CMakeLists.txt: CXX is honored only together with CC.
+        if [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
             cxx_compiler="${CXX}"
         elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
             cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
