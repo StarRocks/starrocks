@@ -392,6 +392,42 @@ TEST_F(KafkaDataConsumerTest, empty_job_client_rack_disables_node_value) {
     EXPECT_TRUE(consumer.match(&context));
 }
 
+TEST_F(KafkaDataConsumerTest, client_rack_isolates_reused_consumers) {
+    config::routine_load_kafka_client_rack = "rack-a";
+    const struct {
+        const char* name;
+        std::map<std::string, std::string> properties;
+        const char* expected_rack;
+    } cases[] = {
+            {"node default", {{"group.id", "g1"}}, "rack-a"},
+            {"explicit empty", {{"group.id", "g1"}, {"client.rack", ""}}, ""},
+            {"job rack-b", {{"group.id", "g1"}, {"client.rack", "rack-b"}}, "rack-b"},
+            {"job rack-c", {{"group.id", "g1"}, {"client.rack", "rack-c"}}, "rack-c"},
+    };
+
+    for (const auto& original : cases) {
+        SCOPED_TRACE(original.name);
+        StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+        context.load_src_type = TLoadSourceType::KAFKA;
+        context.kafka_info = kafka_load_info(original.properties);
+        KafkaDataConsumer consumer(&context);
+        ASSERT_OK(consumer.init(&context));
+        ASSERT_OK(consumer.reset());
+        EXPECT_EQ(original.expected_rack, effective_conf(consumer, "client.rack"));
+
+        for (const auto& candidate : cases) {
+            SCOPED_TRACE(candidate.name);
+            StreamLoadContext next_context(ExecEnv::GetInstance()->load_stream_mgr());
+            next_context.load_src_type = TLoadSourceType::KAFKA;
+            next_context.kafka_info = kafka_load_info(candidate.properties);
+            // The broker, topic, and group are identical. Only the job's rack property may prevent reuse.
+            // In particular, omitting client.rack and explicitly disabling it must remain distinct.
+            EXPECT_EQ(&original == &candidate, consumer.match(&next_context));
+        }
+        EXPECT_EQ(original.expected_rack, effective_conf(consumer, "client.rack"));
+    }
+}
+
 // Without a node-level value nothing is added: client.rack stays at librdkafka's empty default.
 TEST_F(KafkaDataConsumerTest, no_node_client_rack_leaves_property_unset) {
     config::routine_load_kafka_client_rack = "";
