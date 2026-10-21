@@ -4795,7 +4795,7 @@ TEST_F(ArrowScannerTest, TestStreamRejectsEmptySchemaMessageDeclaringManyRows) {
     expect_hostile_message_rejected_atomically(c);
 }
 
-TEST_F(ArrowScannerTest, TestStreamSaturatesRowCountsDeclaredByHostileMessages) {
+TEST_F(ArrowScannerTest, TestStreamClampsRowsDeclaredByHostileMessages) {
     // Declared row counts come from untrusted IPC metadata. Summing them must saturate instead of wrapping, or the
     // filtered-rows counter (which drives max_filter_ratio) could go negative.
     constexpr int64_t kDeclaredRows = std::numeric_limits<int64_t>::max() / 2;
@@ -4821,8 +4821,40 @@ TEST_F(ArrowScannerTest, TestStreamSaturatesRowCountsDeclaredByHostileMessages) 
     ASSERT_OK(res.status());
     ASSERT_EQ(2, res.value()->num_rows());
     EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    constexpr int64_t kClamp = std::numeric_limits<int32_t>::max();
     EXPECT_EQ(3, ctx->counter->arrow_messages_rejected);
-    EXPECT_EQ(std::numeric_limits<int64_t>::max(), ctx->counter->num_rows_filtered);
+    EXPECT_EQ(3 * kClamp, ctx->counter->num_rows_filtered);
+    // The orchestrator and the FE add sink rows on top of this counter; that sum must not wrap.
+    int64_t total = 0;
+    EXPECT_FALSE(__builtin_add_overflow(ctx->counter->num_rows_filtered, int64_t{2}, &total));
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamClampsSingleMessageWhoseBatchesDeclareOverflowingRowCount) {
+    constexpr int64_t kHalfPlusOne = std::numeric_limits<int64_t>::max() / 2 + 1;
+    auto c = make_int_slot_case();
+    auto empty_schema = arrow::schema(std::vector<std::shared_ptr<arrow::Field>>{});
+
+    SlotTypeDescInfoArray slots = c.slots;
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+    append_ipc_message(
+            pipe, empty_schema,
+            {arrow::RecordBatch::Make(empty_schema, kHalfPlusOne, std::vector<std::shared_ptr<arrow::Array>>{}),
+             arrow::RecordBatch::Make(empty_schema, kHalfPlusOne, std::vector<std::shared_ptr<arrow::Array>>{})});
+    append_ipc_message(pipe, c.good_schema, {c.good_batch});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(std::numeric_limits<int32_t>::max(), ctx->counter->num_rows_filtered);
     scanner.close();
 }
 
