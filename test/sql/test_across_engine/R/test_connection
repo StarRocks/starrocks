@@ -1,4 +1,4 @@
--- name: test_connection
+-- name: rerun_test_connection
 SELECT 1, 2;
 -- result:
 1	2

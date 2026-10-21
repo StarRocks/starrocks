@@ -1,4 +1,4 @@
--- name: test_sink_nested_map
+-- name: rerun_test_sink_nested_map
 shell: ossutil64 cp ./sql/test_across_engine/data/nested_maps.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
 -- result:
 0
@@ -69,7 +69,7 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0
 0
 
 -- !result
--- name: test_sink_nested_list
+-- name: rerun_test_sink_nested_list
 shell: ossutil64 cp ./sql/test_across_engine/data/nested_lists.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
 -- result:
 0
