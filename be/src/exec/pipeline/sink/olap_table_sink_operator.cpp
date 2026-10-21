@@ -14,25 +14,11 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
-<<<<<<< HEAD
+#include <exception>
+
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
 #include "runtime/buffer_control_block.h"
-=======
-#include <exception>
-
-#include "base/time/time.h"
-#include "base/utility/defer_op.h"
-#include "common/thread/threadpool.h"
-#include "compute_env/result/buffer_control_block.h"
-#include "compute_env/result/result_buffer_mgr.h"
-#include "compute_env/workgroup/pipeline_executor_set.h"
-#include "compute_env/workgroup/work_group.h"
-#include "data_sink/tablet/olap_table_sink.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_cancel.h"
-#include "exec_primitive/pipeline/primitives/driver_executor.h"
->>>>>>> bd4428a ([BugFix] Contain load sink close submission exceptions (#81251))
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"

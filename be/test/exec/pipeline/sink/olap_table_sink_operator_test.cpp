@@ -255,7 +255,7 @@ TEST_F(OlapTableSinkOperatorTest, enqueue_exception_closes_inline_once) {
 
     EXPECT_NO_THROW(EXPECT_FALSE(_op->pending_finish()));
     SyncPoint::GetInstance()->DisableProcessing();
-    _runtime_state->query_execution_services()->execution->load_sink_close_thread_pool->wait();
+    _exec_env->load_sink_close_thread_pool()->wait();
     ASSERT_TRUE(wait_until_close_finished());
     EXPECT_EQ(1, _sink.close_calls);
     EXPECT_EQ(std::this_thread::get_id(), _sink.close_thread);
