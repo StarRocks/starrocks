@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
 #include "librdkafka/rdkafka.h"

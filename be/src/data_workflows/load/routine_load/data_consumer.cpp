@@ -74,9 +74,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     } else {
         _group_id = it->second;
     }
-    const std::string& node_rack = config::routine_load_kafka_client_rack;
-    LOG(INFO) << "init kafka consumer with group id: " << _group_id
-              << (node_rack.empty() ? std::string() : ", client.rack: " + node_rack);
+    LOG(INFO) << "init kafka consumer with group id: " << _group_id;
 
     std::string errstr;
     auto set_conf = [&conf, &errstr](const std::string& conf_key, const std::string& conf_val) {
@@ -121,6 +119,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     // in its own rack/availability zone instead of the partition leader. Applied BEFORE the job's custom
     // properties so that an explicit "property.client.rack" on the job still wins. Not recorded in
     // _custom_properties: it is identical for every consumer on this node and must not affect match().
+    const std::string& node_rack = config::routine_load_kafka_client_rack;
     if (!node_rack.empty()) {
         RETURN_IF_ERROR(set_conf("client.rack", node_rack));
     }
@@ -149,6 +148,15 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             RETURN_IF_ERROR(set_conf(item.first, item.second));
         }
         _custom_properties.emplace(item.first, item.second);
+    }
+
+    // Report the client.rack that is actually in effect: a job-level property overrides the node config.
+    auto rack_it = ctx->kafka_info->properties.find("client.rack");
+    const std::string& effective_rack = rack_it != ctx->kafka_info->properties.end() ? rack_it->second : node_rack;
+    if (!effective_rack.empty()) {
+        LOG(INFO) << "kafka consumer client.rack: " << effective_rack
+                  << (rack_it != ctx->kafka_info->properties.end() ? " (job property)"
+                                                                   : " (node config routine_load_kafka_client_rack)");
     }
 
     if (conf->set("event_cb", &_k_event_cb, errstr) != RdKafka::Conf::CONF_OK) {

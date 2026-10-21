@@ -1448,6 +1448,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Kafka関連のルーチンロード操作に使用されるタイムアウト（秒）。クライアントリクエストがタイムアウトを指定しない場合、`get_info`のデフォルトRPCタイムアウトとして`routine_load_kafka_timeout_second`が使用されます（ミリ秒に変換）。また、librdkafkaコンシューマの呼び出しごとのコンシュームポーリングタイムアウトとしても使用されます（ミリ秒に変換され、残りの実行時間で上限が設定されます）。注: 内部の`get_info`パスは、FE側のタイムアウト競合を避けるため、librdkafkaに渡す前にこの値を80%に減らします。この値を、タイムリーな障害報告とネットワーク/ブローカー応答に十分な時間のバランスが取れるように設定してください。この設定は変更できないため、変更には再起動が必要です。
 - 導入バージョン: v3.2.0
 
+
+### routine_load_kafka_client_rack
+
+- デフォルト: ""
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: この BE または CN が実行するすべての Routine Load コンシューマが Kafka に通知する `client.rack` です（KIP-392「最も近いレプリカからのフェッチ」）。Kafka ブローカーに `broker.rack` とラック対応の `replica.selector.class`（例: `org.apache.kafka.common.replica.RackAwareReplicaSelector`）が設定されている場合、一致するラックを通知したコンシューマは、パーティションリーダーではなく同じラック（例えば同じクラウドのアベイラビリティゾーン）のレプリカからデータを読み取るため、消費データのゾーン間転送がなくなります。各ノードで、そのノード自身のラックまたはゾーンの識別子を設定してください。`be.conf` は `${ENV_VAR}` 置換に対応しているため、環境変数から値を注入できます。`CREATE ROUTINE LOAD` のジョブレベルの `"property.client.rack"` は、そのジョブについてこの値を上書きします。ラック対応のレプリカ選択をサポートしないブローカーはこの設定を無視します。空（デフォルト）の場合は `client.rack` を設定せず、コンシューマは引き続きパーティションリーダーから読み取ります。
+- 導入バージョン: v4.2.0
+
 ### routine_load_pulsar_timeout_second
 
 - デフォルト: 10
