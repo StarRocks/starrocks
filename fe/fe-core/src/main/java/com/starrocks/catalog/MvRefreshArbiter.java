@@ -319,7 +319,6 @@ public class MvRefreshArbiter {
         return affected;
     }
 
-<<<<<<< HEAD
     /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
     public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
         return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
@@ -339,7 +338,8 @@ public class MvRefreshArbiter {
                 .findFirst()
                 .map(context::getBaseTableRefreshInfo)
                 .orElseGet(Maps::newHashMap);
-=======
+    }
+
     /**
      * The mv partitions holding rows that no tracked partition of {@code refBaseTable} accounts for.
      * <p>
@@ -405,6 +405,5 @@ public class MvRefreshArbiter {
     private static boolean holdsRows(Partition mvPartition) {
         return mvPartition.getSubPartitions().stream()
                 .anyMatch(physical -> physical.getVisibleVersion() != Partition.PARTITION_INIT_VERSION);
->>>>>>> 4cbbafd8c32... [BugFix][RB-556] Refresh mv partitions whose rows no tracked base partition accounts for (#66081)
     }
 }
