@@ -2760,7 +2760,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "GetChangedPartitionDiff",
                             "CollectMVToBaseTablePartitionNames",
                             "GenerateBaseRefMap",
-                            "GenerateMvRefMap"
+                            "GenerateMvRefMap",
+                            "MVPartitionsWithUntrackedRows"
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
                         logSysInfo(e.getKey() + ": " + e.getValue());
