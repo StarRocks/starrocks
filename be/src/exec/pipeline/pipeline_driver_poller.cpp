@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <chrono>
 
+#include "exec/pipeline/mc_trace.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/current_thread.h"
@@ -183,8 +184,13 @@ void PipelineDriverPoller::run_internal() {
             ready_drivers.clear();
         }
 
-        g_poller_pass_latency_us << (MonotonicNanos() - pass_start_ns) / 1000;
+        const int64_t pass_ns = MonotonicNanos() - pass_start_ns;
+        g_poller_pass_latency_us << pass_ns / 1000;
         g_poller_max_driver_check_latency_us << max_driver_check_ns / 1000;
+        if (mctrace::enabled() && pass_ns >= mctrace::slow_ns()) {
+            MCTRACE_LOG << "ev=poller_pass pass_us=" << pass_ns / 1000
+                        << " max_check_us=" << max_driver_check_ns / 1000;
+        }
 
         if (spin_count != 0 && spin_count % 64 == 0) {
 #ifdef __x86_64__

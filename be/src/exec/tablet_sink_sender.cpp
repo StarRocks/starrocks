@@ -14,10 +14,14 @@
 
 #include "exec/tablet_sink_sender.h"
 
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <utility>
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+#include "exec/pipeline/mc_trace.h"
 #include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
@@ -431,6 +435,16 @@ Status TabletSinkSender::_write_combined_txn_log() {
     // entry leaves the transaction permanently unpublishable once it commits. Check coverage
     // against what the FE dispatched before anything reaches object storage.
     const ExpectedTabletsByPartition expected = _expected_tablets_by_partition();
+    const int32_t inject_delay_ms = config::merge_commit_lifecycle_inject_txn_log_delay_ms;
+    const int32_t inject_every_n = config::merge_commit_lifecycle_inject_txn_log_every_n;
+    if (inject_delay_ms > 0 && inject_every_n > 0) {
+        static std::atomic<int64_t> s_num_writes{0};
+        if (s_num_writes.fetch_add(1, std::memory_order_relaxed) % inject_every_n == 0) {
+            MCTRACE_LOG << "ev=inject_txn_log_delay txn_id=" << _txn_id << " load_id=" << print_id(_load_id)
+                        << " delay_ms=" << inject_delay_ms;
+            std::this_thread::sleep_for(std::chrono::milliseconds(inject_delay_ms));
+        }
+    }
     if (config::enable_put_combinded_txn_log_parallel) {
         return write_combined_txn_log_parallel(_txn_log_map, expected);
     }
