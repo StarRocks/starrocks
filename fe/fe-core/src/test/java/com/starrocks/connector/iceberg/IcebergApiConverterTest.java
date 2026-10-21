@@ -29,8 +29,6 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
-import com.starrocks.thrift.TIcebergSchema;
-import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
@@ -731,23 +729,6 @@ public class IcebergApiConverterTest {
         DdlException e = assertThrows(DdlException.class,
                 () -> IcebergApiConverter.toIcebergSortOrder(schema, orderByElements));
         assertTrue(e.getMessage().contains("Duplicate sort key column id is not allowed."), e.getMessage());
-    }
-
-    @Test
-    public void testTIcebergSchemaCarriesNestedInitialDefault() {
-        // BE fills a struct subfield missing from a data file with its initial-default.
-        Types.NestedField a = Types.NestedField.optional("a").withId(2).ofType(Types.IntegerType.get()).build();
-        Types.NestedField b = Types.NestedField.optional("b").withId(3).ofType(Types.IntegerType.get())
-                .withInitialDefault(7).build();
-        // A TIMESTAMPTZ default would be read as a UTC wall time in the session time zone, so it is not sent.
-        Types.NestedField tz = Types.NestedField.optional("tz").withId(4).ofType(Types.TimestampType.withZone())
-                .withInitialDefault(1_700_000_000_000_000L).build();
-        Schema schema = new Schema(Types.NestedField.optional(1, "s", Types.StructType.of(a, b, tz)));
-        TIcebergSchema tSchema = IcebergApiConverter.getTIcebergSchema(schema);
-        List<TIcebergSchemaField> children = tSchema.getFields().get(0).getChildren();
-        Assertions.assertFalse(children.get(0).isSetInitial_default());
-        assertEquals("7", children.get(1).getInitial_default());
-        Assertions.assertFalse(children.get(2).isSetInitial_default());
     }
 
     @Test

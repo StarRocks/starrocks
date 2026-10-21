@@ -61,7 +61,7 @@ private:
         return _iceberg_column_names.empty() ? &_scanner_ctx->hive_column_names : &_iceberg_column_names;
     }
     bool use_orc_column_names() const {
-        return _iceberg_column_names.empty() && _scanner_ctx->format_scan_context.options.orc_use_column_names;
+        return _iceberg_column_names.empty() && _scanner_ctx->options.orc_use_column_names;
     }
 
     // disable orc search argument would be much easier for
