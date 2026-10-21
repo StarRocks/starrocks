@@ -383,6 +383,32 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     return reinterpret_cast<Cache::Handle*>(e);
 }
 
+Cache::Handle* LRUCache::insert_no_evict(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                         void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+    LRUHandle* e = _alloc_handle(key, hash, value, value_size, deleter, priority);
+    bool fits = false;
+    std::vector<LRUHandle*> last_ref_list;
+    {
+        std::lock_guard l(_mutex);
+        // Checked under the same lock as the insert, so _insert_no_lock() below has nothing to evict.
+        fits = _usage + e->charge <= _capacity;
+        if (fits) {
+            _insert_no_lock(e, &last_ref_list);
+        }
+    }
+
+    if (!fits) {
+        // Only the handle is ours to release; `value` still belongs to the caller.
+        ::free(e);
+        return nullptr;
+    }
+    for (auto entry : last_ref_list) {
+        entry->free();
+    }
+
+    return reinterpret_cast<Cache::Handle*>(e);
+}
+
 Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                           void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                           CachePriority priority) {
@@ -544,6 +570,13 @@ Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t 
                                        void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     const uint32_t hash = _hash_slice(key);
     return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
+}
+
+Cache::Handle* ShardedLRUCache::insert_no_evict(const CacheKey& key, void* value, size_t value_size,
+                                                void (*deleter)(const CacheKey& key, void* value),
+                                                CachePriority priority) {
+    const uint32_t hash = _hash_slice(key);
+    return _shards[_shard(hash)].insert_no_evict(key, hash, value, value_size, deleter, priority);
 }
 
 Cache::Handle* ShardedLRUCache::insert_if_absent(const CacheKey& key, void* value, size_t value_size,

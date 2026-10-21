@@ -175,7 +175,8 @@ public:
 
     void expire_cache();
 
-    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+    // Shrink the primary index cache to |percent|% of its capacity if it holds more. Indexes in use are kept.
+    void evict_cache(int32_t percent);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
@@ -186,6 +187,9 @@ public:
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
+
+    // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
+    void refresh_preload_mem_limit();
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
@@ -253,6 +257,8 @@ public:
     int64_t get_index_memory_size(int64_t tablet_id) const;
 
 private:
+    int64_t _calc_preload_mem_limit() const;
+
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,

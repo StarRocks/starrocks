@@ -149,15 +149,6 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
-### lake_enable_tablet_location_handoff
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether the nodes that write a load's data hand the storage location of their tablets over to the node that coordinates the load, in a shared-data cluster. For a table with `file_bundling` enabled, the coordinating node writes one combined transaction log per partition, and it usually owns no tablet of most partitions. When this item is `true`, the nodes that own the tablets return the storage location of one tablet per partition together with their transaction logs, and the coordinating node writes the combined transaction log without requesting the location from StarMgr; the requests avoided are counted in `lake_tablet_location_handoff_hits_total`. When it is `false`, the coordinating node requests the location from StarMgr once per such partition per load, which is counted in `starrocks_be_staros_shard_info_fallback_total`. The returned location includes the credentials of the storage volume.
-- Introduced in: -
-
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -291,6 +282,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_shard_info_cache_ttl_sec
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a BE or CN in a shared-data cluster keeps the storage location of a tablet it does not own, so that touching the tablet again within this time does not request the location from StarMgr. A node keeps two kinds of locations. The first kind is what it requested from StarMgr, counted in `starrocks_be_staros_shard_info_fallback_total`, when it read or wrote the files of a tablet assigned to another node, for example when several nodes write the same tablet in one load, or when a vacuum reads the metadata of every tablet in a partition; lookups answered by them are counted in `staros_shard_info_fallback_cache_hits_total`. The second kind is what the nodes that own the tablets hand over to the node that coordinates a load into a table with `file_bundling` enabled, together with their transaction logs, so that the coordinating node writes the combined transaction log of each partition without requesting the location; lookups answered by them are counted in `lake_tablet_location_handoff_hits_total`. The node that owns a tablet receives storage volume updates pushed by StarMgr, while a kept location picks them up only after it expires, so this item also bounds how long such a node can keep using outdated storage volume settings, such as rotated credentials. The kept locations include the credentials of the storage volume. `0` disables both kinds: nothing is handed over or kept, and every such lookup requests the location from StarMgr.
+- Introduced in: -
+
 ### lake_vacuum_enable_task_timeout
 
 - Default: true
@@ -332,6 +332,33 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
+### primary_key_index_memory_high_percent
+
+- Default: 75
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level to which a background thread periodically shrinks the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. The cache capacity equals the memory limit for updates (see `update_memory_limit_percent`). When the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. Indexes in use are never evicted. Set it to a value lower than `primary_key_index_memory_urgent_percent`.
+- Introduced in: -
+
+### primary_key_index_memory_middle_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level, expressed as a percentage of the cache capacity, to which the primary key index cache is shrunk when a publish of a Primary Key table in a shared-data cluster fails because it exceeds the memory limit. The primary key indexes that are not in use are evicted until the cache is within this percentage, which frees memory for the retried publish. Set it to a value lower than `primary_key_index_memory_high_percent`.
+- Introduced in: -
+
+### primary_key_index_memory_urgent_percent
+
+- Default: 85
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. It is checked after every publish that does not fail because it exceeds the memory limit: when the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. It is a backstop for when the cache grows faster than the background thread brings it down to `primary_key_index_memory_high_percent`, so set it to a value higher than that item.
 - Introduced in: -
 
 ### s3_multipart_equal_part_size

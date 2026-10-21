@@ -450,6 +450,12 @@ CREATE ANALYZE FULL ALL db_name PROPERTIES (
 );
 ```
 
+**保留 StarRocks 提供的自动采集任务，但不采集 `db_name.tbl_name` 表**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
+```
+
 ### 导入数据时采集统计信息
 
 为保证针对数据导入后立即查询产生相对较好的执行计划，StarRocks 会在 INSERT INTO/OVERWRITE 两种 DML 语句执行结束后，触发异步的统计信息采集任务。DML 结束后默认等待 30 秒。如果统计信息采集任务 30 秒没有结束，则返回 DML 执行结果。

@@ -265,6 +265,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **合法取值**：`CIRCULAR`、`RANDOM`
 * **引入版本**：-
 
+### broadcast_mem_exceeded_penalty_factor
+
+* **描述**: 设置广播 CPU、内存和网络成本的惩罚因子，在每个 BE/CN 的构建侧估算数据量超过广播内存阈值时生效。设置为 `1.0` 可禁用此惩罚。
+* **作用域**: Session, Global
+* **默认值**: `1000.0`
+* **数据类型**: Double
+* **有效值**: `[1.0, 1000000.0]` 范围内的有限数值。超出此范围的值、非数值、`NaN` 和无穷大均会被拒绝。
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置。例如：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。
@@ -625,6 +640,12 @@ FROM test;
 * 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
 * 默认值：true
 * 引入版本：v3.3
+
+### enable_gather_fragment_child_affinity
+
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：扫描外部 Catalog 表（如 Hive 或 Iceberg）、`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 默认值：false
+* 引入版本：v4.2
 
 ### enable_gin_filter
 
@@ -1516,7 +1537,7 @@ FROM test;
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。在 Query Queue v1 下，它作用于集群中的每个 BE 和 CN 节点。在 Query Queue v2 下，任一存活节点达到该上限时，新查询会等待。详细信息，参见 [内存准入](../administration/management/resource_management/query_queues.md#内存准入)。
 * 默认值：`0`
 * 取值范围：[0, 1]
 

@@ -814,6 +814,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000
@@ -974,6 +983,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   `/api/_meta_replay_state` 同样不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
 
   受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
+### `enable_rest_bearer_authentication`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
+- 引入版本: v4.2
 
 ### `http_web_page_display_hardware`
 

@@ -149,7 +149,17 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         try {
             executor.execute(() -> {
                 try {
-                    action.handleRequest(request);
+                    HttpConnectContext shared = action.isSqlAction() ? request.getConnectContext() : null;
+                    if (shared != null) {
+                        // The SQL actions on a channel share one ConnectContext for as long as the channel lives, and a
+                        // client that pipelines requests would have two of them run on it at once: one would see the
+                        // other's identity, variables and state half-written. One request at a time per connection.
+                        synchronized (shared) {
+                            action.handleRequest(request);
+                        }
+                    } else {
+                        action.handleRequest(request);
+                    }
                 } catch (Exception e) {
                     handleException(request, e);
                 } finally {

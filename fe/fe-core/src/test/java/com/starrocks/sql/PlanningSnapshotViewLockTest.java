@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -38,6 +39,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Planning off private copies takes the copies in StatementPlanner while the meta lock is still held, which is
@@ -89,9 +91,13 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     }
 
     private void assertEveryCopyWasLocked(String sql) throws Exception {
+        assertEveryCopyWasLockedOf(sql, "t0");
+    }
+
+    private void assertEveryCopyWasLockedOf(String sql, String table) throws Exception {
         getExecPlan(sql);
-        Assertions.assertTrue(copied.contains("t0"),
-                "planning did not copy the view's base table, so this is not testing the snapshot path: " + sql);
+        Assertions.assertTrue(copied.contains(table),
+                "planning did not copy " + table + ", so this is not testing the snapshot path: " + sql);
         Assertions.assertTrue(copiedWithoutLock.isEmpty(),
                 "copied without holding its read lock: " + copiedWithoutLock + ", for: " + sql);
         assertNothingLeftLocked(sql);
@@ -226,6 +232,64 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
         Assertions.assertEquals(3, resolutions.get());
         Assertions.assertFalse(copied.contains("t0"), "copied a table its name no longer stands for");
         assertNothingLeftLocked("SELECT * FROM " + VIEW);
+    }
+
+    /**
+     * An INSERT into every partition of its target gets the partition ids at analysis, from the live table, with the
+     * first lock held. Taking the whole set again leaves a window with nothing held, where a partition of the target
+     * can be dropped: the ids then have to come from the copy, or the sink fails with an unknown partition.
+     */
+    @Test
+    public void testATargetPartitionDroppedWhileNothingWasHeld() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_relock_target (k1 int, v1 int) DUPLICATE KEY(k1) "
+                + "PARTITION BY RANGE(k1) (PARTITION p1 VALUES LESS THAN ('10'), PARTITION p2 VALUES LESS THAN ('20')) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num' = '1')");
+        try {
+            AtomicInteger resolutions = new AtomicInteger();
+            new MockUp<PlannerMetaLocker>() {
+                @Mock
+                public PlannerMetaLocker forTablesNotLockedOf(Invocation invocation, ConnectContext session,
+                                                              StatementBase analyzedStatement) {
+                    PlannerMetaLocker locker = invocation.getInvokedInstance();
+                    return locker.forAllTablesOf(session, analyzedStatement);
+                }
+
+                // 1: what forces the re-lock, 2: the set it locks, resolved with nothing held
+                @Mock
+                public PlannerMetaLocker forAllTablesOf(Invocation invocation, ConnectContext session,
+                                                        StatementBase analyzedStatement) {
+                    if (resolutions.incrementAndGet() == 2) {
+                        dropPartitionElsewhere("ALTER TABLE test.t_relock_target DROP PARTITION p2 FORCE");
+                    }
+                    return invocation.proceed(session, analyzedStatement);
+                }
+            };
+            String sql = "INSERT INTO test.t_relock_target SELECT l_orderkey, l_partkey FROM " + CONNECTOR_TABLE;
+            assertEveryCopyWasLockedOf(sql, "t_relock_target");
+            Assertions.assertTrue(resolutions.get() >= 2, "did not take the whole set again");
+        } finally {
+            starRocksAssert.dropTable("test.t_relock_target");
+        }
+    }
+
+    private static void dropPartitionElsewhere(String sql) {
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(() -> {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ctx.setThreadLocalInfo();
+            try {
+                new StarRocksAssert(ctx).alterTable(sql);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        });
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        Assertions.assertNull(failure.get(), String.valueOf(failure.get()));
     }
 
     /** A view does not take the whole set again: the lock taken before analysis already covers its base tables. */

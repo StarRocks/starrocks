@@ -6,7 +6,7 @@ unlisted: True
 
 # FE/BE パラメーターと変数の記述テンプレート
 
-> コード内で FE/BE パラメーターや変数を追加、変更、削除する際は、ドキュメントを更新することを忘れないでください: [FE configuration](https://docs.starrocks.io/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/docs/reference/System_variable/).
+> コード内で FE/BE パラメーターや変数を追加、変更、削除する際は、ドキュメントを更新することを忘れないでください: [FE configuration](../administration/configuration/FE_parameters/FE_parameters.md), [BE configuration](../administration/configuration/BE_parameters/BE_parameters.md), [System variables](./System_variable.md).
 
 パラメーターまたは変数の説明には通常、次のフィールドが含まれます:
 

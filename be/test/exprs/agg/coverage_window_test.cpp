@@ -27,10 +27,12 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
 #include "exprs/geo_functions.h"
+#include "geo/geo_coverage_simplify.h"
 #include "geo/wkb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/memory_allocator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -257,15 +259,13 @@ TEST(CoverageWindowTest, GuardsApplyDuringInitializationAndToNativeInput) {
     EXPECT_TRUE(line.ctx->has_error());
 }
 
-TEST(CoverageWindowTest, InvalidCoveragePadsOutputButFailsTheQuery) {
+TEST(CoverageWindowTest, InvalidCoverageFailsWithoutWritingOutput) {
     WindowHarness h;
     h.evaluate(coverage_input({left, left}));
     ASSERT_TRUE(h.ctx->has_error());
     EXPECT_NE(std::string(h.ctx->error_msg()).find("ST_CoverageSimplify"), std::string::npos);
     auto result = h.result(2);
-    EXPECT_EQ(result->size(), 2);
-    EXPECT_TRUE(result->is_null(0));
-    EXPECT_TRUE(result->is_null(1));
+    EXPECT_EQ(result->size(), 0);
     result->check_or_die();
 }
 
@@ -315,14 +315,14 @@ TEST(CoverageWindowTest, WrongPhysicalParameterFailsDuringInitialization) {
     EXPECT_TRUE(parameter.ctx->has_error());
 }
 
-TEST(CoverageWindowTest, IncompleteFrameIsRejectedAndOutputIsPadded) {
+TEST(CoverageWindowTest, IncompleteFrameIsRejectedWithoutWritingOutput) {
     WindowHarness h;
     auto input = coverage_input({left, right});
     const Column* columns[] = {input.get()};
     h.fn.update_batch_single_state_with_frame(h.ctx.get(), h.storage.data(), columns, 0, 2, 0, 1);
     ASSERT_TRUE(h.ctx->has_error());
     auto result = h.result(2);
-    EXPECT_EQ(result->size(), 2);
+    EXPECT_EQ(result->size(), 0);
     result->check_or_die();
 }
 
@@ -340,6 +340,36 @@ TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
         h.fn.reset(h.ctx.get(), {}, h.storage.data());
+    }
+    EXPECT_EQ(h.query->consumption(), 0);
+}
+
+TEST(CoverageWindowTest, QueryMemoryLimitStopsInsideKernel) {
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto& ring = polygon.rings.emplace_back();
+    // Allocation or a memory poll must stop decoding before the zero-area ring error.
+    for (int i = 0; i < 20000; ++i) ring.push_back({double(i), 0});
+    ring.push_back({0, 0});
+    std::string input;
+    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &input, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    WindowHarness h(1, false, true, 1024 * 1024);
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
+        if (CurrentThread::mem_tracker() == nullptr)
+            GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
+        auto created = GeoCoverageSimplify::create(
+                memory::get_default_allocator(),
+                {&h.runtime, [](void* state) {
+                     return static_cast<RuntimeState*>(state)->check_mem_limit("ST_CoverageSimplify");
+                 }});
+        ASSERT_TRUE(created.ok()) << created.status();
+        auto coverage = std::move(created).value();
+        ASSERT_TRUE(coverage->append(Slice(input)).ok());
+        ASSERT_TRUE(h.runtime.check_mem_limit("before kernel").ok());
+        const auto status = coverage->finish(1, false);
+        EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+        EXPECT_FALSE(coverage->result(0).ok());
     }
     EXPECT_EQ(h.query->consumption(), 0);
 }

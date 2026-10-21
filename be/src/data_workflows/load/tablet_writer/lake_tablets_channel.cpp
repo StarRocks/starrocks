@@ -869,13 +869,13 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, my_logs);
                     }
                 } else {
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
-                    if (config::lake_enable_tablet_location_handoff) {
+                    if (config::lake_shard_info_cache_ttl_sec > 0) {
                         context->add_shard_infos(_tablet_manager, all_logs);
                     }
                 }

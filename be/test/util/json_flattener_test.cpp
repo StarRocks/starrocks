@@ -42,6 +42,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
@@ -605,6 +606,165 @@ TEST_F(JsonFlattenerTest, testPathTreeBoundedWithinASingleWideRow) {
     ASSIGN_OR_ABORT(auto a, JsonValue::parse(original));
     ASSIGN_OR_ABORT(auto b, JsonValue::parse(roundtrip));
     EXPECT_EQ(0, a.compare(b));
+}
+
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysNestedUnderASkippedKey) {
+    config::json_flat_sparsity_factor = 0.3;
+    // Two rows fill the trie with paths seen twice (so shrinking cannot free them) using few distinct names,
+    // which keeps the remain filter under its key cap. Every later row then carries "x", which no longer
+    // fits in the trie and goes to the remain column whole.
+    std::string wide = R"({"0id": 0)";
+    for (int i = 0; i < 80; i++) {
+        wide += ", \"a" + std::to_string(i) + "\": {";
+        for (int j = 0; j < 80; j++) {
+            wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+        }
+        wide += "}";
+    }
+    wide += "}";
+    auto json_column = JsonColumn::create();
+    for (int row = 0; row < 200; row++) {
+        std::string json;
+        if (row < 2) {
+            json = wide;
+        } else {
+            json = R"({"0id": )" + std::to_string(row) + R"(, "x": {)";
+            for (int k = 0; k < 20; k++) {
+                json += (k ? ", " : "") + std::string("\"leaf") + std::to_string(k) + "\": " + std::to_string(row);
+            }
+            json += "}}";
+        }
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_TRUE(jf._path_tree_full);
+    ASSERT_TRUE(jf.has_remain_json());
+    ASSERT_NE(jf.flat_paths().end(), std::find(jf.flat_paths().begin(), jf.flat_paths().end(), "0id"));
+    ASSERT_TRUE(nullptr != jf.remain_fitler());
+    // A reader probes the filter with the last component of the path it extracts (x.leafN -> "leafN") and
+    // returns NULL without reading the remain column on a miss. A bloom filter has no false negatives, so
+    // every key under "x" must test positive.
+    EXPECT_TRUE(jf.remain_fitler()->test_bytes("x", 1));
+    for (int k = 0; k < 20; k++) {
+        std::string leaf = "leaf" + std::to_string(k);
+        EXPECT_TRUE(jf.remain_fitler()->test_bytes(leaf.data(), leaf.size())) << leaf;
+    }
+
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(json_column->size(), merged_json->size());
+    for (size_t row = 0; row < json_column->size(); row++) {
+        EXPECT_EQ(0, json_column->get_object(row)->compare(*down_cast<const JsonColumn*>(merged_json)->get_object(row)))
+                << row;
+    }
+}
+
+// A path is flattened to a numeric type only if that type holds every value exactly; otherwise it is flattened
+// as JSON. Integers past 2^53 next to doubles, and negative integers next to integers past INT64_MAX, would
+// otherwise read back as different numbers.
+TEST_F(JsonFlattenerTest, testNumericPathTypeKeepsValuesExact) {
+    config::json_flat_sparsity_factor = 0.3;
+    struct Case {
+        std::vector<std::string> jsons;
+        LogicalType expected_type;
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {{R"({"a": 1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123456789})", R"({"a": 1.5})"}, TYPE_JSON},
+        {{R"({"a": -3})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        {{R"({"a": -1234567890123})", R"({"a": 18446744073709551615})"}, TYPE_JSON},
+        // Exact as before.
+        {{R"({"a": 9007199254740992})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": 1})", R"({"a": 1.5})"}, TYPE_DOUBLE},
+        {{R"({"a": -3})", R"({"a": 9223372036854775807})"}, TYPE_BIGINT},
+        {{R"({"a": 5})", R"({"a": 18446744073709551615})"}, TYPE_LARGEINT},
+        {{R"({"a": 1.5})", R"({"a": 1e300})"}, TYPE_DOUBLE},
+    };
+    // clang-format on
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.jsons[0] + " " + c.jsons[1]);
+        auto json_column = JsonColumn::create();
+        for (const auto& json : c.jsons) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+            json_column->append(&jv);
+        }
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        ASSERT_EQ(std::vector<std::string>{"a"}, jf.flat_paths());
+        EXPECT_EQ(c.expected_type, jf.flat_types()[0]);
+
+        JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        flattener.flatten(json_column.get());
+        Columns flat_columns;
+        for (auto& col : flattener.mutable_result()) {
+            flat_columns.emplace_back(std::move(col));
+        }
+        JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+        auto merged = merger.merge(flat_columns);
+        const auto* merged_json = merged->is_nullable()
+                                          ? down_cast<const NullableColumn*>(merged.get())->data_column().get()
+                                          : merged.get();
+        ASSERT_EQ(json_column->size(), merged_json->size());
+        for (size_t row = 0; row < json_column->size(); row++) {
+            const auto* got = down_cast<const JsonColumn*>(merged_json)->get_object(row);
+            EXPECT_EQ(0, json_column->get_object(row)->compare(*got))
+                    << "row " << row << ": " << got->to_string_uncheck();
+        }
+    }
+}
+
+// Before numeric paths were kept exact, the deriver met negative integers with integers past INT64_MAX at
+// LARGEINT, so existing segments may hold negative LARGEINT values. Rebuilding them as JSON -- whole-JSON reads
+// (JsonMerger) and the conversion to a JSON sub-column (HyperJsonTransformer) -- must keep them negative.
+TEST_F(JsonFlattenerTest, testLegacyNegativeLargeintSubColumnKeepsSign) {
+    const std::vector<int128_t> values = {-2, std::numeric_limits<int64_t>::min(), 5,
+                                          static_cast<int128_t>(std::numeric_limits<uint64_t>::max())};
+    const std::vector<std::string> expected = {"-2", "-9223372036854775808", "5", "18446744073709551615"};
+    auto data = Int128Column::create();
+    for (auto v : values) {
+        data->append(v);
+    }
+    ColumnPtr largeint = NullableColumn::create(std::move(data), NullColumn::create(values.size(), 0));
+
+    JsonMerger merger({"a"}, {TYPE_LARGEINT}, false);
+    auto merged = merger.merge({largeint});
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(values.size(), merged_json->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        EXPECT_EQ(R"({"a": )" + expected[row] + "}",
+                  down_cast<const JsonColumn*>(merged_json)->get_object(row)->to_string_uncheck())
+                << "row " << row;
+    }
+
+    HyperJsonTransformer transformer({"a"}, {TYPE_JSON}, false);
+    transformer.init_compaction_task({"a"}, {TYPE_LARGEINT}, false);
+    ASSERT_OK(transformer.trans({largeint}));
+    auto result = transformer.mutable_result();
+    ASSERT_EQ(1, result.size());
+    const auto* json_values =
+            down_cast<const JsonColumn*>(down_cast<NullableColumn*>(result[0].get())->data_column().get());
+    ASSERT_EQ(values.size(), json_values->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        // Compare the text: JsonValue::compare also tells apart the integer encodings (SmallInt, Int, UInt).
+        EXPECT_EQ(expected[row], json_values->get_object(row)->to_string_uncheck()) << "row " << row;
+    }
 }
 
 TEST_F(JsonFlattenerTest, testComplexJsonExtract) {

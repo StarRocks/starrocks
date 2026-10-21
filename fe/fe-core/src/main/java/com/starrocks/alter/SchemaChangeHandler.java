@@ -3188,6 +3188,8 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         }
 
+        AlterMVJobExecutor.checkMaterializedViewDefinitionsWithSchema(olapTable, indexMetaIdToSchema, "change schema");
+
         // Both routed branches below return before the fastSchemaEvolution flag set above is ever
         // read, and neither job carries this property: the async trailing-key job updates the tablet
         // schemas but its updateCatalogUnprotected never calls setZstdCompressionColumns, and the

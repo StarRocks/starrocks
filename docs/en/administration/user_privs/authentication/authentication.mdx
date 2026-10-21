@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # Authentication
 
+StarRocks authenticates a client on every entry point it exposes: the MySQL protocol, the HTTP API (SQL API, Stream Load, the FE Web UI), Arrow Flight SQL, and the Stream Load RPCs a BE forwards to the FE. A user is defined either locally with `CREATE USER` (native authentication, optionally naming an external plugin) or through a [security integration](./security_integration.md), which delegates the whole user directory to an external system.
+
+## Where each authentication method works
+
+| How the user is defined | MySQL protocol | HTTP API | Arrow Flight SQL |
+| --- | --- | --- | --- |
+| `CREATE USER ... IDENTIFIED BY '<password>'`<br />(native password) | password | Basic | user name and password |
+| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br />(native user, LDAP bind) | password, <br />sent with `mysql_clear_password` | Basic | user name and password |
+| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br />(native user, JWT) | JWT, <br />sent with `authentication_openid_connect_client` | not supported | not supported |
+| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br />(native user, OAuth 2.0) | browser flow | not supported | not supported |
+| Security integration, `authentication_ldap_simple` | password, <br />sent with `mysql_clear_password` | Basic | user name and password |
+| Security integration, `authentication_jwt` | JWT, <br />sent with `authentication_openid_connect_client` | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+| Security integration, `authentication_oauth2` | browser flow | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+
+Note the following points:
+
+- **A Bearer token needs a security integration.** A token names its user in a claim, not in the request, so StarRocks has nothing to look a local user up by. A native user that names the JWT or OAuth 2.0 plugin therefore works only over the MySQL protocol, where the handshake carries the user name. Create a JWT or OAuth 2.0 security integration to use tokens on the other entry points.
+- **The same name can mean two identities.** When a token is accepted through a security integration, the user is ephemeral: its privileges come from a [group provider](../group_provider.md) and `GRANT ... TO EXTERNAL GROUP`, and a local user of the same name is not consulted. The same person may therefore hold different privileges over the MySQL protocol and over HTTP.
+- **The MySQL protocol offers one token plugin at a time.** It is the one of the first JWT or OAuth 2.0 security integration on `authentication_chain`. The HTTP and Arrow Flight entry points do not have this limit, because a token is routed by its issuer and audience.
+- **Bearer authentication can be turned off** on the HTTP and Arrow Flight entry points with the FE configuration item `enable_rest_bearer_authentication` (default `true`). It never affects the MySQL protocol.
+- **A Stream Load is authenticated again when it commits.** A load that runs longer than the remaining lifetime of its token fails at commit, so use a token with enough lifetime, or Basic authentication, for long loads.
+- Authenticating directly against a BE (Stream Load sent to the BE HTTP port) requires the BE configuration item `enable_http_auth = true`.
+- Every failed HTTP authentication answers `401` with both a `Basic` and a `Bearer` challenge and does not say which method refused or why. Use the `authentication_failure_total` and `authentication_failure_reason_total` metrics on the FE to diagnose failures.
+
 import DocCardList from '@theme/DocCardList';
 
 <DocCardList />

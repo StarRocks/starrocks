@@ -27,6 +27,10 @@
 #include <string_view>
 #include <vector>
 
+#define BOOST_MATH_DISABLE_FLOAT128
+#define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -35,11 +39,14 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "geo/geo_buffer.h"
+#include "geo/geo_exact_arithmetic.h"
 #include "geo/geo_measurements.h"
 #include "geo/geo_overlay.h"
 #include "geo/geo_topology_simplify.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "gutil/compiler_util.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -117,6 +124,24 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     return GeoInput{geo, nullable, constant};
 }
 
+bool decode_canonical_xy_point(Slice wkb, WkbCoordinate* point) {
+    // Finite canonical XY POINTs survive parse/write without normalization.
+    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
+    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
+        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
+        return false;
+    }
+    std::array<uint64_t, 2> coordinates;
+    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
+    if constexpr (std::endian::native != std::endian::little) {
+        coordinates[0] = std::byteswap(coordinates[0]);
+        coordinates[1] = std::byteswap(coordinates[1]);
+    }
+    point->x = std::bit_cast<double>(coordinates[0]);
+    point->y = std::bit_cast<double>(coordinates[1]);
+    return std::isfinite(point->x) && std::isfinite(point->y);
+}
+
 template <LogicalType Type, bool X>
 StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -129,6 +154,11 @@ StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row)) {
             result.append_null();
+            continue;
+        }
+        if (WkbCoordinate point; decode_canonical_xy_point(input.wkb(row), &point) &&
+                                 (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point.x, point.y))) {
+            result.append(X ? point.x : point.y);
             continue;
         }
         WkbGeometry geometry;
@@ -521,9 +551,39 @@ PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, 
     return result;
 }
 
-long double planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
-    return (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y) -
-           (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+ALWAYS_NOINLINE int exact_planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    // Finite binary64 coordinates scaled by 2^1074 have magnitude <2^2098.
+    // Differences need at most 2099 bits and the determinant 4199, so
+    // 4224 fixed bits suffice without heap allocations.
+    using Integer = boost::multiprecision::number<
+            boost::multiprecision::cpp_int_backend<4224, 4224, boost::multiprecision::signed_magnitude,
+                                                   boost::multiprecision::unchecked, void>,
+            boost::multiprecision::et_off>;
+    const auto scaled = [](double value) -> Integer { return geo_exact::scaled_binary64<Integer>(value); };
+    const Integer ax = scaled(a.x), ay = scaled(a.y);
+    const Integer bx = scaled(b.x), by = scaled(b.y);
+    const Integer cx = scaled(c.x), cy = scaled(c.y);
+    const Integer determinant = geo_exact::orientation(ax, ay, bx, by, cx, cy);
+    return geo_exact::sign(determinant);
+}
+
+int planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    const long double left = (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y);
+    const long double right = (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+    const long double determinant = left - right;
+    // Eight epsilons bound the rounding of differences, products and subtraction.
+    constexpr long double kErrorBound = 8 * std::numeric_limits<long double>::epsilon();
+    const long double error = kErrorBound * (std::abs(left) + std::abs(right));
+    bool certain = std::abs(determinant) > error;
+    // A wide long double exponent range also covers the smallest binary64
+    // product's error bound. Narrower platforms must check for underflow.
+    if constexpr (std::numeric_limits<long double>::min_exponent >
+                  2 * (std::numeric_limits<double>::min_exponent - std::numeric_limits<double>::digits) -
+                          std::numeric_limits<long double>::digits) {
+        certain &= error >= std::numeric_limits<long double>::min();
+    }
+    if (!certain) [[unlikely]] return exact_planar_orientation(a, b, c);
+    return determinant > 0 ? 1 : -1;
 }
 
 bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c,
@@ -532,30 +592,177 @@ bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, c
         planar_point_on_segment(d, a, b)) {
         return true;
     }
-    const auto abc = planar_orientation(a, b, c);
-    const auto abd = planar_orientation(a, b, d);
-    const auto cda = planar_orientation(c, d, a);
-    const auto cdb = planar_orientation(c, d, b);
-    return (abc > 0) != (abd > 0) && (cda > 0) != (cdb > 0);
+    const int abc = planar_orientation(a, b, c);
+    const int abd = planar_orientation(a, b, d);
+    if (abc * abd >= 0) return false;
+    return planar_orientation(c, d, a) * planar_orientation(c, d, b) < 0;
 }
 
-bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
-    for (const auto& lhs_ring : lhs.rings) {
-        for (const auto& rhs_ring : rhs.rings) {
-            for (size_t i = 1; i < lhs_ring.size(); ++i) {
-                for (size_t j = 1; j < rhs_ring.size(); ++j) {
-                    if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j])) {
-                        return true;
+struct PlanarIntersectsBounds {
+    double min_x = std::numeric_limits<double>::infinity();
+    double min_y = std::numeric_limits<double>::infinity();
+    double max_x = -std::numeric_limits<double>::infinity();
+    double max_y = -std::numeric_limits<double>::infinity();
+
+    void add(const WkbCoordinate& point) {
+        min_x = std::min(min_x, point.x);
+        min_y = std::min(min_y, point.y);
+        max_x = std::max(max_x, point.x);
+        max_y = std::max(max_y, point.y);
+    }
+
+    std::optional<PlanarIntersectsBounds> expanded(double padding) const {
+        PlanarIntersectsBounds result{min_x - padding, min_y - padding, max_x + padding, max_y + padding};
+        if (!std::isfinite(result.min_x) || !std::isfinite(result.min_y) || !std::isfinite(result.max_x) ||
+            !std::isfinite(result.max_y)) {
+            return std::nullopt;
+        }
+        return result;
+    }
+
+    bool disjoint(const PlanarIntersectsBounds& rhs) const {
+        return max_x < rhs.min_x || min_x > rhs.max_x || max_y < rhs.min_y || min_y > rhs.max_y;
+    }
+};
+
+PlanarIntersectsBounds planar_intersects_bounds(const std::vector<WkbCoordinate>& ring) {
+    PlanarIntersectsBounds result;
+    for (const auto& point : ring) result.add(point);
+    return result;
+}
+
+PlanarIntersectsBounds planar_intersects_bounds(const WkbGeometry& polygon) {
+    PlanarIntersectsBounds result;
+    for (const auto& ring : polygon.rings) {
+        for (const auto& point : ring) result.add(point);
+    }
+    return result;
+}
+
+std::optional<double> planar_intersects_padding(const PlanarIntersectsBounds& lhs, const PlanarIntersectsBounds& rhs) {
+    const double span = std::max(std::max(lhs.max_x, rhs.max_x) - std::min(lhs.min_x, rhs.min_x),
+                                 std::max(lhs.max_y, rhs.max_y) - std::min(lhs.min_y, rhs.min_y));
+    if (!std::isfinite(span)) return std::nullopt;
+    // Four times the endpoint tolerance, plus a normal underflow margin; bounds compare binary64 endpoints.
+    constexpr double kPaddingFactor = 4 * kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon();
+    return kPaddingFactor * span + std::numeric_limits<double>::min();
+}
+
+// Calibration: a plain first probe avoids setup for tiny pairs without giving up disjoint pruning.
+constexpr size_t kPlanarIntersectsPlainPairBudget = 64;
+
+struct PlanarIntersectsEdgeIndex {
+    struct Edge {
+        PlanarIntersectsBounds bounds;
+        WkbCoordinate a;
+        WkbCoordinate b;
+    };
+    std::vector<Edge> edges;
+    std::vector<double> prefix_max_x;
+
+    void build(const std::vector<WkbCoordinate>& ring) {
+        edges.clear();
+        edges.reserve(ring.size() - 1);
+        for (size_t j = 1; j < ring.size(); ++j) {
+            PlanarIntersectsBounds bounds;
+            bounds.add(ring[j - 1]);
+            bounds.add(ring[j]);
+            edges.push_back({bounds, ring[j - 1], ring[j]});
+        }
+        std::sort(edges.begin(), edges.end(),
+                  [](const Edge& a, const Edge& b) { return a.bounds.min_x < b.bounds.min_x; });
+        prefix_max_x.resize(edges.size());
+        double max_x = -std::numeric_limits<double>::infinity();
+        for (size_t j = 0; j < edges.size(); ++j) {
+            max_x = std::max(max_x, edges[j].bounds.max_x);
+            prefix_max_x[j] = max_x;
+        }
+    }
+
+    bool intersects(const WkbCoordinate& a, const WkbCoordinate& b, const PlanarIntersectsBounds& query) const {
+        const auto first = std::lower_bound(prefix_max_x.begin(), prefix_max_x.end(), query.min_x);
+        const auto last = std::upper_bound(edges.begin(), edges.end(), query.max_x,
+                                           [](double x, const Edge& edge) { return x < edge.bounds.min_x; });
+        for (size_t j = first - prefix_max_x.begin(), end = last - edges.begin(); j < end; ++j) {
+            const auto& edge = edges[j];
+            if (!query.disjoint(edge.bounds) && planar_segments_intersect(a, b, edge.a, edge.b)) return true;
+        }
+        return false;
+    }
+};
+
+// Separate calibration: avoid index setup on small rings and pairs with an early hit.
+constexpr size_t kPlanarIntersectsIndexMinEdges = 128;
+constexpr size_t kPlanarIntersectsIndexPairBudget = 256;
+
+bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs, PlanarIntersectsEdgeIndex* index) {
+    const auto& first_left = lhs.rings[0];
+    const auto& first_right = rhs.rings[0];
+    const size_t left_edges = first_left.size() - 1;
+    const size_t right_edges = first_right.size() - 1;
+    const bool tiny = left_edges <= kPlanarIntersectsPlainPairBudget &&
+                      right_edges <= kPlanarIntersectsPlainPairBudget &&
+                      left_edges * right_edges <= kPlanarIntersectsPlainPairBudget;
+    const size_t plain_end = tiny ? first_right.size() : 2;
+    for (size_t j = 1; j < plain_end; ++j) {
+        if (planar_segments_intersect(first_left[0], first_left[1], first_right[j - 1], first_right[j])) return true;
+    }
+    const auto lhs_bounds = planar_intersects_bounds(lhs);
+    const auto rhs_bounds = planar_intersects_bounds(rhs);
+    const auto padding = planar_intersects_padding(lhs_bounds, rhs_bounds);
+    const auto expanded = padding ? lhs_bounds.expanded(*padding) : std::nullopt;
+    if (!expanded || !expanded->disjoint(rhs_bounds)) {
+        for (const auto& lhs_ring : lhs.rings) {
+            const auto left = lhs.rings.size() == 1 ? lhs_bounds : planar_intersects_bounds(lhs_ring);
+            for (const auto& rhs_ring : rhs.rings) {
+                const auto right = rhs.rings.size() == 1 ? rhs_bounds : planar_intersects_bounds(rhs_ring);
+                const auto ring_bounds = padding ? left.expanded(*padding) : std::nullopt;
+                if (ring_bounds && ring_bounds->disjoint(right)) continue;
+                const bool eligible = padding && lhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges &&
+                                      rhs_ring.size() - 1 >= kPlanarIntersectsIndexMinEdges;
+                size_t tested_pairs = 0;
+                bool indexed = false;
+                for (size_t i = 1; i < lhs_ring.size(); ++i) {
+                    if (eligible && !indexed && tested_pairs >= kPlanarIntersectsIndexPairBudget) {
+                        index->build(rhs_ring);
+                        indexed = true;
                     }
+                    PlanarIntersectsBounds edge;
+                    edge.add(lhs_ring[i - 1]);
+                    edge.add(lhs_ring[i]);
+                    const auto query = padding ? edge.expanded(*padding) : std::nullopt;
+                    const size_t first =
+                            i == 1 && &lhs_ring == &lhs.rings[0] && &rhs_ring == &rhs.rings[0] ? plain_end : 1;
+                    if (!query) {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j]))
+                                return true;
+                        }
+                    } else if (indexed) {
+                        if (index->intersects(lhs_ring[i - 1], lhs_ring[i], *query)) return true;
+                    } else {
+                        for (size_t j = first; j < rhs_ring.size(); ++j) {
+                            const auto& c = rhs_ring[j - 1];
+                            const auto& d = rhs_ring[j];
+                            if (query->max_x < std::min(c.x, d.x) || query->min_x > std::max(c.x, d.x) ||
+                                query->max_y < std::min(c.y, d.y) || query->min_y > std::max(c.y, d.y)) {
+                                continue;
+                            }
+                            if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], c, d)) return true;
+                        }
+                    }
+                    if (eligible && !indexed) tested_pairs += rhs_ring.size() - first;
                 }
             }
         }
     }
+    // Bounds prune edge contacts only: preserve the original containment calculation.
     return planar_polygon_relation(lhs, rhs.rings[0][0]) != PointPolygonRelation::OUTSIDE ||
            planar_polygon_relation(rhs, lhs.rings[0][0]) != PointPolygonRelation::OUTSIDE;
 }
 
-bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs,
+                                      PlanarIntersectsEdgeIndex* index) {
     const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
     const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
     for (size_t i = 0; i < lhs_count; ++i) {
@@ -563,7 +770,7 @@ bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry&
         if (lhs_polygon.empty) continue;
         for (size_t j = 0; j < rhs_count; ++j) {
             const auto& rhs_polygon = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
-            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon)) return true;
+            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon, index)) return true;
         }
     }
     return false;
@@ -847,6 +1054,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
     }
     std::optional<WkbGeometry> constant_geometry[2];
     SphericalPolygonFamilyCache constant_spherical_polygons[2];
+    PlanarIntersectsEdgeIndex edge_index;
     for (size_t row = 0; row < rows; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             result.append_null();
@@ -882,7 +1090,7 @@ StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& colu
                              spherical_polygon_family_intersects(*left, *right, left_cache, right_cache));
             result.append(intersects);
         } else {
-            result.append(planar_polygon_family_intersects(*left, *right));
+            result.append(planar_polygon_family_intersects(*left, *right, &edge_index));
         }
     }
     auto output = result.build(false);
@@ -1127,24 +1335,8 @@ StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& column
 }
 
 bool is_valid_canonical_geography_point(Slice wkb) {
-    // A finite XY POINT in canonical little-endian WKB needs no normalization.
-    // Checking its complete structure and CRS84 coordinates here avoids a
-    // geometry allocation and a decode/encode round trip at the SQL boundary.
-    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
-    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
-        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
-        return false;
-    }
-    std::array<uint64_t, 2> coordinates;
-    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
-    if constexpr (std::endian::native != std::endian::little) {
-        coordinates[0] = std::byteswap(coordinates[0]);
-        coordinates[1] = std::byteswap(coordinates[1]);
-    }
-    const double longitude = std::bit_cast<double>(coordinates[0]);
-    const double latitude = std::bit_cast<double>(coordinates[1]);
-    return std::isfinite(longitude) && std::isfinite(latitude) && longitude >= -180 && longitude <= 180 &&
-           latitude >= -90 && latitude <= 90;
+    WkbCoordinate point;
+    return decode_canonical_xy_point(wkb, &point) && is_valid_crs84_coordinate(point.x, point.y);
 }
 
 template <LogicalType InputType>
@@ -1207,8 +1399,13 @@ StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& 
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        WkbCoordinate point;
+        if (!text && decode_canonical_xy_point(value, &point)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry, semantics)
                              : WkbCodec::parse_wkb(value, &geometry, semantics);
         std::string wkb;
@@ -1935,7 +2132,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_intersects(FunctionContext* conte
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersects(FunctionContext* context, const Columns& columns) {
-    return geo_intersects<TYPE_GEOMETRY>(context, columns);
+    TRY_CATCH_BAD_ALLOC(return geo_intersects<TYPE_GEOMETRY>(context, columns));
 }
 Status GeoFunctions::native_geo_unary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();

@@ -204,6 +204,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the INT8 column pool.
 
+## `jwks_fetch_latency_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Latency of each JWKS (JSON Web Key Set) fetch from the identity provider, whatever triggered it: the first load of a `jwks_url`, a background refresh ahead of the cache TTL, a refresh forced by a token with an unknown `kid`, or a retry. Failed fetches are timed as well. A JWT verification itself is a stable CPU cost; when Bearer authentication gets slow, this fetch is where the time goes.
+- Introduced in: v4.2
+
+## `jwks_refresh_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of JWKS fetches from the identity provider, labeled by `result` (`success` or `failure`). One increment per HTTP fetch, counted at the fetch itself, so a background refresh counts once and a fetch that failed but was answered from cached keys (see `jwks_cache_outage_ttl_seconds`) counts as a failure. A rising `failure` rate means the identity provider's JWKS endpoint is unhealthy; authentication keeps working from the cached keys until the outage window runs out.
+- Introduced in: v4.2
+
 ## `jemalloc_active_bytes`
 
 - Unit: Bytes
@@ -337,7 +351,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_enable_tablet_location_handoff`). They are kept in an LRU cache of 16 MiB: an entry is used for five minutes after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_shard_info_cache_ttl_sec`). They are kept in an LRU cache of 16 MiB, shared with the locations counted in `staros_shard_info_fallback_cache_entries`: an entry is used for `lake_shard_info_cache_ttl_sec` after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
 
 ## `lake_tablet_location_handoff_hits_total`
 

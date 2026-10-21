@@ -204,6 +204,20 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：INT8 列池使用的内存。
 
+## `jwks_fetch_latency_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 描述：每次从身份提供方拉取 JWKS（JSON Web Key Set）的耗时，不区分触发原因：某个 `jwks_url` 的首次加载、缓存到期前的后台提前刷新、token 带未知 `kid` 触发的刷新、失败后的重试都算，失败的拉取同样计时。JWT 验签本身是稳定的 CPU 开销，Bearer 认证变慢时，时间基本花在这里。
+- 引入版本：v4.2
+
+## `jwks_refresh_total`
+
+- 单位：个
+- 类型：Counter
+- 描述：从身份提供方拉取 JWKS 的总次数，按 `result`（`success` / `failure`）打标签。在 HTTP 拉取本身计数，每次拉取加一：后台刷新只算一次，拉取失败但用缓存的旧 key 顶上（见 `jwks_cache_outage_ttl_seconds`）的情况算 `failure`。`failure` 持续上升说明身份提供方的 JWKS 端点不健康；在容错窗口用完之前，认证仍靠缓存的 key 继续工作。
+- 引入版本：v4.2
+
 ## `jemalloc_active_bytes`
 
 - 单位：字节
@@ -337,7 +351,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 类型：瞬时值
-- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`）。条目保存在一个 16 MiB 的 LRU 缓存中，与 `staros_shard_info_fallback_cache_entries` 统计的条目共用，最后一次刷新后在 `lake_shard_info_cache_ttl_sec` 时长内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
 
 ## `lake_tablet_location_handoff_hits_total`
 

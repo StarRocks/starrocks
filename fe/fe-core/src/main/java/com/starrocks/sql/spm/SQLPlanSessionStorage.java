@@ -15,7 +15,6 @@ package com.starrocks.sql.spm;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.UnsupportedException;
@@ -26,9 +25,21 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 class SQLPlanSessionStorage implements SQLPlanStorage {
+    /*
+     * Session baselines never leave memory, but their ids share one namespace with the global ones: SHOW
+     * BASELINE unions both storages, and DROP / ENABLE / DISABLE BASELINE apply an id to both. Taking the id
+     * from the catalog generator kept that namespace disjoint, at the price of a journal write, which only
+     * the leader may perform - so CREATE BASELINE failed outright on every follower FE. Hand out ids from a
+     * range reserved above every reachable catalog id instead: no journal, still disjoint.
+     */
+    static final long SESSION_BASELINE_ID_BASE = 1L << 62;
+
+    private static final AtomicLong SESSION_BASELINE_ID_GENERATOR = new AtomicLong(SESSION_BASELINE_ID_BASE);
+
     private final List<BaselinePlan> baselinePlans = Lists.newArrayList();
 
     public List<BaselinePlan> getBaselines(Expr where) {
@@ -67,7 +78,7 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
     @Override
     public void storeBaselinePlan(List<BaselinePlan> plans) {
         for (BaselinePlan plan : plans) {
-            plan.setId(GlobalStateMgr.getCurrentState().getNextId());
+            plan.setId(SESSION_BASELINE_ID_GENERATOR.getAndIncrement());
             baselinePlans.add(plan);
         }
     }

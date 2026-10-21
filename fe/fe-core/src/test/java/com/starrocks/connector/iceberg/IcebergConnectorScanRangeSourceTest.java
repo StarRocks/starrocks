@@ -31,12 +31,19 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1011,5 +1018,115 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 prevCtx.setThreadLocalInfo();
             }
         }
+    }
+
+    // Data files and equality delete files get the same key exactly when they share spec and partition.
+    @Test
+    public void testBuildPartitionKey() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "p", Types.StringType.get()));
+        PartitionSpec unpartitioned = PartitionSpec.builderFor(schema).withSpecId(0).build();
+        PartitionSpec byP = PartitionSpec.builderFor(schema).withSpecId(1).identity("p").build();
+        PartitionSpec byPAgain = PartitionSpec.builderFor(schema).withSpecId(2).identity("p").build();
+
+        Assertions.assertNull(IcebergConnectorScanRangeSource.buildPartitionKey(unpartitioned, null));
+        String a = IcebergConnectorScanRangeSource.buildPartitionKey(byP, partition("a"));
+        Assertions.assertEquals(a, IcebergConnectorScanRangeSource.buildPartitionKey(byP, partition("a")));
+        Assertions.assertNotEquals(a, IcebergConnectorScanRangeSource.buildPartitionKey(byP, partition("b")));
+        // the same partition value under another spec is another partition
+        Assertions.assertNotEquals(a, IcebergConnectorScanRangeSource.buildPartitionKey(byPAgain, partition("a")));
+        // a null partition value differs from every string value
+        String nullKey = IcebergConnectorScanRangeSource.buildPartitionKey(byP, partition(null));
+        for (String value : List.of("", "n", "null")) {
+            Assertions.assertNotEquals(nullKey, IcebergConnectorScanRangeSource.buildPartitionKey(byP, partition(value)));
+        }
+    }
+
+    // int -> long and float -> double promotions: a side that sees the field under either type, holding a value
+    // of either class, must produce the same key.
+    @Test
+    public void testBuildPartitionKeyAcrossTypePromotion() {
+        PartitionSpec byIntP = PartitionSpec.builderFor(new Schema(
+                Types.NestedField.optional(1, "p", Types.IntegerType.get()))).withSpecId(0).identity("p").build();
+        PartitionSpec byLongP = PartitionSpec.builderFor(new Schema(
+                Types.NestedField.optional(1, "p", Types.LongType.get()))).withSpecId(0).identity("p").build();
+        String key = IcebergConnectorScanRangeSource.buildPartitionKey(byIntP, partition(5));
+        Assertions.assertEquals(key, IcebergConnectorScanRangeSource.buildPartitionKey(byLongP, partition(5L)));
+        Assertions.assertEquals(key, IcebergConnectorScanRangeSource.buildPartitionKey(byLongP, partition(5)));
+        Assertions.assertEquals(key, IcebergConnectorScanRangeSource.buildPartitionKey(byIntP, partition(5L)));
+
+        PartitionSpec byFloatQ = PartitionSpec.builderFor(new Schema(
+                Types.NestedField.optional(1, "q", Types.FloatType.get()))).withSpecId(0).identity("q").build();
+        PartitionSpec byDoubleQ = PartitionSpec.builderFor(new Schema(
+                Types.NestedField.optional(1, "q", Types.DoubleType.get()))).withSpecId(0).identity("q").build();
+        Assertions.assertEquals(IcebergConnectorScanRangeSource.buildPartitionKey(byFloatQ, partition(1.5f)),
+                IcebergConnectorScanRangeSource.buildPartitionKey(byDoubleQ, partition(1.5d)));
+    }
+
+    // Only the column the equality delete rewrite adds is the partition key; a real column of that name is not.
+    @Test
+    public void testIsPartitionKeyColumn() {
+        Schema plain = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+        Schema withRealColumn = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, IcebergTable.PARTITION_KEY, Types.StringType.get()));
+        Assertions.assertTrue(IcebergConnectorScanRangeSource.isPartitionKeyColumn(IcebergTable.PARTITION_KEY, plain));
+        Assertions.assertFalse(IcebergConnectorScanRangeSource.isPartitionKeyColumn("id", plain));
+        Assertions.assertFalse(
+                IcebergConnectorScanRangeSource.isPartitionKeyColumn(IcebergTable.PARTITION_KEY, withRealColumn));
+    }
+
+    // Each equality-id group has its own delete scan, which must only read the delete files of that group.
+    @Test
+    public void testDeleteFileScanRangesKeepOnlyTheirEqualityGroup() {
+        DeleteFile deletesByData = FileMetadata.deleteFileBuilder(SPEC_A)
+                .ofEqualityDeletes(2)
+                .withPath("/path/to/data-a-deletes-by-data.orc")
+                .withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(1)
+                .build();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A2_DELETES).addDeletes(deletesByData).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        Assertions.assertEquals(2, fileScanTask.deletes().size());
+
+        Assertions.assertEquals(List.of(FILE_A2_DELETES.location()), deleteScanPaths(icebergTable, fileScanTask, 1));
+        Assertions.assertEquals(List.of(deletesByData.location()), deleteScanPaths(icebergTable, fileScanTask, 2));
+    }
+
+    private List<String> deleteScanPaths(IcebergTable icebergTable, FileScanTask fileScanTask, int equalityId) {
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY,
+                IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, List.of(equalityId)),
+                tupleDescriptor, Optional.empty(), PartitionIdGenerator.of(), false, false);
+        List<String> paths = new ArrayList<>();
+        for (TScanRangeLocations locations : scanRangeSource.toScanRanges(fileScanTask)) {
+            paths.add(locations.getScan_range().getHdfs_scan_range().getFull_path());
+        }
+        return paths;
+    }
+
+    private static StructLike partition(Object value) {
+        return new StructLike() {
+            @Override
+            public int size() {
+                return 1;
+            }
+
+            @Override
+            public <T> T get(int pos, Class<T> javaClass) {
+                return javaClass.cast(value);
+            }
+
+            @Override
+            public <T> void set(int pos, T newValue) {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 }

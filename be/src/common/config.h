@@ -68,6 +68,9 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // BRPC stub cache expire configurations
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
+// The interval of the background check that resets BRPC stubs whose connection has failed, default 10 seconds.
+// A value <= 0 disables the check.
+CONF_mInt32(brpc_failed_channel_reset_interval_s, "10");
 
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
 // - true: StarRocks will attempt to resolve hostnames to IPs.
@@ -914,7 +917,14 @@ CONF_Bool(enable_stop_be_action, "true");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
-CONF_Bool(enable_jvm_metrics, "false");
+// Collect JVM memory metrics. No JVM is created for this: collection starts once a JVM exists
+// in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
+CONF_Bool(enable_jvm_metrics, "true");
+
+// Count the committed JVM heap and non-heap memory in the "jvm" memory tracker under the process
+// tracker, so the BE memory limit includes it. Updated by the JVM metrics hook, so it needs
+// enable_jvm_metrics. When turned off, the next round releases the tracked memory.
+CONF_mBool(enable_jvm_memory_tracker, "true");
 
 CONF_mBool(enable_prefetch, "true");
 
@@ -1776,8 +1786,18 @@ CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // non-existent segments and prevent delvec file garbage collection.
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
-// Used for control memory usage of update state cache and compaction state cache
+// Used for control memory usage of update state cache and compaction state cache in shared-data mode
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+// Upper bound of the shared-data primary key index cache, as a percentage of its capacity, checked after every
+// publish that does not fail on the update memory limit. A backstop for when the background evict thread has
+// not yet brought the cache down to primary_key_index_memory_high_percent.
+CONF_mInt32(primary_key_index_memory_urgent_percent, "85");
+// The background update cache evict thread shrinks the shared-data primary key index cache to this percentage
+// of its capacity whenever it holds more.
+CONF_mInt32(primary_key_index_memory_high_percent, "75");
+// When a shared-data primary key publish fails because it exceeds the update memory limit, the primary key
+// index cache is shrunk to this percentage of its capacity, so that the retry has memory to work with.
+CONF_mInt32(primary_key_index_memory_middle_percent, "50");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // Verify sstable block checksums on cloud-native PK index reads (open, point lookup,
@@ -2560,11 +2580,14 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // Must be positive. Runtime changes resize the existing pool without interrupting running closes.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
-// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
-// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
-// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
-// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
-CONF_mBool(lake_enable_tablet_location_handoff, "true");
+// Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
+// the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
+// to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
+// txn logs, which then writes each partition's combined txn log without asking. An owner gets storage
+// updates pushed by starmgr; a kept copy only picks them up when it expires, so this also bounds how
+// long such a node may use outdated storage settings. 0 disables both: nothing is handed over or kept,
+// and every such touch asks starmgr.
+CONF_mInt64(lake_shard_info_cache_ttl_sec, "60");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics

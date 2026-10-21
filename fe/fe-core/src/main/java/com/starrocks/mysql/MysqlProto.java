@@ -35,6 +35,10 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthChannel;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
+import com.starrocks.authentication.AuthFailureReason;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -58,6 +62,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 
@@ -164,10 +169,70 @@ public class MysqlProto {
         return new NegotiateResult(authPacket, NegotiateState.OK);
     }
 
+    /**
+     * Decode a MySQL handshake frame into a protocol-neutral credential.
+     *
+     * <p>This is the one place that needs to know which auth plugin the handshake negotiated, and
+     * it is deliberately the only one: the plugin name is read here and thrown away, never stored
+     * on the credential, and {@code AuthenticationHandler} never sees it. Two of the five frames
+     * have an exact counterpart on the other channels - a clear password is a password, an OpenID
+     * Connect frame wraps a token - so they are unwrapped here and travel as {@code PLAIN_PASSWORD}
+     * / {@code BEARER_TOKEN}. Providers downstream then have a single path per credential shape
+     * instead of a MySQL branch each, and the security-integration chain can filter purely on what
+     * a provider says it can read.
+     *
+     * <p>{@code clientPlugin} comes from the packet that carried {@code authResponse}, not from the
+     * context: the bytes and the name of the format they are in belong together, and reading the
+     * name from a field a different method happens to have filled is how it goes stale.
+     *
+     * <p>An unrecognised or absent plugin name falls through to {@code MYSQL_NATIVE_SCRAMBLE}: an old
+     * client that sends no plugin name is speaking {@code mysql_native_password}, and guessing any
+     * other shape for a name we do not know would read the bytes as something they are not.
+     */
+    public static AuthCredentials handshakeCredentials(String user, byte[] authResponse, String clientPlugin,
+                                                       String remoteHost) throws AuthenticationException {
+        if (AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString().equalsIgnoreCase(clientPlugin)) {
+            // The clear-password frame appends a trailing NUL; every other channel sends the bare
+            // password, so strip it here and the difference stops existing.
+            byte[] password = authResponse;
+            if (password.length > 0 && password[password.length - 1] == 0) {
+                password = Arrays.copyOf(password, password.length - 1);
+            }
+            return new AuthCredentials(user, password, AuthCredentialKind.PLAIN_PASSWORD,
+                    AuthChannel.MYSQL, remoteHost);
+        }
+        if (AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString().equalsIgnoreCase(clientPlugin)) {
+            byte[] token;
+            try {
+                ByteBuffer buffer = ByteBuffer.wrap(authResponse);
+                MysqlCodec.readInt1(buffer);            // 1 byte of client capability
+                token = MysqlCodec.readLenEncodedString(buffer);
+            } catch (RuntimeException e) {
+                throw new AuthenticationException("Malformed JWT")
+                        .withReason(AuthFailureReason.MALFORMED);
+            }
+            return new AuthCredentials(user, token, AuthCredentialKind.BEARER_TOKEN,
+                    AuthChannel.MYSQL, remoteHost);
+        }
+        if (AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString().equalsIgnoreCase(clientPlugin)) {
+            // The client declared the OAuth2 plugin. There are no credential bytes - on MySQL the
+            // token always arrives later, through the browser callback - and the kind records that
+            // this client received the authorization endpoint and can open the browser itself, so
+            // the provider may hold the handshake until the callback lands. A client without the
+            // plugin sends a scramble and falls through to MYSQL_NATIVE_SCRAMBLE below; the OAuth2
+            // provider answers that one immediately and lets the first statement carry the URL.
+            return new AuthCredentials(user, new byte[0],
+                    AuthCredentialKind.MYSQL_OAUTH2_CLIENT, AuthChannel.MYSQL, remoteHost);
+        }
+        // mysql_native_password, and an old client that names no plugin - which is speaking it too.
+        return AuthCredentials.ofNativeScramble(user, authResponse, remoteHost);
+    }
+
     public static NegotiateResult authenticate(ConnectContext context, MysqlAuthPacket authPacket) throws IOException {
         try {
-            AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
-                    authPacket.getAuthResponse());
+            AuthCredentials cred = handshakeCredentials(authPacket.getUser(), authPacket.getAuthResponse(),
+                    authPacket.getPluginName(), context.getMysqlChannel().getRemoteIp());
+            AuthenticationHandler.authenticate(context, cred);
         } catch (AuthenticationException e) {
             if (e.getErrorCode() == null) {
                 context.getState().setErrorCode(ErrorCode.ERR_AUTHENTICATION_FAIL);
@@ -241,8 +306,9 @@ public class MysqlProto {
         // do authenticate again
 
         try {
-            AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
-                    changeUserPacket.getAuthResponse());
+            AuthCredentials cred = handshakeCredentials(changeUserPacket.getUser(), changeUserPacket.getAuthResponse(),
+                    changeUserPacket.getPluginName(), context.getMysqlChannel().getRemoteIp());
+            AuthenticationHandler.authenticate(context, cred);
         } catch (AuthenticationException e) {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
