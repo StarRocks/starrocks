@@ -105,6 +105,7 @@ public:
         }
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
+    void set_iceberg_schema(const TIcebergSchema* schema) { _orc_mapping_options.iceberg_schema = schema; }
     void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
