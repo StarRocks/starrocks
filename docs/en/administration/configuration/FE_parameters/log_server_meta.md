@@ -1293,7 +1293,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: How long StarRocks keeps refreshing a table after that table was last accessed. StarRocks applies this cutoff to each table. For a Hive, Iceberg, Delta Lake, or Paimon table that has been accessed, if it has not been accessed for longer than this value, StarRocks stops refreshing its cached metadata. A table that has not been accessed is not refreshed. MaxCompute catalogs that use the same background refresh do not apply this cutoff.
+- Description: How long StarRocks keeps refreshing a table after that table was last accessed. This cutoff is applied per table, but only when its last access time is recorded. For Hive, Iceberg, Delta Lake, and Paimon tables with a recorded last access time, StarRocks stops refreshing cached metadata when the time since the last access exceeds this value. A table that has not been accessed is not refreshed. MaxCompute catalogs that use the same background refresh do not apply this cutoff.
 - Introduced in: v2.5.5
 
 ### `bdbje_cleaner_threads`
@@ -1482,7 +1482,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the periodic background refresh of cached external catalog metadata. After it is enabled, a background task on each FE refreshes cached metadata for Hive, Iceberg, Delta Lake, Paimon, and MaxCompute catalogs so that StarRocks can perceive data changes. Hive metadata is read from Hive Metastore or AWS Glue. Iceberg catalogs, including Iceberg REST catalogs, are read from the configured catalog service (Hive Metastore, AWS Glue, REST, Hadoop, or JDBC). The refresh reloads table metadata and, when that metadata changes, the cached manifests and data files. `true` enables the refresh, and `false` disables it.
+- Description: Whether to enable the periodic background refresh of cached external catalog metadata. When enabled, a background task on each FE periodically refreshes cached metadata for Hive, Iceberg, Delta Lake, Paimon, and MaxCompute catalogs so that StarRocks can perceive data changes. The actual refresh behavior depends on each catalog's caching configuration. Hive metadata is read from Hive Metastore or AWS Glue. Iceberg catalogs, including Iceberg REST catalogs, are read from the configured catalog service (Hive Metastore, AWS Glue, REST, Hadoop, or JDBC). The refresh reloads table metadata and, when that metadata changes, the cached manifests and data files. `true` enables the refresh, and `false` disables it.
 - Introduced in: v2.5.5
 
 ### `refresh_other_fe_dispatch_executor_thread_num`
