@@ -72,7 +72,8 @@ public:
     using Row = std::pair<int32_t, int32_t>; // (c1, c2)
     using Rows = std::map<int32_t, Row>;
 
-    LakePrimaryKeyRecoverTest() : TestBase(kTestDirectory) {
+    // gtest-parallel serializes only the tests of one test case, so every test case needs a directory of its own.
+    explicit LakePrimaryKeyRecoverTest(const char* test_directory = kTestDirectory) : TestBase(test_directory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -385,8 +386,10 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 // if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
 // sstables already have it. Recover rebuilds from rowsets alone, so either way the deleted keys must still be
 // deleted afterwards.
-class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest,
-                                            public testing::WithParamInterface<bool> {};
+class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
+public:
+    LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
+};
 
 // Disabled: recover skips a del file the compaction output inherited, and has nothing to replay once the
 // compaction dropped it, so the deleted keys come back.
@@ -494,7 +497,10 @@ TEST_F(LakePrimaryKeyRecoverTest, row_mode_partial_update) {
 // in upsert mode, keys that do not exist yet go to a new full segment. Recover both while that publish is in
 // progress and on a later one.
 class LakePrimaryKeyRecoverColumnModeTest : public LakePrimaryKeyRecoverTest,
-                                            public testing::WithParamInterface<PartialUpdateMode> {};
+                                            public testing::WithParamInterface<PartialUpdateMode> {
+public:
+    LakePrimaryKeyRecoverColumnModeTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_column_mode") {}
+};
 
 TEST_P(LakePrimaryKeyRecoverColumnModeTest, column_mode_partial_update) {
     const PartialUpdateMode mode = GetParam();
