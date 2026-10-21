@@ -348,6 +348,31 @@ Status TabletManager::parse_shard_properties(int64_t tablet_id,
     return Status::OK();
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status TabletManager::resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                               int64_t* index_id) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
+        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
+        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
+        auto msg = fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
+                               shard_info_or.status().message());
+        // StarMgr answers NOT_EXIST for a dropped shard, which starlet surfaces as absl NotFound: version 1
+        // of the tablet does not exist. Other failures (starlet not ready, a failed StarMgr RPC) may be
+        // transient and must not be mistaken for missing metadata.
+        if (absl::IsNotFound(shard_info_or.status())) {
+            return Status::NotFound(msg);
+        }
+        return Status::InternalError(msg);
+    }
+    return parse_shard_properties(tablet_id, shard_info_or.value().properties, table_id, partition_id, index_id);
+}
+#endif // USE_STAROS
+
 StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t tablet_id) {
     TEST_ERROR_POINT("TabletManager::construct_initial_metadata");
 #ifdef BE_TEST
@@ -362,19 +387,7 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     int64_t partition_id = -1;
     int64_t index_id = -1;
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    auto worker = get_staros_worker();
-    if (worker == nullptr) {
-        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
-        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
-        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
-    }
-    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
-    if (!shard_info_or.ok()) {
-        return Status::InternalError(fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
-                                                 shard_info_or.status().message()));
-    }
-    RETURN_IF_ERROR(
-            parse_shard_properties(tablet_id, shard_info_or.value().properties, &table_id, &partition_id, &index_id));
+    RETURN_IF_ERROR(resolve_shard_properties(tablet_id, &table_id, &partition_id, &index_id));
 
     ASSIGN_OR_RETURN(auto resp,
                      _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));

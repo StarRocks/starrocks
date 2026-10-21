@@ -2642,6 +2642,62 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     EXPECT_EQ(st.value()->column(1).name(), "c1");
 }
 
+// A version-1 read without a version-1 file resolves the tablet's shard to build the metadata. StarMgr
+// answers NOT_EXIST for a dropped shard, which must read as NotFound like every other version of the
+// tablet; failures that may be transient must not.
+TEST_F(LakeTabletManagerTest, resolve_shard_properties) {
+    using ShardInfoOr = absl::StatusOr<staros::starlet::ShardInfo>;
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
+
+    int64_t table_id = 0;
+    int64_t partition_id = 0;
+    int64_t index_id = 0;
+
+    // StarMgr no longer has the shard.
+    auto dropped_id = next_id();
+    auto not_exist = "shard " + std::to_string(dropped_id) + " not exist.";
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(dropped_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::NotFoundError(not_exist))));
+    auto st = lake::TabletManager::resolve_shard_properties(dropped_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_not_found()) << st;
+    EXPECT_NE(std::string::npos, st.message().find(not_exist)) << st;
+
+    // Starlet is not ready yet.
+    auto unavailable_id = next_id();
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(unavailable_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::UnavailableError("starlet is still not ready!"))));
+    st = lake::TabletManager::resolve_shard_properties(unavailable_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+
+    // The StarMgr RPC failed.
+    auto timeout_id = next_id();
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(timeout_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::DeadlineExceededError("grpc.GetShard error"))));
+    st = lake::TabletManager::resolve_shard_properties(timeout_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+
+    // The shard resolves.
+    auto live_id = next_id();
+    staros::starlet::ShardInfo shard_info;
+    shard_info.id = live_id;
+    shard_info.properties.emplace("tableId", "11");
+    shard_info.properties.emplace("partitionId", "12");
+    shard_info.properties.emplace("indexId", "13");
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(live_id)).WillOnce(::testing::Return(shard_info));
+    ASSERT_OK(lake::TabletManager::resolve_shard_properties(live_id, &table_id, &partition_id, &index_id));
+    EXPECT_EQ(11, table_id);
+    EXPECT_EQ(12, partition_id);
+    EXPECT_EQ(13, index_id);
+
+    // No StarOS worker at all.
+    set_staros_worker_for_test(nullptr);
+    st = lake::TabletManager::resolve_shard_properties(next_id(), &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_not_found()) << st;
+}
+
 TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
     _tablet_manager->add_in_writing_data_size(1, 100);
