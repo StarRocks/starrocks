@@ -114,13 +114,8 @@ select count(udtfdouble) from t0, udtfdouble(c1);
 -- !result
 select concat('[', udtfstring, ']') from TABLE(udtfstring(""));
 -- result:
-<<<<<<< HEAD
-
-
-=======
 []
 []
->>>>>>> 4eb4184 ([UT] Fix test_jvm_udf expecting no row from udtfstring("") (#81245))
 -- !result
 select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
 -- result:
