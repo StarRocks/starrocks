@@ -14,6 +14,8 @@
 
 #include "storage/lake/primary_key_manager.h"
 
+#include <algorithm>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -1890,6 +1892,16 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
     // there, so this can under-estimate; this constant is the knob to raise if that ever shows up.
     constexpr size_t kEstimatedSegmentBytesPerColumn = 1024;
     const size_t estimated_segment_bytes = params.tablet_schema->num_columns() * kEstimatedSegmentBytesPerColumn;
+    // Complex columns build child readers that the top-level column estimate does not account for;
+    // flat JSON's child readers additionally depend on the file's data. Check the full construction
+    // schema, even for a scalar-only projection, once per call before any segment can enter the cache.
+    const auto& schema_columns = params.tablet_schema->columns();
+    const bool use_segment_cache_for_schema =
+            config::lake_pk_partial_update_use_segment_cache &&
+            std::none_of(schema_columns.begin(), schema_columns.end(), [](const TabletColumn& column) {
+                const auto type = column.type();
+                return type == TYPE_JSON || type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT;
+            });
     auto fetch_values_from_segment =
             [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
                 const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
@@ -1905,8 +1917,7 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         file_info.fs = fs;
         StatusOr<SegmentPtr> segment;
         auto* tablet_mgr = params.tablet->tablet_mgr();
-        bool use_segment_cache =
-                allow_segment_cache && tablet_mgr != nullptr && config::lake_pk_partial_update_use_segment_cache;
+        bool use_segment_cache = allow_segment_cache && tablet_mgr != nullptr && use_segment_cache_for_schema;
         if (use_segment_cache) {
             // Take the cache path only while this publish's own base segments can fit in it. A publish
             // reads every base segment holding a row it updates, so once that set exceeds the cache

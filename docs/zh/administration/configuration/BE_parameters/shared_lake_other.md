@@ -251,7 +251,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。仅当该 tablet 的基底 Segment 能够容纳在 `lake_metadata_cache_limit` 之内，且每个 Segment 的估计大小不超过单个缓存分片的容量时才使用缓存；否则，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
+- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。包含 JSON、ARRAY、MAP 或 STRUCT 列的表使用原有的打开路径，因为按顶层列数估算无法涵盖嵌套元数据。仅当该 tablet 的基底 Segment 能够容纳在 `lake_metadata_cache_limit` 之内，且每个 Segment 的估计大小不超过单个缓存分片的容量时才使用缓存；否则，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
 - 引入版本：v4.2
 
 ### enable_lake_prepared_split_pre_refinement

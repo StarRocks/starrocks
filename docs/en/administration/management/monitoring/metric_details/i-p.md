@@ -349,7 +349,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Gauge
-- Description: Cumulative number of cached segment candidates rejected since this BE/CN started because their schema is missing or incompatible with the requested schema. Each rejection opens a private segment without replacing the shared entry. Includes incompatible candidates returned by concurrent cache insertion after a lookup miss, so this value cannot be subtracted directly from lookup hits. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+- Description: Cumulative number of cached segment candidates rejected since this BE/CN started because their schema is missing or incompatible with the requested schema. When cache filling is enabled, a rejected entry is atomically replaced only if it still refers to the same segment; existing readers keep their segment. Otherwise, the request opens a private segment. Includes incompatible candidates returned by concurrent cache insertion after a lookup miss, so this value cannot be subtracted directly from lookup hits. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
 
 ## `lake_tablet_location_handoff_entries`
 

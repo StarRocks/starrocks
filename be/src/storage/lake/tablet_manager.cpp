@@ -1984,12 +1984,20 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
             // A physical lookup hit can still be unusable for this request's schema.
             // Count the final cache winner, including an insert-if-absent race.
             g_segment_cache_schema_reject_total << 1;
-            // Check the final cache winner, including an insert_if_absent race. A logical schema
-            // used by another reader can omit columns this request still needs, even if the footer
-            // physically contains them. Do not replace that reader's entry or share its Segment.
+            // Never mutate a Segment held by another reader. With cache filling enabled, replace
+            // only the entry we just checked so subsequent requests can reuse this schema. A racing
+            // replacement or eviction must not be overwritten; serve this request privately instead.
             auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
-            segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema),
-                                                /*tablet_manager=*/nullptr);
+            auto replacement = std::make_shared<Segment>(fs, segment_info, segment_id, tablet_schema,
+                                                         fill_meta_cache ? this : nullptr);
+            if (fill_meta_cache) {
+                TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_replace", nullptr);
+                if (!_metacache->replace_segment_if_matches(cache_key, segment.get(), replacement)) {
+                    replacement = std::make_shared<Segment>(std::move(fs), segment_info, segment_id,
+                                                            std::move(tablet_schema), /*tablet_manager=*/nullptr);
+                }
+            }
+            segment = std::move(replacement);
         }
     }
     // segment->open will read the footer, and it is time-consuming.

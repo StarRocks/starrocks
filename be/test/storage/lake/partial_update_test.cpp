@@ -19,6 +19,7 @@
 #include <map>
 #include <random>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
@@ -37,6 +38,7 @@
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -50,11 +52,14 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -409,7 +414,12 @@ public:
         read_and_check(old_reader, _tablet_schema, /*c1_multiplier=*/3);
         if (legacy_schema_change) {
             auto cached_after_old_read = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
-            EXPECT_EQ(cached.get(), cached_after_old_read.get());
+            ASSERT_NE(nullptr, cached_after_old_read);
+            EXPECT_NE(cached.get(), cached_after_old_read.get());
+            EXPECT_EQ(_tablet_schema->id(), cached_after_old_read->tablet_schema().id());
+            EXPECT_NE(nullptr, cached_after_old_read->column_with_uid(dropped_uid));
+            // The old query can make its compatible schema reusable without mutating a narrowed
+            // Segment that another reader still holds.
             EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid));
         }
         auto current_schema = ChunkHelper::convert_schema(new_tablet_schema);
@@ -2032,6 +2042,151 @@ INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
                                                    .enable_persistent_index = true,
                                                    .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
                                                    .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
+
+class LakeNestedSegmentCacheTest : public LakePartialUpdateTestBase, public testing::WithParamInterface<const char*> {
+public:
+    LakeNestedSegmentCacheTest() : LakePartialUpdateTestBase("test_lake_nested_segment_cache") {}
+};
+
+TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
+    constexpr int kFields = 64;
+    constexpr int64_t kCacheCapacity = 128 * 1024;
+    const std::string type = GetParam();
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    auto* complex = schema_pb->mutable_column(2);
+    complex->set_type(type);
+    complex->clear_default_value();
+    ColumnPB nested_struct;
+    nested_struct.set_unique_id(next_id());
+    nested_struct.set_name("element");
+    nested_struct.set_type("STRUCT");
+    nested_struct.set_is_nullable(true);
+    for (int field = 0; field < kFields; ++field) {
+        auto* child = nested_struct.add_children_columns();
+        child->set_unique_id(next_id());
+        child->set_name(fmt::format("f{}", field));
+        child->set_type("INT");
+        child->set_is_nullable(true);
+    }
+    if (type == "STRUCT") {
+        complex->mutable_children_columns()->CopyFrom(nested_struct.children_columns());
+    } else if (type == "ARRAY") {
+        complex->add_children_columns()->CopyFrom(nested_struct);
+    } else if (type == "MAP") {
+        auto* key = complex->add_children_columns();
+        key->set_unique_id(next_id());
+        key->set_name("key");
+        key->set_type("INT");
+        key->set_is_nullable(true);
+        complex->add_children_columns()->CopyFrom(nested_struct);
+    }
+    const TabletSchemaPtr tablet_schema = TabletSchema::create(*schema_pb);
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), kChunkSize);
+    std::vector<JsonValue> json_values;
+    json_values.reserve(kChunkSize);
+    for (int row = 0; row < kChunkSize; ++row) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(row));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(100 + row));
+        DatumStruct fields;
+        std::string json = "{";
+        for (int field = 0; field < kFields; ++field) {
+            fields.emplace_back(row * 100 + field);
+            if (field != 0) json += ",";
+            json += fmt::format("\"f{}\":{}", field, row * 100 + field);
+        }
+        json += "}";
+        auto* values = chunk->get_column_raw_ptr_by_index(2);
+        if (type == "JSON") {
+            ASSIGN_OR_ABORT(auto value, JsonValue::parse(json));
+            json_values.emplace_back(std::move(value));
+            values->append_datum(Datum(&json_values.back()));
+        } else if (type == "ARRAY") {
+            values->append_datum(DatumArray{Datum(fields)});
+        } else if (type == "MAP") {
+            values->append_datum(DatumMap{{int32_t{1}, Datum(fields)}});
+        } else {
+            values->append_datum(fields);
+        }
+    }
+
+    const auto tablet_id = metadata->id();
+    const auto filename = fmt::format("nested_cache_{}.dat", next_id());
+    FileInfo file_info{.path = _tablet_mgr->segment_location(tablet_id, filename)};
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
+    ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_info.path));
+    SegmentWriterOptions writer_options;
+    writer_options.flat_json_config = std::make_shared<FlatJsonConfig>(true, 0.5, 0.9, kFields);
+    SegmentWriter writer(std::move(file), 0, tablet_schema, writer_options);
+    ASSERT_OK(writer.init());
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0, index_size = 0, footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    file_info.size = file_size;
+    ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
+    auto* complex_reader = probe->column_with_uid(complex->unique_id());
+    ASSERT_NE(nullptr, complex_reader);
+    ASSERT_NE(nullptr, complex_reader->sub_readers());
+    if (type == "JSON") {
+        ASSERT_TRUE(complex_reader->is_flat_json());
+    }
+    // The old three-top-level-column estimate admits the entry, although its real footer readers
+    // cannot fit in a shard. Opening the probe privately must not seed the segment cache.
+    ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
+    ASSERT_GT(probe->mem_usage(), kCacheCapacity / kNumShards);
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(kChunkSize);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename(filename);
+    segment_meta->set_size(file_size);
+    RssidFileInfoContainer container;
+    container.add_rssid_to_file(*metadata);
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    const TabletMetadataPtr read_metadata = metadata;
+    const TxnLogPB_OpWrite op_write;
+    const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
+    std::vector<uint32_t> rowids(kChunkSize);
+    std::iota(rowids.begin(), rowids.end(), 0);
+    const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
+
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    config::lake_pk_partial_update_use_segment_cache = true;
+    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    std::vector<bool> decisions;
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    // A scalar-only projection still opens all readers in the construction schema. The second
+    // request also verifies that the static path preserves the complex values themselves.
+    for (const auto& projection : {std::vector<uint32_t>{1}, std::vector<uint32_t>{1, 2}}) {
+        decisions.clear();
+        MutableColumns values;
+        for (auto column_id : projection) {
+            values.emplace_back(chunk->get_column_by_index(column_id)->clone_empty());
+        }
+        ASSERT_OK(_primary_key_mgr->get_column_values(params, projection, false, rowids_by_rssid, &values));
+        ASSERT_EQ(1, decisions.size());
+        EXPECT_FALSE(decisions.front()) << "bypass must be decided before the first cache insertion";
+        for (size_t column = 0; column < projection.size(); ++column) {
+            ASSERT_EQ(kChunkSize, values[column]->size());
+            for (int row = 0; row < kChunkSize; ++row) {
+                EXPECT_EQ(1, values[column]->equals(row, *chunk->get_column_by_index(projection[column]), row));
+            }
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(ComplexTypes, LakeNestedSegmentCacheTest, ::testing::Values("STRUCT", "JSON", "ARRAY", "MAP"),
+                         [](const testing::TestParamInfo<const char*>& info) { return std::string(info.param); });
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:
