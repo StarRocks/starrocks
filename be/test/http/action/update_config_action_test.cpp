@@ -32,6 +32,7 @@
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
@@ -49,6 +50,7 @@
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
@@ -127,6 +129,25 @@ TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_preload_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(
+                ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "10"));
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
