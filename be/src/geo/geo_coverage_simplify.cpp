@@ -17,12 +17,14 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <map>
 #include <memory_resource>
 #include <numeric>
+#include <variant>
 #include <vector>
 
 #define BOOST_MATH_DISABLE_FLOAT128
@@ -162,21 +164,62 @@ struct Alloc {
 // Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
 // ring sums with native WKB positions <4219. 16384 checked bits also cover
 // tolerance^2 and doubled midpoint samples. Dynamic limbs use the tracked allocator.
-using Integer = boost::multiprecision::number<
+using DynamicInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
                                                boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
         boost::multiprecision::et_off>;
-Integer scaled(double value) {
-    return geo_exact::scaled_binary64<Integer>(value);
-}
+using FixedInteger = boost::multiprecision::number<
+        boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::signed_magnitude,
+                                               boost::multiprecision::checked, void>,
+        boost::multiprecision::et_off>;
+
+// Finite binary64 as an odd significand times 2^shift, in the original 2^1074 scale.
+struct Binary64 {
+    uint64_t significand;
+    unsigned shift;
+    bool negative;
+    explicit Binary64(double value) {
+        const uint64_t bits = std::bit_cast<uint64_t>(value), exponent = (bits >> 52) & 0x7ff;
+        significand = bits & ((uint64_t{1} << 52) - 1);
+        if (exponent) significand |= uint64_t{1} << 52;
+        shift = exponent ? exponent - 1 : 0;
+        negative = bits >> 63;
+        if (significand) {
+            const unsigned zeros = std::countr_zero(significand);
+            significand >>= zeros;
+            shift += zeros;
+        }
+    }
+};
+struct ArithmeticBounds {
+    unsigned common_shift = 2098, high_bit = 0;
+    uint32_t positions = 0;
+    void include(double value) {
+        const Binary64 parts(value);
+        if (!parts.significand) return;
+        common_shift = std::min(common_shift, parts.shift);
+        high_bit = std::max(high_bit, parts.shift + unsigned(std::bit_width(parts.significand)));
+    }
+    bool fixed() const {
+        const unsigned b = high_bit ? high_bit - common_shift : 0;
+        // |coordinate|, tolerance <2^b. Determinants use <=2b+4 bits;
+        // every (also shortened) ring sum uses <=2b+1+bit_width(positions).
+        // The first bound also keeps multiplication operands within two limbs,
+        // so Boost's full four-limb multiplication scratch fits in 256 bits.
+        return b + 2 <= 128 && 2 * b + std::bit_width(positions) + 4 <= 255;
+    }
+};
+template <class Integer>
 int sign(const Integer& value) {
     return geo_exact::sign(value);
 }
-struct Point {
+template <class Integer>
+struct NumericPoint {
     double x, y;
     Integer ex, ey;
 };
-Integer orientation(const Point& a, const Point& b, const Point& c) {
+template <class Integer>
+Integer orientation(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c) {
     return geo_exact::orientation(a.ex, a.ey, b.ex, b.ey, c.ex, c.ey);
 }
 Key key(uint32_t a, uint32_t b) {
@@ -205,20 +248,26 @@ template <class F>
 void query(const Tree& tree, const Box& box, F&& visitor) {
     tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
 }
-Box bounds(const Point& a, const Point& b) {
+template <class Integer>
+Box bounds(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
     return {{std::min(a.x, b.x), std::min(a.y, b.y)}, {std::max(a.x, b.x), std::max(a.y, b.y)}};
 }
-bool between(const Point& p, const Point& a, const Point& b) {
+template <class Integer>
+bool between(const NumericPoint<Integer>& p, const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
     return std::min(a.x, b.x) <= p.x && p.x <= std::max(a.x, b.x) && std::min(a.y, b.y) <= p.y &&
            p.y <= std::max(a.y, b.y);
 }
 enum class Contact { NONE, ENDPOINT, TJUNCTION, CROSS, OVERLAP };
-Contact contact(const Point& a, const Point& b, const Point& c, const Point& d) {
+template <class Integer>
+Contact contact(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c,
+                const NumericPoint<Integer>& d) {
     const int ac = sign(orientation(a, b, c)), ad = sign(orientation(a, b, d));
     const int ca = sign(orientation(c, d, a)), cb = sign(orientation(c, d, b));
     if (ac * ad < 0 && ca * cb < 0) return Contact::CROSS;
     if (ac == 0 && ad == 0 && ca == 0 && cb == 0) {
-        auto less = [](const Point& p, const Point& q) { return p.x < q.x || (p.x == q.x && p.y < q.y); };
+        auto less = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+            return p.x < q.x || (p.x == q.x && p.y < q.y);
+        };
         const auto& lo1 = less(a, b) ? a : b;
         const auto& hi1 = less(a, b) ? b : a;
         const auto& lo2 = less(c, d) ? c : d;
@@ -228,7 +277,9 @@ Contact contact(const Point& a, const Point& b, const Point& c, const Point& d) 
         if (less(hi, lo)) return Contact::NONE;
         if (less(lo, hi)) return Contact::OVERLAP;
     }
-    auto equal = [](const Point& p, const Point& q) { return p.x == q.x && p.y == q.y; };
+    auto equal = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+        return p.x == q.x && p.y == q.y;
+    };
     if ((ac == 0 && between(c, a, b) && !equal(c, a) && !equal(c, b)) ||
         (ad == 0 && between(d, a, b) && !equal(d, a) && !equal(d, b)) ||
         (ca == 0 && between(a, c, d) && !equal(a, c) && !equal(a, d)) ||
@@ -244,7 +295,8 @@ struct Occurrence {
     uint32_t node, ring, previous, next;
     bool active = true;
 };
-struct Ring {
+template <class Integer>
+struct NumericRing {
     uint32_t first, count, component;
     bool hole;
     Integer area;
@@ -263,12 +315,13 @@ struct LocationIndex {
     std::pmr::vector<RingIndex> rings;
     explicit LocationIndex(Memory& memory) : edges(&memory), rings(&memory) {}
 };
-struct Node {
-    Point point;
+template <class Integer>
+struct NumericNode {
+    NumericPoint<Integer> point;
     std::pmr::vector<uint32_t> occurrences;
     uint32_t version = 0;
     bool fixed = false, active = true;
-    Node(Point p, Memory& m) : point(std::move(p)), occurrences(&m) {}
+    NumericNode(NumericPoint<Integer> p, Memory& m) : point(std::move(p)), occurrences(&m) {}
 };
 struct Edge {
     uint32_t a, b;
@@ -283,12 +336,14 @@ struct Row {
     bool null = false, multi = false;
     explicit Row(Memory& m) : bytes(&m) {}
 };
-struct Candidate {
+template <class Integer>
+struct NumericCandidate {
     Integer area;
     uint32_t node, version;
 };
-struct CandidateLess {
-    bool operator()(const Candidate& a, const Candidate& b) const {
+template <class Integer>
+struct NumericCandidateLess {
+    bool operator()(const NumericCandidate<Integer>& a, const NumericCandidate<Integer>& b) const {
         return a.area != b.area ? a.area > b.area : a.node > b.node;
     }
 };
@@ -331,40 +386,16 @@ void write(std::pmr::vector<uint8_t>& output, T value) {
     const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
     output.insert(output.end(), bytes, bytes + sizeof(T));
 }
-} // namespace
-
-struct GeoCoverageSimplify::Impl {
+struct Partition {
     Memory memory;
     GeoCoverageCheckpoint checkpoint;
     std::pmr::vector<Row> rows;
     std::pmr::vector<uint8_t> output_bytes;
-    std::pmr::vector<Node> nodes;
-    std::pmr::vector<Occurrence> occurrences;
-    std::pmr::vector<Ring> rings;
-    std::pmr::vector<Component> components;
-    std::pmr::map<std::pair<double, double>, uint32_t> node_map;
-    std::pmr::map<Key, uint32_t> edge_map;
-    std::pmr::vector<Edge> edges;
-    std::pmr::vector<Candidate> heap;
-    Tree edge_tree, node_tree;
-    size_t input_bytes = 0, calls = 0, external = 0;
-    size_t since_check = 0;
+    size_t input_bytes = 0, calls = 0, external = 0, since_check = 0;
     bool finished = false, failed = false, null_parameter = false;
-    Impl(memory::Allocator* allocator, GeoCoverageCheckpoint checkpoint, size_t metadata)
-            : memory(allocator),
-              checkpoint(std::move(checkpoint)),
-              rows(&memory),
-              output_bytes(&memory),
-              nodes(&memory),
-              occurrences(&memory),
-              rings(&memory),
-              components(&memory),
-              node_map(&memory),
-              edge_map(&memory),
-              edges(&memory),
-              heap(&memory),
-              edge_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)),
-              node_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)) {
+    ArithmeticBounds arithmetic;
+    Partition(memory::Allocator* allocator, GeoCoverageCheckpoint checkpoint, size_t metadata)
+            : memory(allocator), checkpoint(std::move(checkpoint)), rows(&memory), output_bytes(&memory) {
         memory.retain(metadata);
     }
     void check() {
@@ -411,14 +442,79 @@ struct GeoCoverageSimplify::Impl {
             if (positions > native_limits.max_coordinates - reader.coordinates)
                 invalid("ST_CoverageSimplify exceeds native WKB coordinate limit");
             reader.coordinates += positions;
+            arithmetic.positions = std::max(arithmetic.positions, positions);
             if (positions > (reader.bytes.size - reader.position) / 16)
                 invalid("ST_CoverageSimplify truncated WKB ring");
             for (uint32_t j = 0; j < positions; ++j) {
                 tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
                 if (!std::isfinite(x) || !std::isfinite(y)) invalid("ST_CoverageSimplify nonfinite XY coordinate");
+                arithmetic.include(x);
+                arithmetic.include(y);
             }
         }
+    }
+};
+
+template <class Integer>
+struct Kernel {
+    using Point = NumericPoint<Integer>;
+    using Node = NumericNode<Integer>;
+    using Ring = NumericRing<Integer>;
+    using Candidate = NumericCandidate<Integer>;
+    using CandidateLess = NumericCandidateLess<Integer>;
+    Partition& partition;
+    Memory& memory;
+    std::pmr::vector<Row>& rows;
+    std::pmr::vector<uint8_t>& output_bytes;
+    size_t& input_bytes;
+    size_t& calls;
+    unsigned shift;
+    std::pmr::vector<Node> nodes;
+    std::pmr::vector<Occurrence> occurrences;
+    std::pmr::vector<Ring> rings;
+    std::pmr::vector<Component> components;
+    std::pmr::map<std::pair<double, double>, uint32_t> node_map;
+    std::pmr::map<Key, uint32_t> edge_map;
+    std::pmr::vector<Edge> edges;
+    std::pmr::vector<Candidate> heap;
+    Tree edge_tree, node_tree;
+    Kernel(Partition& partition, unsigned shift)
+            : partition(partition),
+              memory(partition.memory),
+              rows(partition.rows),
+              output_bytes(partition.output_bytes),
+              input_bytes(partition.input_bytes),
+              calls(partition.calls),
+              shift(shift),
+              nodes(&memory),
+              occurrences(&memory),
+              rings(&memory),
+              components(&memory),
+              node_map(&memory),
+              edge_map(&memory),
+              edges(&memory),
+              heap(&memory),
+              edge_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)),
+              node_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)) {}
+    void check() { partition.check(); }
+    void tick(size_t count = 1) { partition.tick(count); }
+    Integer scaled(double value) const {
+        if constexpr (std::is_same_v<Integer, DynamicInteger>) {
+            return geo_exact::scaled_binary64<Integer>(value);
+        } else {
+            const Binary64 parts(value);
+            Integer result(parts.significand);
+            if (parts.significand) result <<= parts.shift - shift;
+            return parts.negative ? -result : result;
+        }
+    }
+    void run(double tolerance, bool boundary) {
+        decode();
+        graph();
+        validate();
+        if (tolerance > 0 && !nodes.empty()) simplify(tolerance, boundary);
+        output(tolerance == 0);
     }
     uint32_t intern(double x, double y) {
         auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
@@ -907,6 +1003,22 @@ struct GeoCoverageSimplify::Impl {
     }
 };
 
+} // namespace
+
+struct GeoCoverageSimplify::Impl : Partition {
+    using Partition::Partition;
+    // Destroy numerical storage before its captured resource. Dispatch once,
+    // only after every row and tolerance have contributed to the same bound.
+    std::variant<std::monostate, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
+    void run(double tolerance, bool boundary) {
+        arithmetic.include(tolerance);
+        if (arithmetic.fixed())
+            kernel.emplace<1>(*this, arithmetic.common_shift).run(tolerance, boundary);
+        else
+            kernel.emplace<2>(*this, 0).run(tolerance, boundary);
+    }
+};
+
 StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memory::Allocator* allocator,
                                                                            GeoCoverageCheckpoint checkpoint) {
     if (!allocator) return Status::InvalidArgument("ST_CoverageSimplify requires an allocator");
@@ -991,11 +1103,7 @@ Status GeoCoverageSimplify::finish(std::optional<double> tolerance, std::optiona
             if (!std::isfinite(*tolerance) || *tolerance < 0 || !std::isfinite(*tolerance * *tolerance))
                 invalid("ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance "
                         "squared");
-            s.decode();
-            s.graph();
-            s.validate();
-            if (*tolerance > 0 && !s.nodes.empty()) s.simplify(*tolerance, *boundary);
-            s.output(*tolerance == 0);
+            s.run(*tolerance, *boundary);
         }
         s.finished = true;
         return Status::OK();

@@ -459,6 +459,80 @@ std::string transformed_wkb(const std::string& text, double scale, double offset
     EXPECT_TRUE(WkbCodec::to_wkb(geometry, &result, kCartesian).ok());
     return result;
 }
+TEST(GeoCoverageTest, ExactThresholdAndWholePartitionArithmetic) {
+    struct Case {
+        double x, tolerance;
+        bool removed;
+    };
+    const Case cases[] = {{6, 1, true},
+                          {std::nextafter(6.0, 7.0), 1, false},
+                          {std::nextafter(6.0, 5.0), 1, true},
+                          {6, std::nextafter(1.0, 0.0), false},
+                          {6, std::nextafter(1.0, 2.0), true},
+                          {5.9375, std::nextafter(1.0, 0.0), true}};
+    const std::vector<std::string> source = {wkb("POLYGON ((0 0,0 1,4 1,6 0.5,4 0,0 0))"),
+                                             wkb("POLYGON ((4 0,6 0.5,4 1,8 1,8 0,4 0))")};
+    const std::vector<std::string> simplified = {wkb("POLYGON ((0 0,0 1,4 1,4 0,0 0))"),
+                                                 wkb("POLYGON ((4 0,4 1,8 1,8 0,4 0))")};
+    auto triangle = decoded(Slice(wkb("POLYGON ((20 0,24 0,24 1,20 0))")));
+    triangle.rings[0][2].y = std::numeric_limits<double>::denorm_min();
+    std::string subnormal;
+    ASSERT_TRUE(WkbCodec::to_wkb(triangle, &subnormal, kCartesian).ok());
+    for (const auto& test : cases)
+        for (bool fallback : {false, true})
+            for (int form = 0; form < 3; ++form) {
+                SCOPED_TRACE(::testing::Message() << "x=" << std::hexfloat << test.x << " tolerance=" << test.tolerance
+                                                  << " fallback=" << fallback << " form=" << form);
+                TestAllocator allocator;
+                auto c = make(allocator);
+                std::vector<std::string> inputs;
+                for (const auto& row : source) {
+                    auto geometry = decoded(Slice(row));
+                    for (auto& point : geometry.rings[0])
+                        if (point.x == 6) point.x = test.x;
+                    std::string input;
+                    ASSERT_TRUE(WkbCodec::to_wkb(geometry, &input, kCartesian).ok());
+                    inputs.push_back(std::move(input));
+                }
+                append(*c, inputs);
+                // A last-admitted tiny coordinate forces the entire partition
+                // onto the original path, including its earlier normal rows.
+                if (fallback) {
+                    ASSERT_TRUE(c->append(Slice(subnormal)).ok());
+                }
+                const auto status = form == 2 ? c->finish(test.tolerance) : c->finish(test.tolerance, form == 1);
+                ASSERT_TRUE(status.ok()) << status;
+                for (size_t i = 0; i < inputs.size(); ++i)
+                    EXPECT_EQ(c->result(i)->value().to_string(), test.removed ? simplified[i] : inputs[i]);
+                if (fallback) {
+                    EXPECT_EQ(c->result(2)->value().to_string(), subnormal);
+                }
+                c.reset();
+                EXPECT_EQ(allocator.live, 0);
+            }
+}
+TEST(GeoCoverageTest, ExactArithmeticAtCapacityBoundary) {
+    // The unit triangle prevents cancellation of the large square's exponent.
+    // 2^123 coordinates fit the partition proof; 2^124 and 2^1023 use fallback.
+    const auto unit = wkb("POLYGON ((-2 0,-1 0,-1 1,-2 0))");
+    for (int power : {123, 124, 1023})
+        for (double tolerance : {0.0, 1.0})
+            for (int form = 0; form < 3; ++form) {
+                SCOPED_TRACE(::testing::Message()
+                             << "power=" << power << " tolerance=" << tolerance << " form=" << form);
+                TestAllocator allocator;
+                auto c = make(allocator);
+                const auto square = transformed_wkb("POLYGON ((0 0,0 1,1 1,1 0,0 0))", std::ldexp(1.0, power), 0);
+                ASSERT_TRUE(c->append(Slice(square)).ok());
+                ASSERT_TRUE(c->append(Slice(unit)).ok());
+                const auto status = form == 2 ? c->finish(tolerance) : c->finish(tolerance, form == 1);
+                ASSERT_TRUE(status.ok()) << status;
+                EXPECT_EQ(c->result(0)->value().to_string(), square);
+                EXPECT_EQ(c->result(1)->value().to_string(), unit);
+                c.reset();
+                EXPECT_EQ(allocator.live, 0);
+            }
+}
 TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) {
     const std::vector<std::vector<std::string>> cases{
             {"POLYGON ((0 0,8 0,8 8,0 8,0 0))", "POLYGON ((8 0,16 0,16 8,8 8,8 0))"},
