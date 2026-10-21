@@ -604,6 +604,44 @@ TEST_F(LakePrimaryKeyRecoverTest, recover_discards_delvecs_of_failed_attempt) {
     EXPECT_EQ(expected, read(_version));
 }
 
+// Recover drops the persistent index's sstables along with the delete vectors and rebuilds the index from the
+// rowsets, so nothing refers to the old sstables any more; vacuum gets them through orphan_files.
+TEST_F(LakePrimaryKeyRecoverTest, recover_hands_dropped_sstables_to_vacuum) {
+    Rows expected;
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 16, 0, 0)}, {deletes(0, 4)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+    auto next = std::make_shared<TabletMetadata>(*flushed);
+    next->set_version(_version + 1);
+    ASSERT_GT(next->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
+    _version++;
+    std::vector<std::string> old_sstables;
+    for (const auto& sst : next->sstable_meta().sstables()) {
+        old_sstables.push_back(sst.filename());
+    }
+
+    const std::vector<std::vector<Op>> later = {upserts(200, 202, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    ASSERT_EQ(expected, read(_version));
+    ASSIGN_OR_ABORT(auto recovered, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& name : old_sstables) {
+        EXPECT_TRUE(std::none_of(recovered->sstable_meta().sstables().begin(),
+                                 recovered->sstable_meta().sstables().end(),
+                                 [&](const PersistentIndexSstablePB& sst) { return sst.filename() == name; }))
+                << name;
+        EXPECT_TRUE(std::any_of(recovered->orphan_files().begin(), recovered->orphan_files().end(),
+                                [&](const FileMetaPB& f) { return f.name() == name; }))
+                << name;
+    }
+    check_index_agrees(&expected);
+}
+
 // A tablet split leaves each child reading the parent's shared segments through its own key range, so a
 // segment iterator over such a segment starts at the first in-range row, not at row 0. Recover must address
 // the rows it replays by their physical row ids, or the delete vectors it rebuilds mark the wrong rows.
