@@ -1072,28 +1072,28 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // re-upsert would wrongly erase it.
     //
     // The filter needs an index get() (the ONLY SST-reading step here). It is a no-op -- and is skipped
-    // -- when nothing can be newer than the delete: an origin del file that follows the last segment
-    // (op_offset == max segment id) erases every key of this rowset, so we avoid its cold-start SST
-    // reads. This preserves the dominant cold-rebuild win for the common (non-interleaved) case.
-    // replay_erase (Phase 2) is a pure memtable write.
+    // -- when nothing in the index is newer than the delete: in the common (non-interleaved) case, an
+    // origin del file that follows the last segment (op_offset == max segment id) erases every key of
+    // this rowset, so we avoid its cold-start SST reads. replay_erase (Phase 2) is a pure memtable write.
     auto load_one = [&](int del_idx, DecodedDel* out) -> Status {
         ASSIGN_OR_RETURN(out->pkc, read_one(del_idx));
         RETURN_IF_ERROR(extract_keys(out->pkc, &out->keys));
         const auto& del = rowset->metadata().del_files(del_idx);
-        const bool is_origin = (rowset->id() == del.origin_rowset_id());
         // Fall back to the max segment id when a delete has no recorded op_offset (older metadata):
         // it then follows the last segment, so the filter erases everything (the legacy behavior).
         // This must cover non-origin (compaction-inherited) dels too: otherwise del.op_offset() reads a
         // defaulted 0, under-setting too_old below and wrongly skipping -- resurrecting -- rows on
         // rebuild. Matches resolve_del_op_offset() and erase_one().
         const uint32_t op_offset = !del.has_op_offset() ? get_max_segment_idx(rowset->metadata()) : del.op_offset();
-        // Skip the get()-based filter only when the delete follows the last segment of its own rowset,
-        // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
-        const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
-        if (need_filter) {
-            // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
-            // newer (upserted by a later segment, or a newer rowset) are skipped.
-            const uint32_t too_old = del.origin_rowset_id() + op_offset;
+        // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
+        // newer (upserted by a later segment, or a newer rowset) are skipped.
+        const uint32_t too_old = del.origin_rowset_id() + op_offset;
+        // The filter only skips a key whose current entry is newer than the delete, so look the keys up only
+        // when the index already holds such an entry; the memtable's max_rss_rowid is at least that of every
+        // entry, flushed ones included. Replayed in id order, a del file its own rowset wrote after its last
+        // segment never needs it; after a tablet merge, which orders the rowsets of a version by uid, a rowset
+        // with a larger id may have been replayed first.
+        if ((_memtable->max_rss_rowid() >> 32) > too_old) {
             // Never join here: load_one and these lookups share the PK execution pool.
             return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }
@@ -1153,9 +1153,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return Status::OK();
     }
 
-    // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for non-origin
-    // files only) submit the index get(). Both the OSS byte reads and the non-origin SST get()s
-    // overlap here on pk_index_execution_thread_pool. load_one only submits lookups and returns;
+    // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for files the
+    // index may hold newer entries for) submit the index get(). Both the OSS byte reads and the SST
+    // get()s overlap here on pk_index_execution_thread_pool. load_one only submits lookups and returns;
     // the caller joins the load runner before joining the lookup runner, so no pool worker waits
     // for work queued to its own pool. Memory tradeoff: holds all `num_del_files`
     // decoded columns concurrently until Phase 2 consumes them — guarded above by the update-memtracker

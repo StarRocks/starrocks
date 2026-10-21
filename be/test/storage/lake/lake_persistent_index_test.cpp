@@ -2908,9 +2908,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_get_propagates_sst_error
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
@@ -2960,9 +2962,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_load_error_drains_get_ta
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
