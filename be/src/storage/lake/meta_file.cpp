@@ -890,6 +890,14 @@ void MetaFileBuilder::_collect_del_files_for_compaction_output(RowsetMetadataPB*
     auto it = del_files->begin();
     while (it != del_files->end()) {
         if (above_rebuild_point || min_kept_rowset_id < it->origin_rowset_id()) {
+            if (!it->has_op_offset()) {
+                // A del file written before op_offset existed follows every segment of its origin rowset.
+                // Pin that now: once inherited, readers fall back to the max segment index of the rowset
+                // holding it, which bounds the delete past newer rowsets and erases their rows. When the
+                // file is inherited already, its origin rowset's segments are gone, so 0 erases the same
+                // rows as its real offset.
+                it->set_op_offset(it->origin_rowset_id() == rowset->id() ? get_max_segment_idx(*rowset) : 0);
+            }
             collect_del_files->push_back(std::move(*it));
             it = del_files->erase(it);
         } else {

@@ -1629,11 +1629,11 @@ TEST_F(MetaFileTest, test_keep_del_files_for_kept_older_rowsets_when_compact) {
     metadata->set_id(tablet_id);
     metadata->set_version(10);
     metadata->set_next_rowset_id(110);
-    auto write = [&](int64_t version, const std::string& segment, const std::string& del) {
+    auto write = [&](int64_t version, const std::vector<std::string>& segments, const std::string& del) {
         metadata->set_version(version);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        if (!segment.empty()) {
+        for (const auto& segment : segments) {
             rowset_metadata.add_segment_metas()->set_filename(segment);
         }
         if (!del.empty()) {
@@ -1661,39 +1661,44 @@ TEST_F(MetaFileTest, test_keep_del_files_for_kept_older_rowsets_when_compact) {
         ASSERT_OK(builder.apply_opcompaction(op_compaction, inputs.back(), 0));
         ASSERT_OK(builder.finalize(next_id()));
     };
-    ASSERT_NO_FATAL_FAILURE(write(11, "aaa.dat", ""));        // 110
-    ASSERT_NO_FATAL_FAILURE(write(12, "", "bbb.del"));        // 111
-    ASSERT_NO_FATAL_FAILURE(write(13, "ccc.dat", ""));        // 112
-    ASSERT_NO_FATAL_FAILURE(write(14, "ddd.dat", "ddd.del")); // 113
+    // The del files carry no op_offset, as written before it existed.
+    ASSERT_NO_FATAL_FAILURE(write(11, {"aaa.dat"}, ""));                    // 110
+    ASSERT_NO_FATAL_FAILURE(write(12, {}, "bbb.del"));                      // 111
+    ASSERT_NO_FATAL_FAILURE(write(13, {"ccc.dat"}, ""));                    // 112
+    ASSERT_NO_FATAL_FAILURE(write(14, {"ddd.dat", "ddd2.dat"}, "ddd.del")); // 113, 114
     // Put the rebuild point above every rowset this test creates, so an index rebuild needs none of the del files.
     PersistentIndexSstablePB sstable;
     sstable.set_max_rss_rowid((uint64_t)200 << 32);
     metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(sstable);
 
     // 110 and 112 stay, and both are older than 113's delete; 110 is older than 111's.
-    ASSERT_NO_FATAL_FAILURE(compact(15, {111, 113}, "eee.dat")); // 114
+    ASSERT_NO_FATAL_FAILURE(compact(15, {111, 113}, "eee.dat")); // 115
     ASSERT_EQ(3, metadata->rowsets_size());
     const auto& output = metadata->rowsets(2);
-    ASSERT_EQ(114, output.id());
+    ASSERT_EQ(115, output.id());
     ASSERT_EQ(2, output.del_files_size());
     EXPECT_EQ("bbb.del", output.del_files(0).name());
     EXPECT_EQ(111, output.del_files(0).origin_rowset_id());
     EXPECT_EQ("ddd.del", output.del_files(1).name());
     EXPECT_EQ(113, output.del_files(1).origin_rowset_id());
+    // A carried del file records that it followed every segment of its origin rowset.
+    EXPECT_EQ(0, output.del_files(0).op_offset());
+    EXPECT_EQ(1, output.del_files(1).op_offset());
     // Moved, not copied: vacuum of the compaction inputs must not delete them.
     for (const auto& input : metadata->compaction_inputs()) {
         EXPECT_EQ(0, input.del_files_size());
     }
 
     // Only 112 stays, which is older than 113's delete but not than 111's.
-    ASSERT_NO_FATAL_FAILURE(compact(16, {110, 114}, "fff.dat")); // 115
+    ASSERT_NO_FATAL_FAILURE(compact(16, {110, 115}, "fff.dat")); // 116
     ASSERT_EQ(2, metadata->rowsets_size());
-    ASSERT_EQ(115, metadata->rowsets(1).id());
+    ASSERT_EQ(116, metadata->rowsets(1).id());
     ASSERT_EQ(1, metadata->rowsets(1).del_files_size());
     EXPECT_EQ("ddd.del", metadata->rowsets(1).del_files(0).name());
+    EXPECT_EQ(1, metadata->rowsets(1).del_files(0).op_offset());
 
     // Nothing older than any delete stays.
-    ASSERT_NO_FATAL_FAILURE(compact(17, {112, 115}, "ggg.dat")); // 116
+    ASSERT_NO_FATAL_FAILURE(compact(17, {112, 116}, "ggg.dat")); // 117
     ASSERT_EQ(1, metadata->rowsets_size());
     EXPECT_EQ(0, metadata->rowsets(0).del_files_size());
 }
