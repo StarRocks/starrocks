@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.google.common.hash.Hashing;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -40,7 +41,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -96,8 +96,10 @@ public class MVVersionManager {
                 .collect(Collectors.partitioningBy(s -> s.getBaseTable().isNativeTableOrMaterializedView()));
         List<BaseTableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
         List<BaseTableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
-        boolean isOlapTableRefreshed = updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
-        updateMetaForExternalTable(refreshContext, externalTablePartitionNames);
+        Set<String> refreshedMvPartitions = mvRefreshedPartitions.getPartitionNames();
+        boolean isOlapTableRefreshed =
+                updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds, refreshedMvPartitions);
+        updateMetaForExternalTable(refreshContext, externalTablePartitionNames, refBaseTableIds, refreshedMvPartitions);
         // Unchanged semantics: having any external base table at all counts as "meta changed", even when every
         // one of them is deferred to the batch's final run.
         boolean isExternalTableRefreshed = !externalTables.isEmpty();
@@ -247,7 +249,8 @@ public class MVVersionManager {
 
     private boolean updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
                                            List<BaseTableSnapshotInfo> changedTablePartitionInfos,
-                                           Set<Long> refBaseTableIds) {
+                                           Set<Long> refBaseTableIds,
+                                           Set<String> refreshedMvPartitions) {
         if (changedTablePartitionInfos.isEmpty()) {
             return false;
         }
@@ -302,15 +305,8 @@ public class MVVersionManager {
             // remove partition info of not-exist partition for snapshot table from version map
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
-                Set<String> visiblePartitionNames = snapshotOlapTable.getVisiblePartitionNames();
-                // Use iterator to avoid creating intermediate collections and for better performance
-                Iterator<String> keyIter = currentTablePartitionInfo.keySet().iterator();
-                while (keyIter.hasNext()) {
-                    String partitionName = keyIter.next();
-                    if (!visiblePartitionNames.contains(partitionName)) {
-                        keyIter.remove();
-                    }
-                }
+                pruneDroppedPartitions(currentTablePartitionInfo, snapshotOlapTable.getVisiblePartitionNames(),
+                        snapshotTable, refBaseTableIds.contains(tableId), refreshedMvPartitions);
             }
             isOlapTableRefreshed = true;
         }
@@ -410,7 +406,9 @@ public class MVVersionManager {
     }
 
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                            Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames) {
+                                            Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames,
+                                            Set<Long> refBaseTableIds,
+                                            Set<String> refreshedMvPartitions) {
         if (externalTablePartitionNames.isEmpty()) {
             return;
         }
@@ -436,22 +434,27 @@ public class MVVersionManager {
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // Remove partition info for partitions that no longer exist in the snapshot table.
-            if (!partitionNamesList.isEmpty()) {
-                Set<String> partitionNames = Sets.newHashSetWithExpectedSize(partitionNamesList.size());
-                partitionNames.addAll(partitionNamesList);
-                // Remove using iterator for better performance on concurrent maps
-                Iterator<String> iter = currentTablePartitionInfo.keySet().iterator();
-                while (iter.hasNext()) {
-                    String partitionName = iter.next();
-                    if (!partitionNames.contains(partitionName)) {
-                        iter.remove();
-                    }
-                }
-            } else {
-                // If no partitions exist, clear all
-                currentTablePartitionInfo.clear();
-            }
+            pruneDroppedPartitions(currentTablePartitionInfo, Sets.newHashSet(partitionNamesList), snapshotTable,
+                    refBaseTableIds.contains(snapshotTable.getId()), refreshedMvPartitions);
         }
+    }
+
+    // Dropped entries are the only evidence that the mv partitions holding their rows are stale, so they stay until no
+    // mv partition outside this run is affected. The mapping behind "affected" cannot tell several ref base tables'
+    // partitions apart, and a recomputed partition could then look affected forever, so only a sole ref table keeps them.
+    private void pruneDroppedPartitions(Map<String, MaterializedView.BasePartitionInfo> trackedPartitions,
+                                        Set<String> livePartitions, Table baseTable, boolean isRefBaseTable,
+                                        Set<String> refreshedMvPartitions) {
+        Set<String> dropped = trackedPartitions.keySet().stream()
+                .filter(name -> !livePartitions.contains(name))
+                .collect(Collectors.toSet());
+        if (isRefBaseTable && mv.getRefBaseTableCount() == 1 && !refreshedMvPartitions.containsAll(
+                MvRefreshArbiter.getMvPartitionsAffectedByDrops(mv, baseTable, dropped))) {
+            logger.info("Keep dropped partitions {} of base table {} tracked until the mv partitions holding " +
+                    "their rows are refreshed", dropped, baseTable.getName());
+            return;
+        }
+        trackedPartitions.keySet().removeAll(dropped);
     }
 
     /**

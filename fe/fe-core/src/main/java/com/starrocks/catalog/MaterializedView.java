@@ -2530,6 +2530,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return refreshBaseTable(info.slots(), info.tableToBaseTableInfo());
     }
 
+    /** The number of ref base tables, from the cached analysis: unlike the getters above, it resolves no table. */
+    public int getRefBaseTableCount() {
+        return refBaseTablePartitionInfo.columns().size();
+    }
+
     /**
      * Get the related partition table and column of the materialized view since one mv can contain multi ref base tables.
      * NOTE: The ref-base-table columns' order is guaranteed as the order of mv's defined partition columns' order.
