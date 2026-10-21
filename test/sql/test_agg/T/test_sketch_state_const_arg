@@ -1,4 +1,4 @@
--- name: test_agg_state_const_arg
+-- name: test_sketch_state_const_arg
 -- The _state combinator hands an aggregate function its constant arguments unchanged -- deliberately,
 -- to avoid materialising N copies of a constant -- while passing columns[0]->size(), the replicated
 -- row count, as chunk_size. convert_to_serialize_format hoisted the unwrapped container and indexed
