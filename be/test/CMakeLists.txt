@@ -291,6 +291,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
+    ./storage/lake/lake_primary_key_recover_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp
