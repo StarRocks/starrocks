@@ -588,7 +588,12 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
+<<<<<<< HEAD
     ./storage/lake/lake_scan_node_test.cpp
+=======
+    ./storage/lake/lake_primary_key_recover_test.cpp
+    ./exec/lake_connector_scan_node_test.cpp
+>>>>>>> 38bac09 ([UT] Cover lake primary key recover for each load type (#81195))
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
