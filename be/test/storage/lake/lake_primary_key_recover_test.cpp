@@ -393,10 +393,7 @@ public:
     LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
 };
 
-// Disabled until the publish's delvecs follow recover (#81204): the deleted keys' segment is rebuilt with an empty
-// delete vector, which the re-publish does not see, so it rebuilds the index from the stale one, the index misses
-// the resurrected rows, and the follow-up upsert of every key leaves them live twice.
-TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction_keeps_live_rows) {
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_rows) {
     const bool flush_index = GetParam();
     Rows expected;
     // The last value each key was ever upserted with, deleted keys included: what a resurrected row may show.
