@@ -239,8 +239,18 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (_child_readers[field_name] == nullptr) {
+<<<<<<< HEAD
             Column* child_column = struct_column->field_column(field_name).get();
             child_column->append_default(real_read);
+=======
+            ASSIGN_OR_RETURN(auto* child_column, struct_column->field_column_raw_ptr(field_name));
+
+            if (auto it = _default_columns.find(field_name); it != _default_columns.end()) {
+                child_column->append_value_multiple_times(*it->second, 0, real_read);
+            } else {
+                child_column->append_default(real_read);
+            }
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
         }
     }
 

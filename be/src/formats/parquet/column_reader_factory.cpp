@@ -14,13 +14,41 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+<<<<<<< HEAD
+=======
+#include "base/failpoint/fail_point.h"
+#include "column/column_helper.h"
+#include "column/datum_convert.h"
+#include "column/variant_path_parser.h"
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
+<<<<<<< HEAD
 #include "util/failpoint/fail_point.h"
+=======
+#include "runtime/mem_pool.h"
+#include "runtime/type_info_allocator_adapter.h"
+#include "types/type_info.h"
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
 
 namespace starrocks::parquet {
+
+// A one-row nullable column holding an Iceberg initial-default, parsed with the subfield's type.
+static StatusOr<ColumnPtr> create_default_column(const TypeDescriptor& type, const std::string& default_value) {
+    auto type_info = get_type_info(type);
+    if (type_info == nullptr) {
+        return Status::NotSupported(fmt::format("unsupported initial-default type {}", type.debug_string()));
+    }
+    MemPool mem_pool;
+    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
+    Datum datum;
+    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
+    auto column = ColumnHelper::create_column(type, true);
+    column->append_datum(datum);
+    return column;
+}
 
 DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
@@ -133,11 +161,28 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field, subfield_pos,
                                           lake_schema_subfield);
 
+<<<<<<< HEAD
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
+=======
+        std::map<std::string, ColumnReaderPtr> children_readers;
+        std::map<std::string, ColumnPtr> default_columns;
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (subfield_pos[i] == -1) {
                 // -1 means subfield not existed; we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
+                const TIcebergSchemaField* lake_child = mapping.lake_children[i];
+                if (lake_child != nullptr && lake_child->__isset.initial_default &&
+                    !col_type.children[i].is_complex_type()) {
+                    // A type the default parser does not support (e.g. TIME) keeps reading NULL, as before
+                    // defaults were filled; any other failure still fails the scan.
+                    auto default_column = create_default_column(col_type.children[i], lake_child->initial_default);
+                    if (default_column.ok()) {
+                        default_columns.emplace(col_type.field_names[i], std::move(default_column).value());
+                    } else if (!default_column.status().is_not_supported()) {
+                        return default_column.status();
+                    }
+                }
                 continue;
             }
 
@@ -148,8 +193,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
 
         // maybe struct subfield ColumnReader is null
+<<<<<<< HEAD
         if (_has_valid_subfield_column_reader(children_readers)) {
             return std::make_unique<StructColumnReader>(field, std::move(children_readers));
+=======
+        if (any_reader_not_null(children_readers)) {
+            return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns));
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
         } else {
             return nullptr;
         }
@@ -188,6 +238,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader
     }
 }
 
+<<<<<<< HEAD
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                             bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type == ColumnType::STRUCT);
@@ -198,6 +249,70 @@ void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& 
     if (!col_type.field_ids.empty()) {
         for (size_t i = 0; i < field.children.size(); i++) {
             field_id_2_pos.emplace(field.children[i].field_id, i);
+=======
+StructSubfieldMapping ColumnReaderFactory::resolve_struct_subfields(const ParquetField& field,
+                                                                    const TypeDescriptor& col_type, bool case_sensitive,
+                                                                    const TIcebergSchemaField* lake_schema_field,
+                                                                    bool parquet_has_field_id) {
+    DCHECK(field.has_struct_layout());
+    const size_t num_children = col_type.children.size();
+    StructSubfieldMapping mapping;
+    mapping.parquet_children.assign(num_children, nullptr);
+    mapping.lake_children.assign(num_children, nullptr);
+
+    std::unordered_map<int32_t, const ParquetField*> parquet_by_id;
+    std::unordered_map<std::string, const ParquetField*> parquet_by_name;
+    for (const auto& child : field.children) {
+        parquet_by_id.emplace(child.field_id, &child);
+        parquet_by_name.emplace(Utils::format_name(child.name, case_sensitive), &child);
+    }
+    auto find_by_id = [&](int32_t id) -> const ParquetField* {
+        auto it = parquet_by_id.find(id);
+        return it != parquet_by_id.end() ? it->second : nullptr;
+    };
+    auto find_by_name = [&](const std::string& name) -> const ParquetField* {
+        auto it = parquet_by_name.find(Utils::format_name(name, case_sensitive));
+        return it != parquet_by_name.end() ? it->second : nullptr;
+    };
+    // The name the file stores the i-th type child under: its physical name if there is one, else its field name.
+    // The vectors may be shorter than the children (or padded with ""), so a missing entry means "no physical name".
+    auto parquet_name = [&](size_t i) -> const std::string& {
+        if (i < col_type.field_physical_names.size() && !col_type.field_physical_names[i].empty()) {
+            return col_type.field_physical_names[i];
+        }
+        return col_type.field_names[i];
+    };
+
+    if (lake_schema_field != nullptr) {
+        // For struct type with schema change, a subfield may not exist in the file: when Iceberg adds a new struct
+        // subfield, the original parquet file does not contain it.
+        std::unordered_map<std::string, const TIcebergSchemaField*> lake_by_name;
+        for (const auto& each : lake_schema_field->children) {
+            lake_by_name.emplace(Utils::format_name(each.name, case_sensitive), &each);
+        }
+        for (size_t i = 0; i < num_children; i++) {
+            auto lake_it = lake_by_name.find(Utils::format_name(col_type.field_names[i], case_sensitive));
+            if (lake_it == lake_by_name.end()) {
+                // The table's struct subfield is not in the Iceberg schema; should not happen, defensive.
+                DCHECK(false) << "Struct subfield name: " << col_type.field_names[i] << " not found in iceberg schema.";
+                continue;
+            }
+            const ParquetField* parquet_child =
+                    parquet_has_field_id ? find_by_id(lake_it->second->field_id) : find_by_name(parquet_name(i));
+            // Keep the lake child even when the file lacks the subfield: its initial-default fills the subfield.
+            mapping.parquet_children[i] = parquet_child;
+            mapping.lake_children[i] = lake_it->second;
+        }
+        return mapping;
+    }
+
+    for (size_t i = 0; i < num_children; i++) {
+        // An id of -1 (or a vector shorter than the children) means the type has no id for this child.
+        if (i < col_type.field_ids.size() && col_type.field_ids[i] != -1) {
+            mapping.parquet_children[i] = find_by_id(col_type.field_ids[i]);
+        } else {
+            mapping.parquet_children[i] = find_by_name(parquet_name(i));
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
         }
     }
     std::unordered_map<std::string, size_t> field_name_2_pos;

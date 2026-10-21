@@ -397,11 +397,28 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 }
 
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
+    // An Iceberg ORC file with field ids is resolved by id: its columns are named by their current Iceberg names
+    // and mapped by position, so a renamed column still reads its data.
+    _iceberg_column_names.clear();
+    const TIcebergSchema* lake_schema = _scanner_ctx->format_scan_context.lake_schema;
+    if (lake_schema != nullptr) {
+        if (auto names = OrcMappingFactory::iceberg_column_names(reader->getType(), *lake_schema)) {
+            _iceberg_column_names = std::move(*names);
+        }
+    }
     std::unordered_set<std::string> known_column_names;
+<<<<<<< HEAD:be/src/exec/hdfs_scanner_orc.cpp
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
+=======
+    OrcChunkReader::build_column_name_set(&known_column_names, column_names(), reader->getType(),
+                                          _scanner_ctx->format_scan_context.options.case_sensitive,
+                                          use_orc_column_names());
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.update_materialized_columns(known_column_names));
+    ASSIGN_OR_RETURN(auto skip, _scanner_ctx->format_scan_context.should_skip_by_evaluating_not_existed_slots());
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
         _should_skip_file = true;
@@ -524,10 +541,20 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
+<<<<<<< HEAD:be/src/exec/hdfs_scanner_orc.cpp
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx.case_sensitive);
     _orc_reader->set_use_orc_column_names(_scanner_ctx.orc_use_column_names);
+=======
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->format_scan_context.timezone));
+    _orc_reader->set_hive_column_names(column_names());
+    _orc_reader->set_case_sensitive(_scanner_ctx->format_scan_context.options.case_sensitive);
+    _orc_reader->set_use_orc_column_names(use_orc_column_names());
+    if (!_iceberg_column_names.empty()) {
+        _orc_reader->set_iceberg_schema(_scanner_ctx->format_scan_context.lake_schema);
+    }
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
     // for hive table, we set this flag
     _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&

@@ -22,12 +22,15 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorSinkSortScope;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.TestTables;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.IcebergTableFactory;
 import com.starrocks.thrift.TBucketFunction;
+import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
 import mockit.Mock;
@@ -35,6 +38,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
@@ -364,4 +368,81 @@ public class IcebergTableTest extends TableTestBase {
         LightWeightIcebergTable light = new LightWeightIcebergTable(base);
         Assertions.assertThrows(UnsupportedOperationException.class, light::getNativeTable);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetStatsCollectMetadata() {
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.Snapshot snapshot = Mockito.mock(org.apache.iceberg.Snapshot.class);
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.snapshotId()).thenReturn(123456789L);
+        Mockito.when(snapshot.summary()).thenReturn(ImmutableMap.of(
+                "total-data-files", "5",
+                "total-records", "1000"));
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        Map<String, String> metadata = table.getStatsCollectMetadata();
+        Assertions.assertEquals("123456789", metadata.get("snapshot_id"));
+        Assertions.assertEquals("5", metadata.get("total_files"));
+        Assertions.assertEquals("1000", metadata.get("total_rows"));
+
+        // No current snapshot (e.g. empty table) -> empty metadata, not an error.
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(null);
+        Assertions.assertTrue(table.getStatsCollectMetadata().isEmpty());
+    }
+
+    @Test
+    public void testToThriftIgnoresUnknownPartitionTransform() {
+        // Per the Iceberg spec a reader ignores a partition field whose transform it does not know.
+        // Before the fix toThrift threw "Unsupported partition transform", so the table was unqueryable.
+        Schema iceSchema = new Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "p", Types.IntegerType.get()));
+        PartitionSpec spec = PartitionSpecParser.fromJson(iceSchema, "{\"spec-id\": 0, \"fields\": [" +
+                "{\"name\": \"id_future\", \"transform\": \"future_transform[3]\", \"source-id\": 1, " +
+                "\"field-id\": 1000}, " +
+                "{\"name\": \"p\", \"transform\": \"identity\", \"source-id\": 2, \"field-id\": 1001}]}");
+        Assertions.assertFalse(IcebergApiConverter.isKnownPartitionTransform(spec.fields().get(0)));
+        Assertions.assertTrue(IcebergApiConverter.isKnownPartitionTransform(spec.fields().get(1)));
+
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        Mockito.when(nativeTable.schema()).thenReturn(iceSchema);
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(nativeTable.location()).thenReturn("s3://bucket/table");
+        Mockito.when(nativeTable.sortOrder()).thenReturn(SortOrder.unsorted());
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(Lists.newArrayList(new Column("id", INT, false), new Column("p", INT, false)))
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        Assertions.assertEquals(List.of("p"), table.getPartitionColumnNames());
+        TTableDescriptor desc = table.toThrift(new ArrayList<>());
+        List<TIcebergPartitionInfo> partitionInfos = desc.getIcebergTable().getPartition_info();
+        Assertions.assertEquals(1, partitionInfos.size());
+        Assertions.assertEquals("p", partitionInfos.get(0).getPartition_column_name());
+
+        // A writer cannot compute the unknown field, so writes still fail.
+        StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergApiConverter.checkPartitionTransformsWritable(spec));
+        Assertions.assertTrue(e.getMessage().contains("Unsupported partition transform"), e.getMessage());
+    }
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
 }

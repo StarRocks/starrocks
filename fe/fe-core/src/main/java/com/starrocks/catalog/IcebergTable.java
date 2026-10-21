@@ -442,6 +442,59 @@ public class IcebergTable extends Table {
         return table;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
+     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
+     * resolved per query already.
+     */
+    @Override
+    public Table forQueryPlanning() {
+        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
+    }
+
+    // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
+    // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
+    // are not exposed; ordinary reads keep the current spec.
+    private List<PartitionField> readSchemaPartitionFields() {
+        Schema schema = getReadSchema();
+        return getReadSpec().fields().stream()
+                .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .filter(IcebergApiConverter::isKnownPartitionTransform)
+                .collect(Collectors.toList());
+    }
+
+    // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
+    // time-travel read (bound via withReadMetadata), otherwise the current table schema.
+    public Schema getReadSchema() {
+        return readView != null ? readView.schema : getNativeTable().schema();
+    }
+
+    // The partition spec this table instance is read with. For a time-travel read this is derived
+    // from the target snapshot's manifests: a single spec is the snapshot's partitioning; multiple
+    // specs (mixed partitioning within the snapshot) are treated as unpartitioned so table-level
+    // partition-metadata optimizations are disabled and correctness is preserved (scan planning still
+    // uses each file's own spec). Ordinary reads use the current table spec.
+    public PartitionSpec getReadSpec() {
+        Map<Integer, PartitionSpec> specsById = readView != null ? readView.specsById : null;
+        if (specsById == null) {
+            return getNativeTable().spec();
+        }
+        if (specsById.size() == 1) {
+            return specsById.values().iterator().next();
+        }
+        return PartitionSpec.unpartitioned();
+    }
+
+    // True when this is a time-travel read that pinned an explicit snapshot read view via
+    // withReadMetadata. Lets callers tell a time-travel read (keep the snapshot schema/spec) from an
+    // ordinary read of the current table state.
+    public boolean isTimeTravelRead() {
+        return readView != null;
+    }
+
+>>>>>>> d82b955 ([BugFix] Fix Iceberg read correctness: unknown transforms, ORC field ids, promoted bounds, unknown type, default values (#81257))
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
