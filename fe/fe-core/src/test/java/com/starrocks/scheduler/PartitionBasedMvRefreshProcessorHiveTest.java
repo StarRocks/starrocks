@@ -1466,9 +1466,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                     "to the size of the first partition expr maps: 1."));
         }
     }
-<<<<<<< HEAD
-}
-=======
 
     /** An external ref base table's version map is pruned on its own path, so it must keep drop evidence too. */
     @Test
@@ -1523,4 +1520,3 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         }
     }
 }
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
