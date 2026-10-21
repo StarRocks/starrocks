@@ -267,7 +267,11 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         if (_child_readers[field_name] == nullptr) {
             ASSIGN_OR_RETURN(auto* child_column, struct_column->field_column_raw_ptr(field_name));
 
-            child_column->append_default(real_read);
+            if (auto it = _default_columns.find(field_name); it != _default_columns.end()) {
+                child_column->append_value_multiple_times(*it->second, 0, real_read);
+            } else {
+                child_column->append_default(real_read);
+            }
         }
     }
 
