@@ -123,6 +123,7 @@ starrocks_detect_total_ram_gb() {
 }
 
 starrocks_detect_linker_type() {
+    local build_dir="${1:-${CMAKE_BUILD_DIR:-}}"
     local explicit_linker="${STARROCKS_LINKER:-}"
     if [[ -n "${explicit_linker}" ]]; then
         case "${explicit_linker}" in
@@ -138,8 +139,22 @@ starrocks_detect_linker_type() {
 
     if [[ "$(uname -m)" != "aarch64" ]]; then
         local cxx_compiler=""
-        # Mirrors be/CMakeLists.txt: CXX is honored only together with CC.
-        if [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
+        local cached_c=""
+        local cached_cxx=""
+        local has_cmake_compiler_override=0
+        if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
+            cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
+                has_cmake_compiler_override=1
+            fi
+        fi
+
+        # Mirrors be/CMakeLists.txt: cached CMake compiler overrides ENV{CC}/ENV{CXX},
+        # ENV{STARROCKS_GCC_HOME}, and ENV{STARROCKS_LLVM_HOME}; CXX is honored only together with CC.
+        if [[ "${has_cmake_compiler_override}" -eq 1 ]]; then
+            cxx_compiler="${cached_cxx:-${CXX:-g++}}"
+        elif [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
             cxx_compiler="${CXX}"
         elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
             cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
@@ -148,8 +163,18 @@ starrocks_detect_linker_type() {
         else
             cxx_compiler="g++"
         fi
-        local cxx_version
-        cxx_version="$("${cxx_compiler}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" -dumpversion 2>/dev/null || echo 0)"
+        local cxx_version=""
+        cxx_version="$("${cxx_compiler}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" -dumpversion 2>/dev/null || true)"
+        if [[ -z "${cxx_version}" && "${has_cmake_compiler_override}" -eq 1 ]]; then
+            local cmake_cxx_file=""
+            for cmake_cxx_file in "${build_dir}"/CMakeFiles/*/CMakeCXXCompiler.cmake; do
+                if [[ -r "${cmake_cxx_file}" ]]; then
+                    cxx_version="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_CXX_COMPILER_VERSION[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_cxx_file}" | tail -n 1)"
+                    [[ -n "${cxx_version}" ]] && break
+                fi
+            done
+        fi
+        cxx_version="${cxx_version:-0}"
         local cxx_major cxx_minor cxx_patch
         IFS='.' read -r cxx_major cxx_minor cxx_patch <<< "${cxx_version}"
         cxx_major="${cxx_major%%[^0-9]*}"

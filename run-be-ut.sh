@@ -44,7 +44,14 @@ if starrocks_is_darwin; then
 else
     . ${STARROCKS_HOME}/env.sh
 fi
-SR_LINKER_TYPE="$(starrocks_detect_linker_type)"
+HAS_EXPLICIT_PARALLEL=0
+if [[ -n "${PARALLEL:-}" && "${PARALLEL}" =~ ^[0-9]+$ && "${PARALLEL}" -gt 0 ]]; then
+    HAS_EXPLICIT_PARALLEL=1
+fi
+CMAKE_BUILD_TYPE="${BUILD_TYPE:-ASAN}"
+CMAKE_BUILD_PREFIX="${CMAKE_BUILD_PREFIX:-${STARROCKS_HOME}/be}"
+CMAKE_BUILD_DIR="${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}"
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
 SR_RAM_GB="$(starrocks_detect_total_ram_gb)"
 PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
 
@@ -248,7 +255,7 @@ while true; do
         --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
         --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
         --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
-        -j) PARALLEL=$2; shift 2 ;;
+        -j) PARALLEL=$2; HAS_EXPLICIT_PARALLEL=1; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -298,6 +305,10 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
+if [[ "${HAS_EXPLICIT_PARALLEL}" -eq 0 ]]; then
+    PARALLEL="$(PARALLEL="" starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
+fi
 
 source ${STARROCKS_HOME}/bin/common.sh
 

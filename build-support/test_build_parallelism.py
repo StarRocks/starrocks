@@ -364,6 +364,160 @@ class TestBuildParallelism(unittest.TestCase):
             )
             self.assertEqual(legacy_type, "legacy")
 
+    def test_detect_linker_type_cmake_cache_overrides_env(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gcc12_dir = os.path.join(tmpdir, "gcc12", "bin")
+            os.makedirs(gcc12_dir, exist_ok=True)
+            mock_gcc12 = os.path.join(gcc12_dir, "gcc")
+            mock_gxx12 = os.path.join(gcc12_dir, "g++")
+            for path in (mock_gcc12, mock_gxx12):
+                with open(path, "w") as f:
+                    f.write("#!/bin/sh\necho '12.1.0'\n")
+                os.chmod(path, 0o755)
+
+            gcc14_home = os.path.join(tmpdir, "gcc14")
+            gcc14_dir = os.path.join(gcc14_home, "bin")
+            os.makedirs(gcc14_dir, exist_ok=True)
+            mock_gcc14 = os.path.join(gcc14_dir, "gcc")
+            mock_gxx14 = os.path.join(gcc14_dir, "g++")
+            for path in (mock_gcc14, mock_gxx14):
+                with open(path, "w") as f:
+                    f.write("#!/bin/sh\necho '14.3.0'\n")
+                os.chmod(path, 0o755)
+
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            with open(os.path.join(build_dir, "CMakeCache.txt"), "w") as f:
+                f.write(
+                    f"CMAKE_C_COMPILER:FILEPATH={mock_gcc12}\n"
+                    f"CMAKE_CXX_COMPILER:FILEPATH={mock_gxx12}\n"
+                )
+
+            env = {
+                "STARROCKS_LINKER": "",
+                "STARROCKS_GCC_HOME": gcc14_home,
+                "CC": mock_gcc14,
+                "CXX": mock_gxx14,
+            }
+            cmd_arg = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.17"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.27"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+            self.assertEqual(self.run_bash(cmd_arg, env), "legacy")
+
+            cmd_env = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            env_with_build_dir = dict(env, CMAKE_BUILD_DIR=build_dir)
+            self.assertEqual(self.run_bash(cmd_env, env_with_build_dir), "legacy")
+
+    def test_detect_linker_type_cmake_cache_modern_compiler(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gcc12_home = os.path.join(tmpdir, "gcc12")
+            gcc12_dir = os.path.join(gcc12_home, "bin")
+            os.makedirs(gcc12_dir, exist_ok=True)
+            mock_gxx12 = os.path.join(gcc12_dir, "g++")
+            with open(mock_gxx12, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx12, 0o755)
+
+            gcc14_dir = os.path.join(tmpdir, "gcc14", "bin")
+            os.makedirs(gcc14_dir, exist_ok=True)
+            mock_gxx14 = os.path.join(gcc14_dir, "g++")
+            with open(mock_gxx14, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_gxx14, 0o755)
+
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            with open(os.path.join(build_dir, "CMakeCache.txt"), "w") as f:
+                f.write(f"CMAKE_CXX_COMPILER:FILEPATH={mock_gxx14}\n")
+
+            cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.17"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.27"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+            linker_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "STARROCKS_GCC_HOME": gcc12_home,
+                },
+            )
+            self.assertEqual(linker_type, "modern")
+
+    def test_run_be_ut_cached_compiler_and_clean_refresh(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gcc12_dir = os.path.join(tmpdir, "gcc12", "bin")
+            os.makedirs(gcc12_dir, exist_ok=True)
+            mock_gxx12 = os.path.join(gcc12_dir, "g++")
+            with open(mock_gxx12, "w") as f:
+                f.write("#!/bin/sh\necho '12.1.0'\n")
+            os.chmod(mock_gxx12, 0o755)
+
+            gcc14_home = os.path.join(tmpdir, "gcc14")
+            gcc14_dir = os.path.join(gcc14_home, "bin")
+            os.makedirs(gcc14_dir, exist_ok=True)
+            mock_gxx14 = os.path.join(gcc14_dir, "g++")
+            with open(mock_gxx14, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_gxx14, 0o755)
+
+            build_prefix = os.path.join(tmpdir, "build_prefix")
+            build_dir = os.path.join(build_prefix, "ut_build_ASAN")
+            cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+            def populate_cache():
+                os.makedirs(build_dir, exist_ok=True)
+                with open(cache_file, "w") as f:
+                    f.write(f"CMAKE_CXX_COMPILER:FILEPATH={mock_gxx12}\n")
+
+            def run_slice(*args: str) -> str:
+                quoted_args = " ".join(f'"{a}"' for a in args)
+                cmd = f"""
+                export STARROCKS_HOME="{tmpdir}"
+                export CMAKE_BUILD_PREFIX="{build_prefix}"
+                export STARROCKS_GCC_HOME="{gcc14_home}"
+                starrocks_is_darwin() {{ return 1; }}
+                uname() {{ echo "x86_64"; }}
+                ldd() {{ echo "ldd (GNU libc) 2.17"; }}
+                ld() {{ echo "GNU ld (GNU Binutils) 2.27"; }}
+                starrocks_detect_parallelism() {{ echo 16; }}
+                starrocks_detect_total_ram_gb() {{ echo 64; }}
+                set -- {quoted_args}
+                eval "$(awk '
+                    /\\. \\$\\{{STARROCKS_HOME\\}}\\/env\\.sh/ {{ seen_env=1; next }}
+                    seen_env && !started && /^fi$/ {{ started=1; next }}
+                    /^source \\$\\{{STARROCKS_HOME\\}}\\/bin\\/common\\.sh/ {{ exit }}
+                    started {{ print }}
+                ' "{REPO_ROOT}/run-be-ut.sh")"
+                echo "RESULT=${{SR_LINKER_TYPE}}:${{PARALLEL}}"
+                """
+                return self.run_bash(cmd)
+
+            populate_cache()
+            out_no_clean = run_slice()
+            self.assertEqual(out_no_clean.splitlines()[-1].strip(), "RESULT=legacy:5")
+
+            populate_cache()
+            out_clean = run_slice("--clean")
+            self.assertFalse(os.path.exists(cache_file))
+            self.assertEqual(out_clean.splitlines()[-1].strip(), "RESULT=modern:16")
+
+            populate_cache()
+            out_clean_j = run_slice("--clean", "-j", "7")
+            self.assertEqual(out_clean_j.splitlines()[-1].strip(), "RESULT=modern:7")
+
     def test_detect_total_ram_gb_unreadable_fallback(self):
         cmd = """
         starrocks_is_darwin() { return 1; }
