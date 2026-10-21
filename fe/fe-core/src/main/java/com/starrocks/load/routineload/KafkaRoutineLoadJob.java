@@ -859,6 +859,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // which CREATE ROUTINE LOAD rejects, while the leader holds every discovered partition, so
         // re-creating from its DDL would pin the job to those partitions.
         boolean printedPartitions = false;
+        // ALTER enables discovery by replacing this list. Use the same reference for the check and
+        // copy so a replacement between them cannot turn a nonempty legacy list into empty DDL.
+        List<Integer> customPartitions = customKafkaPartitions;
         if (customeKafkaPartitionOffsets != null) {
             // sort a copy: SHOW CREATE ROUTINE LOAD is a read path and must not reorder the job's state
             List<Pair<Integer, Long>> sortedPartitionOffsets = Lists.newArrayList(customeKafkaPartitionOffsets);
@@ -887,12 +890,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
             sb.append("\",\n");
             printedPartitions = true;
-        } else if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+        } else if (customPartitions != null && !customPartitions.isEmpty()) {
             // A pinned job persisted by a release that did not yet keep the CREATE-time offsets (the
             // "ckpo" field): keep its partition list so the DDL re-creates a pinned job. Without
             // kafka_offsets the offsets fall back to kafka_default_offsets / OFFSET_END, as for any
             // CREATE ROUTINE LOAD that lists partitions only.
-            List<Integer> sortedPartitions = Lists.newArrayList(customKafkaPartitions);
+            List<Integer> sortedPartitions = Lists.newArrayList(customPartitions);
             Collections.sort(sortedPartitions);
             sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
             sb.append(Joiner.on(",").join(sortedPartitions)).append("\",\n");
