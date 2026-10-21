@@ -6,7 +6,7 @@ description: "DBine is a free, open source desktop database manager that connect
 
 # DBine
 
-[DBine](https://dbine.com) is a free, open source (MIT licensed) desktop database manager for
+[DBine](https://dbine.com) is a free, open source (Apache 2.0 licensed) desktop database manager for
 Windows, macOS, and Linux that works with 130+ databases and cloud services in the same window.
 It has a StarRocks connection type that connects to the FE over the MySQL protocol.
 

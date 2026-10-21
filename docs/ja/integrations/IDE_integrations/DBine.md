@@ -6,7 +6,7 @@ description: "DBine は無料のオープンソースのデスクトップ デ�
 
 # DBine
 
-[DBine](https://dbine.com) は、Windows、macOS、Linux 向けの無料のオープンソース（MIT ライセンス）のデスクトップ
+[DBine](https://dbine.com) は、Windows、macOS、Linux 向けの無料のオープンソース（Apache 2.0 ライセンス）のデスクトップ
 データベース管理ツールで、130 以上のデータベースとクラウドサービスを 1 つのウィンドウで扱えます。StarRocks
 用の接続タイプがあり、MySQL プロトコルで FE に接続します。
 

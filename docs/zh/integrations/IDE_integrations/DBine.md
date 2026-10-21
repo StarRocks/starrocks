@@ -6,7 +6,7 @@ description: "DBine 是一款免费、开源的桌面数据库管理工具，通
 
 # DBine
 
-[DBine](https://dbine.com) 是一款免费、开源（MIT 许可证）的桌面数据库管理工具，支持 Windows、macOS 和 Linux，
+[DBine](https://dbine.com) 是一款免费、开源（Apache 2.0 许可证）的桌面数据库管理工具，支持 Windows、macOS 和 Linux，
 可以在同一个窗口中使用 130 多种数据库和云服务。它提供 StarRocks 连接类型，通过 MySQL 协议连接到 FE。
 
 ## 前提条件
