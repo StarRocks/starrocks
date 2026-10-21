@@ -81,6 +81,16 @@ Status LakePrimaryKeyRecover::rowset_iterator(
     // Sort the rowsets in order of primary key occurrence,
     // so we can generate correct delvecs
     RETURN_IF_ERROR(sort_rowsets(&rowsets));
+    _compacted_ranges.clear();
+    for (const auto& rowset : rowsets) {
+        const auto& meta = rowset->metadata();
+        if (meta.has_max_compact_input_rowset_id()) {
+            _compacted_ranges.push_back(
+                    {meta.id(), meta.id() + get_rowset_id_step(meta), meta.max_compact_input_rowset_id()});
+        }
+    }
+    std::sort(_compacted_ranges.begin(), _compacted_ranges.end(),
+              [](const CompactedRange& a, const CompactedRange& b) { return a.begin < b.begin; });
     for (auto& rowset : rowsets) {
         auto res = rowset->get_each_segment_iterator(pkey_schema, false, &stats);
         if (!res.ok()) {
@@ -124,20 +134,23 @@ Status LakePrimaryKeyRecover::rowset_iterator(
         // A non-origin del file was carried over by a compaction whose inputs included its origin rowset
         // (see MetaFileBuilder::apply_opcompaction). The compaction output already left out the rows it
         // deleted, so it only matters for rowsets the compaction kept, and those can sort before or after
-        // this rowset when the compaction inputs are not contiguous. So it goes after all segments, and,
-        // like LakePersistentIndex::load_dels, it only erases entries not newer than the delete, i.e.
-        // rssid <= origin_rowset_id + op_offset. Rowset ids follow publish order, so a newer entry belongs
-        // to a later load or compaction and stays. The origin rowset's own segments are gone, so when
-        // op_offset was not recorded, origin_rowset_id gives the same result.
+        // this rowset when the compaction inputs are not contiguous. So it goes after all segments, and it
+        // only erases entries older than the delete: those whose data age is below origin_rowset_id. Rowset
+        // ids follow publish order, and the origin rowset's own segments are gone, so a load rowset is older
+        // iff its id is smaller. A compaction output is as old as its newest input
+        // (max_compact_input_rowset_id), not its own id: one that ran before the delete but published after
+        // it still holds the deleted rows, hidden only by its delvec, which recover drops. One whose newest
+        // input is not older than the delete ran after it and left those rows out, so the rows it does hold
+        // for the deleted keys were upserted later and stay.
         std::vector<uint32_t> delidxs;
-        std::vector<uint32_t> del_max_rssids;
+        std::vector<uint32_t> del_age_bounds;
         delidxs.reserve(del_rfs.size());
-        del_max_rssids.reserve(del_rfs.size());
+        del_age_bounds.reserve(del_rfs.size());
         for (uint32_t j = 0; j < del_rfs.size(); ++j) {
             const auto& del = rowset->metadata().del_files(j);
             if (del.origin_rowset_id() != rowset->id()) {
                 delidxs.push_back(itrs.size() + j);
-                del_max_rssids.push_back(del.origin_rowset_id() + (del.has_op_offset() ? del.op_offset() : 0));
+                del_age_bounds.push_back(del.origin_rowset_id());
                 continue;
             }
             // Fall back to the max segment id when op_offset was not recorded (older metadata): the
@@ -159,7 +172,7 @@ Status LakePrimaryKeyRecover::rowset_iterator(
                 }
             }
             delidxs.push_back(segs_before + j);
-            del_max_rssids.push_back(UINT32_MAX);
+            del_age_bounds.push_back(UINT32_MAX);
         }
         // The handler walks the merged sequence once, so a del file whose position is not after the
         // previous one would never be replayed. Fail instead of silently dropping the delete.
@@ -171,7 +184,7 @@ Status LakePrimaryKeyRecover::rowset_iterator(
                                     rowset->id(), _metadata->id(), j, delidxs[j], delidxs[j - 1]));
             }
         }
-        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, del_max_rssids, rowset->id()));
+        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, del_age_bounds, rowset->id()));
     }
     return Status::OK();
 }
@@ -185,6 +198,15 @@ Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& ne
         _builder->append_delvec(delvec_ptr, new_delete.first);
     }
     return Status::OK();
+}
+
+uint32_t LakePrimaryKeyRecover::data_age(uint32_t rssid) const {
+    auto it = std::upper_bound(_compacted_ranges.begin(), _compacted_ranges.end(), rssid,
+                               [](uint32_t value, const CompactedRange& range) { return value < range.begin; });
+    if (it != _compacted_ranges.begin() && rssid < std::prev(it)->end) {
+        return std::prev(it)->data_age;
+    }
+    return rssid;
 }
 
 int64_t LakePrimaryKeyRecover::tablet_id() {

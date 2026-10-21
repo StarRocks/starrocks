@@ -403,8 +403,8 @@ protected:
         _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
     }
 
-    // Compact the rowsets at the given positions of the current version and publish the result.
-    void compact(const std::vector<int>& positions) {
+    // Compact the rowsets at the given positions of the current version, without publishing the result.
+    int64_t execute_compaction(const std::vector<int>& positions) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
         auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
         std::vector<RowsetPtr> inputs;
@@ -414,9 +414,12 @@ protected:
         const int64_t txn_id = next_id();
         auto context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id(), _version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), inputs));
-        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
-        publish(txn_id, false);
+        CHECK_OK(task->execute(CompactionTask::kNoCancelFn));
+        return txn_id;
     }
+
+    // Compact the rowsets at the given positions of the current version and publish the result.
+    void compact(const std::vector<int>& positions) { publish(execute_compaction(positions), false); }
 
     TabletMetadataPtr metadata() {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
@@ -484,6 +487,43 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_non_contiguous_compactio
     ASSERT_EQ(expected, read(_version));
     ASSERT_EQ(3, metadata()->rowsets_size());
     ASSERT_EQ(1, metadata()->rowsets(2).del_files_size());
+
+    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// A compaction that runs before a delete and publishes after it holds the deleted rows, hidden only by its
+// delete vector. Its id is newer than the delete, but its rows are as old as its input. A later compaction
+// that takes the delete rowset and keeps this one must keep the del file, and recover must apply it to them.
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_during_compaction) {
+    Rows expected;
+    const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 0)};
+    publish(write_rows(base), false);
+    apply(&expected, base);
+    const int64_t pending = execute_compaction({0});
+    const std::vector<std::vector<Op>> del = {deletes(0, 8)};
+    publish(write_rows(del), false);
+    apply(&expected, del);
+    publish(pending, false);
+    ASSERT_EQ(expected, read(_version));
+    const std::vector<std::vector<Op>> unrelated = {upserts(100, 104, 0, 0)};
+    publish(write_rows(unrelated), false);
+    apply(&expected, unrelated);
+    ASSERT_EQ(expected, read(_version));
+    if (GetParam()) {
+        ASSERT_NO_FATAL_FAILURE(flush_index());
+    }
+
+    // The delete rowset, the late compaction output and the unrelated load, in that order. Keep the output.
+    ASSERT_EQ(3, metadata()->rowsets_size());
+    ASSERT_TRUE(metadata()->rowsets(1).has_max_compact_input_rowset_id());
+    ASSERT_NO_FATAL_FAILURE(compact({0, 2}));
+    ASSERT_EQ(expected, read(_version));
+    ASSERT_EQ(2, metadata()->rowsets_size());
+    ASSERT_EQ(1, metadata()->rowsets(1).del_files_size());
 
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);

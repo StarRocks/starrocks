@@ -48,13 +48,13 @@ Status PrimaryKeyRecover::recover() {
             pkey_schema, stats,
             [&](const std::vector<ChunkIteratorPtr>& itrs,
                 const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, const std::vector<uint32_t>& delidxs,
-                const std::vector<uint32_t>& del_max_rssids, uint32_t rowset_id) {
+                const std::vector<uint32_t>& del_age_bounds, uint32_t rowset_id) {
                 // handle upsert
                 if (del_rfs.size() != delidxs.size() ||
-                    (!del_max_rssids.empty() && del_max_rssids.size() != del_rfs.size())) {
+                    (!del_age_bounds.empty() && del_age_bounds.size() != del_rfs.size())) {
                     return Status::InternalError(fmt::format(
-                            "invalid delete files when recover, del files {} vs del idxs {} vs del max rssids {}",
-                            del_rfs.size(), delidxs.size(), del_max_rssids.size()));
+                            "invalid delete files when recover, del files {} vs del idxs {} vs del age bounds {}",
+                            del_rfs.size(), delidxs.size(), del_age_bounds.size()));
                 }
                 const size_t total_size = itrs.size() + del_rfs.size();
                 size_t itr_index = 0;
@@ -70,14 +70,14 @@ Status PrimaryKeyRecover::recover() {
                         auto col = pk_column->clone();
                         const auto* end = read_buffer.data() + read_buffer.size();
                         RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
-                        if (!del_max_rssids.empty() && del_max_rssids[del_index] != UINT32_MAX) {
-                            // Only erase the keys whose current entry is not newer than the delete.
+                        if (!del_age_bounds.empty() && del_age_bounds[del_index] != UINT32_MAX) {
+                            // Only erase the keys whose current entry is older than the delete.
                             std::vector<uint64_t> values(col->size(), NullIndexValue);
                             RETURN_IF_ERROR(index.get(*col, &values));
                             std::vector<uint32_t> older;
                             for (uint32_t row = 0; row < values.size(); row++) {
                                 if (values[row] != NullIndexValue &&
-                                    static_cast<uint32_t>(values[row] >> 32) <= del_max_rssids[del_index]) {
+                                    data_age(static_cast<uint32_t>(values[row] >> 32)) < del_age_bounds[del_index]) {
                                     older.push_back(row);
                                 }
                             }

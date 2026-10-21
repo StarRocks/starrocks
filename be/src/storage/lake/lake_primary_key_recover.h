@@ -57,6 +57,10 @@ public:
 
     int64_t tablet_id() override;
 
+    // A compaction output's rows are as old as its newest input rowset, max_compact_input_rowset_id: the
+    // compaction may publish after deletes it did not see, so its own id would make its rows look newer.
+    uint32_t data_age(uint32_t rssid) const override;
+
     StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const override;
 
     // Sorrt rowset by rowsetid
@@ -68,6 +72,13 @@ private:
     Tablet* _tablet;
     MutableTabletMetadataPtr _metadata;
     MutableColumnPtr _pk_column;
+    // [first rssid, end rssid) and max_compact_input_rowset_id of each compaction output, sorted by first rssid.
+    struct CompactedRange {
+        uint32_t begin;
+        uint32_t end;
+        uint32_t data_age;
+    };
+    std::vector<CompactedRange> _compacted_ranges;
 };
 
 } // namespace lake

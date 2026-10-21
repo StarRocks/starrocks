@@ -865,12 +865,13 @@ static int delete_from_protobuf_map(T* protobuf_map, const std::unordered_set<ui
 // 1. With a cloud native persistent index, the del files above the rebuild point: the sstables do not
 //    cover them yet, so an index rebuild replays them.
 // 2. The del files that may delete rows of a rowset this compaction keeps, i.e. one older than the
-//    delete (`min_kept_rowset_id` is the smallest id of the kept rowsets that have segments). The
+//    delete (`min_kept_rowset_id` is the smallest data age of the kept rowsets that have segments). The
 //    compaction output leaves out the rows the delete removed from the inputs, but in the kept rowset
 //    the delete is only recorded in its delvec, which primary key recover discards and rebuilds by
 //    replaying del files. Rowset ids follow publish order, so a kept rowset is older than the delete
-//    iff its id is smaller than the delete's origin rowset id. The del file is dropped once a
-//    compaction includes every rowset older than it.
+//    iff its data age is smaller than the delete's origin rowset id: its id for a load, its newest
+//    input (max_compact_input_rowset_id) for a compaction output, which may have run before the
+//    delete and published after it. The del file is dropped once no older kept rowset remains.
 // The moved del files are removed from the input rowset, which goes to compaction_inputs and is vacuumed.
 void MetaFileBuilder::_collect_del_files_for_compaction_output(RowsetMetadataPB* rowset, uint32_t min_kept_rowset_id,
                                                                std::vector<DelfileWithRowsetId>* collect_del_files) {
@@ -1022,12 +1023,15 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
 
     // Del files moved from the input rowsets to the output rowset.
     std::vector<DelfileWithRowsetId> collect_del_files;
+    // A compaction output's rows are as old as its newest input, not its own (later) id.
     uint32_t min_kept_rowset_id = UINT32_MAX;
     for (const auto& rowset : _tablet_meta->rowsets()) {
         if (rowset.segment_metas_size() > 0 &&
             std::find(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end(), rowset.id()) ==
                     op_compaction.input_rowsets().end()) {
-            min_kept_rowset_id = std::min(min_kept_rowset_id, rowset.id());
+            const uint32_t data_age =
+                    rowset.has_max_compact_input_rowset_id() ? rowset.max_compact_input_rowset_id() : rowset.id();
+            min_kept_rowset_id = std::min(min_kept_rowset_id, data_age);
         }
     }
     auto it = _tablet_meta->mutable_rowsets()->begin();

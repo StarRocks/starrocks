@@ -53,8 +53,8 @@ public:
 
     // iterator all rowset and get their iterator and basic stat.
     // The handler takes each rowset's segment iterators, del files, the replay position of each del file, the
-    // erase bound of each del file and the rowset id. A del file only erases keys whose current entry has an
-    // rssid no greater than its bound; an empty bound list makes every del file erase unconditionally.
+    // erase bound of each del file and the rowset id. A del file only erases keys whose current entry has a
+    // data age (see data_age()) below its bound; UINT32_MAX, or an empty bound list, erases unconditionally.
     virtual Status rowset_iterator(
             const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
             const std::function<
@@ -63,6 +63,9 @@ public:
 
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;
+
+    // The age of the data in segment `rssid`, comparable with del file erase bounds. Defaults to the rssid.
+    virtual uint32_t data_age(uint32_t rssid) const { return rssid; }
 
     virtual int64_t tablet_id() = 0;
 
