@@ -18,7 +18,7 @@ BUILD_HELPERS = os.path.join(REPO_ROOT, "build-support", "build_helpers.sh")
 
 
 class TestBuildParallelism(unittest.TestCase):
-    def run_bash(self, cmd: str, env_overrides: dict = None) -> str:
+    def _clean_env(self, env_overrides: dict = None) -> dict:
         env = os.environ.copy()
         for key in (
             "STARROCKS_LINKER",
@@ -35,6 +35,10 @@ class TestBuildParallelism(unittest.TestCase):
             env.pop(key, None)
         if env_overrides:
             env.update(env_overrides)
+        return env
+
+    def run_bash(self, cmd: str, env_overrides: dict = None) -> str:
+        env = self._clean_env(env_overrides)
         script = f'. "{BUILD_HELPERS}"\n{cmd}'
         res = subprocess.run(
             ["bash", "-c", script],
@@ -456,6 +460,28 @@ class TestBuildParallelism(unittest.TestCase):
             )
             self.assertEqual(linker_type, "modern")
 
+    def test_detect_linker_type_cmake_compiler_cmake_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            cmake_files_dir = os.path.join(build_dir, "CMakeFiles", "3.26.4")
+            os.makedirs(cmake_files_dir, exist_ok=True)
+            with open(os.path.join(build_dir, "CMakeCache.txt"), "w") as f:
+                f.write("CMAKE_CXX_COMPILER:FILEPATH=/nonexistent/uncallable/g++\n")
+            with open(
+                os.path.join(cmake_files_dir, "CMakeCXXCompiler.cmake"), "w"
+            ) as f:
+                f.write('set(CMAKE_CXX_COMPILER_VERSION "14.3.0")\n')
+
+            cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.17"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.27"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+            linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
+            self.assertEqual(linker_type, "modern")
+
     def test_run_be_ut_cached_compiler_and_clean_refresh(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             gcc12_dir = os.path.join(tmpdir, "gcc12", "bin")
@@ -746,6 +772,7 @@ class TestBuildParallelism(unittest.TestCase):
         res = subprocess.run(
             ["bash", "-c", "./run-be-ut.sh --help || true"],
             cwd=REPO_ROOT,
+            env=self._clean_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -791,6 +818,7 @@ class TestBuildParallelism(unittest.TestCase):
         res_flag = subprocess.run(
             ["bash", "-c", cmd_flag, "_", "-j", "11"],
             cwd=REPO_ROOT,
+            env=self._clean_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
