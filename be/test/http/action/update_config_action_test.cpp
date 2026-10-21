@@ -28,6 +28,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/update_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -93,6 +94,23 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_lake_pk_preload_memory_limit_percent) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* update_mgr = ExecEnv::GetInstance()->lake_update_manager();
+    ASSERT_NE(nullptr, update_mgr);
+    const int64_t update_mem_limit = update_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_preload_memory_limit_percent);
+    DeferOp defer([&]() { CHECK_OK(action.update_config("lake_pk_preload_memory_limit_percent", saved_percent)); });
+
+    ASSERT_OK(action.update_config("lake_pk_preload_memory_limit_percent", "50"));
+    ASSERT_EQ(update_mem_limit * 50 / 100, update_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(update_mem_limit * 50 / 100, update_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(action.update_config("lake_pk_preload_memory_limit_percent", "10"));
+    ASSERT_EQ(update_mem_limit * 10 / 100, update_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(update_mem_limit * 10 / 100, update_mgr->compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(UpdateConfigActionTest, test_update_load_sink_close_thread_pool_num_max) {

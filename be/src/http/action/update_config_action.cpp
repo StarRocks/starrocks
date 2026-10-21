@@ -224,6 +224,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 #endif
             return st;
         });
+        _config_callback.emplace("lake_pk_preload_memory_limit_percent", [&]() -> Status {
+            auto* update_mgr = _exec_env->lake_update_manager();
+            if (update_mgr != nullptr) {
+                update_mgr->refresh_preload_mem_limit();
+                LOG(INFO) << "Set lake_pk_preload_memory_limit_percent: "
+                          << config::lake_pk_preload_memory_limit_percent
+                          << ", preload mem limit: " << update_mgr->update_state_mem_tracker()->limit();
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() -> Status {
             if (_exec_env->dictionary_cache_pool() != nullptr) {
                 return _exec_env->dictionary_cache_pool()->update_max_threads(

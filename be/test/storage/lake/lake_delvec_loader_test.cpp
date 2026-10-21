@@ -28,6 +28,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/scoped_updater.h"
 
 namespace starrocks::lake {
 
@@ -366,6 +367,29 @@ TEST_F(LakeDelvecLoaderTest, test_update_primary_index_memory_limit) {
     ASSERT_EQ(process_mem_limit, _update_manager->index_cache().capacity());
     ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(-1).ok());
     ASSERT_EQ(0, _update_manager->index_cache().capacity());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    UpdateManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
+
+    config::lake_pk_preload_memory_limit_percent = 50;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(500, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(500, manager.compaction_state_mem_tracker()->limit());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_preload_memory_limit_percent = 200;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
+    config::lake_pk_preload_memory_limit_percent = -1;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(0, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(0, manager.compaction_state_mem_tracker()->limit());
 }
 
 } // namespace starrocks::lake
