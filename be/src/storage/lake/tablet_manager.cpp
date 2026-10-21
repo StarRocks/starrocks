@@ -386,24 +386,8 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     int64_t table_id = -1;
     int64_t partition_id = -1;
     int64_t index_id = -1;
-<<<<<<< HEAD
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    auto worker = get_staros_worker();
-    if (worker == nullptr) {
-        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
-        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
-        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
-    }
-    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
-    if (!shard_info_or.ok()) {
-        return Status::InternalError(fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
-                                                 shard_info_or.status().message()));
-    }
-    RETURN_IF_ERROR(
-            parse_shard_properties(tablet_id, shard_info_or.value().properties, &table_id, &partition_id, &index_id));
-=======
     RETURN_IF_ERROR(resolve_shard_properties(tablet_id, &table_id, &partition_id, &index_id));
->>>>>>> e74f782 ([BugFix] Return NotFound for version 1 of a dropped lake tablet (#81196))
 
     ASSIGN_OR_RETURN(auto resp,
                      _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));
