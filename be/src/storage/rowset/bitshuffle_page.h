@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <sys/types.h>
 
@@ -47,7 +48,10 @@
 #include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
+#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/storage_column_traits.h"
 #include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
@@ -432,6 +436,63 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
+
+    // rowids are sorted (callers partition them per page with lower_bound), so checking the first
+    // element covers all of them. A violation means a caller bug; fail loudly instead of
+    // skipping, because callers pair the decoded values with per-rowid null flags.
+    if (UNLIKELY(total > 0 && rowids[0] < first_ordinal_in_page)) {
+        return Status::Corruption(
+                fmt::format("rowid {} precedes page first ordinal {}", rowids[0], first_ordinal_in_page));
+    }
+
+    if constexpr (!std::is_same_v<CppType, bool>) {
+        if (!column->is_constant()) {
+            NullableColumn* nullable_col = nullptr;
+            Column* target_col = column;
+            if (column->is_nullable()) {
+                column->materialized_nullable();
+                nullable_col = down_cast<NullableColumn*>(column);
+                target_col = nullable_col->data_column_raw_ptr();
+                DCHECK_EQ(target_col->size(), nullable_col->null_column()->size());
+            }
+
+            auto try_direct_write = [&](auto* fc) -> bool {
+                if (!fc) {
+                    return false;
+                }
+                size_t orig_size = fc->size();
+                fc->resize_uninitialized(orig_size + total);
+                uint8_t* dst_raw = fc->mutable_raw_data() + orig_size * sizeof(CppType);
+                for (size_t i = 0; i < total; i++) {
+                    ordinal_t ord = rowids[i] - first_ordinal_in_page;
+                    if (UNLIKELY(ord >= _num_elements)) {
+                        break;
+                    }
+                    std::memcpy(dst_raw + read_count * sizeof(CppType), get_data(ord * SIZE_OF_TYPE), sizeof(CppType));
+                    read_count++;
+                }
+                if (read_count < total) {
+                    fc->resize(orig_size + read_count);
+                }
+                if (nullable_col != nullptr) {
+                    nullable_col->null_column_data().resize(orig_size + read_count, 0);
+                }
+                *count = read_count;
+                return true;
+            };
+
+            using StorageCol = StorageColumnType<Type>;
+            if (try_direct_write(dynamic_cast<StorageCol*>(target_col))) {
+                return Status::OK();
+            }
+            if constexpr (!std::is_same_v<StorageCol, FixedLengthColumnBase<CppType>>) {
+                if (try_direct_write(dynamic_cast<FixedLengthColumnBase<CppType>*>(target_col))) {
+                    return Status::OK();
+                }
+            }
+        }
+    }
+
     auto data = std::make_unique_for_overwrite<CppType[]>(total);
     for (size_t i = 0; i < total; i++) {
         ordinal_t ord = rowids[i] - first_ordinal_in_page;
