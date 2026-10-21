@@ -256,32 +256,39 @@ starrocks_detect_linker_type() {
         return 0
     fi
 
-    if [[ "$(uname -m)" != "aarch64" ]]; then
-        local cxx_compiler=""
-        local cached_c=""
-        local cached_cxx=""
-        local has_cmake_compiler_override=0
-        if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
-            cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-            cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-            if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
-                has_cmake_compiler_override=1
-            fi
+    local cxx_compiler=""
+    local cached_c=""
+    local cached_cxx=""
+    local cached_cxx_flags=""
+    local cached_exe_linker_flags=""
+    local cached_shared_linker_flags=""
+    local has_cmake_compiler_override=0
+    if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
+        cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        cached_cxx_flags="$(sed -n -E 's/^CMAKE_CXX_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        cached_shared_linker_flags="$(sed -n -E 's/^CMAKE_SHARED_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
+            has_cmake_compiler_override=1
         fi
+    fi
 
-        # Mirrors be/CMakeLists.txt: cached CMake compiler overrides ENV{CC}/ENV{CXX},
-        # ENV{STARROCKS_GCC_HOME}, and ENV{STARROCKS_LLVM_HOME}; CXX is honored only together with CC.
-        if [[ "${has_cmake_compiler_override}" -eq 1 ]]; then
-            cxx_compiler="${cached_cxx:-${CXX:-g++}}"
-        elif [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
-            cxx_compiler="${CXX}"
-        elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
-            cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
-        elif [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
-            cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
-        else
-            cxx_compiler="g++"
-        fi
+    # Mirrors be/CMakeLists.txt: cached CMake compiler overrides ENV{CC}/ENV{CXX},
+    # ENV{STARROCKS_GCC_HOME}, and ENV{STARROCKS_LLVM_HOME}; CXX is honored only together with CC.
+    if [[ "${has_cmake_compiler_override}" -eq 1 ]]; then
+        cxx_compiler="${cached_cxx:-${CXX:-g++}}"
+    elif [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
+        cxx_compiler="${CXX}"
+    elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
+        cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
+    elif [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
+        cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+    else
+        cxx_compiler="g++"
+    fi
+
+    if [[ "$(uname -m)" != "aarch64" ]]; then
         local cxx_version=""
         cxx_version="$("${cxx_compiler}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" -dumpversion 2>/dev/null || true)"
         if [[ -z "${cxx_version}" && "${has_cmake_compiler_override}" -eq 1 ]]; then
@@ -317,9 +324,86 @@ starrocks_detect_linker_type() {
         fi
     fi
 
+    # Inspect explicit linker flags (-fuse-ld=* / --ld-path=*) in effective CMake link line order:
+    # <FLAGS> (CMAKE_CXX_FLAGS + CXXFLAGS + STARROCKS_CXX_COMMON_FLAGS) followed by
+    # <CMAKE_CXX_LINK_FLAGS> (CMAKE_EXE/SHARED_LINKER_FLAGS + LDFLAGS + STARROCKS_CXX_LINKER_FLAGS).
+    local combined_flags="${cached_cxx_flags} ${CXXFLAGS:-} ${STARROCKS_CXX_COMMON_FLAGS:-} ${cached_exe_linker_flags} ${cached_shared_linker_flags} ${LDFLAGS:-} ${STARROCKS_CXX_LINKER_FLAGS:-}"
+    local flag_tokens=()
+    read -r -a flag_tokens <<< "${combined_flags//,/ }"
+    local flag_linker=""
+    local flag_token=""
+    for flag_token in "${flag_tokens[@]+"${flag_tokens[@]}"}"; do
+        case "${flag_token}" in
+            -fuse-ld=*)
+                flag_linker="${flag_token#-fuse-ld=}"
+                ;;
+            --ld-path=*)
+                flag_linker="${flag_token#--ld-path=}"
+                ;;
+        esac
+    done
+    if [[ -n "${flag_linker}" ]]; then
+        case "${flag_linker}" in
+            *lld*|*mold*|*gold*)
+                echo "modern"
+                return 0
+                ;;
+            *bfd*)
+                echo "legacy"
+                return 0
+                ;;
+        esac
+        if command -v "${flag_linker}" >/dev/null 2>&1; then
+            local flag_ld_version=""
+            flag_ld_version="$("${flag_linker}" -v 2>&1 || "${flag_linker}" --version 2>&1 || true)"
+            case "${flag_ld_version}" in
+                *LLD*|*lld*|*mold*|*GNU\ gold*)
+                    echo "modern"
+                    return 0
+                    ;;
+                *)
+                    echo "legacy"
+                    return 0
+                    ;;
+            esac
+        fi
+    fi
 
-    # Inspect the default system ld flavor
-    local ld_version_output
+    # Inspect the active compiler's resolved linker (-Wl,--version or -print-prog-name=ld),
+    # then fall back to system ld on PATH.
+    if ! ( declare -F ld >/dev/null 2>&1 && [[ "${cxx_compiler}" == "g++" ]] && ! declare -F g++ >/dev/null 2>&1 ); then
+        local compiler_wl_version=""
+        compiler_wl_version="$("${cxx_compiler}" -Wl,--version 2>&1 || true)"
+        case "${compiler_wl_version}" in
+            *LLD*|*lld*|*mold*|*GNU\ gold*)
+                echo "modern"
+                return 0
+                ;;
+            *GNU\ ld*)
+                echo "legacy"
+                return 0
+                ;;
+        esac
+
+        local compiler_ld=""
+        compiler_ld="$("${cxx_compiler}" -print-prog-name=ld 2>/dev/null || true)"
+        if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
+            local compiler_ld_version=""
+            compiler_ld_version="$("${compiler_ld}" -v 2>&1 || true)"
+            case "${compiler_ld_version}" in
+                *LLD*|*lld*|*mold*|*GNU\ gold*)
+                    echo "modern"
+                    return 0
+                    ;;
+                *GNU\ ld*)
+                    echo "legacy"
+                    return 0
+                    ;;
+            esac
+        fi
+    fi
+
+    local ld_version_output=""
     if command -v ld >/dev/null 2>&1; then
         ld_version_output="$(ld -v 2>&1 || true)"
         case "${ld_version_output}" in
@@ -329,7 +413,7 @@ starrocks_detect_linker_type() {
                 ;;
         esac
     fi
-    
+
     echo "legacy"
 }
 

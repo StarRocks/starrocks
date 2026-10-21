@@ -22,6 +22,10 @@ class TestBuildParallelism(unittest.TestCase):
         env = os.environ.copy()
         for key in (
             "STARROCKS_LINKER",
+            "STARROCKS_CXX_LINKER_FLAGS",
+            "STARROCKS_CXX_COMMON_FLAGS",
+            "LDFLAGS",
+            "CXXFLAGS",
             "STARROCKS_GCC_HOME",
             "STARROCKS_LLVM_HOME",
             "CC",
@@ -289,6 +293,10 @@ class TestBuildParallelism(unittest.TestCase):
                 "STARROCKS_LLVM_HOME": tmpdir,
                 "CC": "gcc",
                 "CXX": os.path.join(tmpdir, "bin", "g++"),
+                "STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld",
+                "STARROCKS_CXX_COMMON_FLAGS": "-fuse-ld=mold",
+                "LDFLAGS": "-fuse-ld=gold",
+                "CXXFLAGS": "-Wl,-fuse-ld=lld",
             }
             with unittest.mock.patch.dict(os.environ, ambient, clear=False):
                 cmd = """
@@ -482,6 +490,205 @@ class TestBuildParallelism(unittest.TestCase):
             """
             linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
             self.assertEqual(linker_type, "modern")
+
+    def test_detect_linker_type_honors_cxx_linker_flags_env(self):
+        cmd_default_legacy = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        g++() { echo "12.1.0"; }
+        ldd() { echo "ldd (GNU libc) 2.35"; }
+        ld() { echo "GNU ld (GNU Binutils) 2.38"; }
+        starrocks_detect_linker_type
+        """
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
+            ),
+            "modern",
+        )
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {"STARROCKS_CXX_COMMON_FLAGS": "-fuse-ld=gold"},
+            ),
+            "modern",
+        )
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {"LDFLAGS": "-Wl,-O1 --ld-path=/usr/bin/ld.mold"},
+            ),
+            "modern",
+        )
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {"CXXFLAGS": "-Wl,-fuse-ld=lld"},
+            ),
+            "modern",
+        )
+
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {
+                    "STARROCKS_CXX_COMMON_FLAGS": "-fuse-ld=lld",
+                    "STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=bfd",
+                },
+            ),
+            "legacy",
+        )
+
+        cmd_default_modern_ld = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        g++() { echo "12.1.0"; }
+        ldd() { echo "ldd (GNU libc) 2.35"; }
+        ld() { echo "LLD 17.0.6"; }
+        starrocks_detect_linker_type
+        """
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_modern_ld,
+                {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=bfd"},
+            ),
+            "legacy",
+        )
+
+        # On glibc < 2.29 + GCC > 14.0.0, be/CMakeLists.txt:984 appends
+        # add_link_options("-fuse-ld=gold") (<LINK_FLAGS>) after CMAKE_EXE_LINKER_FLAGS
+        cmd_auto_gold = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        g++() { echo "14.3.0"; }
+        ldd() { echo "ldd (GNU libc) 2.17"; }
+        ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+        starrocks_detect_linker_type
+        """
+        self.assertEqual(
+            self.run_bash(
+                cmd_auto_gold,
+                {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=bfd"},
+            ),
+            "modern",
+        )
+
+    def test_detect_linker_type_honors_cmake_cache_linker_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+            cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            g++() {{ echo "12.1.0"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.38"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+
+            for cache_entry in (
+                "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=lld\n",
+                "CMAKE_CXX_FLAGS:STRING=-fuse-ld=mold\n",
+                "CMAKE_SHARED_LINKER_FLAGS:STRING=-fuse-ld=gold\n",
+            ):
+                with open(cache_file, "w") as f:
+                    f.write(cache_entry)
+                self.assertEqual(self.run_bash(cmd), "modern")
+
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=bfd\n")
+            self.assertEqual(self.run_bash(cmd), "legacy")
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
+                ),
+                "modern",
+            )
+
+    def test_detect_linker_type_probes_compiler_prog_name_ld(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gold = os.path.join(tmpdir, "custom-ld")
+            with open(mock_gold, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU gold (GNU Binutils 2.38) 1.16'\n")
+            os.chmod(mock_gold, 0o755)
+
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write(
+                    f'#!/bin/sh\ncase "$*" in *-print-prog-name=ld*) echo "{mock_gold}" ;; *) echo "12.1.0" ;; esac\n'
+                )
+            os.chmod(mock_gxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.35"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.38"; }
+            starrocks_detect_linker_type
+            """
+            self.assertEqual(
+                self.run_bash(cmd, {"STARROCKS_GCC_HOME": tmpdir}),
+                "modern",
+            )
+
+        with tempfile.TemporaryDirectory() as llvm_tmpdir:
+            llvm_bin = os.path.join(llvm_tmpdir, "bin")
+            os.makedirs(llvm_bin, exist_ok=True)
+            mock_clangxx = os.path.join(llvm_bin, "clang++")
+            with open(mock_clangxx, "w") as f:
+                f.write(
+                    '#!/bin/sh\ncase "$*" in *-Wl,--version*) echo "LLD 17.0.6" ;; *-print-prog-name=ld*) echo "/usr/bin/ld" ;; *) echo "17.0.6" ;; esac\n'
+                )
+            os.chmod(mock_clangxx, 0o755)
+
+            self.assertEqual(
+                self.run_bash(cmd, {"STARROCKS_LLVM_HOME": llvm_tmpdir}),
+                "modern",
+            )
+
+    def test_detect_linker_type_aarch64_honors_compiler_and_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_lld = os.path.join(tmpdir, "custom-lld")
+            with open(mock_lld, "w") as f:
+                f.write("#!/bin/sh\necho 'LLD 17.0.6'\n")
+            os.chmod(mock_lld, 0o755)
+
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write(
+                    f'#!/bin/sh\ncase "$*" in *-print-prog-name=ld*) echo "{mock_lld}" ;; *) echo "12.1.0" ;; esac\n'
+                )
+            os.chmod(mock_gxx, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "aarch64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.38"; }
+            starrocks_detect_linker_type
+            """
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
+                ),
+                "modern",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_GCC_HOME": tmpdir},
+                ),
+                "modern",
+            )
 
     def test_run_be_ut_cached_compiler_and_clean_refresh(self):
         with tempfile.TemporaryDirectory() as tmpdir:
