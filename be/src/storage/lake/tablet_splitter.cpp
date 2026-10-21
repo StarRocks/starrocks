@@ -1842,6 +1842,9 @@ void prune_unreferenced_delvec_files(TabletMetadataPB* child) {
     for (const auto& sst : child->sstable_meta().sstables()) {
         if (sst.has_delvec()) versions.insert(sst.delvec().version());
     }
+    for (const auto& rowset : child->rowsets()) {
+        for (const auto& [_, page] : rowset.initial_delvecs().pages()) versions.insert(page.version());
+    }
     auto* files = child->mutable_delvec_meta()->mutable_version_to_file();
     for (auto it = files->begin(); it != files->end();) {
         if (versions.contains(it->first))
@@ -2208,6 +2211,19 @@ Status apply_segment_ownership_to_new_tablet_rowset(RowsetMetadataPB* rowset, co
         if (!segment_meta.has_segment_idx()) segment_meta.set_segment_idx(segment_index);
         segment_meta.set_shared(ownership.segments[segment_index].shared[new_tablet_index]);
         kept_segment_metas.push_back(std::move(segment_meta));
+    }
+
+    // The initial delvec pages of the segments this new tablet drops would only pin their delvec files.
+    if (rowset->has_initial_delvecs()) {
+        std::unordered_set<uint32_t> kept_segment_idxes;
+        for (const auto& segment_meta : kept_segment_metas) kept_segment_idxes.insert(segment_meta.segment_idx());
+        auto* pages = rowset->mutable_initial_delvecs()->mutable_pages();
+        for (auto it = pages->begin(); it != pages->end();) {
+            if (kept_segment_idxes.contains(it->first))
+                ++it;
+            else
+                it = pages->erase(it);
+        }
     }
 
     rowset->clear_segment_metas();

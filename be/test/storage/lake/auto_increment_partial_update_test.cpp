@@ -14,11 +14,13 @@
 
 #include <gtest/gtest.h>
 
+#include <numeric>
 #include <random>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -26,7 +28,9 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
+#include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
@@ -35,6 +39,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -417,4 +422,93 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// A partial update that leaves the auto-increment column out reads it from the stored row; a row deleted before
+// the update publishes has none, so publish deletes the updated row again, right after adding it. Primary key
+// recover must keep it deleted.
+TEST_F(LakeAutoIncrementPartialUpdateTest, test_recover_keeps_delete_conflict) {
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    recreate_schema(1);
+    const auto tablet_id = _tablet_metadata->id();
+    constexpr int kHalf = kChunkSize / 2;
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    // Write rows [first, kChunkSize) of |chunk|.
+    auto write = [&](const Chunk& chunk, const std::vector<SlotDescriptor*>* slots, bool partial, int first) {
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(slots)
+                                                   .set_miss_auto_increment_column(partial)
+                                                   .set_table_id(next_id())
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data() + first, kChunkSize - first));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp disable_sync_point([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("StorageEngine::get_next_increment_id_interval.1", [](void* arg) {
+        auto& meta = *(std::shared_ptr<AutoIncrementMeta>*)(arg);
+        meta->min = 1;
+        meta->max = kChunkSize * 2;
+    });
+
+    int64_t version = 1;
+    ASSERT_OK(publish_single_version(tablet_id, ++version, write(generate_data(kChunkSize, false), nullptr, false, 0))
+                      .status());
+    // Every key exists when the update is written.
+    const int64_t update_txn_id = write(generate_data(kChunkSize, true), &_slot_pointers, true, 0);
+
+    // Delete keys [0, kHalf) before the update publishes; the other rows are written again unchanged.
+    std::vector<SlotDescriptor> delete_slots;
+    delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    delete_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    delete_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    delete_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> delete_slot_pointers{&delete_slots[0], &delete_slots[1], &delete_slots[2],
+                                                      &delete_slots[3]};
+    auto rows = generate_data(kChunkSize, false);
+    auto op = Int8Column::create();
+    for (int i = 0; i < kChunkSize; i++) {
+        op->append(i < kHalf ? TOpType::DELETE : TOpType::UPSERT);
+    }
+    Chunk deletes(
+            {rows.get_column_by_index(0), rows.get_column_by_index(1), rows.get_column_by_index(2), std::move(op)},
+            Chunk::SlotHashMap{{0, 0}, {1, 1}, {2, 2}, {3, 3}});
+    ASSERT_OK(publish_single_version(tablet_id, ++version, write(deletes, &delete_slot_pointers, false, 0)).status());
+
+    ASSERT_OK(publish_single_version(tablet_id, ++version, update_txn_id).status());
+    auto second_half = [](int c0, int c1, int c2) { return c0 >= kHalf && c1 - 1 == c0 && c2 == c0; };
+    ASSERT_EQ(kHalf, check(version, second_half));
+    // Write the last key again unchanged, so that the update's segment keeps a deleted row after recover.
+    ASSERT_OK(publish_single_version(tablet_id, ++version,
+                                     write(generate_data(kChunkSize, false), nullptr, false, kChunkSize - 1))
+                      .status());
+
+    // Recover while publishing an update of the remaining keys.
+    bool fail_index_load = true;
+    SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) {
+        if (fail_index_load) {
+            fail_index_load = false;
+            *(Status*)arg = Status::AlreadyExist("injected duplicate primary key");
+        }
+    });
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
+    const int64_t recover_before = StorageMetrics::instance()->primary_key_table_error_state_total.value();
+    ASSERT_OK(publish_single_version(tablet_id, ++version,
+                                     write(generate_data(kChunkSize, true), &_slot_pointers, true, kHalf))
+                      .status());
+    ASSERT_EQ(recover_before + 1, StorageMetrics::instance()->primary_key_table_error_state_total.value());
+    EXPECT_EQ(kHalf, check(version, second_half));
+}
 } // namespace starrocks::lake

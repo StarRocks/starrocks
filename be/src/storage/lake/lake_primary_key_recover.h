@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -51,6 +52,8 @@ public:
                                                       const std::vector<std::unique_ptr<RandomAccessFile>>&,
                                                       const std::vector<uint32_t>&, uint32_t)>& handler) override;
 
+    StatusOr<std::vector<uint32_t>> initial_deletes(uint32_t rssid) override;
+
     // generate delvec and save
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;
 
@@ -66,7 +69,13 @@ private:
     MetaFileBuilder* _builder;
     Tablet* _tablet;
     MutableTabletMetadataPtr _metadata;
+    // Load the initial deletes of |rowset|'s segments into _initial_deletes. Counts it in |unrecorded_rowsets|
+    // when it may have some but they were not recorded.
+    Status load_initial_deletes(const Rowset& rowset, int64_t* unrecorded_rowsets);
+
     MutableColumnPtr _pk_column;
+    // From rssid to its initial deletes, for the rowset being replayed.
+    std::unordered_map<uint32_t, std::vector<uint32_t>> _initial_deletes;
 };
 
 } // namespace lake

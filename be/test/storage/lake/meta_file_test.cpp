@@ -653,6 +653,44 @@ TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
     EXPECT_EQ(prefix, loaded.save());
 }
 
+// One publish can add several rowsets (e.g. a replication); each one records the delvec pages its segments got
+// from that publish, while a rowset added earlier records nothing.
+TEST_F(MetaFileTest, test_finalize_delvec_records_initial_delvecs_of_every_rowset) {
+    const int64_t tablet_id = next_id();
+    const int64_t version = 3;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(4);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    for (uint32_t id = 1; id <= 3; id++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->add_segment_metas()->set_segment_idx(0);
+    }
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.record_initial_delvecs(2);
+    builder.record_initial_delvecs(3);
+    for (uint32_t rssid = 1; rssid <= 3; rssid++) {
+        auto delvec = std::make_shared<DelVector>();
+        const uint32_t rowid = rssid;
+        delvec->init(version, &rowid, 1);
+        builder.append_delvec(delvec, rssid);
+    }
+    ASSERT_OK(builder.finalize(next_id()));
+
+    EXPECT_FALSE(metadata->rowsets(0).has_initial_delvecs());
+    for (int i = 1; i <= 2; i++) {
+        const auto& pages = metadata->rowsets(i).initial_delvecs().pages();
+        ASSERT_EQ(1, pages.size()) << "rowset " << metadata->rowsets(i).id();
+        DelVector loaded;
+        ASSERT_OK(get_del_vec(_tablet_manager.get(), *metadata, pages.at(0), false, LakeIOOptions{}, &loaded));
+        EXPECT_EQ(1, loaded.cardinality());
+        EXPECT_TRUE(loaded.roaring()->contains(metadata->rowsets(i).id()));
+    }
+}
+
 TEST_F(MetaFileTest, test_get_delvec_ignores_encryption_metadata) {
     const int64_t tablet_id = next_id();
     const int64_t version = 11;

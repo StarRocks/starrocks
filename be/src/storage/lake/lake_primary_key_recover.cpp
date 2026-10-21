@@ -14,13 +14,17 @@
 
 #include "storage/lake/lake_primary_key_recover.h"
 
+#include <fmt/format.h>
+
 #include "column/column.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
@@ -31,7 +35,20 @@ namespace starrocks::lake {
 Status LakePrimaryKeyRecover::pre_cleanup() {
     // 1. reset delvec & sst in metadata and clean delvec in builder
     // TODO reclaim delvec files
+    // Keep the files of the rowsets' initial delvecs, which recover replays.
+    DelvecMetadataPB initial_delvec_meta;
+    for (const auto& rowset : _metadata->rowsets()) {
+        for (const auto& [_, page] : rowset.initial_delvecs().pages()) {
+            auto it = _metadata->delvec_meta().version_to_file().find(page.version());
+            if (it != _metadata->delvec_meta().version_to_file().end()) {
+                (*initial_delvec_meta.mutable_version_to_file())[page.version()] = it->second;
+            }
+        }
+    }
     _metadata->clear_delvec_meta();
+    if (initial_delvec_meta.version_to_file_size() > 0) {
+        _metadata->mutable_delvec_meta()->Swap(&initial_delvec_meta);
+    }
     _metadata->clear_sstable_meta();
     // 2. reset primary index
     RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
@@ -81,7 +98,9 @@ Status LakePrimaryKeyRecover::rowset_iterator(
     // Sort the rowsets in order of primary key occurrence,
     // so we can generate correct delvecs
     RETURN_IF_ERROR(sort_rowsets(&rowsets));
+    int64_t unrecorded_rowsets = 0;
     for (auto& rowset : rowsets) {
+        RETURN_IF_ERROR(load_initial_deletes(*rowset, &unrecorded_rowsets));
         auto res = rowset->get_each_segment_iterator(pkey_schema, false, &stats);
         if (!res.ok()) {
             return res.status();
@@ -150,7 +169,73 @@ Status LakePrimaryKeyRecover::rowset_iterator(
         }
         RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->id()));
     }
+    if (unrecorded_rowsets > 0) {
+        LOG(WARNING) << "Primary key recover replays " << unrecorded_rowsets << " rowsets of tablet " << _tablet->id()
+                     << " without the rows their publish deleted, which were not recorded: such rows, e.g. the "
+                        "losers of a conditional update, come back";
+    }
     return Status::OK();
+}
+
+Status LakePrimaryKeyRecover::load_initial_deletes(const Rowset& rowset, int64_t* unrecorded_rowsets) {
+    const auto& rowset_meta = rowset.metadata();
+    const bool recorded = rowset_meta.has_initial_delvecs();
+    // The publish being recovered records the initial delvecs of the rowsets it adds only when it finishes; until
+    // then they are in the builder.
+    const bool publishing = !recorded && _builder->records_initial_delvecs(rowset.id());
+    if (!recorded && !publishing) {
+        // Published before initial delvecs were recorded. Compaction drops deleted rows, so only a load can
+        // carry rows its publish deleted, which the replay brings back.
+        if (!rowset_meta.has_max_compact_input_rowset_id()) {
+            (*unrecorded_rowsets)++;
+        }
+        return Status::OK();
+    }
+    for (int32_t k = 0; k < rowset_meta.segment_metas_size(); k++) {
+        const uint32_t segment_idx = get_segment_idx(rowset_meta, k);
+        DelVectorPtr delvec;
+        if (recorded) {
+            auto it = rowset_meta.initial_delvecs().pages().find(segment_idx);
+            if (it == rowset_meta.initial_delvecs().pages().end()) {
+                continue;
+            }
+            delvec = std::make_shared<DelVector>();
+            LakeIOOptions io_opts{.fill_data_cache = false};
+            auto st = get_del_vec(_tablet->tablet_mgr(), *_metadata, it->second, false, io_opts, delvec.get());
+            if (!st.ok()) {
+                // E.g. a tablet merge does not carry initial delvecs over. Replaying without them would bring
+                // their rows back, so give up instead.
+                return st.clone_and_prepend(fmt::format("cannot read the initial delvec of segment {} of rowset {}",
+                                                        segment_idx, rowset.id()));
+            }
+        } else {
+            ASSIGN_OR_RETURN(bool found,
+                             _builder->find_delvec(TabletSegmentId(_tablet->id(), rowset.id() + segment_idx), &delvec));
+            if (!found) {
+                continue;
+            }
+        }
+        if (delvec->empty()) {
+            continue;
+        }
+        // Keyed the way the replay numbers the segments: rowset id + position.
+        auto& rowids = _initial_deletes[rowset.id() + k];
+        rowids.reserve(delvec->cardinality());
+        for (const auto rowid : *delvec->roaring()) {
+            rowids.push_back(rowid);
+        }
+    }
+    return Status::OK();
+}
+
+StatusOr<std::vector<uint32_t>> LakePrimaryKeyRecover::initial_deletes(uint32_t rssid) {
+    std::vector<uint32_t> rowids;
+    auto it = _initial_deletes.find(rssid);
+    if (it != _initial_deletes.end()) {
+        rowids = std::move(it->second);
+        _initial_deletes.erase(it);
+    }
+    return rowids;
 }
 
 // generate delvec and save

@@ -386,6 +386,9 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             op_write.dels_meta_size(), batch_apply);
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
+    // Some rows of the new segments may lose already in this publish, in ways a replay of the segments
+    // cannot tell: a conditional update's losers, seg_delvecs, auto-increment conflicts.
+    builder->record_initial_delvecs(rowset_id);
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txn_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -1127,6 +1130,7 @@ Status PrimaryKeyManager::publish_column_mode_partial_update(const TxnLogPB_OpWr
 
     const uint32_t rowset_id = metadata->next_rowset_id();
     uint32_t new_del_rebuild_rssid = rowset_id; // default value if no insert rows
+    builder->record_initial_delvecs(rowset_id);
 
     // No cast: the index cache is DynamicCache<uint64_t, LakePersistentIndex>, so value() already
     // returns one. This was a dynamic_cast to the cache's own value type from back when it held a

@@ -1706,6 +1706,33 @@ TEST(TabletSplitterTest, ApplyOwnership_prunes_and_rebuilds_shared) {
     EXPECT_EQ(2u, rowset_for_tablet1.segment_metas(1).segment_idx());
 }
 
+// A new tablet keeps the initial delvec pages of the segments it keeps only; the others would pin their delvec files.
+TEST(TabletSplitterTest, ApplyOwnership_prunes_initial_delvec_pages) {
+    RowsetMetadataPB source_rowset;
+    add_bigint_seg(&source_rowset, 0, 1, "s0");
+    add_bigint_seg(&source_rowset, 5, 15, "s1");
+    add_bigint_seg(&source_rowset, 18, 19, "s2");
+    auto* pages = source_rowset.mutable_initial_delvecs()->mutable_pages();
+    (*pages)[0].set_version(2);
+    (*pages)[2].set_version(3);
+
+    RowsetOwnership ownership;
+    ownership.segments.resize(3);
+    ownership.segments[0] = {{true, false}, {false, false}};
+    ownership.segments[1] = {{true, true}, {true, true}};
+    ownership.segments[2] = {{false, true}, {false, false}};
+
+    RowsetMetadataPB rowset_for_tablet0 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet0, ownership, 0));
+    ASSERT_EQ(1, rowset_for_tablet0.initial_delvecs().pages_size());
+    EXPECT_EQ(2, rowset_for_tablet0.initial_delvecs().pages().at(0).version());
+
+    RowsetMetadataPB rowset_for_tablet1 = source_rowset;
+    ASSERT_OK(apply_segment_ownership_to_new_tablet_rowset(&rowset_for_tablet1, ownership, 1));
+    ASSERT_EQ(1, rowset_for_tablet1.initial_delvecs().pages_size());
+    EXPECT_EQ(3, rowset_for_tablet1.initial_delvecs().pages().at(2).version());
+}
+
 // encryption_meta travels inside each SegmentMetadataPB, so it must prune in lockstep
 // with the segment it describes; a misaligned/dropped entry is load-time corruption.
 TEST(TabletSplitterTest, ApplyOwnership_prunes_segment_encryption_metas) {

@@ -57,6 +57,11 @@ public:
                                                               const std::vector<std::unique_ptr<RandomAccessFile>>&,
                                                               const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
 
+    // Rows of segment |rssid| that were already deleted when the segment was added, in ascending order,
+    // e.g. the losers of a conditional update. Replaying the segment as plain upserts would bring them back,
+    // so recover starts the segment's delvec from them and does not upsert them.
+    virtual StatusOr<std::vector<uint32_t>> initial_deletes(uint32_t rssid) { return std::vector<uint32_t>{}; }
+
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;
 

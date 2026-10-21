@@ -445,8 +445,7 @@ INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyReco
 
 // A conditional upsert keeps the stored row when the incoming one does not win the condition; the losing new
 // row stays in its segment, masked only by that segment's delete vector. Recover must not bring it back.
-// Disabled: recover replays every row as a plain upsert, so the rows that lost the condition win.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_conditional_update) {
+TEST_F(LakePrimaryKeyRecoverTest, conditional_update) {
     Rows expected;
     const std::vector<std::vector<Op>> base = {upserts(0, 12, 100, 0)};
     publish(write_rows(base), false);
@@ -461,6 +460,43 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_conditional_update) {
         }
     }
     publish(write_rows({conditional}, "c1"), false);
+    ASSERT_EQ(expected, read(_version));
+
+    const std::vector<std::vector<Op>> later = {upserts(100, 102, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// With ORDER BY c1 instead of the primary key, a spilled load merges its batches into one segment sorted by c1
+// and resolves duplicate keys while writing: the losers stay in the segment, masked by the delete vector the
+// load hands to publish (seg_delvecs). Here the later batch wins every shared key but sorts first, so a loser
+// follows its winner in the segment. Recover must not bring the losers back.
+class LakePrimaryKeyRecoverSortKeyTest : public LakePrimaryKeyRecoverTest {
+public:
+    LakePrimaryKeyRecoverSortKeyTest() {
+        auto* schema = _tablet_metadata->mutable_schema();
+        schema->add_sort_key_idxes(1);
+        // The load builds the primary key index while writing, which the default encoding of an INT key
+        // does not support.
+        schema->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+};
+
+TEST_F(LakePrimaryKeyRecoverSortKeyTest, duplicate_keys_in_one_segment) {
+    ConfigResetGuard<bool> spill_guard(&config::enable_load_spill, true);
+    ConfigResetGuard<int64_t> eager_build_guard(&config::pk_index_eager_build_threshold_bytes, 1);
+    Rows expected;
+    const std::vector<std::vector<Op>> load = {upserts(0, 12, 100, 0), upserts(6, 18, 0, 1000)};
+    const int64_t txn_id = write_rows(load);
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id(), txn_id));
+    ASSERT_EQ(1, txn_log->op_write().rowset().segment_metas_size());
+    ASSERT_EQ(1, txn_log->op_write().seg_delvecs_size());
+    publish(txn_id, false);
+    apply(&expected, load);
     ASSERT_EQ(expected, read(_version));
 
     const std::vector<std::vector<Op>> later = {upserts(100, 102, 0, 0)};

@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "column/vectorized_fwd.h"
@@ -144,6 +145,12 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
+    // Record on rowset |rowset_id|, which this publish adds, the delvec pages its segments get from this
+    // publish (RowsetMetadataPB.initial_delvecs), for primary key recover to replay. One publish can add
+    // several rowsets, e.g. a replication.
+    void record_initial_delvecs(uint32_t rowset_id) { _initial_delvecs_rowset_ids.insert(rowset_id); }
+    bool records_initial_delvecs(uint32_t rowset_id) const { return _initial_delvecs_rowset_ids.contains(rowset_id); }
+
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
@@ -207,6 +214,8 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    // The rowsets whose initial delvecs finalize records, see record_initial_delvecs().
+    std::unordered_set<uint32_t> _initial_delvecs_rowset_ids;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
 };

@@ -1321,7 +1321,27 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
-    // 3. write to delvec file
+    // 3. record the delvecs the published rowsets' segments start with. Their segments are new, so any page
+    // they have was written by this publish.
+    if (!_initial_delvecs_rowset_ids.empty()) {
+        const auto& delvecs = _tablet_meta->delvec_meta().delvecs();
+        for (auto& rowset : *_tablet_meta->mutable_rowsets()) {
+            if (!_initial_delvecs_rowset_ids.contains(rowset.id())) {
+                continue;
+            }
+            // Set even when no segment lost a row: recover tells this rowset from one published before.
+            auto* pages = rowset.mutable_initial_delvecs()->mutable_pages();
+            for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                const uint32_t segment_idx = get_segment_idx(rowset, i);
+                auto it = delvecs.find(rowset.id() + segment_idx);
+                if (it != delvecs.end() && it->second.version() == version) {
+                    (*pages)[segment_idx] = it->second;
+                }
+            }
+        }
+    }
+
+    // 4. write to delvec file
     if (_buf.size() > 0) {
         // Trace the delvec object write on its own so a slow publish can be attributed to the
         // right remote PUT (delvec vs tablet metadata). delvec_file_bytes is the concatenated
@@ -1344,11 +1364,16 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         TRACE("end write delvec");
     }
 
-    // 4. clear delvec file record in version_to_file if it's not refered any more
+    // 5. clear delvec file record in version_to_file if it's not refered any more
     // collect all versions still refered
     std::set<int64_t> refered_versions;
     for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
         refered_versions.insert(item.second.version());
+    }
+    for (const auto& rowset : _tablet_meta->rowsets()) {
+        for (const auto& [_, page] : rowset.initial_delvecs().pages()) {
+            refered_versions.insert(page.version());
+        }
     }
     // collect version from sstable delvecs
     for (const auto& sst : _tablet_meta->sstable_meta().sstables()) {

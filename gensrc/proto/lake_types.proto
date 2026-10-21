@@ -306,6 +306,18 @@ message RowsetMetadataPB {
     // from the same logical rowset compare equal. MERGE dedups rowsets by uid equality.
     // Optional => backward compatible; legacy rowsets are backfilled at split time.
     optional PUniqueId uid = 19;
+    // Set by the publish of a load into a primary key table: the rows that publish deleted from this
+    // rowset's own segments, which replaying the segments as plain upserts cannot reproduce (the losers
+    // of a conditional update, duplicate keys inside one segment, auto-increment conflicts).
+    // Primary key recover starts from them. Absent on rowsets published before this field existed.
+    optional InitialDelvecsPB initial_delvecs = 20;
+}
+
+message InitialDelvecsPB {
+    // From segment_idx to the segment's delvec page written by the publish that added the rowset.
+    // The page is read through TabletMetadataPB.delvec_meta.version_to_file, which keeps the file while
+    // the rowset references it. A segment with no deleted row has no entry.
+    map<uint32, DelvecPagePB> pages = 1;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,

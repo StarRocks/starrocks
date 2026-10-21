@@ -80,7 +80,10 @@ Status PrimaryKeyRecover::recover() {
                         }
                         uint32_t rssid = rowset_id + itr_index;
                         uint32_t row_id_start = 0;
-                        new_deletes[rssid] = {};
+                        ASSIGN_OR_RETURN(new_deletes[rssid], initial_deletes(rssid));
+                        // Iterated in step with the rows to skip them.
+                        const std::vector<uint32_t> skipped = new_deletes[rssid];
+                        size_t next_skipped = 0;
                         while (true) {
                             chunk->reset();
                             rowids.clear();
@@ -93,9 +96,32 @@ Status PrimaryKeyRecover::recover() {
                                 pk_column->reset_column();
                                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
                                                           encoding_type);
-                                // upsert and generate new deletes
-                                RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
-                                row_id_start += pk_column->size();
+                                // upsert the rows between the skipped ones and generate new deletes. Skipped rows
+                                // are matched by physical row id: a shared segment of a split tablet is read
+                                // through the tablet range, so its rows do not start at 0.
+                                const uint32_t num_rows = pk_column->size();
+                                auto physical_rowid = [&](uint32_t row) {
+                                    return rowids.size() == num_rows ? rowids[row] : row_id_start + row;
+                                };
+                                uint32_t begin = 0;
+                                for (uint32_t row = 0; row <= num_rows; row++) {
+                                    bool skip = false;
+                                    if (row < num_rows) {
+                                        const uint32_t rowid = physical_rowid(row);
+                                        while (next_skipped < skipped.size() && skipped[next_skipped] < rowid) {
+                                            next_skipped++;
+                                        }
+                                        skip = next_skipped < skipped.size() && skipped[next_skipped] == rowid;
+                                    }
+                                    if (row == num_rows || skip) {
+                                        if (begin < row) {
+                                            RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, begin, row,
+                                                                         &new_deletes));
+                                        }
+                                        begin = row + 1;
+                                    }
+                                }
+                                row_id_start += num_rows;
                             }
                         }
                         itr->close();
