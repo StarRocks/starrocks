@@ -302,9 +302,13 @@ public class AlterJobMgr {
             mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
         } catch (Exception e) {
             LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
-            throw new SemanticException(String.format("Can not active materialized view [%s]" +
+            // Suppressed, not the cause: DDLStmtExecutor reports the cause's message instead of this one when a
+            // RuntimeException has a cause. applyActivateFailure looks at the suppressed ones too.
+            SemanticException failure = new SemanticException(String.format("Can not active materialized view [%s]" +
                     " because analyze materialized view define sql: \n\n%s" +
-                    "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage()), e);
+                    "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage()));
+            failure.addSuppressed(e);
+            throw failure;
         }
 
         Map<TableName, Table> tableNameTableMap =
@@ -331,12 +335,25 @@ public class AlterJobMgr {
      * cannot be activated. Must run under the MV write lock.
      */
     public static void applyActivateFailure(MaterializedView materializedView, Throwable failure) {
+        IncompatibleSchemaException incompatible = findIncompatibleSchema(failure);
+        if (incompatible != null) {
+            materializedView.setInactiveAndReason(incompatible.inactiveReason);
+        }
+    }
+
+    private static IncompatibleSchemaException findIncompatibleSchema(Throwable failure) {
         for (Throwable t = failure; t != null; t = t.getCause()) {
             if (t instanceof IncompatibleSchemaException) {
-                materializedView.setInactiveAndReason(((IncompatibleSchemaException) t).inactiveReason);
-                return;
+                return (IncompatibleSchemaException) t;
+            }
+            for (Throwable suppressed : t.getSuppressed()) {
+                IncompatibleSchemaException found = findIncompatibleSchema(suppressed);
+                if (found != null) {
+                    return found;
+                }
             }
         }
+        return null;
     }
 
     /**

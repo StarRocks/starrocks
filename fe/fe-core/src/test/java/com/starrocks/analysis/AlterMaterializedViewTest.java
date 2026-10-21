@@ -393,6 +393,36 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @Test
+    public void testAlterActiveReportsTheMVWhenItsDefinitionNoLongerAnalyzes() throws Exception {
+        final String mvName = "mv_on_view_unresolved";
+        starRocksAssert.withView("CREATE VIEW view_unresolved as select v1, sum(v2) as k2 from t0 group by v1");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                    "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES('replication_num' = '1')\n" +
+                    "as select v1, k2 from view_unresolved");
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), mvName);
+
+            // k2 is gone from the view, so the definition no longer analyzes
+            connectContext.executeSql("alter view view_unresolved as select v1, sum(v2) as k3 from t0 group by v1");
+            Assertions.assertFalse(mv.isActive());
+
+            // DDLStmtExecutor reports the message of the cause of a RuntimeException, so the failure must not
+            // carry the analysis error as its cause, or the MV and its definition are lost from the message.
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> starRocksAssert.ddl(String.format("alter materialized view %s active", mvName)));
+            Assertions.assertTrue(e.getMessage().contains("Can not active materialized view [" + mvName + "]"),
+                    e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("cannot be resolved"), e.getMessage());
+            Assertions.assertFalse(mv.isActive());
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+            starRocksAssert.dropView("view_unresolved");
+        }
+    }
+
+    @Test
     public void testAlterMVOnView() throws Exception {
         final String mvName = "mv_on_view_1";
         starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
