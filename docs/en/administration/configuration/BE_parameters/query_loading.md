@@ -1533,7 +1533,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int64
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Maximum decoded or decompressed bytes allowed for a single Routine Load Apache Arrow IPC stream message (default 64 MB). If a discrete Arrow IPC message exceeds this limit during decompression or batch decoding, the message is rejected and counted toward `num_rows_filtered` to protect Backend memory.
+- Description: Maximum size, in bytes, that a single Routine Load Apache Arrow IPC stream message may reach once decoded (default 64 MB). The limit applies to decompressed buffers, to the estimated size of the projected columns after conversion (a column that is absent, a null-typed column, a dictionary-encoded column, or a list of NULL elements can be tiny on the wire yet expand into a full column), and to the converted output. A message that exceeds the limit, that fails Arrow validation (corrupt buffers or offsets, out-of-range dictionary indexes, invalid UTF-8), or that fails conversion is rejected as a whole: none of its rows are loaded, and every row it declares is counted toward `num_rows_filtered`.
 - Introduced in: -
 
 ### streaming_load_thread_pool_idle_time_ms

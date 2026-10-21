@@ -18,6 +18,8 @@
 #include <arrow/compute/api.h>
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <limits>
 #include <type_traits>
 
 #include "arrow/array/array_binary.h"
@@ -1459,6 +1461,136 @@ Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeD
                                     type_to_string(lt), arrow_type->name()));
     }
     return Status::OK();
+}
+
+namespace {
+
+int64_t saturating_add(int64_t a, int64_t b) {
+    int64_t out = 0;
+    return __builtin_add_overflow(a, b, &out) ? std::numeric_limits<int64_t>::max() : out;
+}
+
+int64_t saturating_mul(int64_t a, int64_t b) {
+    int64_t out = 0;
+    return __builtin_mul_overflow(a, b, &out) ? std::numeric_limits<int64_t>::max() : out;
+}
+
+constexpr int kMaxEstimateDepth = 64;
+
+int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, int depth) {
+    if (length <= 0) {
+        return 0;
+    }
+    if (depth > kMaxEstimateDepth) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    const arrow::Type::type type_id = array.type_id();
+    switch (type_id) {
+    case arrow::Type::NA:
+        return length;
+    case arrow::Type::BINARY:
+    case arrow::Type::STRING: {
+        const auto& a = static_cast<const arrow::BinaryArray&>(array);
+        const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
+        return saturating_add(saturating_mul(length, sizeof(int32_t)), value_bytes);
+    }
+    case arrow::Type::LARGE_BINARY:
+    case arrow::Type::LARGE_STRING: {
+        const auto& a = static_cast<const arrow::LargeBinaryArray&>(array);
+        const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
+        return saturating_add(saturating_mul(length, sizeof(int64_t)), value_bytes);
+    }
+    case arrow::Type::STRING_VIEW: {
+        const auto& a = static_cast<const arrow::StringViewArray&>(array);
+        int64_t total = saturating_mul(length, sizeof(arrow::BinaryViewType::c_type));
+        for (int64_t i = begin; i < begin + length; ++i) {
+            if (!a.IsNull(i)) total = saturating_add(total, static_cast<int64_t>(a.GetView(i).size()));
+        }
+        return total;
+    }
+    case arrow::Type::LIST:
+    case arrow::Type::MAP: {
+        const auto& a = static_cast<const arrow::ListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(saturating_mul(length, sizeof(int32_t)),
+                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::LARGE_LIST: {
+        const auto& a = static_cast<const arrow::LargeListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(saturating_mul(length, sizeof(int64_t)),
+                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::FIXED_SIZE_LIST: {
+        const auto& a = static_cast<const arrow::FixedSizeListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(length, estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::STRUCT: {
+        const auto& a = static_cast<const arrow::StructArray&>(array);
+        int64_t total = length;
+        for (int i = 0; i < a.num_fields(); ++i) {
+            total = saturating_add(total, estimate_output_bytes(*a.field(i), begin, length, depth + 1));
+        }
+        return total;
+    }
+    case arrow::Type::DICTIONARY: {
+        const auto& a = static_cast<const arrow::DictionaryArray&>(array);
+        const auto& dictionary_type = static_cast<const arrow::DictionaryType&>(*array.type());
+        const auto& index_type = static_cast<const arrow::FixedWidthType&>(*dictionary_type.index_type());
+        const int64_t index_bytes = saturating_mul(length, std::max<int64_t>(1, index_type.bit_width() / 8));
+        const std::shared_ptr<arrow::Array> dictionary = a.dictionary();
+        const int64_t dictionary_length = dictionary->length();
+        if (dictionary_length <= 0) {
+            return index_bytes;
+        }
+        // Expansion is what the converters materialize per row. Binary-like dictionaries are summed exactly because
+        // a single huge value repeated by many indices is the classic amplification.
+        int64_t expanded = 0;
+        const arrow::Type::type value_id = dictionary->type_id();
+        if (value_id == arrow::Type::BINARY || value_id == arrow::Type::STRING) {
+            const auto& values = static_cast<const arrow::BinaryArray&>(*dictionary);
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int32_t)));
+            }
+        } else if (value_id == arrow::Type::LARGE_BINARY || value_id == arrow::Type::LARGE_STRING) {
+            const auto& values = static_cast<const arrow::LargeBinaryArray&>(*dictionary);
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int64_t)));
+            }
+        } else {
+            const int64_t dictionary_bytes = estimate_output_bytes(*dictionary, 0, dictionary_length, depth + 1);
+            const int64_t per_value = dictionary_bytes == std::numeric_limits<int64_t>::max()
+                                              ? dictionary_bytes
+                                              : (dictionary_bytes + dictionary_length - 1) / dictionary_length;
+            expanded = saturating_mul(length, per_value);
+        }
+        return saturating_add(index_bytes, expanded);
+    }
+    default:
+        break;
+    }
+    if (arrow::is_fixed_width(type_id)) {
+        const auto& fixed = static_cast<const arrow::FixedWidthType&>(*array.type());
+        return saturating_mul(length, std::max<int64_t>(1, fixed.bit_width() / 8));
+    }
+    // Layouts without a dedicated rule: charge a pointer-sized value per row.
+    return saturating_mul(length, 8);
+}
+
+} // namespace
+
+int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length) {
+    return estimate_output_bytes(array, begin, length, 0);
 }
 
 void ArrowConvertContext::clear_current_column() {

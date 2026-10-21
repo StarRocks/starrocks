@@ -24,8 +24,10 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "arrow/array/builder_base.h"
 #include "arrow/type.h"
@@ -2697,6 +2699,180 @@ PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
 
     std::unique_ptr<arrow::MemoryPool> base_pool = std::move(pool_ptr);
     base_pool.reset();
+}
+
+namespace {
+
+std::shared_ptr<arrow::Array> make_int32_array(const std::vector<int32_t>& values) {
+    arrow::Int32Builder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return array;
+}
+
+std::shared_ptr<arrow::Array> make_offsets32(const std::vector<int32_t>& offsets) {
+    return make_int32_array(offsets);
+}
+
+std::shared_ptr<arrow::Array> make_string_array(const std::vector<std::string>& values) {
+    arrow::StringBuilder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return array;
+}
+
+int64_t estimate_all(const std::shared_ptr<arrow::Array>& array) {
+    return estimate_arrow_array_output_bytes(*array, 0, array->length());
+}
+
+} // namespace
+
+TEST(ArrowOutputSizeEstimateTest, FixedWidthAndNullTypes) {
+    EXPECT_EQ(16, estimate_all(make_int32_array({1, 2, 3, 4})));
+
+    arrow::BooleanBuilder bool_builder;
+    ASSERT_TRUE(bool_builder.AppendValues(std::vector<bool>(8, true)).ok());
+    std::shared_ptr<arrow::Array> bools;
+    ASSERT_TRUE(bool_builder.Finish(&bools).ok());
+    EXPECT_EQ(8, estimate_all(bools));
+
+    // A NullArray occupies nothing on the wire but still materializes one value per row.
+    EXPECT_EQ(2'000'000'000, estimate_all(std::make_shared<arrow::NullArray>(2'000'000'000)));
+    EXPECT_EQ(0, estimate_arrow_array_output_bytes(*make_int32_array({1}), 0, 0));
+}
+
+TEST(ArrowOutputSizeEstimateTest, BinaryLikeTypes) {
+    // 2 rows * 4-byte offsets + 5 value bytes.
+    EXPECT_EQ(13, estimate_all(make_string_array({"ab", "cde"})));
+
+    arrow::LargeStringBuilder large_builder;
+    ASSERT_TRUE(large_builder.AppendValues({"ab", "cde"}).ok());
+    std::shared_ptr<arrow::Array> large;
+    ASSERT_TRUE(large_builder.Finish(&large).ok());
+    EXPECT_EQ(2 * 8 + 5, estimate_all(large));
+
+    arrow::StringViewBuilder view_builder;
+    ASSERT_TRUE(view_builder.Append(std::string(100, 'x')).ok());
+    ASSERT_TRUE(view_builder.Append("y").ok());
+    ASSERT_TRUE(view_builder.AppendNull().ok());
+    std::shared_ptr<arrow::Array> views;
+    ASSERT_TRUE(view_builder.Finish(&views).ok());
+    EXPECT_EQ(3 * 16 + 101, estimate_all(views));
+}
+
+TEST(ArrowOutputSizeEstimateTest, NestedTypesFollowTheReferencedChildRange) {
+    auto values = make_int32_array({1, 2, 3});
+    auto list = arrow::ListArray::FromArrays(*make_offsets32({0, 2, 3}), *values).ValueOrDie();
+    // 2 rows * 4-byte offsets + 3 ints.
+    EXPECT_EQ(2 * 4 + 12, estimate_all(list));
+    // Slicing only charges the child range the slice references.
+    EXPECT_EQ(1 * 4 + 4, estimate_arrow_array_output_bytes(*list, 1, 1));
+    EXPECT_EQ(1 * 4 + 4, estimate_all(list->Slice(1, 1)));
+
+    arrow::Int64Builder offsets64_builder;
+    ASSERT_TRUE(offsets64_builder.AppendValues({0, 2, 3}).ok());
+    std::shared_ptr<arrow::Array> offsets64;
+    ASSERT_TRUE(offsets64_builder.Finish(&offsets64).ok());
+    auto large_list = arrow::LargeListArray::FromArrays(*offsets64, *values).ValueOrDie();
+    EXPECT_EQ(2 * 8 + 12, estimate_all(large_list));
+
+    auto fixed_values = make_int32_array({1, 2, 3, 4, 5, 6});
+    auto fixed_list = arrow::FixedSizeListArray::FromArrays(fixed_values, 2).ValueOrDie();
+    EXPECT_EQ(3 + 24, estimate_all(fixed_list));
+
+    auto strings = make_string_array({"x", "yz"});
+    auto ints = make_int32_array({1, 2});
+    auto struct_array = arrow::StructArray::Make({ints, strings}, std::vector<std::string>{"a", "b"}).ValueOrDie();
+    EXPECT_EQ(2 + 8 + (2 * 4 + 3), estimate_all(struct_array));
+
+    auto keys = make_int32_array({1, 2, 3});
+    auto items = make_int32_array({4, 5, 6});
+    auto map = arrow::MapArray::FromArrays(make_offsets32({0, 2, 3}), keys, items).ValueOrDie();
+    // 2 rows * 4-byte offsets + entries struct (3 + 12 + 12).
+    EXPECT_EQ(2 * 4 + (3 + 12 + 12), estimate_all(map));
+}
+
+TEST(ArrowOutputSizeEstimateTest, ListOverNullChildIsChargedForEveryElement) {
+    // One row whose list holds two million NULL elements: a few bytes on the wire.
+    auto child = std::make_shared<arrow::NullArray>(2'000'000);
+    auto list = arrow::ListArray::FromArrays(*make_offsets32({0, 2'000'000}), *child).ValueOrDie();
+    EXPECT_EQ(4 + 2'000'000, estimate_all(list));
+}
+
+TEST(ArrowOutputSizeEstimateTest, DictionaryChargesTheExpandedValues) {
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+    auto make_dict = [&](const std::vector<std::string>& dict_values, const std::vector<int8_t>& indices,
+                         const std::vector<bool>& valid) {
+        arrow::Int8Builder idx_builder;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (valid[i]) {
+                EXPECT_TRUE(idx_builder.Append(indices[i]).ok());
+            } else {
+                EXPECT_TRUE(idx_builder.AppendNull().ok());
+            }
+        }
+        std::shared_ptr<arrow::Array> idx_array;
+        EXPECT_TRUE(idx_builder.Finish(&idx_array).ok());
+        return std::make_shared<arrow::DictionaryArray>(dict_type, idx_array, make_string_array(dict_values));
+    };
+
+    // 3 one-byte indices + (3+4) + (3+4) + (1+4) expanded bytes; the NULL index expands to nothing.
+    EXPECT_EQ(3 + 7 + 7 + 5, estimate_all(make_dict({"aaa", "b"}, {0, 0, 1}, {true, true, true})));
+    EXPECT_EQ(4 + 7 + 5, estimate_all(make_dict({"aaa", "b"}, {0, 1, 0, 0}, {true, true, false, false})));
+    // A single 1 KiB value referenced 4096 times is ~4 MiB once expanded.
+    EXPECT_GE(estimate_all(
+                      make_dict({std::string(1024, 'x')}, std::vector<int8_t>(4096, 0), std::vector<bool>(4096, true))),
+              4096 * 1024);
+    // An empty dictionary only costs the indices.
+    EXPECT_EQ(2, estimate_all(make_dict({}, {0, 0}, {false, false})));
+
+    arrow::LargeStringBuilder large_dict_builder;
+    ASSERT_TRUE(large_dict_builder.AppendValues({"aaa", "b"}).ok());
+    std::shared_ptr<arrow::Array> large_dict;
+    ASSERT_TRUE(large_dict_builder.Finish(&large_dict).ok());
+    arrow::Int8Builder idx_builder;
+    ASSERT_TRUE(idx_builder.AppendValues({0, 1}).ok());
+    std::shared_ptr<arrow::Array> idx;
+    ASSERT_TRUE(idx_builder.Finish(&idx).ok());
+    auto large_dict_array = std::make_shared<arrow::DictionaryArray>(
+            arrow::dictionary(arrow::int8(), arrow::large_utf8()), idx, large_dict);
+    EXPECT_EQ(2 + (3 + 8) + (1 + 8), estimate_all(large_dict_array));
+
+    // Fixed-width dictionary values are charged at their average width.
+    arrow::Int8Builder int_idx_builder;
+    ASSERT_TRUE(int_idx_builder.AppendValues({0, 1, 2, 0}).ok());
+    std::shared_ptr<arrow::Array> int_idx;
+    ASSERT_TRUE(int_idx_builder.Finish(&int_idx).ok());
+    auto int_dict = std::make_shared<arrow::DictionaryArray>(arrow::dictionary(arrow::int8(), arrow::int32()), int_idx,
+                                                             make_int32_array({10, 20, 30}));
+    EXPECT_EQ(4 + 4 * 4, estimate_all(int_dict));
+}
+
+TEST(ArrowOutputSizeEstimateTest, UnknownLayoutsAndLimitsAreConservative) {
+    // Layouts without a dedicated rule are charged a pointer-sized value per row.
+    arrow::BinaryViewBuilder binary_view_builder;
+    ASSERT_TRUE(binary_view_builder.Append("abc").ok());
+    std::shared_ptr<arrow::Array> binary_views;
+    ASSERT_TRUE(binary_view_builder.Finish(&binary_views).ok());
+    EXPECT_EQ(8, estimate_all(binary_views));
+
+    // Arithmetic saturates instead of overflowing.
+    std::vector<std::shared_ptr<arrow::Array>> huge_children;
+    for (int i = 0; i < 4; ++i) {
+        huge_children.push_back(std::make_shared<arrow::NullArray>(int64_t{1} << 62));
+    }
+    auto huge_struct =
+            arrow::StructArray::Make(huge_children, std::vector<std::string>{"a", "b", "c", "d"}).ValueOrDie();
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), estimate_all(huge_struct));
+
+    // Pathologically deep nesting is treated as unbounded.
+    std::shared_ptr<arrow::Array> nested = make_int32_array({1});
+    for (int i = 0; i < 70; ++i) {
+        nested = arrow::ListArray::FromArrays(*make_offsets32({0, 1}), *nested).ValueOrDie();
+    }
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), estimate_all(nested));
 }
 
 } // namespace starrocks

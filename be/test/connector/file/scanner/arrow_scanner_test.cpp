@@ -19,13 +19,18 @@
 #include <arrow/io/memory.h>
 #include <arrow/ipc/writer.h>
 #include <arrow/util/compression.h>
+#include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <limits>
 #include <memory>
+#include <mutex>
+#include <random>
 #include <sstream>
 #include <utility>
 
@@ -1665,7 +1670,7 @@ struct StreamScannerContext {
 
 static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_context(
         const SlotTypeDescInfoArray& slot_infos, UniqueId load_id, std::shared_ptr<StreamLoadPipe> pipe,
-        int32_t batch_size = 0) {
+        int32_t batch_size = 0, LoadPathMgr* load_path_mgr = nullptr, int64_t log_rejected_record_num = 0) {
     auto ctx = std::make_unique<StreamScannerContext>();
     ctx->load_id = load_id;
     ctx->pipe = pipe;
@@ -1683,9 +1688,13 @@ static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_conte
     if (batch_size != 0) {
         query_options.__set_batch_size(batch_size);
     }
+    if (log_rejected_record_num != 0) {
+        query_options.__set_log_rejected_record_num(log_rejected_record_num);
+    }
     TQueryGlobals query_globals;
     query_globals.time_zone = "UTC";
     ctx->runtime_services.load_stream_mgr = &ctx->load_stream_mgr;
+    ctx->runtime_services.load_path_mgr = load_path_mgr;
     ctx->qes.runtime = &ctx->runtime_services;
 
     ctx->state = ctx->obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &ctx->qes, nullptr));
@@ -3489,9 +3498,8 @@ TEST_F(ArrowScannerTest, TestStreamMultiBatchRuntimeAppendFailureCountsRemaining
     };
 
     // Message 1: 2-batch discrete Arrow IPC stream.
-    // Batch 1 (2 rows) and Batch 2 (3 rows) both pass decode_discrete_message() and validate_batch_schema().
-    // Batch 1 has an out-of-bounds dictionary index (5 >= 2) that fails during append_batch_to_src_chunk()
-    // while Batch 2 (3 rows) is still queued in _discrete_batches, exercising filter_current_discrete_message().
+    // Batch 1 (2 rows) has an out-of-bounds dictionary index (5 >= 2), which ValidateFull() rejects at decode
+    // time. The whole message, including the valid Batch 2 (3 rows), is rejected and all 5 rows are counted.
     {
         auto batch1 = make_dict_batch({0, 5});
         auto batch2 = make_dict_batch({0, 1, 0});
@@ -3895,63 +3903,6 @@ TEST_F(ArrowScannerTest, TestNonDiscreteMultiRangeTransitionAndAllRowsFiltered) 
         EXPECT_FALSE(res.status().ok());
         EXPECT_FALSE(res.status().is_end_of_file());
         scanner.close();
-
-        // Also test when Range 3 flips _is_discrete_pipe to true during ReadNext(&_batch) at line 785 and then fails
-        // initialize_src_chunk at line 786, covering lines 789-791.
-        struct FlipToDiscreteOnBatchReadPipe : public StreamLoadPipe {
-            using StreamLoadPipe::StreamLoadPipe;
-            Status read(uint8_t* data, size_t* data_size, bool* eof) override {
-                if (scanner != nullptr && scanner->_curr_file_reader != nullptr) {
-                    scanner->_is_discrete_pipe = true;
-                }
-                return StreamLoadPipe::read(data, data_size, eof);
-            }
-            ArrowScanner* scanner = nullptr;
-        };
-
-        auto load_id2 = UniqueId::gen_uid();
-        auto empty_pipe2 = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
-        ASSERT_OK(empty_pipe2->finish());
-        DeferOp remove_pipe2([&]() { ctx->load_stream_mgr.remove(load_id2); });
-        ASSERT_OK(ctx->load_stream_mgr.put(load_id2, empty_pipe2));
-
-        auto load_id3 = UniqueId::gen_uid();
-        auto bad_discrete_pipe = std::make_shared<FlipToDiscreteOnBatchReadPipe>(1024 * 1024, 64 * 1024);
-        DeferOp remove_pipe3([&]() { ctx->load_stream_mgr.remove(load_id3); });
-        ASSERT_OK(ctx->load_stream_mgr.put(load_id3, bad_discrete_pipe));
-        {
-            arrow::DayTimeIntervalBuilder interval_builder;
-            ASSERT_ARROW_OK(interval_builder.Append(arrow::DayTimeIntervalType::DayMilliseconds{3, 700}));
-            std::shared_ptr<arrow::Array> interval_array;
-            ASSERT_ARROW_OK(interval_builder.Finish(&interval_array));
-            auto bad_schema = arrow::schema({arrow::field("c0_int", arrow::day_time_interval())});
-            auto bad_batch = arrow::RecordBatch::Make(bad_schema, 1, {interval_array});
-            auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
-            auto writer = arrow::ipc::MakeStreamWriter(stream, bad_schema).ValueOrDie();
-            ASSERT_ARROW_OK(writer->WriteRecordBatch(*bad_batch));
-            ASSERT_ARROW_OK(writer->Close());
-            auto buf = stream->Finish().ValueOrDie();
-
-            ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
-            bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
-            bb->flip_to_read();
-            ASSERT_OK(bad_discrete_pipe->append(std::move(bb)));
-        }
-        ASSERT_OK(bad_discrete_pipe->finish());
-
-        TBrokerRangeDesc discrete_range2 = range2;
-        discrete_range2.__set_load_id(load_id2.to_thrift());
-        TBrokerRangeDesc discrete_range3 = range2;
-        discrete_range3.__set_load_id(load_id3.to_thrift());
-        ctx->broker_scan_range.ranges = {range1, discrete_range2, discrete_range3};
-
-        ArrowScanner discrete_scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
-        bad_discrete_pipe->scanner = &discrete_scanner;
-        ASSERT_OK(discrete_scanner.open());
-        auto discrete_res = discrete_scanner.get_next();
-        EXPECT_TRUE(discrete_res.status().is_end_of_file());
-        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
-        discrete_scanner.close();
     }
 
     // Subcase B & C: Strict-mode CHAR(2) filtering where Batch 1 (2 rows) fills chunk (batch_size = 2) and is
@@ -4210,10 +4161,9 @@ TEST_F(ArrowScannerTest, TestDiscreteHelperDefensiveBranches) {
         scanner._conv_funcs[0]->func = nullptr;
         EXPECT_FALSE(scanner.append_batch_to_src_chunk(&err_chunk).ok());
 
-        // 4. Push bad_batch into _discrete_batches while _is_discrete_pipe is true so get_next() hits lines 734-736
-        // (filter_current_discrete_message + continue), then reads the valid message from the pipe.
+        // 4. With the manually opened discrete reader and stale per-batch state cleared, get_next() reads and
+        // converts the valid message from the pipe.
         scanner._batch.reset();
-        scanner._discrete_batches.push_back(bad_batch);
         auto res = scanner.get_next();
         ASSERT_OK(res.status());
         ASSERT_NE(nullptr, res.value());
@@ -4660,6 +4610,505 @@ TEST_F(ArrowScannerTest, TestTruncatedBodyRowCountAndDictionaryBombAndProfileCou
         EXPECT_TRUE(eof_res.status().is_end_of_file());
         EXPECT_EQ(2, ctx->counter->arrow_messages_rejected);
         EXPECT_EQ(2, ctx->counter->num_rows_filtered);
+        scanner.close();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hostile Routine Load messages.
+//
+// A discrete (Kafka/Pulsar) message is decoded, validated and converted as a unit:
+//   * a rejected message never exposes any of its rows,
+//   * every row it declares is counted as filtered,
+//   * every message is accounted for exactly once (read XOR rejected).
+// ---------------------------------------------------------------------------
+namespace {
+
+class ArrowScannerLogSink final : public google::LogSink {
+public:
+    void send(google::LogSeverity severity, const char* full_filename, const char* base_filename, int line,
+              const google::LogMessageTime& time, const char* message, size_t message_len) override {
+        std::lock_guard lock(_mutex);
+        _messages.emplace_back(severity, std::string(message, message_len));
+    }
+
+    size_t count(google::LogSeverity severity, const std::string& needle) const {
+        std::lock_guard lock(_mutex);
+        return std::count_if(_messages.begin(), _messages.end(), [&](const auto& entry) {
+            return entry.first == severity && entry.second.find(needle) != std::string::npos;
+        });
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::vector<std::pair<google::LogSeverity, std::string>> _messages;
+};
+
+void append_raw_message(const std::shared_ptr<StreamLoadPipe>& pipe, const uint8_t* data, size_t size) {
+    ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(size).value();
+    bb->put_bytes(reinterpret_cast<const char*>(data), size);
+    bb->flip_to_read();
+    ASSERT_OK(pipe->append(std::move(bb)));
+}
+
+std::vector<uint8_t> serialize_ipc_stream(const std::shared_ptr<arrow::Schema>& schema,
+                                          const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
+    auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+    for (const auto& batch : batches) {
+        EXPECT_TRUE(writer->WriteRecordBatch(*batch).ok());
+    }
+    EXPECT_TRUE(writer->Close().ok());
+    auto buf = stream->Finish().ValueOrDie();
+    return std::vector<uint8_t>(buf->data(), buf->data() + buf->size());
+}
+
+void append_ipc_message(const std::shared_ptr<StreamLoadPipe>& pipe, const std::shared_ptr<arrow::Schema>& schema,
+                        const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
+    auto bytes = serialize_ipc_stream(schema, batches);
+    append_raw_message(pipe, bytes.data(), bytes.size());
+}
+
+std::shared_ptr<arrow::RecordBatch> make_int32_batch(const std::shared_ptr<arrow::Schema>& schema,
+                                                     const std::vector<int32_t>& values) {
+    arrow::Int32Builder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return arrow::RecordBatch::Make(schema, static_cast<int64_t>(values.size()), {array});
+}
+
+std::shared_ptr<arrow::RecordBatch> make_string_batch(const std::shared_ptr<arrow::Schema>& schema,
+                                                      const std::vector<std::string>& values) {
+    arrow::StringBuilder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return arrow::RecordBatch::Make(schema, static_cast<int64_t>(values.size()), {array});
+}
+
+// Deliberately unchecked: tests use it to build out-of-range dictionary indices.
+std::shared_ptr<arrow::RecordBatch> make_dictionary_string_batch(const std::shared_ptr<arrow::Schema>& schema,
+                                                                 const std::vector<std::string>& dictionary_values,
+                                                                 const std::vector<int8_t>& indices) {
+    arrow::StringBuilder dict_builder;
+    EXPECT_TRUE(dict_builder.AppendValues(dictionary_values).ok());
+    std::shared_ptr<arrow::Array> dict_array;
+    EXPECT_TRUE(dict_builder.Finish(&dict_array).ok());
+
+    arrow::Int8Builder idx_builder;
+    EXPECT_TRUE(idx_builder.AppendValues(indices).ok());
+    std::shared_ptr<arrow::Array> idx_array;
+    EXPECT_TRUE(idx_builder.Finish(&idx_array).ok());
+
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+    std::shared_ptr<arrow::Array> column = std::make_shared<arrow::DictionaryArray>(dict_type, idx_array, dict_array);
+    return arrow::RecordBatch::Make(schema, static_cast<int64_t>(indices.size()), {column});
+}
+
+// A list<null> column whose offsets describe `offsets.size() - 1` rows over a NullArray child of
+// `offsets.back()` elements. The child has no buffers, so the message stays tiny on the wire.
+std::shared_ptr<arrow::RecordBatch> make_null_list_batch(const std::shared_ptr<arrow::Schema>& schema,
+                                                         const std::vector<int32_t>& offsets) {
+    arrow::Int32Builder offsets_builder;
+    EXPECT_TRUE(offsets_builder.AppendValues(offsets).ok());
+    std::shared_ptr<arrow::Array> offsets_array;
+    EXPECT_TRUE(offsets_builder.Finish(&offsets_array).ok());
+    auto child = std::make_shared<arrow::NullArray>(offsets.back());
+    auto list = arrow::ListArray::FromArrays(*offsets_array, *child);
+    EXPECT_TRUE(list.ok()) << list.status().ToString();
+    std::shared_ptr<arrow::Array> list_array = list.ValueOrDie();
+    return arrow::RecordBatch::Make(schema, static_cast<int64_t>(offsets.size()) - 1, {list_array});
+}
+
+struct HostileMessageCase {
+    SlotTypeDescInfoArray slots;
+    std::shared_ptr<arrow::Schema> hostile_schema;
+    std::vector<std::shared_ptr<arrow::RecordBatch>> hostile_batches;
+    std::shared_ptr<arrow::Schema> good_schema;
+    std::shared_ptr<arrow::RecordBatch> good_batch;
+    int64_t expected_filtered_rows = 0;
+    int64_t decoded_bytes_cap = 64 * 1024 * 1024;
+};
+
+// Feeds `hostile` followed by one valid message and verifies the scanner rejects the hostile one atomically.
+void expect_hostile_message_rejected_atomically(const HostileMessageCase& c) {
+    const int64_t old_limit = config::routine_load_arrow_max_decoded_bytes_per_message;
+    config::routine_load_arrow_max_decoded_bytes_per_message = c.decoded_bytes_cap;
+    DeferOp restore_limit([&]() { config::routine_load_arrow_max_decoded_bytes_per_message = old_limit; });
+
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(c.slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    append_ipc_message(pipe, c.hostile_schema, c.hostile_batches);
+    append_ipc_message(pipe, c.good_schema, {c.good_batch});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    EXPECT_EQ(c.good_batch->num_rows(), res.value()->num_rows())
+            << "no row of the rejected message may be exposed before the valid message";
+
+    auto eof_res = scanner.get_next();
+    EXPECT_TRUE(eof_res.status().is_end_of_file()) << eof_res.status();
+
+    EXPECT_EQ(c.expected_filtered_rows, ctx->counter->num_rows_filtered);
+    EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(1, ctx->counter->arrow_messages_read) << "a rejected message must not also be counted as read";
+    scanner.close();
+}
+
+HostileMessageCase make_int_slot_case() {
+    HostileMessageCase c;
+    c.slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    c.good_schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    c.good_batch = make_int32_batch(c.good_schema, {101, 202});
+    return c;
+}
+
+HostileMessageCase make_string_slot_case() {
+    HostileMessageCase c;
+    c.slots.emplace_back("c0_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    c.good_schema = arrow::schema({arrow::field("c0_str", arrow::utf8())});
+    c.good_batch = make_string_batch(c.good_schema, {"ok1", "ok2"});
+    return c;
+}
+
+} // namespace
+
+TEST_F(ArrowScannerTest, TestStreamRejectsEmptySchemaMessageDeclaringManyRows) {
+    constexpr int64_t kDeclaredRows = 2'000'000;
+    auto c = make_int_slot_case();
+    // Every projected slot is nullable, so the schema validates, yet the batch declares millions of rows
+    // while carrying no buffers at all.
+    c.hostile_schema = arrow::schema(std::vector<std::shared_ptr<arrow::Field>>{});
+    c.hostile_batches = {
+            arrow::RecordBatch::Make(c.hostile_schema, kDeclaredRows, std::vector<std::shared_ptr<arrow::Array>>{})};
+    c.expected_filtered_rows = kDeclaredRows;
+    c.decoded_bytes_cap = 1024 * 1024;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamSaturatesRowCountsDeclaredByHostileMessages) {
+    // Declared row counts come from untrusted IPC metadata. Summing them must saturate instead of wrapping, or the
+    // filtered-rows counter (which drives max_filter_ratio) could go negative.
+    constexpr int64_t kDeclaredRows = std::numeric_limits<int64_t>::max() / 2;
+    auto c = make_int_slot_case();
+    auto empty_schema = arrow::schema(std::vector<std::shared_ptr<arrow::Field>>{});
+
+    SlotTypeDescInfoArray slots = c.slots;
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+    for (int i = 0; i < 3; ++i) {
+        append_ipc_message(
+                pipe, empty_schema,
+                {arrow::RecordBatch::Make(empty_schema, kDeclaredRows, std::vector<std::shared_ptr<arrow::Array>>{})});
+    }
+    append_ipc_message(pipe, c.good_schema, {c.good_batch});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(3, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), ctx->counter->num_rows_filtered);
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsNullTypeColumnDeclaringManyRows) {
+    constexpr int64_t kDeclaredRows = 2'000'000;
+    auto c = make_int_slot_case();
+    c.hostile_schema = arrow::schema({arrow::field("c0_int", arrow::null())});
+    c.hostile_batches = {arrow::RecordBatch::Make(c.hostile_schema, kDeclaredRows,
+                                                  {std::make_shared<arrow::NullArray>(kDeclaredRows)})};
+    c.expected_filtered_rows = kDeclaredRows;
+    c.decoded_bytes_cap = 1024 * 1024;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsNestedNullChildDeclaringManyElements) {
+    constexpr int32_t kChildElements = 2'000'000;
+    HostileMessageCase c;
+    c.slots.emplace_back("c0_arr", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)),
+                         true);
+    c.hostile_schema = arrow::schema({arrow::field("c0_arr", arrow::list(arrow::null()))});
+    // One top-level row whose list holds two million NULL elements.
+    c.hostile_batches = {make_null_list_batch(c.hostile_schema, {0, kChildElements})};
+    c.good_schema = c.hostile_schema;
+    c.good_batch = make_null_list_batch(c.good_schema, {0, 1, 2});
+    c.expected_filtered_rows = 1;
+    c.decoded_bytes_cap = 1024 * 1024;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsDictionaryExpansionBeyondOutputBudget) {
+    auto c = make_string_slot_case();
+    auto dict_schema = arrow::schema({arrow::field("c0_str", arrow::dictionary(arrow::int8(), arrow::utf8()))});
+    // 4096 indices over a single 1 KiB value: tiny on the wire, 4 MiB once expanded.
+    c.hostile_schema = dict_schema;
+    c.hostile_batches = {
+            make_dictionary_string_batch(dict_schema, {std::string(1024, 'x')}, std::vector<int8_t>(4096, 0))};
+    c.expected_filtered_rows = 4096;
+    c.decoded_bytes_cap = 1024 * 1024;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsMessageWhenLaterBatchHasOutOfRangeDictionaryIndex) {
+    auto c = make_string_slot_case();
+    auto dict_schema = arrow::schema({arrow::field("c0_str", arrow::dictionary(arrow::int8(), arrow::utf8()))});
+    // The first batch alone fills more than one chunk; the defect is only in the second batch.
+    c.hostile_schema = dict_schema;
+    c.hostile_batches = {make_dictionary_string_batch(dict_schema, {"a", "b"}, std::vector<int8_t>(5000, 0)),
+                         make_dictionary_string_batch(dict_schema, {"a", "b"}, {0, 7})};
+    c.expected_filtered_rows = 5002;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsMessageWithInvalidUtf8) {
+    auto c = make_string_slot_case();
+    const int32_t offsets[] = {0, 1, 2, 3};
+    auto offsets_buf = arrow::Buffer::FromString(std::string(reinterpret_cast<const char*>(offsets), sizeof(offsets)));
+    auto data_buf = arrow::Buffer::FromString(std::string("\xff\xfe\xfd", 3));
+    std::shared_ptr<arrow::Array> bad_strings = std::make_shared<arrow::StringArray>(3, offsets_buf, data_buf);
+    c.hostile_schema = c.good_schema;
+    c.hostile_batches = {arrow::RecordBatch::Make(c.hostile_schema, 3, {bad_strings})};
+    c.expected_filtered_rows = 3;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsWholeMessageWhenConvertedOutputExceedsBudget) {
+    auto c = make_int_slot_case();
+    // Estimated output is 4 bytes per row (800,000 B) which fits the 900,000 B budget, but a nullable INT
+    // column really materializes 5 bytes per row, so the cap is only crossed while converting later chunks.
+    // Chunks converted before that point must not leak out of the rejected message.
+    c.hostile_schema = c.good_schema;
+    c.hostile_batches = {make_int32_batch(c.hostile_schema, std::vector<int32_t>(200'000, 7))};
+    c.expected_filtered_rows = 200'000;
+    c.decoded_bytes_cap = 900'000;
+    expect_hostile_message_rejected_atomically(c);
+}
+
+TEST_F(ArrowScannerTest, TestStreamMissingNullableColumnLoadsNulls) {
+    // Matches JSON/Avro/CSV: a column absent from the payload is NULL when the destination allows it.
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    auto other_schema = arrow::schema({arrow::field("unrelated", arrow::int32())});
+    append_ipc_message(pipe, other_schema, {make_int32_batch(other_schema, {1, 2, 3})});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    ASSERT_EQ(3, res.value()->num_rows());
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_TRUE(res.value()->columns()[0]->is_null(i));
+    }
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+    EXPECT_EQ(0, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(0, ctx->counter->num_rows_filtered);
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectedMessageWarningsAreCapped) {
+    constexpr int kCorruptMessages = 150;
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    const std::string junk = "corrupt_arrow_ipc_stream";
+    for (int i = 0; i < kCorruptMessages; ++i) {
+        append_raw_message(pipe, reinterpret_cast<const uint8_t*>(junk.data()), junk.size());
+    }
+    auto good_schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    append_ipc_message(pipe, good_schema, {make_int32_batch(good_schema, {1, 2})});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScannerLogSink sink;
+    google::AddLogSink(&sink);
+    DeferOp remove_sink([&] { google::RemoveLogSink(&sink); });
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    scanner.close();
+
+    // Counters stay exact even though the log is capped.
+    EXPECT_EQ(kCorruptMessages, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(kCorruptMessages, ctx->counter->num_rows_filtered);
+    // Same cap as the error log (101 entries) plus a single "suppressed" notice.
+    const size_t warnings = sink.count(google::GLOG_WARNING, "Arrow routine load:");
+    EXPECT_GE(warnings, 1u);
+    EXPECT_LE(warnings, 102u);
+    EXPECT_EQ(1u, sink.count(google::GLOG_WARNING, "suppressed"));
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectedRecordsHonorUserCapBeyondErrorLogCap) {
+    constexpr int kCorruptMessages = 150;
+    LoadPathMgr load_path_mgr({(_tmp_root_dir / "hostile_rejected_record_cap").string()});
+    ASSERT_OK(load_path_mgr.init());
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe, /*batch_size=*/0, &load_path_mgr,
+                                               /*log_rejected_record_num=*/1000);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+    ctx->state->set_db("test_db");
+    ctx->state->set_load_label("test_hostile_rejected_record_cap");
+    ctx->state->set_txn_id(54323);
+
+    const std::string junk = "corrupt_arrow_ipc_stream";
+    for (int i = 0; i < kCorruptMessages; ++i) {
+        append_raw_message(pipe, reinterpret_cast<const uint8_t*>(junk.data()), junk.size());
+    }
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    scanner.close();
+
+    // The error log is capped (~100 entries) but rejected records follow log_rejected_record_num only.
+    auto* writer = LoadPathStateHelper::rejected_record_writer(ctx->state);
+    ASSERT_NE(nullptr, writer);
+    std::ifstream rejected_file(writer->file_path());
+    ASSERT_TRUE(rejected_file.is_open());
+    std::string line;
+    int rejected_records = 0;
+    while (std::getline(rejected_file, line)) {
+        if (!line.empty()) ++rejected_records;
+    }
+    EXPECT_EQ(kCorruptMessages, rejected_records);
+}
+
+namespace {
+
+std::vector<uint8_t> mutate_ipc_bytes(const std::vector<uint8_t>& base, std::mt19937& rng) {
+    std::vector<uint8_t> out = base;
+    switch (rng() % 5) {
+    case 0: { // flip up to four random bits
+        const size_t flips = 1 + rng() % 4;
+        for (size_t i = 0; i < flips; ++i) {
+            out[rng() % out.size()] ^= static_cast<uint8_t>(1u << (rng() % 8));
+        }
+        break;
+    }
+    case 1: // truncate
+        out.resize(1 + rng() % out.size());
+        break;
+    case 2: { // overwrite an 8-byte window with random bytes
+        const size_t pos = rng() % out.size();
+        for (size_t i = pos; i < std::min(out.size(), pos + 8); ++i) {
+            out[i] = static_cast<uint8_t>(rng());
+        }
+        break;
+    }
+    case 3: { // delete a short range
+        const size_t pos = rng() % out.size();
+        const size_t len = 1 + rng() % 16;
+        out.erase(out.begin() + pos, out.begin() + std::min(out.size(), pos + len));
+        if (out.empty()) out.push_back(0);
+        break;
+    }
+    default: { // write an extreme 4-byte value (lengths, offsets, counts)
+        const size_t pos = rng() % (out.size() - 3);
+        const uint8_t fill = (rng() % 2) ? 0xFF : 0x7F;
+        for (size_t i = pos; i < pos + 4; ++i) out[i] = fill;
+        break;
+    }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_F(ArrowScannerTest, TestStreamMutatedMessagesAreAccountedForExactlyOnce) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    slots.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    slots.emplace_back("c2_dict", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32()), arrow::field("c1_str", arrow::utf8()),
+                                 arrow::field("c2_dict", arrow::dictionary(arrow::int8(), arrow::utf8()))});
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    for (int b = 0; b < 2; ++b) {
+        arrow::Int32Builder int_builder;
+        arrow::StringBuilder str_builder;
+        for (int i = 0; i < 40; ++i) {
+            ASSERT_ARROW_OK(int_builder.Append(b * 100 + i));
+            ASSERT_ARROW_OK(str_builder.Append("row_" + std::to_string(b * 100 + i)));
+        }
+        std::shared_ptr<arrow::Array> int_array, str_array;
+        ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+        ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+        arrow::StringBuilder dict_builder;
+        ASSERT_ARROW_OK(dict_builder.AppendValues({"red", "green", "blue"}));
+        std::shared_ptr<arrow::Array> dict_values;
+        ASSERT_ARROW_OK(dict_builder.Finish(&dict_values));
+        arrow::Int8Builder idx_builder;
+        for (int i = 0; i < 40; ++i) ASSERT_ARROW_OK(idx_builder.Append(static_cast<int8_t>(i % 3)));
+        std::shared_ptr<arrow::Array> idx_array;
+        ASSERT_ARROW_OK(idx_builder.Finish(&idx_array));
+        std::shared_ptr<arrow::Array> dict_array =
+                std::make_shared<arrow::DictionaryArray>(schema->field(2)->type(), idx_array, dict_values);
+        batches.push_back(arrow::RecordBatch::Make(schema, 40, {int_array, str_array, dict_array}));
+    }
+    const auto base = serialize_ipc_stream(schema, batches);
+    ASSERT_GT(base.size(), 16u);
+
+    std::mt19937 rng(20261022);
+    constexpr int kGroups = 8;
+    constexpr int kMessagesPerGroup = 150;
+    for (int group = 0; group < kGroups; ++group) {
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        for (int m = 0; m < kMessagesPerGroup; ++m) {
+            auto mutated = mutate_ipc_bytes(base, rng);
+            append_raw_message(pipe, mutated.data(), mutated.size());
+        }
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        while (true) {
+            auto res = scanner.get_next();
+            if (res.status().is_end_of_file()) break;
+            ASSERT_TRUE(res.status().ok()) << "group " << group << ": " << res.status();
+            ASSERT_NE(nullptr, res.value());
+        }
+        EXPECT_EQ(kMessagesPerGroup, ctx->counter->arrow_messages_read + ctx->counter->arrow_messages_rejected)
+                << "group " << group << ": every message must be read or rejected exactly once";
+        EXPECT_GE(ctx->counter->num_rows_filtered, ctx->counter->arrow_messages_rejected) << "group " << group;
         scanner.close();
     }
 }

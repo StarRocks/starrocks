@@ -139,6 +139,12 @@ MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_des
 
 const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type);
 
+// Estimates how many bytes StarRocks materializes when array[begin, begin + length) is converted, looking through
+// nested children. The estimate is independent of the array's size on the wire: a NullArray, a dictionary or a list
+// over a NullArray child is tiny on the wire yet expands into a full column. Positions are logical positions of
+// `array`. The array must already have passed arrow::Array::ValidateFull(); the result saturates at INT64_MAX.
+int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length);
+
 Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
                                   std::string_view col_name);
 

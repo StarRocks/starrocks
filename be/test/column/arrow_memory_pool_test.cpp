@@ -89,8 +89,8 @@ TEST(ArrowMemoryPoolTest, RejectsReallocateExceedingLimit) {
 }
 
 TEST(ArrowMemoryPoolTest, PoolBufferDestructionOrderSafetyUnderASan) {
-    // Mirrors ArrowScanner member declaration order:
-    // _discrete_memory_pool declared BEFORE _batch / _discrete_batches
+    // Mirrors ArrowScanner::decode_and_convert_discrete_message(): the pool is declared BEFORE the batches
+    // whose PoolBuffers free into it, so the batches are destroyed first.
     struct ScannerSimulatedState {
         std::unique_ptr<ArrowBoundedMemoryPool> pool;
         std::shared_ptr<arrow::RecordBatch> batch;

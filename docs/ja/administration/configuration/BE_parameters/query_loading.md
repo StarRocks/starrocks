@@ -1463,7 +1463,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 型: Int64
 - 単位: Bytes
 - 変更可能: はい
-- 説明: 単一のRoutine Load Apache Arrow IPCストリームメッセージに対して許可されるデコードまたは解凍後の最大バイト数（デフォルトは64 MB）。個別のArrow IPCメッセージが解凍またはバッチデコード中にこの制限を超えた場合、BEメモリを保護するためにそのメッセージは拒否され、`num_rows_filtered`にカウントされます。
+- 説明: 単一のRoutine Load Apache Arrow IPCストリームメッセージがデコード後に取り得る最大バイト数（デフォルトは64 MB）。この制限は、解凍後のバッファ、変換後の投影列の推定サイズ（存在しない列、null型の列、辞書エンコードされた列、NULL要素のみのリストは、転送時には小さくても完全な列に展開されることがあります）、および変換後の出力に適用されます。制限を超えたメッセージ、Arrowの検証（バッファやオフセットの破損、範囲外の辞書インデックス、不正なUTF-8）に失敗したメッセージ、または変換に失敗したメッセージは、全体として拒否されます。そのメッセージの行は一切ロードされず、宣言されたすべての行が`num_rows_filtered`にカウントされます。
 - 導入バージョン: -
 
 ### streaming_load_thread_pool_idle_time_ms
