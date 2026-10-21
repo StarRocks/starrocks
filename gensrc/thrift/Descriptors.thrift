@@ -621,6 +621,10 @@ struct TIcebergSchemaField {
     // struct subfield missing from a data file; top-level columns use TColumn.default_value instead.
     5: optional string initial_default
 
+    // Names the field may have in data files without field ids, from the table's schema.name-mapping.default
+    // (all names kept across renames). Readers resolve such files by these names instead of the current name.
+    6: optional list<string> mapped_names
+
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }
