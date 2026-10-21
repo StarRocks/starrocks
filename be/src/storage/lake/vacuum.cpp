@@ -1732,8 +1732,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // vacuum can still hold the reclaimed version there, which would make the walk continue
             // through a version whose bundle state is unknown.
             if (!versions_and_states.contains(garbage_version)) {
-                LOG(WARNING) << "Stop garbage walk of tablet_id=" << tablet_id << " at version=" << garbage_version
-                             << ": not in the metadata directory listing";
+                LOG(INFO) << "Stop garbage walk of tablet_id=" << tablet_id << " at version=" << garbage_version
+                          << ": not in the metadata directory listing";
                 break;
             }
             auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
