@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsWithUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
@@ -273,6 +274,17 @@ public abstract class MVTimelinessArbiter {
                     getDroppedTrackedPartitions(mv, baseTable)));
         }
         return baseChangedPartitionNames;
+    }
+
+    protected PCellSortedSet getMvPartitionCellsWithUntrackedRows(Set<Table> refBaseTables,
+                                                                  Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef,
+                                                                  PCellSortedSet mvPartitionCells) {
+        Set<String> untracked = refBaseTables.stream()
+                .flatMap(refBaseTable -> getMvPartitionsWithUntrackedRows(mv, refBaseTable, mvToBaseNameRef).stream())
+                .collect(Collectors.toSet());
+        PCellSortedSet cells = PCellSortedSet.of(mvPartitionCells);
+        cells.retainAllNames(untracked);
+        return cells;
     }
 
     /**
