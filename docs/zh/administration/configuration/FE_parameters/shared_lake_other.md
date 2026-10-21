@@ -622,6 +622,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - 默认值: true

@@ -622,6 +622,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - 導入時期：-
 
+### `star_client_get_shard_info_batch_size`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データクラスターで FE が多数の tablet を担当するコンピュートノードを一度に特定する場合（大きなテーブルに対するクエリやロードの計画時、AutoVacuum によるパーティションのクリーンアップ時、FE による tablet の削除時など）に、1 回の StarMgr リクエストで問い合わせる tablet 数の上限。これを超える問い合わせは、この数以下の tablet を含む複数のリクエストに分割され、順に送信されます。StarMgr は 1 回のリクエストに応答する間 tablet メタデータのロックを保持し、その間は StarMgr のメタデータ変更と、Follower FE での StarMgr メタデータのリプレイがブロックされます。そのため、大きなテーブルの全 tablet を 1 回のリクエストで問い合わせると、数秒間ブロックされることがあります。値を小さくすると 1 回あたりのブロック時間は短くなりますが、リクエスト数は増えます。`1` 未満の値は `1` として扱われます。
+- 導入時期：v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - デフォルト：true
