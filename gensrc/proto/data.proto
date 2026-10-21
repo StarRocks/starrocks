@@ -138,4 +138,7 @@ message SegmentPB {
     // for index
     optional int64 seg_index_data_size = 30;
     repeated SegmentIndexPB seg_indexes = 31;
+    // Bytes of standalone index files (e.g. the vector index .vi) that are counted in
+    // index_size but are not part of the segment file described by data_size.
+    optional int64 standalone_index_size = 32;
 };
