@@ -523,6 +523,13 @@ Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows)
     // Declaration order is load-bearing: the batches hold arrow::PoolBuffers that free into `pool` when they are
     // destroyed, so `pool` must be declared first (destroyed last) and `release` last (runs first).
     ArrowBoundedMemoryPool pool(max_decoded_bytes, _decode_delegate_pool);
+    DeferOp record_decode_allocations([this, &pool]() {
+        const int64_t allocated = pool.total_bytes_allocated();
+        _counter->arrow_decompressed_bytes += allocated;
+        if (_arrow_decompressed_bytes_counter != nullptr) {
+            COUNTER_UPDATE(_arrow_decompressed_bytes_counter, allocated);
+        }
+    });
     std::deque<std::shared_ptr<arrow::RecordBatch>> batches;
     _conv_ctx.memory_pool = &pool;
     DeferOp release([this, &batches]() {
@@ -539,16 +546,10 @@ Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows)
         return convert_status;
     }
 
-    // Single commit point: counters only move once the whole message has been converted. The pool is sampled
-    // here so that dictionary expansion done during conversion is included.
-    const int64_t allocated = pool.total_bytes_allocated();
+    // Single commit point: the message counter only advances once the whole message has been converted.
     _counter->arrow_messages_read++;
-    _counter->arrow_decompressed_bytes += allocated;
     if (_arrow_messages_read_counter != nullptr) {
         COUNTER_UPDATE(_arrow_messages_read_counter, 1);
-    }
-    if (_arrow_decompressed_bytes_counter != nullptr) {
-        COUNTER_UPDATE(_arrow_decompressed_bytes_counter, allocated);
     }
     return Status::OK();
 }
