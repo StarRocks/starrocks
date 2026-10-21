@@ -28,18 +28,11 @@
 #include <numeric>
 #include <optional>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config_ingest_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -53,10 +46,14 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
-#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -236,7 +233,7 @@ protected:
     void publish(int64_t txn_id, bool recover) {
         if (recover) {
             // Only a load reaches the injection point, so make sure this publish does not reuse a cached index.
-            _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+            _update_mgr->try_remove_primary_index_cache(tablet_id());
             _fail_next_index_load = true;
         }
         const int64_t recover_before = recover_count();
@@ -250,7 +247,7 @@ protected:
     }
 
     // Recover is entered once per injected duplicate key; the error-state counter counts exactly those.
-    static int64_t recover_count() { return StorageMetrics::instance()->primary_key_table_error_state_total.value(); }
+    static int64_t recover_count() { return StarRocksMetrics::instance()->primary_key_table_error_state_total.value(); }
 
     // Every row visible at `version`, keyed by c0. A duplicate primary key fails the test.
     Rows read(int64_t version) {
@@ -259,7 +256,7 @@ protected:
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         Rows rows;
-        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
         while (true) {
             chunk->reset();
             auto st = reader->get_next(chunk.get());
@@ -406,13 +403,13 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
     if (flush_index) {
         // Persist the whole index into sstables, as a publish eventually does, in a version of its own.
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+        ASSIGN_OR_ABORT(auto flushed, _update_mgr->flush_pk_memtable(metadata, _version + 1));
         auto next = std::make_shared<TabletMetadata>(*flushed);
         next->set_version(_version + 1);
         ASSERT_GT(next->sstable_meta().sstables_size(), 0);
         ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
         _version++;
-        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+        _update_mgr->try_remove_primary_index_cache(tablet_id());
         metadata = next;
     }
 
@@ -557,7 +554,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
         ASSERT_OK(builder.finalize(next_id()));
     }
     _version++;
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    _update_mgr->try_remove_primary_index_cache(tablet_id());
     ASSERT_EQ(expected.size() - 1, read(_version).size());
 
     // Recover treats the segments as the truth, so key 100 is back.
@@ -633,7 +630,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_shared_segment_read_through_tablet_ra
     }
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*child));
     _version++;
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    _update_mgr->try_remove_primary_index_cache(tablet_id());
     std::erase_if(expected, [](const auto& entry) { return entry.first < kLowerBound; });
     ASSERT_EQ(expected, read(_version));
 
@@ -706,7 +703,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_multi_statement_transaction) {
     for (const auto& load_id : load_ids) {
         info.add_load_ids()->CopyFrom(load_id);
     }
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    _update_mgr->try_remove_primary_index_cache(tablet_id());
     _fail_next_index_load = true;
     std::vector<TxnInfoPB> txns{info};
     auto st = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
