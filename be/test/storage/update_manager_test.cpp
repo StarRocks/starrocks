@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "column/chunk_factory.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/storage_define.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
