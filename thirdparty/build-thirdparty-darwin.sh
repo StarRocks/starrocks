@@ -1281,8 +1281,38 @@ build_cctz() {
     sync_lib64_links
 }
 
+croaringbitmap_version() {
+    local prefix="$1"
+    local header="${prefix}/include/roaring/roaring_version.h"
+
+    [[ -f "${header}" ]] || return 1
+    local ver
+    ver="$(sed -n -E 's/^#define[[:space:]]+ROARING_VERSION[[:space:]]+"([^"]+)".*/\1/p' "${header}" | head -n 1)"
+    if [[ -n "${ver}" ]]; then
+        echo "${ver}"
+        return 0
+    fi
+
+    return 1
+}
+
+verify_croaringbitmap_install() {
+    local prefix="$1"
+    local expected_version="$2"
+    local installed_version
+    installed_version="$(croaringbitmap_version "${prefix}" || true)"
+    [[ -s "${prefix}/lib/libroaring.a" && "${installed_version}" == "${expected_version}" ]] || return 1
+    local hdr
+    for hdr in roaring.h roaring64.h roaring.hh roaring64map.hh roaring_version.h; do
+        [[ -s "${prefix}/include/roaring/${hdr}" ]] || return 1
+    done
+    return 0
+}
+
 build_croaringbitmap() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libroaring.a" && -f "${TP_INCLUDE_DIR}/roaring/roaring.h" ]]; then
+    local expected_version="${CROARINGBITMAP_SOURCE#CRoaring-}"
+
+    if verify_croaringbitmap_install "${TP_INSTALL_DIR}" "${expected_version}"; then
         return 0
     fi
 
@@ -1293,9 +1323,11 @@ build_croaringbitmap() {
     mkdir -p cmake_build
     cd cmake_build
 
-    local force_avx=FALSE
-    if [[ "$(uname -m)" != "arm64" ]]; then
-        force_avx=ON
+    local croaring_c_flags="$(append_flags "${CFLAGS}" "-Wno-error")"
+    local croaring_cxx_flags="$(append_flags "${CXXFLAGS}" "-D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error")"
+    if [[ "$(uname -m)" == "x86_64" ]]; then
+        croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
+        croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
     fi
 
     if ! "${CMAKE_CMD}" .. \
@@ -1306,22 +1338,26 @@ build_croaringbitmap() {
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DROARING_BUILD_STATIC=ON \
         -DENABLE_ROARING_TESTS=OFF \
+        -DENABLE_ROARING_BENCHMARKS=OFF \
         -DROARING_DISABLE_NATIVE=ON \
-        -DFORCE_AVX="${force_avx}" \
-        -DROARING_DISABLE_AVX512=ON \
+        -DFORCE_AVX=${FORCE_AVX:-OFF} \
+        -DROARING_DISABLE_AVX512=${ROARING_DISABLE_AVX512:-OFF} \
         -DROARING_USE_CPM=OFF \
-        -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-Wno-error")" \
-        -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error")" \
+        -DCMAKE_C_FLAGS="${croaring_c_flags}" \
+        -DCMAKE_CXX_FLAGS="${croaring_cxx_flags}" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5; then
         cd ..
+        rm -rf "${TP_DIR}/build/croaringbitmap" "${TP_INSTALL_DIR}/lib/libroaring.a" "${TP_INCLUDE_DIR}/roaring"
         mkdir -p "${TP_DIR}/build/croaringbitmap"
         local object_files=()
         local include_flags="-I./include -I./src"
         local src_file
         for src_file in src/*.c src/*/*.c; do
             [[ -f "${src_file}" ]] || continue
-            local obj_file="${TP_DIR}/build/croaringbitmap/$(basename "${src_file}" .c).o"
-            "${CC}" ${CFLAGS} ${include_flags} -c "${src_file}" -o "${obj_file}"
+            local obj_name="${src_file#src/}"
+            obj_name="${obj_name//\//_}"
+            local obj_file="${TP_DIR}/build/croaringbitmap/${obj_name%.c}.o"
+            "${CC}" ${croaring_c_flags} ${include_flags} -c "${src_file}" -o "${obj_file}"
             object_files+=("${obj_file}")
         done
         if [[ "${#object_files[@]}" -eq 0 ]]; then
@@ -1331,17 +1367,15 @@ build_croaringbitmap() {
 
         mkdir -p "${TP_INSTALL_DIR}/lib" "${TP_INCLUDE_DIR}/roaring"
         cp -R include/roaring/* "${TP_INCLUDE_DIR}/roaring/"
-        if [[ -f cpp/roaring.hh ]]; then
-            cp cpp/roaring.hh "${TP_INCLUDE_DIR}/roaring/"
-        fi
+        cp cpp/*.hh "${TP_INCLUDE_DIR}/roaring/"
         "${AR}" rcs "${TP_INSTALL_DIR}/lib/libroaring.a" "${object_files[@]}"
         "${RANLIB}" "${TP_INSTALL_DIR}/lib/libroaring.a" >/dev/null 2>&1 || true
     else
+        rm -rf "${TP_INSTALL_DIR}/lib/libroaring.a" "${TP_INCLUDE_DIR}/roaring"
         "${CMAKE_CMD}" --build . -j "${PARALLEL}"
         "${CMAKE_CMD}" --install .
-        if [[ -f ../cpp/roaring.hh ]]; then
-            cp ../cpp/roaring.hh "${TP_INCLUDE_DIR}/roaring/"
-        fi
+        cp ../cpp/*.hh "${TP_INCLUDE_DIR}/roaring/"
+        cd ..
     fi
 
     local shim_src="${TP_DIR}/build/croaringbitmap/hash_memory_impl.cc"
@@ -1351,6 +1385,10 @@ build_croaringbitmap() {
     "${CXX}" ${CXXFLAGS} -c "${shim_src}" -o "${shim_obj}"
     append_object_to_archive "${TP_INSTALL_DIR}/lib/libroaring.a" "${shim_obj}"
     sync_lib64_links
+    if ! verify_croaringbitmap_install "${TP_INSTALL_DIR}" "${expected_version}"; then
+        echo "ERROR: CRoaring ${expected_version} installation verification failed in ${TP_INSTALL_DIR}" >&2
+        exit 1
+    fi
 }
 
 unsupported_package() {
