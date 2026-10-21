@@ -147,7 +147,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         if (joinType.isRightJoin()) {
             dominatedOutputSpec = rightScanDistributionSpec;
         } else if (joinType.isFullOuterJoin()) {
-            dominatedOutputSpec = leftScanDistributionSpec.getNullRelaxSpec(leftScanDistributionSpec.getEquivDesc());
+            dominatedOutputSpec =
+                    leftScanDistributionSpec.getNullRelaxSpec(leftScanDistributionSpec.getEquivDesc().copy());
         } else {
             dominatedOutputSpec = leftScanDistributionSpec;
         }
@@ -181,7 +182,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         if (!joinType.isFullOuterJoin() && !joinType.isRightOuterJoin()) {
             return physicalPropertySet;
         }
-        HashDistributionSpec newSpec = hashDistributionSpec.getNullRelaxSpec(hashDistributionSpec.getEquivDesc());
+        HashDistributionSpec newSpec = hashDistributionSpec.getNullRelaxSpec(hashDistributionSpec.getEquivDesc().copy());
         return new PhysicalPropertySet(DistributionProperty.createProperty(newSpec),
                 physicalPropertySet.getSortProperty(), physicalPropertySet.getCteProperty());
     }
@@ -216,6 +217,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 equivDesc.unionNullRelaxCols(leftCol, rightCol);
             }
         } else if (joinOperator.isFullOuterJoin()) {
+            // Only clear the output descriptor: child properties may be reused by other memo alternatives.
             equivDesc.clearNullStrictUnionFind();
             for (int i = 0; i < leftOnPredicateColumns.size(); i++) {
                 DistributionCol leftCol = leftOnPredicateColumns.get(i);
@@ -369,7 +371,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 dominatedRangeSpec = rightRawSpec;
             } else if (joinType.isFullOuterJoin()) {
                 RangeDistributionSpec leftRange = (RangeDistributionSpec) leftRawSpec;
-                dominatedRangeSpec = leftRange.getNullRelaxSpec(leftRange.getEquivalentDescriptor());
+                dominatedRangeSpec = leftRange.getNullRelaxSpec(leftRange.getEquivalentDescriptor().copy());
             } else {
                 dominatedRangeSpec = leftRawSpec;
             }

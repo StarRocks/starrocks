@@ -343,6 +343,9 @@ class OutputPropertyDeriverRangeTest {
             @Mocked ExpressionContext context) throws Exception {
         RangeDistributionSpec leftSpec = buildRangeSkeleton(100L, 1, 2);
         RangeDistributionSpec rightSpec = buildRangeSkeleton(200L, 1, 2);
+        DistributionCol bucketCol = leftSpec.getColocateColumns().get(0);
+        DistributionCol aliasCol = new DistributionCol(99, true);
+        leftSpec.getEquivalentDescriptor().unionDistributionCols(bucketCol, aliasCol);
         OutputPropertyDeriver deriver = newDeriver(List.of(propertyOf(leftSpec), propertyOf(rightSpec)));
         stubJoinWithEmptyColumns(node, context, JoinOperator.FULL_OUTER_JOIN);
 
@@ -355,6 +358,11 @@ class OutputPropertyDeriverRangeTest {
         assertEquals(leftSpec.getColocateColumns().size(), rangeOut.getColocateColumns().size());
         rangeOut.getColocateColumns().forEach(col ->
                 assertFalse(col.isNullStrict(), "full-outer output colocate cols must be null-relaxed"));
+        assertTrue(leftSpec.getEquivalentDescriptor().isConnected(aliasCol, bucketCol),
+                "deriving the full-outer output must not clear the child's equivalence");
+        assertFalse(rangeOut.getEquivalentDescriptor().isConnected(aliasCol, bucketCol));
+        assertTrue(rangeOut.getEquivalentDescriptor().isConnected(
+                aliasCol.getNullRelaxCol(), bucketCol.getNullRelaxCol()));
         assertEquals(100L, rangeOut.getEquivalentDescriptor().getTableId(),
                 "null-relaxed spec keeps the left-side table id");
     }

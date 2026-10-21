@@ -1,0 +1,41 @@
+-- name: test_full_outer_join_distribution
+CREATE DATABASE full_outer_distribution_${uuid0};
+USE full_outer_distribution_${uuid0};
+CREATE TABLE plant (k VARCHAR(32), v INT)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3 PROPERTIES ("replication_num"="1");
+CREATE TABLE area (k VARCHAR(32), v INT)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3 PROPERTIES ("replication_num"="1");
+CREATE TABLE dim (id INT, k VARCHAR(32))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES ("replication_num"="1");
+INSERT INTO plant VALUES ('a',100),('b',300);
+INSERT INTO area VALUES ('a',10),('b',30);
+INSERT INTO dim VALUES (1,'a'),(2,'b');
+[ORDER]WITH d AS (
+    SELECT k FROM dim WHERE k IN ('a','b') GROUP BY k
+), l AS (
+    SELECT d.k, SUM(f.v) AS v FROM plant f JOIN d ON f.k=d.k GROUP BY d.k
+), r AS (
+    SELECT d.k, SUM(f.v) AS v FROM area f JOIN d ON f.k=d.k GROUP BY d.k
+)
+SELECT COALESCE(l.k,r.k), l.v, r.v, p.v
+FROM l FULL OUTER JOIN r ON l.k <=> r.k
+LEFT JOIN l p ON COALESCE(l.k,r.k) <=> p.k
+ORDER BY 1, 2, 3, 4;
+TRUNCATE TABLE plant;
+TRUNCATE TABLE area;
+TRUNCATE TABLE dim;
+INSERT INTO plant VALUES ('a',100),('b',300),('b',50),('left_only',7),(NULL,9),(NULL,1);
+INSERT INTO area VALUES ('a',10),('right_only',8),(NULL,2),(NULL,3);
+INSERT INTO dim VALUES (1,'a'),(2,'b'),(3,'left_only'),(4,'right_only'),(5,NULL);
+[ORDER]WITH d AS (
+    SELECT k FROM dim GROUP BY k
+), l AS (
+    SELECT d.k, SUM(f.v) AS v FROM plant f JOIN d ON f.k <=> d.k GROUP BY d.k
+), r AS (
+    SELECT d.k, SUM(f.v) AS v FROM area f JOIN d ON f.k <=> d.k GROUP BY d.k
+)
+SELECT COALESCE(l.k,r.k), l.v, r.v, p.v
+FROM l FULL OUTER JOIN r ON l.k <=> r.k
+LEFT JOIN l p ON COALESCE(l.k,r.k) <=> p.k
+ORDER BY 1, 2, 3, 4;
+DROP DATABASE full_outer_distribution_${uuid0};
