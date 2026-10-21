@@ -11,6 +11,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_HELPERS = os.path.join(REPO_ROOT, "build-support", "build_helpers.sh")
@@ -19,6 +20,19 @@ BUILD_HELPERS = os.path.join(REPO_ROOT, "build-support", "build_helpers.sh")
 class TestBuildParallelism(unittest.TestCase):
     def run_bash(self, cmd: str, env_overrides: dict = None) -> str:
         env = os.environ.copy()
+        for key in (
+            "STARROCKS_LINKER",
+            "STARROCKS_GCC_HOME",
+            "STARROCKS_LLVM_HOME",
+            "CC",
+            "CXX",
+            "PARALLEL",
+            "STARROCKS_CGROUP_ROOT",
+            "CMAKE_BUILD_DIR",
+            "CMAKE_BUILD_PREFIX",
+            "BUILD_TYPE",
+        ):
+            env.pop(key, None)
         if env_overrides:
             env.update(env_overrides)
         script = f'. "{BUILD_HELPERS}"\n{cmd}'
@@ -255,6 +269,100 @@ class TestBuildParallelism(unittest.TestCase):
                 },
             )
             self.assertEqual(linker_type, "modern")
+
+    def test_run_bash_sanitizes_ambient_compiler_env(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_dir = os.path.join(tmpdir, "bin")
+            os.makedirs(bin_dir, exist_ok=True)
+            mock_gxx = os.path.join(bin_dir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("#!/bin/sh\necho '14.3.0'\n")
+            os.chmod(mock_gxx, 0o755)
+
+            ambient = {
+                "STARROCKS_GCC_HOME": tmpdir,
+                "STARROCKS_LLVM_HOME": tmpdir,
+                "CC": "gcc",
+                "CXX": os.path.join(tmpdir, "bin", "g++"),
+            }
+            with unittest.mock.patch.dict(os.environ, ambient, clear=False):
+                cmd = """
+                starrocks_is_darwin() { return 1; }
+                uname() { echo "x86_64"; }
+                g++() { echo "13.2.0"; }
+                ldd() { echo "ldd (GNU libc) 2.17"; }
+                ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+                starrocks_detect_linker_type
+                """
+                linker_type = self.run_bash(cmd)
+                self.assertEqual(linker_type, "legacy")
+
+    def test_detect_linker_type_version_14_0_0_is_legacy(self):
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        g++() { echo "14.0.0"; }
+        ldd() { echo "ldd (GNU libc) 2.17"; }
+        ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+        starrocks_detect_linker_type
+        """
+        linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
+        self.assertEqual(linker_type, "legacy")
+
+    def test_detect_linker_type_version_14_0_1_is_modern(self):
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        g++() { echo "14.0.1"; }
+        ldd() { echo "ldd (GNU libc) 2.17"; }
+        ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+        starrocks_detect_linker_type
+        """
+        linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
+        self.assertEqual(linker_type, "modern")
+
+    def test_detect_linker_type_queries_dumpfullversion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cxx_modern = os.path.join(tmpdir, "mock_cxx_modern")
+            with open(cxx_modern, "w") as f:
+                f.write(
+                    '#!/bin/sh\ncase "$*" in *-dumpfullversion*) echo "14.3.0" ;; *) echo "14" ;; esac\n'
+                )
+            os.chmod(cxx_modern, 0o755)
+
+            cxx_legacy = os.path.join(tmpdir, "mock_cxx_legacy")
+            with open(cxx_legacy, "w") as f:
+                f.write(
+                    '#!/bin/sh\ncase "$*" in *-dumpfullversion*) echo "14.0.0" ;; *) echo "14" ;; esac\n'
+                )
+            os.chmod(cxx_legacy, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.27"; }
+            starrocks_detect_linker_type
+            """
+            modern_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "CC": "gcc",
+                    "CXX": cxx_modern,
+                },
+            )
+            self.assertEqual(modern_type, "modern")
+
+            legacy_type = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_LINKER": "",
+                    "CC": "gcc",
+                    "CXX": cxx_legacy,
+                },
+            )
+            self.assertEqual(legacy_type, "legacy")
 
     def test_detect_total_ram_gb_unreadable_fallback(self):
         cmd = """

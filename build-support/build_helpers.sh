@@ -149,8 +149,16 @@ starrocks_detect_linker_type() {
             cxx_compiler="g++"
         fi
         local cxx_version
-        cxx_version="$(${cxx_compiler} -dumpversion 2>/dev/null || echo 0)"
-        if [[ "${cxx_version%%.*}" -ge 14 ]]; then
+        cxx_version="$("${cxx_compiler}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" -dumpversion 2>/dev/null || echo 0)"
+        local cxx_major cxx_minor cxx_patch
+        IFS='.' read -r cxx_major cxx_minor cxx_patch <<< "${cxx_version}"
+        cxx_major="${cxx_major%%[^0-9]*}"
+        cxx_minor="${cxx_minor%%[^0-9]*}"
+        cxx_patch="${cxx_patch%%[^0-9]*}"
+        cxx_major="${cxx_major:-0}"
+        cxx_minor="${cxx_minor:-0}"
+        cxx_patch="${cxx_patch:-0}"
+        if [[ "${cxx_major}" -gt 14 ]] || [[ "${cxx_major}" -eq 14 && ( "${cxx_minor}" -gt 0 || "${cxx_patch}" -gt 0 ) ]]; then
             local glibc_version
             glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF; exit}' || true)"
             if [[ -n "${glibc_version}" ]]; then
