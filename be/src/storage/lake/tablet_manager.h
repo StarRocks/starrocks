@@ -422,6 +422,34 @@ private:
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+<<<<<<< HEAD
+=======
+    // Read the physical partition's shared initial-metadata object (tablet id 0, version 1) and
+    // return it stamped with |tablet_id|. |sibling_path| is any per-tablet metadata path in that
+    // partition; only its directory is used.
+    //
+    // The object is per partition, not per tablet, so it is cached under its RESOLVED path whatever
+    // |cache_opts.fill_meta_cache| says, and concurrent misses on one partition collapse into a single
+    // remote read through _shared_initial_metadata_group. Only |skip_meta_cache| (bypass the lookup)
+    // and |fill_data_cache| are honored. The definition says why.
+    StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
+                                                             const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                             const std::shared_ptr<FileSystem>& fs);
+    StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
+    // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
+    StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
+    // Parse (table_id, partition_id, index_id) from StarOS shard properties. Exposed for unit tests.
+    static Status parse_shard_properties(int64_t tablet_id,
+                                         const std::unordered_map<std::string, std::string>& properties,
+                                         int64_t* table_id, int64_t* partition_id, int64_t* index_id);
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Resolve (table_id, partition_id, index_id) of |tablet_id| from its StarOS shard info. NotFound when
+    // the shard does not exist, so a dropped tablet's version 1 reads as missing like any other version.
+    // Exposed for unit tests.
+    static Status resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                           int64_t* index_id);
+#endif // USE_STAROS
+>>>>>>> e74f782 ([BugFix] Return NotFound for version 1 of a dropped lake tablet (#81196))
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
