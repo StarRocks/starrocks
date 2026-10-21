@@ -141,7 +141,7 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
         auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type(),
                                                       arrow::compute::CastOptions::Safe(), &exec_ctx);
         if (!decoded_array_res.ok()) {
-            return Status::InternalError(decoded_array_res.status().ToString());
+            return arrow_status_to_status(decoded_array_res.status());
         }
         return convert_arrow_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0,
                                              chunk_start_idx, chunk_filter, conv_ctx);
@@ -249,9 +249,9 @@ void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, s
 }
 
 template <LogicalType LT, typename = StringOrBinaryGuard<LT>>
-static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
-                                                             ? TypeDescriptor::MAX_VARCHAR_LENGTH
-                                                             : TypeDescriptor::MAX_CHAR_LENGTH;
+static inline constexpr uint32_t binary_max_length =
+        (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY) ? TypeDescriptor::MAX_VARCHAR_LENGTH
+                                                     : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGuard<LT>> {
@@ -1149,8 +1149,7 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
     return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
 
-#define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) \
-    { convert_idx(a, b, t0, t1), &ArrowConverter<a, b, t0, t1>::apply }
+#define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) {convert_idx(a, b, t0, t1), &ArrowConverter<a, b, t0, t1>::apply}
 
 #define ARROW_CONV_ENTRY_CTOR(a, b)                                                                    \
     ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, false, false), ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, false, true), \
@@ -1158,8 +1157,7 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
 
 #define ARROW_CONV_ENTRY(a, ...) DEF_BINARY_RELATION_ENTRY_SEP_COMMA(ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
-#define STRICT_ARROW_CONV_ENTRY_CTOR(a, b) \
-    { a, b }
+#define STRICT_ARROW_CONV_ENTRY_CTOR(a, b) {a, b}
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
@@ -1610,9 +1608,9 @@ arrow::Status ArrowBoundedMemoryPool::Allocate(int64_t size, int64_t alignment, 
     int64_t current = _bytes_allocated.fetch_add(size, std::memory_order_relaxed) + size;
     if (_max_bytes > 0 && current > _max_bytes) {
         _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
-        return arrow::Status::OutOfMemory("Arrow IPC decoded allocation of ", size,
-                                          " bytes exceeds per-message limit of ", _max_bytes,
-                                          " bytes (current allocated: ", current - size, ")");
+        return arrow::Status::CapacityError("Arrow IPC decoded allocation of ", size,
+                                            " bytes exceeds per-message limit of ", _max_bytes,
+                                            " bytes (current allocated: ", current - size, ")");
     }
     arrow::Status st = _delegate->Allocate(size, alignment, out);
     if (!st.ok()) {
@@ -1633,8 +1631,8 @@ arrow::Status ArrowBoundedMemoryPool::Reallocate(int64_t old_size, int64_t new_s
     int64_t current = _bytes_allocated.fetch_add(delta, std::memory_order_relaxed) + delta;
     if (_max_bytes > 0 && delta > 0 && current > _max_bytes) {
         _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
-        return arrow::Status::OutOfMemory("Arrow IPC decoded reallocation of ", new_size,
-                                          " bytes exceeds per-message limit of ", _max_bytes, " bytes");
+        return arrow::Status::CapacityError("Arrow IPC decoded reallocation of ", new_size,
+                                            " bytes exceeds per-message limit of ", _max_bytes, " bytes");
     }
     arrow::Status st = _delegate->Reallocate(old_size, new_size, alignment, ptr);
     if (!st.ok()) {
@@ -1677,6 +1675,16 @@ void ArrowBoundedMemoryPool::update_peak(int64_t current) {
     int64_t prev_peak = _peak_bytes.load(std::memory_order_relaxed);
     while (current > prev_peak && !_peak_bytes.compare_exchange_weak(prev_peak, current, std::memory_order_relaxed)) {
     }
+}
+
+Status arrow_status_to_status(const arrow::Status& st) {
+    if (st.ok()) {
+        return Status::OK();
+    }
+    if (st.IsOutOfMemory()) {
+        return Status::MemoryLimitExceeded(st.ToString());
+    }
+    return Status::InternalError(st.ToString());
 }
 
 } // namespace starrocks

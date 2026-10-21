@@ -3578,7 +3578,7 @@ TEST_F(ArrowScannerTest, TestArrowBoundedMemoryPoolOperationsInScannerSuite) {
     EXPECT_EQ(1, pool.num_allocations());
 
     uint8_t* over_buf = nullptr;
-    EXPECT_TRUE(pool.Allocate(1024, &over_buf).IsOutOfMemory());
+    EXPECT_TRUE(pool.Allocate(1024, &over_buf).IsCapacityError());
     EXPECT_EQ(256, pool.bytes_allocated());
 
     EXPECT_TRUE(pool.Reallocate(256, -1, &buf).IsInvalid());
@@ -3592,7 +3592,7 @@ TEST_F(ArrowScannerTest, TestArrowBoundedMemoryPoolOperationsInScannerSuite) {
     EXPECT_EQ(512, pool.max_memory());
     EXPECT_EQ(512, pool.total_bytes_allocated());
 
-    EXPECT_TRUE(pool.Reallocate(128, 2048, &buf).IsOutOfMemory());
+    EXPECT_TRUE(pool.Reallocate(128, 2048, &buf).IsCapacityError());
     EXPECT_EQ(128, pool.bytes_allocated());
 
     pool.Free(buf, 128);
@@ -3601,9 +3601,9 @@ TEST_F(ArrowScannerTest, TestArrowBoundedMemoryPoolOperationsInScannerSuite) {
     ArrowBoundedMemoryPool inner_pool(16);
     ArrowBoundedMemoryPool delegate_fail_pool(1024, &inner_pool);
     uint8_t* fail_buf = nullptr;
-    EXPECT_TRUE(delegate_fail_pool.Allocate(64, &fail_buf).IsOutOfMemory());
+    EXPECT_TRUE(delegate_fail_pool.Allocate(64, &fail_buf).IsCapacityError());
     EXPECT_EQ(0, delegate_fail_pool.bytes_allocated());
-    EXPECT_TRUE(delegate_fail_pool.Reallocate(0, 64, &fail_buf).IsOutOfMemory());
+    EXPECT_TRUE(delegate_fail_pool.Reallocate(0, 64, &fail_buf).IsCapacityError());
     EXPECT_EQ(0, delegate_fail_pool.bytes_allocated());
 
     // Also exercise batch_count metadata overhead cap in decode_discrete_message() when uncompressed batches
@@ -4461,7 +4461,7 @@ TEST_F(ArrowScannerTest, TestTruncatedBodyRowCountAndDictionaryBombAndProfileCou
 
         // Message 1: dictionary(int8, utf8) with 1 string of 128 bytes and 512 rows referencing index 0.
         // ReadNext succeeds (< 2 KB allocated), but arrow::compute::Cast during convert_arrow_array_to_column
-        // attempts to allocate > 64 KB of expanded string data and fails with OutOfMemory from ArrowBoundedMemoryPool.
+        // attempts to allocate > 64 KB of expanded string data and fails with CapacityError from ArrowBoundedMemoryPool.
         {
             auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
             auto dict_schema = arrow::schema({arrow::field("c0_str", dict_type)});
@@ -5143,6 +5143,207 @@ TEST_F(ArrowScannerTest, TestStreamMutatedMessagesAreAccountedForExactlyOnce) {
         EXPECT_GE(ctx->counter->num_rows_filtered, ctx->counter->arrow_messages_rejected) << "group " << group;
         scanner.close();
     }
+}
+
+TEST_F(ArrowScannerTest, TestStreamPropagatesDelegateOutOfMemoryDuringDecompression) {
+    class AlwaysFailingPool final : public arrow::MemoryPool {
+    public:
+        using arrow::MemoryPool::Allocate;
+        using arrow::MemoryPool::Free;
+        using arrow::MemoryPool::Reallocate;
+
+        arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override {
+            return arrow::Status::OutOfMemory("injected");
+        }
+
+        arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override {
+            return arrow::Status::OutOfMemory("injected");
+        }
+
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) override {
+            arrow::default_memory_pool()->Free(buffer, size, alignment);
+        }
+
+        int64_t bytes_allocated() const override { return 0; }
+        int64_t max_memory() const override { return 0; }
+        int64_t total_bytes_allocated() const override { return 0; }
+        int64_t num_allocations() const override { return 0; }
+        std::string backend_name() const override { return "always_failing"; }
+    };
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    auto schema = arrow::schema({arrow::field("c0_bigint", arrow::int64())});
+
+    // Message 1: LZ4-compressed batch with 4096 int64 rows
+    {
+        arrow::Int64Builder builder;
+        for (int64_t i = 0; i < 4096; ++i) {
+            ASSERT_ARROW_OK(builder.Append(42));
+        }
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 4096, {array});
+
+        arrow::ipc::IpcWriteOptions write_options = arrow::ipc::IpcWriteOptions::Defaults();
+        auto codec_res = arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+        ASSERT_ARROW_OK(codec_res.status());
+        write_options.codec = std::move(codec_res).ValueOrDie();
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema, write_options).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Message 2: Valid small uncompressed message (2 rows)
+    {
+        arrow::Int64Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({101, 202}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 2, {array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        EXPECT_OK(pipe->append(std::move(bb)));
+    }
+    EXPECT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    AlwaysFailingPool failing;
+    scanner._decode_delegate_pool = &failing;
+
+    auto res = scanner.get_next();
+    EXPECT_TRUE(res.status().is_mem_limit_exceeded()) << res.status().to_string();
+    EXPECT_EQ(0, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(0, ctx->counter->num_rows_filtered);
+    EXPECT_EQ(0, ctx->counter->arrow_messages_read);
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamPropagatesDelegateOutOfMemoryDuringDictionaryDecode) {
+    class AlwaysFailingPool final : public arrow::MemoryPool {
+    public:
+        using arrow::MemoryPool::Allocate;
+        using arrow::MemoryPool::Free;
+        using arrow::MemoryPool::Reallocate;
+
+        arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override {
+            return arrow::Status::OutOfMemory("injected");
+        }
+
+        arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override {
+            return arrow::Status::OutOfMemory("injected");
+        }
+
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) override {
+            arrow::default_memory_pool()->Free(buffer, size, alignment);
+        }
+
+        int64_t bytes_allocated() const override { return 0; }
+        int64_t max_memory() const override { return 0; }
+        int64_t total_bytes_allocated() const override { return 0; }
+        int64_t num_allocations() const override { return 0; }
+        std::string backend_name() const override { return "always_failing"; }
+    };
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, load_id, pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    // Message 1: dictionary(int8, utf8) with 1 string of 128 bytes and 512 rows referencing index 0
+    {
+        auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+        auto dict_schema = arrow::schema({arrow::field("c0_str", dict_type)});
+
+        arrow::StringBuilder dict_builder;
+        ASSERT_ARROW_OK(dict_builder.Append(std::string(128, 'x')));
+        std::shared_ptr<arrow::Array> dict_values;
+        ASSERT_ARROW_OK(dict_builder.Finish(&dict_values));
+
+        arrow::Int8Builder idx_builder;
+        for (int i = 0; i < 512; ++i) {
+            ASSERT_ARROW_OK(idx_builder.Append(0));
+        }
+        std::shared_ptr<arrow::Array> idx_array;
+        ASSERT_ARROW_OK(idx_builder.Finish(&idx_array));
+
+        std::shared_ptr<arrow::Array> dict_array =
+                std::make_shared<arrow::DictionaryArray>(dict_type, idx_array, dict_values);
+        auto batch = arrow::RecordBatch::Make(dict_schema, 512, {dict_array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, dict_schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+
+    // Message 2: Valid small uncompressed message
+    {
+        auto str_schema = arrow::schema({arrow::field("c0_str", arrow::utf8())});
+        arrow::StringBuilder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({"hello", "world"}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(str_schema, 2, {array});
+
+        auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(stream, str_schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        auto buf = stream->Finish().ValueOrDie();
+
+        ByteBufferPtr bb = ByteBuffer::allocate_with_tracker(buf->size()).value();
+        bb->put_bytes(reinterpret_cast<const char*>(buf->data()), buf->size());
+        bb->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(bb)));
+    }
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    AlwaysFailingPool failing;
+    scanner._decode_delegate_pool = &failing;
+
+    auto res = scanner.get_next();
+    EXPECT_TRUE(res.status().is_mem_limit_exceeded()) << res.status().to_string();
+    EXPECT_EQ(0, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(0, ctx->counter->num_rows_filtered);
+    EXPECT_EQ(0, ctx->counter->arrow_messages_read);
+    scanner.close();
 }
 
 } // namespace starrocks

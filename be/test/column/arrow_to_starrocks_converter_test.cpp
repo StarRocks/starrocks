@@ -2655,7 +2655,7 @@ PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
 
     uint8_t* buf = nullptr;
     EXPECT_TRUE(pool.Allocate(-1, 64, &buf).IsInvalid());
-    EXPECT_TRUE(pool.Allocate(2048, 64, &buf).IsOutOfMemory());
+    EXPECT_TRUE(pool.Allocate(2048, 64, &buf).IsCapacityError());
     EXPECT_EQ(0, pool.bytes_allocated());
 
     delegate.fail_allocate = true;
@@ -2670,7 +2670,7 @@ PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
     EXPECT_EQ(1, pool.num_allocations());
 
     EXPECT_TRUE(pool.Reallocate(256, -1, 64, &buf).IsInvalid());
-    EXPECT_TRUE(pool.Reallocate(256, 2048, 64, &buf).IsOutOfMemory());
+    EXPECT_TRUE(pool.Reallocate(256, 2048, 64, &buf).IsCapacityError());
     EXPECT_EQ(256, pool.bytes_allocated());
 
     delegate.fail_reallocate = true;
@@ -2699,6 +2699,13 @@ PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
 
     std::unique_ptr<arrow::MemoryPool> base_pool = std::move(pool_ptr);
     base_pool.reset();
+}
+
+PARALLEL_TEST(ArrowConverterTest, ArrowStatusToStatusMapping) {
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::OK()).ok());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::OutOfMemory("x")).is_mem_limit_exceeded());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::CapacityError("x")).is_internal_error());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::Invalid("x")).is_internal_error());
 }
 
 namespace {

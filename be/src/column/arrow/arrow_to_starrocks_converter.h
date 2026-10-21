@@ -123,7 +123,7 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
                                      Filter* chunk_filter, ArrowConvertContext* conv_ctx);
 
 struct ConvertFuncTree {
-    ConvertFuncTree(ConvertFunc f) : func(f){};
+    ConvertFuncTree(ConvertFunc f) : func(f) {};
     ConvertFuncTree() = default;
     ConvertFunc func = nullptr;
     std::vector<std::string> field_names; // used in struct
@@ -147,5 +147,7 @@ int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t beg
 
 Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
                                   std::string_view col_name);
+
+Status arrow_status_to_status(const arrow::Status& st);
 
 } // namespace starrocks
