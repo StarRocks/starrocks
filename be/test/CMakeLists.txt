@@ -350,6 +350,7 @@ set(EXEC_FILES
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
         ./storage/lake/lake_primary_key_consistency_test.cpp
+    ./storage/lake/lake_primary_key_recover_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/lake/transactions_test.cpp
         ./storage/lake/lake_meta_reader_test.cpp
