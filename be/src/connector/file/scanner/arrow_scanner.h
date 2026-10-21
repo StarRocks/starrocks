@@ -61,9 +61,19 @@ private:
     Status next_batch();
     Status validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch);
     Status validate_ipc_schema(const std::shared_ptr<arrow::Schema>& schema);
-    Status decode_discrete_message(int64_t* filtered_rows);
+
+    // Discrete (Routine Load) input. A message is decoded, validated and converted as a unit into _ready_chunks,
+    // so a rejected message never exposes any of its rows and every message is counted exactly once.
+    StatusOr<ChunkPtr> get_next_discrete();
+    Status read_discrete_message();
+    Status decode_and_convert_discrete_message(int64_t* filtered_rows);
+    Status decode_discrete_message(ArrowBoundedMemoryPool* pool,
+                                   std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t* rows,
+                                   int64_t* filtered_rows);
+    Status convert_discrete_batches(std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t max_bytes);
+    int64_t estimate_batch_output_bytes(const arrow::RecordBatch& batch) const;
     void reject_discrete_message(const std::string& reason, int64_t filtered_rows);
-    void filter_current_discrete_message(const std::string& reason, int64_t pending_rows = 0);
+
     Status initialize_src_chunk(ChunkPtr* chunk);
     Status append_batch_to_src_chunk(ChunkPtr* chunk);
     bool chunk_is_full();
@@ -82,10 +92,10 @@ private:
     int _chunk_file_idx{0};
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
-    // MUST be declared before _discrete_batches and _batch so PoolBuffers inside
-    // RecordBatches free into a live ArrowBoundedMemoryPool during destruction.
-    std::unique_ptr<ArrowBoundedMemoryPool> _discrete_memory_pool;
-    std::deque<std::shared_ptr<arrow::RecordBatch>> _discrete_batches;
+    // Fully converted chunks of the discrete message being drained by get_next_discrete().
+    std::deque<ChunkPtr> _ready_chunks;
+    // Set once the "further warnings suppressed" notice was logged for rejected messages.
+    bool _reject_log_suppressed{false};
     std::shared_ptr<arrow::RecordBatch> _batch;
     const size_t _max_chunk_size;
     size_t _batch_start_idx{0};
