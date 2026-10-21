@@ -63,10 +63,16 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_cache(std::numeric_limits<size_t>::max()),
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
     _update_mem_tracker = mem_tracker;
     const int64_t update_mem_limit = _update_mem_tracker->limit();
     const int64_t preload_mem_limit =
             update_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+=======
+    _primary_key_mem_tracker = mem_tracker;
+    const int64_t primary_key_mem_limit = _primary_key_mem_tracker->limit();
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
+>>>>>>> cd4f63a ([BugFix] Apply lake_pk_preload_memory_limit_percent at runtime (#81164)):be/src/storage/lake/primary_key_manager.cpp
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
@@ -2321,7 +2327,29 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
     return 0;
 }
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
 void UpdateManager::_print_memory_stats() {
+=======
+int64_t PrimaryKeyManager::_calc_preload_mem_limit() const {
+    const int32_t preload_mem_percent = std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * preload_mem_percent / 100;
+}
+
+void PrimaryKeyManager::refresh_preload_mem_limit() {
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
+    _update_state_mem_tracker->set_limit(preload_mem_limit);
+    _compaction_state_mem_tracker->set_limit(preload_mem_limit);
+}
+
+Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
+    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
+    return Status::OK();
+}
+
+void PrimaryKeyManager::_print_memory_stats() {
+>>>>>>> cd4f63a ([BugFix] Apply lake_pk_preload_memory_limit_percent at runtime (#81164)):be/src/storage/lake/primary_key_manager.cpp
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
         LOG(INFO) << strings::Substitute(
