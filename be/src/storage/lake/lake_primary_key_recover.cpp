@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -135,6 +136,13 @@ Status LakePrimaryKeyRecover::delete_duplicates(const PrimaryIndex::DeletesMap& 
             rssid_to_rowset[rowset.id() + get_segment_idx(rowset, i)] = &rowset;
         }
     }
+    auto get_delvec = [&](uint32_t rssid, DelVectorPtr* delvec) {
+        TabletSegmentId tsid;
+        tsid.tablet_id = _tablet->id();
+        tsid.segment_id = rssid;
+        return _tablet->primary_key_mgr()->get_del_vec(tsid, _base_version, _builder, false /* fill cache */, delvec);
+    };
+    std::set<RowsetMetadataPB*> changed_rowsets;
     for (const auto& [rssid, rowids] : duplicates) {
         if (rowids.empty()) {
             continue;
@@ -142,17 +150,24 @@ Status LakePrimaryKeyRecover::delete_duplicates(const PrimaryIndex::DeletesMap& 
         auto it = rssid_to_rowset.find(rssid);
         RETURN_ERROR_IF_FALSE(it != rssid_to_rowset.end(),
                               fmt::format("recover found no rowset for segment {} of tablet {}", rssid, _tablet->id()));
-        TabletSegmentId tsid;
-        tsid.tablet_id = _tablet->id();
-        tsid.segment_id = rssid;
         DelVectorPtr old_delvec;
-        RETURN_IF_ERROR(_tablet->primary_key_mgr()->get_del_vec(tsid, _base_version, _builder, false /* fill cache */,
-                                                                &old_delvec));
+        RETURN_IF_ERROR(get_delvec(rssid, &old_delvec));
         DelVectorPtr new_delvec;
         old_delvec->add_dels_as_new_version(rowids, _metadata->version(), &new_delvec);
         _builder->append_delvec(new_delvec, rssid);
-        it->second->set_num_dels(it->second->num_dels() + rowids.size());
+        changed_rowsets.insert(it->second);
         _num_duplicate_rows += rowids.size();
+    }
+    // Count the deletes of a changed rowset from its delete vectors rather than adding to num_dels: a duplicate
+    // usually means a delete vector lost deletes that num_dels still counts, and a legacy rowset has no num_dels.
+    for (auto* rowset : changed_rowsets) {
+        int64_t num_dels = 0;
+        for (int i = 0; i < rowset->segment_metas_size(); i++) {
+            DelVectorPtr delvec;
+            RETURN_IF_ERROR(get_delvec(rowset->id() + get_segment_idx(*rowset, i), &delvec));
+            num_dels += delvec->cardinality();
+        }
+        rowset->set_num_dels(num_dels);
     }
     return Status::OK();
 }

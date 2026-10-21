@@ -700,6 +700,9 @@ TEST_F(LakePrimaryKeyRecoverTest, duplicate_keys_keep_the_newest_row) {
     apply(&expected, later);
     EXPECT_EQ(expected, read(_version));
     EXPECT_EQ((std::vector<uint32_t>{4, 5, 6, 7}), deleted_rows(_version, first_rssid));
+    // The lost delete vector left num_dels counting its 4 deletes; recover counts them again, not on top.
+    ASSIGN_OR_ABORT(auto recovered, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    EXPECT_EQ(4, recovered->rowsets(0).num_dels());
     for (int i = 1; i < good->rowsets_size(); i++) {
         const auto& rowset = good->rowsets(i);
         for (int j = 0; j < rowset.segment_metas_size(); j++) {
