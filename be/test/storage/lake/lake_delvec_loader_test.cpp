@@ -532,4 +532,23 @@ TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
     ASSERT_EQ(0, manager.compaction_state_mem_tracker()->limit());
 }
 
+TEST_F(LakeDelvecLoaderTest, test_refresh_block_cache_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
+
+    config::lake_pk_index_block_cache_limit_percent = 50;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(500, manager.block_cache()->cache()->get_capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_index_block_cache_limit_percent = 200;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(1000, manager.block_cache()->cache()->get_capacity());
+    config::lake_pk_index_block_cache_limit_percent = -1;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(0, manager.block_cache()->cache()->get_capacity());
+}
+
 } // namespace starrocks::lake

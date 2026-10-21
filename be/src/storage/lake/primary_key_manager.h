@@ -47,6 +47,8 @@ public:
 
     void update_memory_usage();
 
+    void set_capacity(int64_t cache_limit);
+
     Cache* cache() { return _cache.get(); }
 
 private:
@@ -191,6 +193,9 @@ public:
     // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
     void refresh_preload_mem_limit();
 
+    // Re-apply lake_pk_index_block_cache_limit_percent to the primary index sstable block cache.
+    void refresh_block_cache_mem_limit();
+
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
@@ -258,6 +263,7 @@ public:
 
 private:
     int64_t _calc_preload_mem_limit() const;
+    int64_t _calc_block_cache_mem_limit() const;
 
     // print memory tracker state
     void _print_memory_stats();

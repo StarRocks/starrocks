@@ -348,6 +348,16 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return Status::OK();
     });
+    registry->register_callback("lake_pk_index_block_cache_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_block_cache_mem_limit();
+            LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                      << config::lake_pk_index_block_cache_limit_percent
+                      << ", block cache capacity: " << primary_key_mgr->block_cache()->cache()->get_capacity();
+        }
+        return Status::OK();
+    });
     registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
         auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
         if (thread_pool != nullptr) {

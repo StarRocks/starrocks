@@ -99,9 +99,7 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
 
     _index_cache.set_capacity(primary_key_mem_limit);
 
-    const int64_t block_cache_mem_limit =
-            primary_key_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
-    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
 }
 
 PrimaryKeyManager::~PrimaryKeyManager() {
@@ -121,6 +119,12 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
         : _cache(new_lru_cache(cache_limit)) {
     _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::set_capacity(int64_t cache_limit) {
+    _mem_tracker->set_limit(cache_limit);
+    _cache->set_capacity(cache_limit);
+    update_memory_usage();
 }
 
 void PersistentIndexBlockCache::update_memory_usage() {
@@ -2323,6 +2327,16 @@ int64_t PrimaryKeyManager::get_primary_index_data_version(int64_t tablet_id) {
 int64_t PrimaryKeyManager::_calc_preload_mem_limit() const {
     const int32_t preload_mem_percent = std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0);
     return _primary_key_mem_tracker->limit() * preload_mem_percent / 100;
+}
+
+int64_t PrimaryKeyManager::_calc_block_cache_mem_limit() const {
+    const int32_t block_cache_mem_percent =
+            std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * block_cache_mem_percent / 100;
+}
+
+void PrimaryKeyManager::refresh_block_cache_mem_limit() {
+    _block_cache->set_capacity(_calc_block_cache_mem_limit());
 }
 
 void PrimaryKeyManager::refresh_preload_mem_limit() {

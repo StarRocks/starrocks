@@ -150,6 +150,23 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) 
     ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_index_block_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent",
+                                                                 saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "20"));
+    ASSERT_EQ(primary_key_mem_limit * 20 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
+    ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
     auto* registry = ConfigUpdateRegistry::instance();
     auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
