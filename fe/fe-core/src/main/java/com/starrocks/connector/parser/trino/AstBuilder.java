@@ -194,11 +194,8 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-<<<<<<< HEAD
-=======
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
->>>>>>> 4f78cb0 ([BugFix] Fix time zone direction of Trino TIMESTAMP WITH TIME ZONE literals (#81256))
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -1066,24 +1063,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
-<<<<<<< HEAD
-            String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
-            ZoneId zoneId = parseTimeZoneFromString(formattedValue);
-            if (zoneId == null) {
-                return new DateLiteral(formattedValue, Type.DATETIME);
-            } else {
-                return new FunctionCallExpr("convert_tz", List.of(
-                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
-                        new VariableExpr("time_zone"),
-                        new com.starrocks.analysis.StringLiteral(zoneId.toString())
-                ));
-            }
-        } catch (AnalysisException e) {
-=======
             ZoneId zoneId = parseTimeZoneFromString(value);
             LocalDateTime dateTime = parseLocalDateTimeFromString(value);
             if (zoneId == null) {
-                return new DateLiteral(dateTime, DateType.DATETIME);
+                return new DateLiteral(dateTime, Type.DATETIME);
             } else {
                 // The literal is an instant given as a wall clock in `zoneId`. StarRocks has no
                 // TIMESTAMP WITH TIME ZONE, so represent it as the session-time-zone wall clock of
@@ -1096,13 +1079,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     throw new IllegalArgumentException("Invalid TIMESTAMP due to daylight savings transition");
                 }
                 return new FunctionCallExpr("convert_tz", List.of(
-                        new DateLiteral(dateTime, DateType.DATETIME),
-                        new com.starrocks.sql.ast.expression.StringLiteral(toConvertTzZone(zoneId, offsets.get(0))),
+                        new DateLiteral(dateTime, Type.DATETIME),
+                        new com.starrocks.analysis.StringLiteral(toConvertTzZone(zoneId, offsets.get(0))),
                         new VariableExpr("time_zone")
                 ));
             }
-        } catch (IllegalArgumentException | DateTimeException e) {
->>>>>>> 4f78cb0 ([BugFix] Fix time zone direction of Trino TIMESTAMP WITH TIME ZONE literals (#81256))
+        } catch (AnalysisException | IllegalArgumentException | DateTimeException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
     }
