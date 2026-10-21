@@ -69,7 +69,7 @@ TEST(ArrowMemoryPoolTest, RejectsAllocationExceedingLimit) {
 
     uint8_t* buf2 = nullptr;
     arrow::Status st = pool.Allocate(512, &buf2);
-    EXPECT_TRUE(st.IsOutOfMemory()) << st.ToString();
+    EXPECT_TRUE(st.IsCapacityError()) << st.ToString();
     EXPECT_EQ(pool.bytes_allocated(), 768);
 
     pool.Free(buf1, 768);
@@ -82,7 +82,7 @@ TEST(ArrowMemoryPoolTest, RejectsReallocateExceedingLimit) {
     ASSERT_TRUE(pool.Allocate(512, &buf).ok());
 
     arrow::Status st = pool.Reallocate(512, 2048, &buf);
-    EXPECT_TRUE(st.IsOutOfMemory()) << st.ToString();
+    EXPECT_TRUE(st.IsCapacityError()) << st.ToString();
     EXPECT_EQ(pool.bytes_allocated(), 512);
 
     pool.Free(buf, 512);

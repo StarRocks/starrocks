@@ -113,6 +113,7 @@ private:
     RuntimeProfile::Counter* _arrow_messages_rejected_counter = nullptr;
     RuntimeProfile::Counter* _arrow_decompressed_bytes_counter = nullptr;
     RuntimeProfile::Counter* _arrow_decode_timer = nullptr;
+    arrow::MemoryPool* _decode_delegate_pool{arrow::default_memory_pool()};
 };
 
 } // namespace starrocks

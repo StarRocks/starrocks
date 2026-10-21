@@ -522,7 +522,7 @@ Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows)
 
     // Declaration order is load-bearing: the batches hold arrow::PoolBuffers that free into `pool` when they are
     // destroyed, so `pool` must be declared first (destroyed last) and `release` last (runs first).
-    ArrowBoundedMemoryPool pool(max_decoded_bytes);
+    ArrowBoundedMemoryPool pool(max_decoded_bytes, _decode_delegate_pool);
     std::deque<std::shared_ptr<arrow::RecordBatch>> batches;
     _conv_ctx.memory_pool = &pool;
     DeferOp release([this, &batches]() {
@@ -598,6 +598,10 @@ Status ArrowScanner::decode_discrete_message(ArrowBoundedMemoryPool* pool,
         arrow::Status st = reader->ReadNext(&batch);
         if (!st.ok()) {
             batches->clear();
+            Status mapped = arrow_status_to_status(st);
+            if (mapped.is_mem_limit_exceeded()) {
+                return mapped;
+            }
             *filtered_rows = declared_rows();
             std::string read_error = "Arrow IPC read batch error: " + st.ToString();
             if (!schema_error.empty()) {
