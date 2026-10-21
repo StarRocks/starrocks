@@ -28,35 +28,26 @@
 #include <numeric>
 #include <optional>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config_ingest_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
-#include "storage/datum_variant.h"
 #include "storage/del_vector.h"
-#include "storage/lake/compaction_task.h"
-#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
-#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
-#include "storage/types.h"
-#include "storage/variant_tuple.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -135,9 +126,12 @@ public:
             }
         });
         SyncPoint::GetInstance()->EnableProcessing();
+        _old_enable_primary_key_recover = config::enable_primary_key_recover;
+        config::enable_primary_key_recover = true;
     }
 
     void TearDown() override {
+        config::enable_primary_key_recover = _old_enable_primary_key_recover;
         SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
         SyncPoint::GetInstance()->DisableProcessing();
         remove_test_dir_ignore_error();
@@ -236,7 +230,7 @@ protected:
     void publish(int64_t txn_id, bool recover) {
         if (recover) {
             // Only a load reaches the injection point, so make sure this publish does not reuse a cached index.
-            _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+            _update_mgr->try_remove_primary_index_cache(tablet_id());
             _fail_next_index_load = true;
         }
         const int64_t recover_before = recover_count();
@@ -250,7 +244,7 @@ protected:
     }
 
     // Recover is entered once per injected duplicate key; the error-state counter counts exactly those.
-    static int64_t recover_count() { return StorageMetrics::instance()->primary_key_table_error_state_total.value(); }
+    static int64_t recover_count() { return StarRocksMetrics::instance()->primary_key_table_error_state_total.value(); }
 
     // Every row visible at `version`, keyed by c0. A duplicate primary key fails the test.
     Rows read(int64_t version) {
@@ -259,7 +253,7 @@ protected:
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         Rows rows;
-        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
         while (true) {
             chunk->reset();
             auto st = reader->get_next(chunk.get());
@@ -286,6 +280,24 @@ protected:
                     rows->erase(op.key);
                 } else {
                     (*rows)[op.key] = {op.c1, op.c2};
+                }
+            }
+        }
+    }
+
+    // Apply a load's upserts first and then its deletes, which is the order publish uses on this branch.
+    static void apply_upserts_then_deletes(Rows* rows, const std::vector<std::vector<Op>>& batches) {
+        for (const bool deletes : {false, true}) {
+            for (const auto& batch : batches) {
+                for (const auto& op : batch) {
+                    if (op.del != deletes) {
+                        continue;
+                    }
+                    if (op.del) {
+                        rows->erase(op.key);
+                    } else {
+                        (*rows)[op.key] = {op.c1, op.c2};
+                    }
                 }
             }
         }
@@ -341,7 +353,7 @@ protected:
     int64_t _partition_id = 4561;
     int64_t _version = 1;
     bool _fail_next_index_load = false;
-    ConfigResetGuard<bool> _recover_guard{&config::enable_primary_key_recover, true};
+    bool _old_enable_primary_key_recover = false;
 };
 
 // Upserts and deletes in separate loads, recovering on every publish.
@@ -359,10 +371,9 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_in_separate_loads) {
     check_index_agrees(&expected);
 }
 
-// Upserts and deletes of the same keys mixed in one load, each batch in its own segment or del file, so the
-// recovered result depends on replaying deletes at their position between the segments.
+// Upserts and deletes of the same keys mixed in one load, each batch in its own segment or del file. On this
+// branch publish applies a load's deletes after all of its upserts, and recover has to replay them the same way.
 TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
-    ConfigResetGuard<bool> order_guard(&config::lake_enable_pk_preserve_txn_delete_order, true);
     Rows expected;
     const std::vector<std::vector<Op>> base = {upserts(0, 16, 0, 0)};
     publish(write_rows(base), false);
@@ -371,7 +382,7 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
             upserts(0, 8, 100, 100), deletes(4, 12), upserts(6, 10, 200, 200), deletes(0, 2), upserts(14, 18, 300, 300),
     };
     publish(write_rows(mixed), true);
-    apply(&expected, mixed);
+    apply_upserts_then_deletes(&expected, mixed);
     ASSERT_EQ(expected, read(_version));
     // Recover once more from a later load, now replaying the mixed rowset as history.
     const std::vector<std::vector<Op>> later = {upserts(30, 32, 0, 0)};
@@ -380,68 +391,6 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
     ASSERT_EQ(expected, read(_version));
     check_index_agrees(&expected);
 }
-
-// A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
-// keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
-// if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone, so either way the deleted keys must still be
-// deleted afterwards.
-class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
-public:
-    LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
-};
-
-// Disabled: recover skips a del file the compaction output inherited, and has nothing to replay once the
-// compaction dropped it, so the deleted keys come back.
-TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
-    const bool flush_index = GetParam();
-    Rows expected;
-    const std::vector<std::vector<std::vector<Op>>> loads = {
-            {upserts(0, 16, 0, 0)}, {upserts(100, 104, 0, 0)}, {deletes(0, 8)}, {upserts(200, 204, 0, 0)}};
-    for (const auto& load : loads) {
-        publish(write_rows(load), false);
-        apply(&expected, load);
-    }
-    ASSERT_EQ(expected, read(_version));
-    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    if (flush_index) {
-        // Persist the whole index into sstables, as a publish eventually does, in a version of its own.
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
-        auto next = std::make_shared<TabletMetadata>(*flushed);
-        next->set_version(_version + 1);
-        ASSERT_GT(next->sstable_meta().sstables_size(), 0);
-        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
-        _version++;
-        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-        metadata = next;
-    }
-
-    // Compact everything but the first rowset, which still holds the deleted keys.
-    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
-    ASSERT_EQ(4, rowsets.size());
-    const uint32_t first_rowset_id = rowsets[0]->id();
-    std::vector<RowsetPtr> inputs(rowsets.begin() + 1, rowsets.end());
-    const int64_t compaction_txn_id = next_id();
-    auto context =
-            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id(), _version, false, false, nullptr);
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), inputs));
-    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
-    publish(compaction_txn_id, false);
-    ASSERT_EQ(expected, read(_version));
-    ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    ASSERT_EQ(2, metadata->rowsets_size());
-    ASSERT_EQ(first_rowset_id, metadata->rowsets(0).id());
-    // The del file goes with the compaction output only while the sstables do not cover it yet.
-    ASSERT_EQ(flush_index ? 0 : 1, metadata->rowsets(1).del_files_size());
-
-    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
-    publish(write_rows(later), true);
-    apply(&expected, later);
-    EXPECT_EQ(expected, read(_version));
-}
-
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,
-                         testing::Values(false, true));
 
 // A conditional upsert keeps the stored row when the incoming one does not win the condition; the losing new
 // row stays in its segment, masked only by that segment's delete vector. Recover must not bring it back.
@@ -557,7 +506,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
         ASSERT_OK(builder.finalize(next_id()));
     }
     _version++;
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    _update_mgr->try_remove_primary_index_cache(tablet_id());
     ASSERT_EQ(expected.size() - 1, read(_version).size());
 
     // Recover treats the segments as the truth, so key 100 is back.
@@ -592,54 +541,6 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_at
     ASSERT_OK(recover.recover());
     ASSERT_OK(builder.finalize(next_id()));
     _version++;
-    EXPECT_EQ(expected, read(_version));
-}
-
-// A tablet split leaves each child reading the parent's shared segments through its own key range, so a
-// segment iterator over such a segment starts at the first in-range row, not at row 0. Recover must address
-// the rows it replays by their physical row ids, or the delete vectors it rebuilds mark the wrong rows.
-// Disabled: recover numbers the replayed rows from 0 instead of using the row ids the iterator returns.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_shared_segment_read_through_tablet_range) {
-    // Range distribution requires the order-preserving primary key encoding.
-    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
-    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
-    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
-    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
-
-    Rows expected;
-    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(6, 10, 100, 100)}};
-    for (const auto& load : loads) {
-        publish(write_rows(load), false);
-        apply(&expected, load);
-    }
-    // Turn the tablet into a split child that owns [6, +inf) and shares both rowsets' segments with its sibling.
-    constexpr int32_t kLowerBound = 6;
-    ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    auto child = std::make_shared<TabletMetadata>(*base);
-    child->set_version(_version + 1);
-    {
-        auto* range_pb = child->mutable_range();
-        DatumVariant lower(get_type_info(LogicalType::TYPE_INT), Datum(kLowerBound));
-        VariantTuple tuple;
-        tuple.append(lower);
-        tuple.to_proto(range_pb->mutable_lower_bound());
-        range_pb->set_lower_bound_included(true);
-    }
-    for (auto& rowset : *child->mutable_rowsets()) {
-        for (auto& segment : *rowset.mutable_segment_metas()) {
-            segment.set_shared(true);
-        }
-    }
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*child));
-    _version++;
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-    std::erase_if(expected, [](const auto& entry) { return entry.first < kLowerBound; });
-    ASSERT_EQ(expected, read(_version));
-
-    const std::vector<std::vector<Op>> later = {upserts(100, 102, 0, 0)};
-    publish(write_rows(later), true);
-    apply(&expected, later);
     EXPECT_EQ(expected, read(_version));
 }
 
@@ -706,11 +607,10 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_multi_statement_transaction) {
     for (const auto& load_id : load_ids) {
         info.add_load_ids()->CopyFrom(load_id);
     }
-    _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    _update_mgr->try_remove_primary_index_cache(tablet_id());
     _fail_next_index_load = true;
     std::vector<TxnInfoPB> txns{info};
-    auto st = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id()), _version, _version + 1, txns, false)
-                      .status();
+    auto st = publish_version(_tablet_mgr.get(), tablet_id(), _version, _version + 1, txns, false).status();
     _fail_next_index_load = false;
     ASSERT_OK(st);
     _version++;
