@@ -168,6 +168,104 @@ Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+namespace {
+
+cctz::time_zone get_iceberg_timestamptz_session_timezone(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        return context->state()->timezone_obj();
+    }
+    return cctz::utc_time_zone();
+}
+
+bool should_use_iceberg_timestamptz_utc_fast_path(const cctz::time_zone& timezone) {
+    return timezone == cctz::utc_time_zone();
+}
+
+bool normalize_iceberg_timestamptz_to_utc(FunctionContext* context, const TimestampValue& timestamp,
+                                          TimestampValue* normalized_timestamp) {
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, get_iceberg_timestamptz_session_timezone(context))) {
+        return false;
+    }
+
+    normalized_timestamp->from_unixtime(unix_second, usec, cctz::utc_time_zone());
+    return true;
+}
+
+int64_t floor_div_microseconds(int64_t micros, int64_t unit_micros) {
+    int64_t quotient = micros / unit_micros;
+    int64_t remainder = micros % unit_micros;
+    if (remainder != 0 && ((remainder < 0) != (unit_micros < 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+int64_t iceberg_microseconds_since_epoch(const TimestampValue& timestamp) {
+    return timestamp.diff_microsecond(TimeFunctions::unix_epoch);
+}
+
+int64_t iceberg_days_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_DAY);
+}
+
+int64_t iceberg_hours_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_HOUR);
+}
+
+template <typename TransformFn>
+StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* context, const Columns& columns,
+                                                           TransformFn transform_fn) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto datetime_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    bool use_utc_fast_path =
+            should_use_iceberg_timestamptz_utc_fast_path(get_iceberg_timestamptz_session_timezone(context));
+
+    for (int row = 0; row < size; ++row) {
+        if (datetime_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        if (use_utc_fast_path) {
+            result.append(transform_fn(datetime_viewer.value(row)));
+            continue;
+        }
+
+        TimestampValue normalized_timestamp;
+        if (!normalize_iceberg_timestamptz_to_utc(context, datetime_viewer.value(row), &normalized_timestamp)) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(transform_fn(normalized_timestamp));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// A conversion near the DATETIME bounds can leave the 0000..9999 range, e.g.
+// convert_tz('9999-12-31 23:00:00', '-05:00', 'UTC'); return NULL instead of an invalid DATETIME.
+void append_valid_or_null(ColumnBuilder<TYPE_DATETIME>& result, const TimestampValue& ts) {
+    if (ts.is_valid()) {
+        result.append(ts);
+    } else {
+        result.append_null();
+    }
+}
+
+} // namespace
+
+>>>>>>> 9fcee9c ([BugFix] Return NULL when convert_tz leaves the DATETIME range (#81264))
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto from_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -197,7 +295,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
             TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
             ts.from_unix_second(ts.to_unix_second() + offset, usec);
-            result.append(ts);
+            append_valid_or_null(result, ts);
             continue;
         }
 
@@ -216,7 +314,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
                           ts_value2.second(), ts_value2.microsecond());
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -253,9 +351,14 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
             continue;
         }
         TimestampValue ts;
+<<<<<<< HEAD
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
                           ts_value2.second(), ts_value2.microsecond());
         result.append(ts);
+=======
+        ts.from_unix_second(unix_sec + offset, usec);
+        append_valid_or_null(result, ts);
+>>>>>>> 9fcee9c ([BugFix] Return NULL when convert_tz leaves the DATETIME range (#81264))
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
