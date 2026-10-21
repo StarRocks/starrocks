@@ -14,6 +14,8 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include <algorithm>
+
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
@@ -51,6 +53,31 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         }
     }
     return Status::OK();
+}
+
+int64_t CompactionTask::stream_buffer_size(int64_t num_streams) {
+    const int64_t configured = config::lake_compaction_stream_buffer_size_bytes;
+    const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (configured <= kMinStreamBufferSize || mem_limit <= 0 || num_streams <= 0) {
+        return configured;
+    }
+    return std::clamp<int64_t>(mem_limit / 2 / num_streams, kMinStreamBufferSize, configured);
+}
+
+int64_t CompactionTask::stream_buffer_size_for_pass(int64_t num_streams) {
+    const int64_t buffer_size = stream_buffer_size(num_streams);
+    if (buffer_size < config::lake_compaction_stream_buffer_size_bytes) {
+        _context->stats->stream_buffer_shrunk_passes++;
+        VLOG(1) << "Compaction read buffer shrunk. tablet: " << _tablet.id() << ", txn: " << _txn_id
+                << ", streams: " << num_streams << ", buffer: " << buffer_size
+                << ", configured: " << config::lake_compaction_stream_buffer_size_bytes;
+    }
+    return buffer_size;
+}
+
+int64_t CompactionTask::chunk_mem_limit(int64_t stream_buffer_bytes) {
+    const int64_t worker_limit = config::compaction_memory_limit_per_worker;
+    return worker_limit <= 0 ? worker_limit : std::max(worker_limit - stream_buffer_bytes, worker_limit / 4);
 }
 
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {

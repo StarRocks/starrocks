@@ -20,6 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
+#include "storage/compaction_utils.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -357,6 +358,87 @@ TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
     auto rs = rowset->read(input_schema, rs_opts);
     ASSERT_FALSE(rs.ok());
     ASSERT_GE(total_hits.load(), 2);
+}
+
+// Every (input source, column) stream of a read pass gets its own buffer, so the configured size alone
+// would let a large fan-in outgrow the per-worker budget. The buffer shrinks to share half the budget,
+// bounded by kMinStreamBufferSize below and the configured size above.
+TEST_F(LakeRowsetTest, test_stream_buffer_size_shares_half_the_budget) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    const int64_t saved_buffer = config::lake_compaction_stream_buffer_size_bytes;
+    DeferOp restore([&]() {
+        config::compaction_memory_limit_per_worker = saved_mem_limit;
+        config::lake_compaction_stream_buffer_size_bytes = saved_buffer;
+    });
+    const int64_t kMin = CompactionTask::kMinStreamBufferSize;
+    config::compaction_memory_limit_per_worker = 2L * 1024 * 1024 * 1024;
+    config::lake_compaction_stream_buffer_size_bytes = 1024 * 1024;
+
+    // Small fan-in: the configured size fits and is kept.
+    EXPECT_EQ(1024 * 1024, CompactionTask::stream_buffer_size(100));
+    // 500 sources x 5 columns: 2500 MB of buffers would not fit, half the budget is shared out.
+    EXPECT_EQ(config::compaction_memory_limit_per_worker / 2 / 2500, CompactionTask::stream_buffer_size(2500));
+    EXPECT_LE(2500 * CompactionTask::stream_buffer_size(2500), config::compaction_memory_limit_per_worker / 2);
+    // Huge fan-in: never below the floor.
+    EXPECT_EQ(kMin, CompactionTask::stream_buffer_size(1000000));
+    // Nothing to size, no budget, or an already-small configured buffer: unchanged.
+    EXPECT_EQ(1024 * 1024, CompactionTask::stream_buffer_size(0));
+    config::compaction_memory_limit_per_worker = 0;
+    EXPECT_EQ(1024 * 1024, CompactionTask::stream_buffer_size(2500));
+    config::compaction_memory_limit_per_worker = 2L * 1024 * 1024 * 1024;
+    config::lake_compaction_stream_buffer_size_bytes = kMin / 2;
+    EXPECT_EQ(kMin / 2, CompactionTask::stream_buffer_size(1000000));
+    config::lake_compaction_stream_buffer_size_bytes = -1;
+    EXPECT_EQ(-1, CompactionTask::stream_buffer_size(1000000));
+}
+
+// The read buffers are allocated whatever the chunk size is, so they come off the budget before the
+// chunk is sized -- but the chunk always keeps at least a quarter of it.
+TEST_F(LakeRowsetTest, test_chunk_size_charges_stream_buffers) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+
+    const int64_t kLimit = 1000000;
+    config::compaction_memory_limit_per_worker = kLimit;
+    EXPECT_EQ(kLimit, CompactionTask::chunk_mem_limit(0));
+    EXPECT_EQ(kLimit / 2, CompactionTask::chunk_mem_limit(kLimit / 2));
+    EXPECT_EQ(kLimit / 4, CompactionTask::chunk_mem_limit(kLimit * 2));
+    // A non-positive limit means "no memory cap" and stays that way.
+    config::compaction_memory_limit_per_worker = 0;
+    EXPECT_EQ(0, CompactionTask::chunk_mem_limit(kLimit));
+}
+
+// A pass over a large fan-in picks the shrunk buffer for both its own segment loads and the reader it
+// feeds, and counts itself in the task stats.
+TEST_F(LakeRowsetTest, test_vertical_pass_shrinks_stream_buffer) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    const int64_t saved_buffer = config::lake_compaction_stream_buffer_size_bytes;
+    DeferOp restore([&]() {
+        config::compaction_memory_limit_per_worker = saved_mem_limit;
+        config::lake_compaction_stream_buffer_size_bytes = saved_buffer;
+    });
+    config::compaction_memory_limit_per_worker = 2L * 1024 * 1024 * 1024;
+    config::lake_compaction_stream_buffer_size_bytes = 1024 * 1024;
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+
+    // A handful of sources: the configured buffer stays and nothing is counted.
+    task._total_input_segs = 3;
+    ASSERT_OK(task.calculate_chunk_size_for_column_group({0}).status());
+    EXPECT_EQ(1024 * 1024, task._stream_buffer_size);
+    EXPECT_EQ(0, context.stats->stream_buffer_shrunk_passes);
+
+    // A backlog of 5000 sources over a one-column group cannot all have 1 MB.
+    task._total_input_segs = 5000;
+    ASSERT_OK(task.calculate_chunk_size_for_column_group({0}).status());
+    EXPECT_EQ(CompactionTask::stream_buffer_size(5000), task._stream_buffer_size);
+    EXPECT_LT(task._stream_buffer_size, 1024 * 1024);
+    EXPECT_EQ(1, context.stats->stream_buffer_shrunk_passes);
 }
 
 } // namespace starrocks::lake
