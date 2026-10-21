@@ -43,8 +43,38 @@ namespace starrocks::spill {
 // implements for SpillerWriter
 Status SpillerWriter::_decrease_running_flush_tasks() {
     if (_running_flush_tasks.fetch_sub(1) == 1) {
+<<<<<<< HEAD:be/src/exec/spill/spill_components.cpp
         if (_flush_all_callback) {
             RETURN_IF_ERROR(_flush_all_callback());
+=======
+        // Flush-all completion: all flushes are done and the read phase may begin. The callback wrapper
+        // (Spiller::set_flush_all_call_back) runs the client callback, acquires the input stream and
+        // triggers the first restore. The source wakeup must fire after the whole wrapper (so a woken
+        // reader sees the stream), and on the error path too (an error is also a wakeup). That is why the
+        // notify is in a defer around the callback body, not a straight-line call.
+        auto notify = DeferOp([this]() { _spiller->notify_source_observers(); });
+        // Take the callback rather than read it where it sits, so that it runs exactly once.
+        //
+        // set_flush_all_call_back() raises the counter, stores the callback and lowers the counter
+        // again. A flush completing concurrently can sit between the fetch_sub above -- which has
+        // already told it the count reached zero -- and this line, and then it and the installing
+        // thread both see a count of zero and a callback that is set, and the callback runs twice.
+        // Reading the std::function while another thread assigns to it is a data race on its own.
+        //
+        // Every client of this callback holds a reference to a shared context across it and
+        // releases that reference inside: sort, aggregate, hash join and nested loop join all do.
+        // Running it twice releases the reference twice, which closes the context while another
+        // operator is still working against it -- a use-after-free in the sort merge was traced
+        // back to here.
+        FlushAllCallBack callback;
+        {
+            std::lock_guard<std::mutex> guard(_flush_all_callback_mutex);
+            callback = std::move(_flush_all_callback);
+            _flush_all_callback = nullptr;
+        }
+        if (callback) {
+            RETURN_IF_ERROR(callback());
+>>>>>>> 562b78a ([BugFix] Run a spiller's flush-all callback once when a flush finishes concurrently (#81134)):be/src/compute_env/spill/spill_components.cpp
         }
     }
     return Status::OK();
