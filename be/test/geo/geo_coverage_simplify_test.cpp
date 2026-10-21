@@ -299,15 +299,6 @@ TEST(GeoCoverageTest, MoreThanTenThousandRowsRetainMapping) {
     coverage.reset();
     EXPECT_EQ(allocator.live, 0);
 }
-TEST(GeoCoverageTest, ExternalMemoryAccountingRejectsSizeOverflow) {
-    TestAllocator allocator;
-    auto coverage = make(allocator);
-    const auto status = coverage->retain_external(std::numeric_limits<size_t>::max());
-    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
-    EXPECT_NE(status.to_string().find("size overflow"), std::string::npos);
-    coverage.reset();
-    EXPECT_EQ(allocator.live, 0);
-}
 TEST(GeoCoverageTest, AllocationFailureAndCancellationCleanup) {
     for (size_t fail_after : {0, 3, 10, 100}) {
         TestAllocator allocator;

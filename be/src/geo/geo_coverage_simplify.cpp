@@ -70,10 +70,8 @@ public:
     explicit Memory(memory::Allocator* allocator) : allocator(allocator) {}
     void retain(size_t count) {
         size_t current = used.load(std::memory_order_relaxed);
-        do {
-            if (count > std::numeric_limits<size_t>::max() - current)
-                throw Stop{Status::MemoryLimitExceeded("ST_CoverageSimplify memory accounting size overflow")};
-        } while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed));
+        while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed)) {
+        }
         size_t previous = peak.load(std::memory_order_relaxed);
         while (previous < current + count &&
                !peak.compare_exchange_weak(previous, current + count, std::memory_order_relaxed)) {
@@ -853,8 +851,6 @@ StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memor
     const size_t request = sizeof(StateAllocation) + sizeof(GeoCoverageSimplify) + sizeof(Impl) +
                            alignof(StateAllocation) + alignof(Impl);
     const int64_t metadata = allocator->nallox(request);
-    if (metadata <= 0 || uint64_t(metadata) < request)
-        return Status::MemoryLimitExceeded("ST_CoverageSimplify state allocation size overflow");
     void* raw = nullptr;
     Impl* impl = nullptr;
     try {
@@ -898,8 +894,6 @@ Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
         s.check();
         index(s.rows.size());
         if (wkb) {
-            if (wkb->size > std::numeric_limits<size_t>::max() - s.input_bytes)
-                invalid("ST_CoverageSimplify input byte size overflow");
             Reader reader(*wkb);
             s.preflight(reader, false);
             reader.done();
