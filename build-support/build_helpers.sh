@@ -37,33 +37,90 @@ starrocks_detect_parallelism() {
 
     if ! starrocks_is_darwin; then
         local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
-        local cgroup_cores=0
-
-        # 1. cgroup v2: cpu.max contains "quota period" (e.g. "200000 100000" or "max 100000")
-        local cpu_max_content
-        cpu_max_content="$(cat "${cgroup_root}/cpu.max" 2>/dev/null || true)"
-        if [[ -n "${cpu_max_content}" ]]; then
-            local cfs_quota="" cfs_period=""
-            read -r cfs_quota cfs_period <<< "${cpu_max_content}"
-            if [[ -n "${cfs_quota}" && "${cfs_quota}" =~ ^[0-9]+$ && "${cfs_quota}" -gt 0 && \
-                  -n "${cfs_period}" && "${cfs_period}" =~ ^[0-9]+$ && "${cfs_period}" -gt 0 ]]; then
-                cgroup_cores=$(( cfs_quota / cfs_period ))
-                [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
-            fi
+        local proc_cgroup="${STARROCKS_PROC_SELF_CGROUP:-/proc/self/cgroup}"
+        local v2_subpath=""
+        local v1_cpu_subpath=""
+        if [[ -r "${proc_cgroup}" ]]; then
+            local cg_id="" cg_ctrl="" cg_path=""
+            while IFS=: read -r cg_id cg_ctrl cg_path || [[ -n "${cg_id}" ]]; do
+                cg_path="${cg_path% (deleted)}"
+                while [[ "${cg_path}" == */ ]]; do
+                    cg_path="${cg_path%/}"
+                done
+                if [[ -n "${cg_path}" && "${cg_path}" != /* ]]; then
+                    cg_path="/${cg_path}"
+                fi
+                if [[ "${cg_id}" == "0" && -z "${cg_ctrl}" ]]; then
+                    v2_subpath="${cg_path}"
+                elif [[ ",${cg_ctrl}," == *,cpu,* ]]; then
+                    v1_cpu_subpath="${cg_path}"
+                fi
+            done < "${proc_cgroup}"
         fi
 
-        # 2. cgroup v1: cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct/...)
-        if [[ "${cgroup_cores}" -le 0 ]]; then
-            local v1_quota=""
-            v1_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || true)"
-            if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 ]]; then
-                local v1_period
-                v1_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
-                if [[ -n "${v1_period}" && "${v1_period}" =~ ^[0-9]+$ && "${v1_period}" -gt 0 ]]; then
-                    cgroup_cores=$(( v1_quota / v1_period ))
-                    [[ "${cgroup_cores}" -lt 1 ]] && cgroup_cores=1
+        local cgroup_cores=0
+
+        # 1. cgroup v2: walk leaf-to-root cpu.max ("quota period", e.g. "200000 100000" or "max 100000")
+        local cur_subpath="${v2_subpath}"
+        while true; do
+            local cpu_max_file="${cgroup_root}${cur_subpath}/cpu.max"
+            local cpu_max_content=""
+            if [[ -z "${cur_subpath}" ]]; then
+                cpu_max_content="$(cat "${cpu_max_file}" 2>/dev/null || true)"
+            elif [[ -r "${cpu_max_file}" ]]; then
+                cpu_max_content="$(cat "${cpu_max_file}" 2>/dev/null || true)"
+            fi
+            if [[ -n "${cpu_max_content}" ]]; then
+                local cfs_quota="" cfs_period=""
+                read -r cfs_quota cfs_period <<< "${cpu_max_content}"
+                if [[ -n "${cfs_quota}" && "${cfs_quota}" =~ ^[0-9]+$ && "${cfs_quota}" -gt 0 && \
+                      -n "${cfs_period}" && "${cfs_period}" =~ ^[0-9]+$ && "${cfs_period}" -gt 0 ]]; then
+                    local level_cores=$(( cfs_quota / cfs_period ))
+                    [[ "${level_cores}" -lt 1 ]] && level_cores=1
+                    if [[ "${cgroup_cores}" -le 0 || "${level_cores}" -lt "${cgroup_cores}" ]]; then
+                        cgroup_cores="${level_cores}"
+                    fi
                 fi
             fi
+            [[ -z "${cur_subpath}" ]] && break
+            cur_subpath="${cur_subpath%/*}"
+        done
+
+        # 2. cgroup v1: walk leaf-to-root cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct/...)
+        if [[ "${cgroup_cores}" -le 0 ]]; then
+            cur_subpath="${v1_cpu_subpath}"
+            while true; do
+                local v1_quota="" v1_period=""
+                if [[ -z "${cur_subpath}" ]]; then
+                    v1_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || true)"
+                    if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 ]]; then
+                        v1_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                    fi
+                else
+                    local ctrl_dir=""
+                    for ctrl_dir in "${cgroup_root}/cpu" "${cgroup_root}/cpu,cpuacct"; do
+                        if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" ]]; then
+                            v1_quota="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" 2>/dev/null || true)"
+                            if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" ]]; then
+                                v1_period="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                            else
+                                v1_period=100000
+                            fi
+                            break
+                        fi
+                    done
+                fi
+                if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 && \
+                      -n "${v1_period}" && "${v1_period}" =~ ^[0-9]+$ && "${v1_period}" -gt 0 ]]; then
+                    local v1_level_cores=$(( v1_quota / v1_period ))
+                    [[ "${v1_level_cores}" -lt 1 ]] && v1_level_cores=1
+                    if [[ "${cgroup_cores}" -le 0 || "${v1_level_cores}" -lt "${cgroup_cores}" ]]; then
+                        cgroup_cores="${v1_level_cores}"
+                    fi
+                fi
+                [[ -z "${cur_subpath}" ]] && break
+                cur_subpath="${cur_subpath%/*}"
+            done
         fi
 
         if [[ "${cgroup_cores}" -gt 0 && "${cgroup_cores}" -lt "${cpu_count}" ]]; then
@@ -95,22 +152,84 @@ starrocks_detect_total_ram_gb() {
         fi
 
         local cgroup_root="${STARROCKS_CGROUP_ROOT:-/sys/fs/cgroup}"
-        local cgroup_bytes=""
-        cgroup_bytes="$(cat "${cgroup_root}/memory.max" 2>/dev/null || cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
-        if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
-            local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
-            # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
-            if [[ "${cgroup_gb}" -gt 1048576 ]]; then
-                cgroup_gb=0
-            elif [[ "${cgroup_gb}" -lt 1 ]]; then
-                cgroup_gb=1
-            fi
-
-            if [[ "${cgroup_gb}" -gt 0 ]]; then
-                if [[ "${ram_gb_host}" -eq 0 || "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
-                    echo "${cgroup_gb}"
-                    return 0
+        local proc_cgroup="${STARROCKS_PROC_SELF_CGROUP:-/proc/self/cgroup}"
+        local v2_subpath=""
+        local v1_mem_subpath=""
+        if [[ -r "${proc_cgroup}" ]]; then
+            local cg_id="" cg_ctrl="" cg_path=""
+            while IFS=: read -r cg_id cg_ctrl cg_path || [[ -n "${cg_id}" ]]; do
+                cg_path="${cg_path% (deleted)}"
+                while [[ "${cg_path}" == */ ]]; do
+                    cg_path="${cg_path%/}"
+                done
+                if [[ -n "${cg_path}" && "${cg_path}" != /* ]]; then
+                    cg_path="/${cg_path}"
                 fi
+                if [[ "${cg_id}" == "0" && -z "${cg_ctrl}" ]]; then
+                    v2_subpath="${cg_path}"
+                elif [[ ",${cg_ctrl}," == *,memory,* ]]; then
+                    v1_mem_subpath="${cg_path}"
+                fi
+            done < "${proc_cgroup}"
+        fi
+
+        local best_cgroup_gb=0
+        local cur_subpath=""
+        local cgroup_bytes=""
+
+        cur_subpath="${v2_subpath}"
+        while [[ -n "${cur_subpath}" ]]; do
+            if [[ -r "${cgroup_root}${cur_subpath}/memory.max" ]]; then
+                cgroup_bytes="$(cat "${cgroup_root}${cur_subpath}/memory.max" 2>/dev/null || true)"
+                if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+                    local v2_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+                    if [[ "${v2_gb}" -le 1048576 ]]; then
+                        [[ "${v2_gb}" -lt 1 ]] && v2_gb=1
+                        if [[ "${best_cgroup_gb}" -le 0 || "${v2_gb}" -lt "${best_cgroup_gb}" ]]; then
+                            best_cgroup_gb="${v2_gb}"
+                        fi
+                    fi
+                fi
+            fi
+            cur_subpath="${cur_subpath%/*}"
+        done
+
+        cur_subpath="${v1_mem_subpath}"
+        while [[ -n "${cur_subpath}" ]]; do
+            if [[ -r "${cgroup_root}/memory${cur_subpath}/memory.limit_in_bytes" ]]; then
+                cgroup_bytes="$(cat "${cgroup_root}/memory${cur_subpath}/memory.limit_in_bytes" 2>/dev/null || true)"
+                if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+                    local v1_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+                    if [[ "${v1_gb}" -le 1048576 ]]; then
+                        [[ "${v1_gb}" -lt 1 ]] && v1_gb=1
+                        if [[ "${best_cgroup_gb}" -le 0 || "${v1_gb}" -lt "${best_cgroup_gb}" ]]; then
+                            best_cgroup_gb="${v1_gb}"
+                        fi
+                    fi
+                fi
+            fi
+            cur_subpath="${cur_subpath%/*}"
+        done
+
+        cgroup_bytes="$(cat "${cgroup_root}/memory.max" 2>/dev/null || cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
+        if [[ ( -z "${cgroup_bytes}" || ! "${cgroup_bytes}" =~ ^[0-9]+$ ) && -r "${cgroup_root}/memory/memory.limit_in_bytes" ]]; then
+            cgroup_bytes="$(cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
+        fi
+        if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+            local root_cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+            # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
+            if [[ "${root_cgroup_gb}" -le 1048576 ]]; then
+                [[ "${root_cgroup_gb}" -lt 1 ]] && root_cgroup_gb=1
+                if [[ "${best_cgroup_gb}" -le 0 || "${root_cgroup_gb}" -lt "${best_cgroup_gb}" ]]; then
+                    best_cgroup_gb="${root_cgroup_gb}"
+                fi
+            fi
+        fi
+
+        if [[ "${best_cgroup_gb}" -gt 0 ]]; then
+            if [[ "${ram_gb_host}" -eq 0 || "${best_cgroup_gb}" -lt "${ram_gb_host}" ]]; then
+                echo "${best_cgroup_gb}"
+                return 0
             fi
         fi
 
