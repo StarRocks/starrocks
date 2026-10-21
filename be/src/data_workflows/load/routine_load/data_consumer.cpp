@@ -74,7 +74,9 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     } else {
         _group_id = it->second;
     }
-    LOG(INFO) << "init kafka consumer with group id: " << _group_id;
+    const std::string& node_rack = config::routine_load_kafka_client_rack;
+    LOG(INFO) << "init kafka consumer with group id: " << _group_id
+              << (node_rack.empty() ? std::string() : ", client.rack: " + node_rack);
 
     std::string errstr;
     auto set_conf = [&conf, &errstr](const std::string& conf_key, const std::string& conf_val) {
@@ -113,6 +115,14 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
     if (config::dependency_librdkafka_debug_enable) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
+    }
+
+    // Node-level client.rack (KIP-392 "fetch from closest replica"): lets each BE/CN consume from a replica
+    // in its own rack/availability zone instead of the partition leader. Applied BEFORE the job's custom
+    // properties so that an explicit "property.client.rack" on the job still wins. Not recorded in
+    // _custom_properties: it is identical for every consumer on this node and must not affect match().
+    if (!node_rack.empty()) {
+        RETURN_IF_ERROR(set_conf("client.rack", node_rack));
     }
 
     for (auto& item : ctx->kafka_info->properties) {

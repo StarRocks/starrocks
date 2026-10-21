@@ -17,8 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
+#include "librdkafka/rdkafka.h"
 #include "runtime/byte_buffer.h"
 
 #ifndef __APPLE__
@@ -27,7 +29,25 @@
 
 namespace starrocks {
 
-class KafkaDataConsumerTest : public testing::Test {};
+class KafkaDataConsumerTest : public testing::Test {
+public:
+    // Reads a property back from the live librdkafka handle (the effective configuration lives on the
+    // client instance), so the test observes what the brokers will actually see.
+    static std::string effective_conf(KafkaDataConsumer& consumer, const std::string& key) {
+        const rd_kafka_conf_t* conf = rd_kafka_conf(consumer._k_consumer->c_ptr());
+        char buf[256];
+        buf[0] = '\0';
+        size_t size = sizeof(buf);
+        rd_kafka_conf_res_t res = rd_kafka_conf_get(conf, key.c_str(), buf, &size);
+        if (res != RD_KAFKA_CONF_OK) {
+            return "<conf_get failed: " + std::to_string(static_cast<int>(res)) + ">";
+        }
+        return std::string(buf);
+    }
+
+protected:
+    void TearDown() override { config::routine_load_kafka_client_rack = ""; }
+};
 
 // A minimal RdKafka::Message stand-in for build_kafka_message_meta: only the fields the builder reads
 // (partition/offset/timestamp/key/headers) are backed; the rest of the librdkafka interface returns
@@ -77,9 +97,7 @@ public:
     const std::string* key() const override { return nullptr; }
     void* msg_opaque() const override { return nullptr; }
     int64_t latency() const override { return 0; }
-    struct rd_kafka_message_s* c_ptr() override {
-        return nullptr;
-    }
+    struct rd_kafka_message_s* c_ptr() override { return nullptr; }
     RdKafka::Message::Status status() const override { return RdKafka::Message::MSG_STATUS_PERSISTED; }
     int32_t broker_id() const override { return 0; }
     int32_t leader_epoch() const override { return 0; }
@@ -313,6 +331,57 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_meta_broker_down) {
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.message().find("Local: Broker transport failure") != std::string::npos);
     ASSERT_OK(consumer.reset());
+}
+
+namespace {
+
+// A job against an unreachable broker: init() builds the consumer offline, which is all these tests need.
+std::unique_ptr<KafkaLoadInfo> kafka_load_info(const std::map<std::string, std::string>& properties) {
+    TKafkaLoadInfo t_info;
+    t_info.brokers = "localhost:19092";
+    t_info.topic = "test_topic";
+    t_info.partition_begin_offset = {{0, 100}};
+    t_info.__set_properties(properties);
+    return std::make_unique<KafkaLoadInfo>(t_info);
+}
+
+} // namespace
+
+// routine_load_kafka_client_rack reaches librdkafka as client.rack, and a job without its own client.rack
+// still matches the consumer: the node-level value must not take part in match()/consumer reuse.
+TEST_F(KafkaDataConsumerTest, node_client_rack_applied_and_not_part_of_match) {
+    config::routine_load_kafka_client_rack = "rack-a";
+    StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    context.kafka_info = kafka_load_info({{"group.id", "g1"}});
+
+    KafkaDataConsumer consumer(&context);
+    ASSERT_OK(consumer.init(&context));
+    EXPECT_EQ("rack-a", effective_conf(consumer, "client.rack"));
+    EXPECT_TRUE(consumer.match(&context));
+}
+
+// An explicit "property.client.rack" on the job wins over the node-level value.
+TEST_F(KafkaDataConsumerTest, job_client_rack_overrides_node_value) {
+    config::routine_load_kafka_client_rack = "rack-a";
+    StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    context.kafka_info = kafka_load_info({{"group.id", "g1"}, {"client.rack", "rack-b"}});
+
+    KafkaDataConsumer consumer(&context);
+    ASSERT_OK(consumer.init(&context));
+    EXPECT_EQ("rack-b", effective_conf(consumer, "client.rack"));
+    EXPECT_TRUE(consumer.match(&context));
+}
+
+// Without a node-level value nothing is added: client.rack stays at librdkafka's empty default.
+TEST_F(KafkaDataConsumerTest, no_node_client_rack_leaves_property_unset) {
+    config::routine_load_kafka_client_rack = "";
+    StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    context.kafka_info = kafka_load_info({{"group.id", "g1"}});
+
+    KafkaDataConsumer consumer(&context);
+    ASSERT_OK(consumer.init(&context));
+    EXPECT_EQ("", effective_conf(consumer, "client.rack"));
+    EXPECT_TRUE(consumer.match(&context));
 }
 
 } // namespace starrocks
