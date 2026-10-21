@@ -28,6 +28,7 @@ class TestBuildParallelism(unittest.TestCase):
             "CXX",
             "PARALLEL",
             "STARROCKS_CGROUP_ROOT",
+            "STARROCKS_PROC_SELF_CGROUP",
             "CMAKE_BUILD_DIR",
             "CMAKE_BUILD_PREFIX",
             "BUILD_TYPE",
@@ -766,6 +767,187 @@ class TestBuildParallelism(unittest.TestCase):
             """
             p = self.run_bash(cmd, {"STARROCKS_CGROUP_ROOT": tmpdir})
             self.assertEqual(p, "4")
+
+    def test_detect_parallelism_cgroup_v2_nested_subpath(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "cpu.max"), "w") as f:
+                f.write("max 100000\n")
+            nested_dir = os.path.join(tmpdir, "system.slice", "runner.service")
+            os.makedirs(nested_dir, exist_ok=True)
+            with open(os.path.join(nested_dir, "cpu.max"), "w") as f:
+                f.write("400000 100000\n")
+            proc_cgroup = os.path.join(tmpdir, "proc_self_cgroup")
+            with open(proc_cgroup, "w") as f:
+                f.write("0::/system.slice/runner.service\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 32; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup,
+                },
+            )
+            self.assertEqual(p, "4")
+
+    def test_detect_parallelism_cgroup_v2_parent_stricter_than_leaf(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "cpu.max"), "w") as f:
+                f.write("max 100000\n")
+            parent_dir = os.path.join(tmpdir, "system.slice")
+            leaf_dir = os.path.join(parent_dir, "runner.service")
+            os.makedirs(leaf_dir, exist_ok=True)
+            with open(os.path.join(parent_dir, "cpu.max"), "w") as f:
+                f.write("200000 100000\n")
+            with open(os.path.join(leaf_dir, "cpu.max"), "w") as f:
+                f.write("600000 100000\n")
+            proc_cgroup = os.path.join(tmpdir, "proc_self_cgroup")
+            with open(proc_cgroup, "w") as f:
+                f.write("0::/system.slice/runner.service\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 32; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup,
+                },
+            )
+            self.assertEqual(p, "2")
+
+            with open(os.path.join(leaf_dir, "cpu.max"), "w") as f:
+                f.write("max 100000\n")
+            p_unconstrained_leaf = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup,
+                },
+            )
+            self.assertEqual(p_unconstrained_leaf, "2")
+
+    def test_detect_parallelism_cgroup_v1_nested_subpath(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cpu_root = os.path.join(tmpdir, "cpu")
+            nested_cpu = os.path.join(cpu_root, "docker", "abc")
+            os.makedirs(nested_cpu, exist_ok=True)
+            with open(os.path.join(cpu_root, "cpu.cfs_quota_us"), "w") as f:
+                f.write("-1\n")
+            with open(os.path.join(cpu_root, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            with open(os.path.join(nested_cpu, "cpu.cfs_quota_us"), "w") as f:
+                f.write("600000\n")
+            with open(os.path.join(nested_cpu, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            proc_cgroup = os.path.join(tmpdir, "proc_self_cgroup")
+            with open(proc_cgroup, "w") as f:
+                f.write("5:cpu,cpuacct:/docker/abc\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            nproc() { echo 32; }
+            starrocks_detect_parallelism
+            """
+            p = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup,
+                },
+            )
+            self.assertEqual(p, "6")
+
+        with tempfile.TemporaryDirectory() as tmpdir2:
+            cpuacct_root = os.path.join(tmpdir2, "cpu,cpuacct")
+            nested_cpuacct = os.path.join(cpuacct_root, "docker", "abc")
+            os.makedirs(nested_cpuacct, exist_ok=True)
+            with open(os.path.join(cpuacct_root, "cpu.cfs_quota_us"), "w") as f:
+                f.write("-1\n")
+            with open(os.path.join(cpuacct_root, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            with open(os.path.join(nested_cpuacct, "cpu.cfs_quota_us"), "w") as f:
+                f.write("600000\n")
+            with open(os.path.join(nested_cpuacct, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            proc_cgroup2 = os.path.join(tmpdir2, "proc_self_cgroup")
+            with open(proc_cgroup2, "w") as f:
+                f.write("5:cpu,cpuacct:/docker/abc\n")
+
+            p2 = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir2,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup2,
+                },
+            )
+            self.assertEqual(p2, "6")
+
+    def test_detect_total_ram_gb_nested_cgroup_v2_and_v1(self):
+        with tempfile.TemporaryDirectory() as tmpdir_v2:
+            with open(os.path.join(tmpdir_v2, "memory.max"), "w") as f:
+                f.write("max\n")
+            parent_v2 = os.path.join(tmpdir_v2, "system.slice")
+            nested_v2 = os.path.join(parent_v2, "runner.service")
+            os.makedirs(nested_v2, exist_ok=True)
+            with open(os.path.join(nested_v2, "memory.max"), "w") as f:
+                f.write("12884901888\n")
+            proc_cgroup_v2 = os.path.join(tmpdir_v2, "proc_self_cgroup")
+            with open(proc_cgroup_v2, "w") as f:
+                f.write("0::/system.slice/runner.service\n")
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            awk() { echo 67108864; }
+            starrocks_detect_total_ram_gb
+            """
+            ram_v2 = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_v2,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_v2,
+                },
+            )
+            self.assertEqual(ram_v2, "12")
+
+            with open(os.path.join(parent_v2, "memory.max"), "w") as f:
+                f.write("8589934592\n")
+            ram_v2_parent = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_v2,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_v2,
+                },
+            )
+            self.assertEqual(ram_v2_parent, "8")
+
+        with tempfile.TemporaryDirectory() as tmpdir_v1:
+            mem_root = os.path.join(tmpdir_v1, "memory")
+            nested_v1 = os.path.join(mem_root, "kubepods", "pod1")
+            os.makedirs(nested_v1, exist_ok=True)
+            with open(os.path.join(mem_root, "memory.limit_in_bytes"), "w") as f:
+                f.write("9223372036854771712\n")
+            with open(os.path.join(nested_v1, "memory.limit_in_bytes"), "w") as f:
+                f.write("8589934592\n")
+            proc_cgroup_v1 = os.path.join(tmpdir_v1, "proc_self_cgroup")
+            with open(proc_cgroup_v1, "w") as f:
+                f.write("4:memory:/kubepods/pod1\n")
+
+            ram_v1 = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_v1,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_v1,
+                },
+            )
+            self.assertEqual(ram_v1, "8")
 
     def test_run_be_ut_detect_parallelism(self):
         # 1. Verify -j is documented in run-be-ut.sh help
