@@ -1451,7 +1451,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### routine_load_kafka_client_rack
 
-- デフォルト: ""
+- デフォルト: 空の文字列
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ

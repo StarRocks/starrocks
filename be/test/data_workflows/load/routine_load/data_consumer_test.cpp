@@ -354,6 +354,8 @@ std::unique_ptr<KafkaLoadInfo> kafka_load_info(const std::map<std::string, std::
 TEST_F(KafkaDataConsumerTest, node_client_rack_applied_and_not_part_of_match) {
     config::routine_load_kafka_client_rack = "rack-a";
     StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    // match() only accepts Kafka contexts, and StreamLoadContext leaves load_src_type uninitialized.
+    context.load_src_type = TLoadSourceType::KAFKA;
     context.kafka_info = kafka_load_info({{"group.id", "g1"}});
 
     KafkaDataConsumer consumer(&context);
@@ -366,6 +368,8 @@ TEST_F(KafkaDataConsumerTest, node_client_rack_applied_and_not_part_of_match) {
 TEST_F(KafkaDataConsumerTest, job_client_rack_overrides_node_value) {
     config::routine_load_kafka_client_rack = "rack-a";
     StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    // match() only accepts Kafka contexts, and StreamLoadContext leaves load_src_type uninitialized.
+    context.load_src_type = TLoadSourceType::KAFKA;
     context.kafka_info = kafka_load_info({{"group.id", "g1"}, {"client.rack", "rack-b"}});
 
     KafkaDataConsumer consumer(&context);
@@ -378,6 +382,8 @@ TEST_F(KafkaDataConsumerTest, job_client_rack_overrides_node_value) {
 TEST_F(KafkaDataConsumerTest, no_node_client_rack_leaves_property_unset) {
     config::routine_load_kafka_client_rack = "";
     StreamLoadContext context(ExecEnv::GetInstance()->load_stream_mgr());
+    // match() only accepts Kafka contexts, and StreamLoadContext leaves load_src_type uninitialized.
+    context.load_src_type = TLoadSourceType::KAFKA;
     context.kafka_info = kafka_load_info({{"group.id", "g1"}});
 
     KafkaDataConsumer consumer(&context);

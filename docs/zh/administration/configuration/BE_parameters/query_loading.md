@@ -1540,7 +1540,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### routine_load_kafka_client_rack
 
-- 默认值：""
+- 默认值：空字符串
 - 类型：String
 - 单位：-
 - 是否动态：否

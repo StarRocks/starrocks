@@ -1520,7 +1520,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ### routine_load_kafka_client_rack
 
-- Default: ""
+- Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
