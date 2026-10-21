@@ -1617,6 +1617,87 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+// A compaction carries an input's del file over to its output while it keeps a rowset older than the delete,
+// even when the sstables already cover the delete: primary key recover drops the kept rowset's delvec and
+// can only learn about the delete from the del file. The del file goes once every older rowset is compacted.
+TEST_F(MetaFileTest, test_keep_del_files_for_kept_older_rowsets_when_compact) {
+    const int64_t tablet_id = 10002;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    auto write = [&](int64_t version, const std::string& segment, const std::string& del) {
+        metadata->set_version(version);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        if (!segment.empty()) {
+            rowset_metadata.add_segment_metas()->set_filename(segment);
+        }
+        if (!del.empty()) {
+            DelfileWithRowsetId delfile;
+            delfile.set_name(del);
+            delfile.set_origin_rowset_id(metadata->next_rowset_id());
+            rowset_metadata.add_del_files()->CopyFrom(delfile);
+        }
+        TxnLogPB_OpWrite op_write;
+        std::map<int, SegmentFileInfo> replace_segments;
+        std::vector<FileMetaPB> orphan_files;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        builder.apply_opwrite(op_write, replace_segments, orphan_files);
+        ASSERT_OK(builder.finalize(next_id()));
+    };
+    auto compact = [&](int64_t version, const std::vector<uint32_t>& inputs, const std::string& output) {
+        metadata->set_version(version);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        for (uint32_t input : inputs) {
+            op_compaction.add_input_rowsets(input);
+        }
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename(output);
+        op_compaction.set_compact_version(version);
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, inputs.back(), 0));
+        ASSERT_OK(builder.finalize(next_id()));
+    };
+    ASSERT_NO_FATAL_FAILURE(write(11, "aaa.dat", ""));        // 110
+    ASSERT_NO_FATAL_FAILURE(write(12, "", "bbb.del"));        // 111
+    ASSERT_NO_FATAL_FAILURE(write(13, "ccc.dat", ""));        // 112
+    ASSERT_NO_FATAL_FAILURE(write(14, "ddd.dat", "ddd.del")); // 113
+    // Put the rebuild point above every rowset this test creates, so an index rebuild needs none of the del files.
+    PersistentIndexSstablePB sstable;
+    sstable.set_max_rss_rowid((uint64_t)200 << 32);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(sstable);
+
+    // 110 and 112 stay, and both are older than 113's delete; 110 is older than 111's.
+    ASSERT_NO_FATAL_FAILURE(compact(15, {111, 113}, "eee.dat")); // 114
+    ASSERT_EQ(3, metadata->rowsets_size());
+    const auto& output = metadata->rowsets(2);
+    ASSERT_EQ(114, output.id());
+    ASSERT_EQ(2, output.del_files_size());
+    EXPECT_EQ("bbb.del", output.del_files(0).name());
+    EXPECT_EQ(111, output.del_files(0).origin_rowset_id());
+    EXPECT_EQ("ddd.del", output.del_files(1).name());
+    EXPECT_EQ(113, output.del_files(1).origin_rowset_id());
+    // Moved, not copied: vacuum of the compaction inputs must not delete them.
+    for (const auto& input : metadata->compaction_inputs()) {
+        EXPECT_EQ(0, input.del_files_size());
+    }
+
+    // Only 112 stays, which is older than 113's delete but not than 111's.
+    ASSERT_NO_FATAL_FAILURE(compact(16, {110, 114}, "fff.dat")); // 115
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(115, metadata->rowsets(1).id());
+    ASSERT_EQ(1, metadata->rowsets(1).del_files_size());
+    EXPECT_EQ("ddd.del", metadata->rowsets(1).del_files(0).name());
+
+    // Nothing older than any delete stays.
+    ASSERT_NO_FATAL_FAILURE(compact(17, {112, 115}, "ggg.dat")); // 116
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->rowsets(0).del_files_size());
+}
+
 TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
     // Regression for the metadata-reclaim change: when compaction archives its input
     // rowsets into compaction_inputs, the (potentially large) delete_predicate must be

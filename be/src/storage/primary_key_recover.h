@@ -51,11 +51,15 @@ public:
     // Primary key schema
     virtual starrocks::Schema generate_pkey_schema() = 0;
 
-    // iterator all rowset and get their iterator and basic stat
-    virtual Status rowset_iterator(const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-                                   const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                                              const std::vector<std::unique_ptr<RandomAccessFile>>&,
-                                                              const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
+    // iterator all rowset and get their iterator and basic stat.
+    // The handler takes each rowset's segment iterators, del files, the replay position of each del file, the
+    // erase bound of each del file and the rowset id. A del file only erases keys whose current entry has an
+    // rssid no greater than its bound; an empty bound list makes every del file erase unconditionally.
+    virtual Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<
+                    Status(const std::vector<ChunkIteratorPtr>&, const std::vector<std::unique_ptr<RandomAccessFile>>&,
+                           const std::vector<uint32_t>&, const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
 
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;

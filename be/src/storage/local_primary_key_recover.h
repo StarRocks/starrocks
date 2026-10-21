@@ -28,10 +28,11 @@ public:
     // Primary key schema
     starrocks::Schema generate_pkey_schema() override;
 
-    Status rowset_iterator(const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-                           const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                                      const std::vector<std::unique_ptr<RandomAccessFile>>&,
-                                                      const std::vector<uint32_t>&, uint32_t)>& handler) override;
+    Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<
+                    Status(const std::vector<ChunkIteratorPtr>&, const std::vector<std::unique_ptr<RandomAccessFile>>&,
+                           const std::vector<uint32_t>&, const std::vector<uint32_t>&, uint32_t)>& handler) override;
 
     // generate delvec and save
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;

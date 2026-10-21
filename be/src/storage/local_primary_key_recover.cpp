@@ -66,7 +66,7 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
         const std::function<Status(const std::vector<ChunkIteratorPtr>&,
                                    const std::vector<std::unique_ptr<RandomAccessFile>>&, const std::vector<uint32_t>&,
-                                   uint32_t)>& handler) {
+                                   const std::vector<uint32_t>&, uint32_t)>& handler) {
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
     int64_t latest_applied_major_version;
@@ -104,7 +104,7 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
             del_rfs.push_back(std::move(read_file));
             delidxs.push_back(rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(idx));
         }
-        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->rowset_meta()->get_rowset_seg_id()));
+        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, {}, rowset->rowset_meta()->get_rowset_seg_id()));
     }
     return Status::OK();
 }

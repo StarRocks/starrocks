@@ -382,19 +382,49 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 }
 
 // A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
-// keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
-// if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone, so either way the deleted keys must still be
-// deleted afterwards.
+// keys. The kept rowset records the delete only in its delete vector, which recover drops, so the compaction
+// must carry the del file over to its output rowset for recover to replay. The parameter decides whether the
+// index has flushed those deletes into sstables before the compaction, which an index rebuild alone would not
+// need the del file for.
 class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
 public:
     LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
+
+protected:
+    // Persist the whole index into sstables, as a publish eventually does, in a version of its own.
+    void flush_index() {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+        auto next = std::make_shared<TabletMetadata>(*flushed);
+        next->set_version(_version + 1);
+        ASSERT_GT(next->sstable_meta().sstables_size(), 0);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
+        _version++;
+        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
+    }
+
+    // Compact the rowsets at the given positions of the current version and publish the result.
+    void compact(const std::vector<int>& positions) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+        std::vector<RowsetPtr> inputs;
+        for (int pos : positions) {
+            inputs.push_back(rowsets[pos]);
+        }
+        const int64_t txn_id = next_id();
+        auto context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id(), _version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), inputs));
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        publish(txn_id, false);
+    }
+
+    TabletMetadataPtr metadata() {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        return metadata;
+    }
 };
 
-// Disabled: recover skips a del file the compaction output inherited, and has nothing to replay once the
-// compaction dropped it, so the deleted keys come back.
-TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
-    const bool flush_index = GetParam();
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {
             {upserts(0, 16, 0, 0)}, {upserts(100, 104, 0, 0)}, {deletes(0, 8)}, {upserts(200, 204, 0, 0)}};
@@ -403,41 +433,63 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
         apply(&expected, load);
     }
     ASSERT_EQ(expected, read(_version));
-    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    if (flush_index) {
-        // Persist the whole index into sstables, as a publish eventually does, in a version of its own.
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
-        auto next = std::make_shared<TabletMetadata>(*flushed);
-        next->set_version(_version + 1);
-        ASSERT_GT(next->sstable_meta().sstables_size(), 0);
-        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
-        _version++;
-        _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
-        metadata = next;
+    if (GetParam()) {
+        ASSERT_NO_FATAL_FAILURE(flush_index());
     }
 
     // Compact everything but the first rowset, which still holds the deleted keys.
-    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
-    ASSERT_EQ(4, rowsets.size());
-    const uint32_t first_rowset_id = rowsets[0]->id();
-    std::vector<RowsetPtr> inputs(rowsets.begin() + 1, rowsets.end());
-    const int64_t compaction_txn_id = next_id();
-    auto context =
-            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id(), _version, false, false, nullptr);
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), inputs));
-    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
-    publish(compaction_txn_id, false);
+    const uint32_t first_rowset_id = metadata()->rowsets(0).id();
+    ASSERT_EQ(4, metadata()->rowsets_size());
+    ASSERT_NO_FATAL_FAILURE(compact({1, 2, 3}));
     ASSERT_EQ(expected, read(_version));
-    ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    ASSERT_EQ(2, metadata->rowsets_size());
-    ASSERT_EQ(first_rowset_id, metadata->rowsets(0).id());
-    // The del file goes with the compaction output only while the sstables do not cover it yet.
-    ASSERT_EQ(flush_index ? 0 : 1, metadata->rowsets(1).del_files_size());
+    ASSERT_EQ(2, metadata()->rowsets_size());
+    ASSERT_EQ(first_rowset_id, metadata()->rowsets(0).id());
+    ASSERT_EQ(1, metadata()->rowsets(1).del_files_size());
 
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     EXPECT_EQ(expected, read(_version));
+
+    // Once a compaction takes the first rowset too, nothing older than the delete is left and the del file goes.
+    // Flush first: recover cleared the sstables, and the index rebuild still needs every del file they do not cover.
+    ASSERT_NO_FATAL_FAILURE(flush_index());
+    ASSERT_NO_FATAL_FAILURE(compact({0, 1, 2}));
+    ASSERT_EQ(expected, read(_version));
+    ASSERT_EQ(1, metadata()->rowsets_size());
+    ASSERT_EQ(0, metadata()->rowsets(0).del_files_size());
+    const std::vector<std::vector<Op>> last = {upserts(400, 402, 0, 0)};
+    publish(write_rows(last), true);
+    apply(&expected, last);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
+}
+
+// The compaction takes the delete rowset but skips a later rowset that upserts some of the deleted keys again.
+// The carried del file replays after that rowset, and must erase only the rows older than the delete.
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_non_contiguous_compaction) {
+    Rows expected;
+    const std::vector<std::vector<std::vector<Op>>> loads = {
+            {upserts(0, 16, 0, 0)}, {deletes(0, 8)}, {upserts(0, 4, 100, 100)}, {upserts(100, 104, 0, 0)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    ASSERT_EQ(expected, read(_version));
+    if (GetParam()) {
+        ASSERT_NO_FATAL_FAILURE(flush_index());
+    }
+
+    ASSERT_NO_FATAL_FAILURE(compact({1, 3}));
+    ASSERT_EQ(expected, read(_version));
+    ASSERT_EQ(3, metadata()->rowsets_size());
+    ASSERT_EQ(1, metadata()->rowsets(2).del_files_size());
+
+    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    EXPECT_EQ(expected, read(_version));
+    check_index_agrees(&expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,

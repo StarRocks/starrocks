@@ -48,12 +48,13 @@ Status PrimaryKeyRecover::recover() {
             pkey_schema, stats,
             [&](const std::vector<ChunkIteratorPtr>& itrs,
                 const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, const std::vector<uint32_t>& delidxs,
-                uint32_t rowset_id) {
+                const std::vector<uint32_t>& del_max_rssids, uint32_t rowset_id) {
                 // handle upsert
-                if (del_rfs.size() != delidxs.size()) {
-                    return Status::InternalError(
-                            fmt::format("invalid delete files when recover, del files {} vs del idxs {}",
-                                        del_rfs.size(), delidxs.size()));
+                if (del_rfs.size() != delidxs.size() ||
+                    (!del_max_rssids.empty() && del_max_rssids.size() != del_rfs.size())) {
+                    return Status::InternalError(fmt::format(
+                            "invalid delete files when recover, del files {} vs del idxs {} vs del max rssids {}",
+                            del_rfs.size(), delidxs.size(), del_max_rssids.size()));
                 }
                 const size_t total_size = itrs.size() + del_rfs.size();
                 size_t itr_index = 0;
@@ -69,6 +70,21 @@ Status PrimaryKeyRecover::recover() {
                         auto col = pk_column->clone();
                         const auto* end = read_buffer.data() + read_buffer.size();
                         RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
+                        if (!del_max_rssids.empty() && del_max_rssids[del_index] != UINT32_MAX) {
+                            // Only erase the keys whose current entry is not newer than the delete.
+                            std::vector<uint64_t> values(col->size(), NullIndexValue);
+                            RETURN_IF_ERROR(index.get(*col, &values));
+                            std::vector<uint32_t> older;
+                            for (uint32_t row = 0; row < values.size(); row++) {
+                                if (values[row] != NullIndexValue &&
+                                    static_cast<uint32_t>(values[row] >> 32) <= del_max_rssids[del_index]) {
+                                    older.push_back(row);
+                                }
+                            }
+                            auto older_col = col->clone_empty();
+                            older_col->append_selective(*col, older);
+                            col = std::move(older_col);
+                        }
                         RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                         del_index++;
                     } else {
