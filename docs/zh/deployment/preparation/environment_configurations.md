@@ -342,8 +342,8 @@ cat >> /etc/security/limits.conf << EOF
 * hard nproc 65535
 * soft nofile 655350
 * hard nofile 655350
-* soft stack unlimited
-* hard stack unlimited
+* soft stack 8192
+* hard stack 8192
 * hard memlock unlimited
 * soft memlock unlimited
 EOF
@@ -353,6 +353,12 @@ cat >> /etc/security/limits.d/20-nproc.conf << EOF
 root       soft    nproc     65535
 EOF
 ```
+
+:::note
+
+将栈的软限制和硬限制均设置为 `8192` KiB（8 MiB）。在 glibc/NPTL 下，进程启动时的栈软限制决定新线程的默认栈大小，显式指定线程栈大小的情况除外。将软限制设为 `unlimited` 时，默认线程栈大小会采用体系架构默认值（x86-64 上为 2 MiB），可能增加栈溢出的风险。详情参见 [pthread_create(3)](https://man7.org/linux/man-pages/man3/pthread_create.3.html)。
+
+:::
 
 ## 文件系统配置
 
