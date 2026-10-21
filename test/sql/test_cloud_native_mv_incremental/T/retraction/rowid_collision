@@ -1,0 +1,75 @@
+-- name: test_ivm_rowid_fingerprint_collision @cloud
+-- The v1 __ROW_ID__ fingerprint wrote a string key without its length, so each pair below shared one row id:
+-- the MV lost a row or group, and over a PK base a delete of one retracted the other. New MVs use v2.
+-- aggregate over DUP: ('a', 5) and ('a\x03\x05\x00\x00', NULL)
+CREATE TABLE dup_kv (k1 VARCHAR(32), k2 INT, v BIGINT)
+  DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1');
+INSERT INTO dup_kv VALUES ('a', 5, 1), (unhex('6103050000'), NULL, 2), ('x', 1, 3);
+CREATE MATERIALIZED VIEW mv_agg DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, SUM(v) AS s, COUNT(*) AS c FROM dup_kv GROUP BY k1, k2;
+SELECT get_json_int(inspect_mv_meta('mv_agg'), '$.encodeRowIdVersion');
+REFRESH MATERIALIZED VIEW mv_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_agg ORDER BY 1, 2;
+INSERT INTO dup_kv VALUES ('a', 5, 10), (unhex('6103050000'), NULL, 20);
+REFRESH MATERIALIZED VIEW mv_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_agg ORDER BY 1, 2;
+-- SELECT DISTINCT over DUP: ('a', 0) and ('a\x01', NULL)
+CREATE TABLE dup_kt (k1 VARCHAR(32), f TINYINT)
+  DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1');
+INSERT INTO dup_kt VALUES ('a', 0);
+CREATE MATERIALIZED VIEW mv_distinct DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT DISTINCT k1, f FROM dup_kt;
+REFRESH MATERIALIZED VIEW mv_distinct WITH SYNC MODE;
+INSERT INTO dup_kt VALUES (concat('a', char(1)), NULL);
+REFRESH MATERIALIZED VIEW mv_distinct WITH SYNC MODE;
+SELECT hex(k1), IFNULL(f, -1) FROM mv_distinct ORDER BY 1, 2;
+-- aggregate over a PK base: deleting group ('a\x03\x05\x00\x00', NULL) must not delete group ('a', 5)
+CREATE TABLE pk_kv (id INT NOT NULL, k1 VARCHAR(32), k2 INT, v BIGINT)
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+INSERT INTO pk_kv VALUES (1, 'a', 5, 1);
+CREATE MATERIALIZED VIEW mv_pk_agg DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, SUM(v) AS s, COUNT(*) AS c FROM pk_kv GROUP BY k1, k2;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+INSERT INTO pk_kv VALUES (2, unhex('6103050000'), NULL, 2);
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_pk_agg ORDER BY 1, 2;
+DELETE FROM pk_kv WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_pk_agg ORDER BY 1, 2;
+-- projection over PK (VARCHAR, VARCHAR): ('a\x08', 'b') and ('a', '\x08b')
+CREATE TABLE pk_ss (k1 VARCHAR(32) NOT NULL, k2 VARCHAR(32) NOT NULL, v INT)
+  PRIMARY KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+INSERT INTO pk_ss VALUES (concat('a', char(8)), 'b', 1), ('a', concat(char(8), 'b'), 2), ('x', 'y', 3);
+CREATE MATERIALIZED VIEW mv_pk_proj DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, v FROM pk_ss;
+SELECT get_json_int(inspect_mv_meta('mv_pk_proj'), '$.encodeRowIdVersion');
+REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
+SELECT hex(k1), hex(k2), v FROM mv_pk_proj ORDER BY 1, 2;
+DELETE FROM pk_ss WHERE k1 = 'a';
+REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
+SELECT hex(k1), hex(k2), v FROM mv_pk_proj ORDER BY 1, 2;
+-- inner join of two PK bases: row id (left key, right key)
+CREATE TABLE pk_l (k VARCHAR(32) NOT NULL, j INT)
+  PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE pk_r (k VARCHAR(32) NOT NULL, j INT)
+  PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+INSERT INTO pk_l VALUES ('a', 1), (concat('a', char(8)), 1);
+INSERT INTO pk_r VALUES ('b', 1), (concat(char(8), 'b'), 1);
+CREATE MATERIALIZED VIEW mv_pk_join DISTRIBUTED BY HASH(ka) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT pk_l.k AS ka, pk_r.k AS kb FROM pk_l JOIN pk_r ON pk_l.j = pk_r.j;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT hex(ka), hex(kb) FROM mv_pk_join ORDER BY 1, 2;
+DELETE FROM pk_r WHERE k = 'b';
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT hex(ka), hex(kb) FROM mv_pk_join ORDER BY 1, 2;

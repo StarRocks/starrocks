@@ -1,0 +1,160 @@
+-- name: test_ivm_rowid_fingerprint_collision @cloud
+CREATE TABLE dup_kv (k1 VARCHAR(32), k2 INT, v BIGINT)
+  DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO dup_kv VALUES ('a', 5, 1), (unhex('6103050000'), NULL, 2), ('x', 1, 3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, SUM(v) AS s, COUNT(*) AS c FROM dup_kv GROUP BY k1, k2;
+-- result:
+-- !result
+SELECT get_json_int(inspect_mv_meta('mv_agg'), '$.encodeRowIdVersion');
+-- result:
+2
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_agg ORDER BY 1, 2;
+-- result:
+61	5	1	1
+6103050000	-1	2	1
+78	1	3	1
+-- !result
+INSERT INTO dup_kv VALUES ('a', 5, 10), (unhex('6103050000'), NULL, 20);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_agg ORDER BY 1, 2;
+-- result:
+61	5	11	2
+6103050000	-1	22	2
+78	1	3	1
+-- !result
+CREATE TABLE dup_kt (k1 VARCHAR(32), f TINYINT)
+  DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO dup_kt VALUES ('a', 0);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_distinct DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT DISTINCT k1, f FROM dup_kt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_distinct WITH SYNC MODE;
+INSERT INTO dup_kt VALUES (concat('a', char(1)), NULL);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_distinct WITH SYNC MODE;
+SELECT hex(k1), IFNULL(f, -1) FROM mv_distinct ORDER BY 1, 2;
+-- result:
+61	0
+6101	-1
+-- !result
+CREATE TABLE pk_kv (id INT NOT NULL, k1 VARCHAR(32), k2 INT, v BIGINT)
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_kv VALUES (1, 'a', 5, 1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_agg DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, SUM(v) AS s, COUNT(*) AS c FROM pk_kv GROUP BY k1, k2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+INSERT INTO pk_kv VALUES (2, unhex('6103050000'), NULL, 2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_pk_agg ORDER BY 1, 2;
+-- result:
+61	5	1	1
+6103050000	-1	2	1
+-- !result
+DELETE FROM pk_kv WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT hex(k1), IFNULL(k2, -1), s, c FROM mv_pk_agg ORDER BY 1, 2;
+-- result:
+61	5	1	1
+-- !result
+CREATE TABLE pk_ss (k1 VARCHAR(32) NOT NULL, k2 VARCHAR(32) NOT NULL, v INT)
+  PRIMARY KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_ss VALUES (concat('a', char(8)), 'b', 1), ('a', concat(char(8), 'b'), 2), ('x', 'y', 3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_proj DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k1, k2, v FROM pk_ss;
+-- result:
+-- !result
+SELECT get_json_int(inspect_mv_meta('mv_pk_proj'), '$.encodeRowIdVersion');
+-- result:
+2
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
+SELECT hex(k1), hex(k2), v FROM mv_pk_proj ORDER BY 1, 2;
+-- result:
+61	0862	2
+6108	62	1
+78	79	3
+-- !result
+DELETE FROM pk_ss WHERE k1 = 'a';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
+SELECT hex(k1), hex(k2), v FROM mv_pk_proj ORDER BY 1, 2;
+-- result:
+6108	62	1
+78	79	3
+-- !result
+CREATE TABLE pk_l (k VARCHAR(32) NOT NULL, j INT)
+  PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+CREATE TABLE pk_r (k VARCHAR(32) NOT NULL, j INT)
+  PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_l VALUES ('a', 1), (concat('a', char(8)), 1);
+-- result:
+-- !result
+INSERT INTO pk_r VALUES ('b', 1), (concat(char(8), 'b'), 1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_join DISTRIBUTED BY HASH(ka) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT pk_l.k AS ka, pk_r.k AS kb FROM pk_l JOIN pk_r ON pk_l.j = pk_r.j;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT hex(ka), hex(kb) FROM mv_pk_join ORDER BY 1, 2;
+-- result:
+61	0862
+61	62
+6108	0862
+6108	62
+-- !result
+DELETE FROM pk_r WHERE k = 'b';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT hex(ka), hex(kb) FROM mv_pk_join ORDER BY 1, 2;
+-- result:
+61	0862
+6108	0862
+-- !result
