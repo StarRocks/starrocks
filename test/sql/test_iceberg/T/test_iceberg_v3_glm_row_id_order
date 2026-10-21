@@ -18,14 +18,22 @@ create database iceberg_glm_rid_${uuid0}.db_${uuid0} properties (
 set catalog iceberg_glm_rid_${uuid0};
 use db_${uuid0};
 
-create table t1 (id INT, v STRING) ORDER BY (id DESC) PROPERTIES ("format-version" = "3");
+-- The constant partition column p plus the forced sink shuffle send every row of the rewrite to one
+-- writer, so the rewrite yields one file however many nodes the cluster has. Without them each node
+-- rewrites the files it scans on its own and the _row_id order can stay ascending. The rewrite also
+-- runs with one sink driver, so the single file does not rely on how a node spreads rows over drivers.
+create table t1 (id INT, v STRING, p INT) PARTITION BY (p) ORDER BY (id DESC) PROPERTIES ("format-version" = "3");
 -- Each insert writes one file sorted by id DESC: _row_id ascends with the position, descends with id.
-insert into t1 values (1, 'v1'), (2, 'v2'), (3, 'v3');
-insert into t1 values (4, 'v4'), (5, 'v5'), (6, 'v6');
+insert into t1 values (1, 'v1', 0), (2, 'v2', 0), (3, 'v3', 0);
+insert into t1 values (4, 'v4', 0), (5, 'v5', 0), (6, 'v6', 0);
 select id, _row_id from t1 order by id;
 
 -- The rewrite merges both files sorted by id DESC and keeps _row_id, so file order is 3,4,5,0,1,2.
+set connector_sink_shuffle_mode = 'force';
+set pipeline_sink_dop = 1;
 [UC]alter table t1 execute rewrite_data_files("rewrite_all" = "true");
+set pipeline_sink_dop = 0;
+set connector_sink_shuffle_mode = 'auto';
 select count(distinct _file) from t1;
 select _pos, id, _row_id from t1 order by _pos;
 

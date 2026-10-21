@@ -20,13 +20,13 @@ set catalog iceberg_glm_rid_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
-create table t1 (id INT, v STRING) ORDER BY (id DESC) PROPERTIES ("format-version" = "3");
+create table t1 (id INT, v STRING, p INT) PARTITION BY (p) ORDER BY (id DESC) PROPERTIES ("format-version" = "3");
 -- result:
 -- !result
-insert into t1 values (1, 'v1'), (2, 'v2'), (3, 'v3');
+insert into t1 values (1, 'v1', 0), (2, 'v2', 0), (3, 'v3', 0);
 -- result:
 -- !result
-insert into t1 values (4, 'v4'), (5, 'v5'), (6, 'v6');
+insert into t1 values (4, 'v4', 0), (5, 'v5', 0), (6, 'v6', 0);
 -- result:
 -- !result
 select id, _row_id from t1 order by id;
@@ -38,7 +38,17 @@ select id, _row_id from t1 order by id;
 5	4
 6	3
 -- !result
+set connector_sink_shuffle_mode = 'force';
+-- result:
+-- !result
+set pipeline_sink_dop = 1;
+-- result:
+-- !result
 [UC]alter table t1 execute rewrite_data_files("rewrite_all" = "true");
+set pipeline_sink_dop = 0;
+-- result:
+-- !result
+set connector_sink_shuffle_mode = 'auto';
 -- result:
 -- !result
 select count(distinct _file) from t1;
