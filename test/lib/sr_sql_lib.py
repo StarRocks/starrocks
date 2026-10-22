@@ -96,9 +96,9 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # A shared-data alter job is cancelled with this message when any transaction id is allocated,
 # anywhere in the cluster, between taking the watershed txn id and adding the shadow index
 # (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
-# cleaned up and nothing is lost, so the statement can just be submitted again.
+# cleaned up and nothing is lost, so the statement can just be submitted again -- as often as it
+# takes until the wait's deadline: on a busy cluster several attempts in a row can be cancelled.
 ALTER_RERUN_MSG = "please re-run the alter table command"
-ALTER_RERUN_MAX_RETRY = 3
 # Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
 # ALTER MATERIALIZED VIEW (RollupProcDir).
 SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
@@ -153,6 +153,25 @@ def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name
     column, name = last_alter[2]
     actual = table_name if column == "TableName" else rollup_index_name
     return actual is not None and str(actual) == name
+
+
+# `install plugin from "http..."` downloads the plugin from an external URL. When that URL cannot be
+# reached the failure says nothing about StarRocks, so the case is skipped instead of failed.
+INSTALL_PLUGIN_URL_RE = re.compile(r'^\s*install\s+plugin\s+from\s+"(https?://([^/":]+)[^"]*)"', re.IGNORECASE)
+NETWORK_ERROR_RE = re.compile(r"timed out|Connection refused|Connection reset|No route to host", re.IGNORECASE)
+
+
+def skip_if_plugin_download_failed(sql, act):
+    """Raise SkipTest if `sql` installs a plugin from a URL and `act` is a network error reaching it."""
+    m = INSTALL_PLUGIN_URL_RE.match(sql)
+    if not m or not str(act).startswith("E: "):
+        return
+    url, host = m.group(1), m.group(2)
+    # UnknownHostException carries only the host name as its message. A 404 carries the full URL
+    # instead; that is not matched, because a removed plugin file is not a transient network issue.
+    if NETWORK_ERROR_RE.search(str(act)) or str(act).endswith("'%s')" % host):
+        log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
+        raise SkipTest("plugin download failed (network): %s" % act)
 
 
 class Filter(logging.Filter):
@@ -1492,6 +1511,7 @@ class StarrocksSQLApiLib(object):
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
+        skip_if_plugin_download_failed(sql, act)
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
@@ -2240,7 +2260,6 @@ class StarrocksSQLApiLib(object):
             # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
             if (
                 expect_status == "FINISHED"
-                and rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
                 and should_resubmit_alter(
                     last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
@@ -2697,6 +2716,91 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
+    def alter_and_wait(self, sql, alter_type="COLUMN", timeout=600):
+        """
+        Submit `sql`, an alter that may create a job listed by SHOW ALTER TABLE `alter_type`
+        (COLUMN for a schema change, ROLLUP for ADD ROLLUP or a synchronous MV), and block until
+        that job has landed. The explicit form of the statement followed by wait_alter_table_finish:
+        being handed the statement, it needs no statement matching to retry a watershed cancel
+        (ALTER_RERUN_MSG), which it does like wait_alter_table_finish, through _resubmit_alter.
+        Any other outcome than FINISHED fails.
+
+        `timeout` bounds waiting for the job and for the table, retries included, and no statement
+        is submitted once it has passed. The statements themselves (the SHOWs and each submission
+        of `sql`) are not interrupted: they run under the connection's own timeouts, so a slow one
+        can take the call past `timeout`.
+
+        The job is told apart by JobId: the newest id is read before `sql` is submitted, and since
+        a job is registered within the DDL's own execution (see wait_alter_table_finish), a newer
+        id afterwards is this statement's and no newer id means the alter was applied inline. That
+        holds as long as nothing else alters a table in the database meanwhile, which a case
+        running statements one at a time guarantees; it is not meant for alters issued from
+        several threads of a case at once.
+
+        Returns None, which is what the R file records.
+        """
+        # State and Msg of each layout. OPTIMIZE is a valid SHOW ALTER type too, with its own
+        # layout, but its jobs never hit the watershed cancel; refuse it rather than misread it.
+        layouts = {
+            "COLUMN": (SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL),
+            "ROLLUP": (ROLLUP_STATE_COL, ROLLUP_MSG_COL),
+        }
+        tools.assert_true(
+            alter_type.upper() in layouts,
+            "alter_and_wait supports alter_type COLUMN or ROLLUP, got %s" % alter_type,
+        )
+        state_col, msg_col = layouts[alter_type.upper()]
+        rollup = alter_type.upper() == "ROLLUP"
+        show_sql = "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type
+        deadline = time.monotonic() + timeout
+
+        res = self.execute_sql(show_sql, True)
+        tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+        watermark = int(res["result"][0][0]) if res["result"] else None
+
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], "alter failed: %s" % res["msg"])
+
+        rerun = 0
+        while True:
+            res = self.execute_sql(show_sql, True)
+            tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+            if not res["result"] or (watermark is not None and int(res["result"][0][0]) <= watermark):
+                # No job of its own: the alter was applied inline.
+                return None
+            row = res["result"][0]
+            job_id, table_name, state, msg = int(row[0]), row[1], row[state_col], row[msg_col]
+
+            if state not in ("FINISHED", "CANCELLED"):
+                tools.assert_true(
+                    time.monotonic() < deadline,
+                    "alter_and_wait timed out after %ss, job %s is %s" % (timeout, job_id, state),
+                )
+                time.sleep(0.1)
+                continue
+
+            # Keep the watermarks of the legacy wait helpers past this job, so one used later in
+            # the case does not take it for its own.
+            self._last_alter_job_id = max(job_id, getattr(self, "_last_alter_job_id", None) or 0)
+            if rollup:
+                self._last_alter_mv_job_id = max(job_id, getattr(self, "_last_alter_mv_job_id", None) or 0)
+
+            if state == "FINISHED":
+                if rollup:
+                    res = self.execute_sql("SELECT DATABASE()", True)
+                    tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+                    # See wait_table_state_normal: a finished rollup releases the table later.
+                    self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+                return None
+
+            tools.assert_true(
+                is_watershed_cancel(state, msg),
+                "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
+            )
+            rerun += 1
+            watermark = job_id
+            self._resubmit_alter(sql, None, job_id, msg, rerun, table_name, deadline)
+
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
         """
         Block until the alter submitted just before this call has landed.
@@ -2760,8 +2864,7 @@ class StarrocksSQLApiLib(object):
 
             rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
             if (
-                rerun < ALTER_RERUN_MAX_RETRY
-                and time.monotonic() < deadline
+                time.monotonic() < deadline
                 and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
             ):
                 # Wait for the resubmitted job instead.
@@ -3489,13 +3592,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         scan_table_sql = (
             f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
+        # PhySegmentsCount counts each segment once; SegmentsReadCount counts it once per split that reads
+        # it, and is the only one a shared-nothing or older build reports.
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
             )
-            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
-            from profile 
-            where line like "%- SegmentsReadCount%"
+            select coalesce(
+                max(if(line like "%- PhySegmentsCount%",
+                       regexp_extract(line, ".*- PhySegmentsCount: (?:.*\\()?(\\d+)\\)?", 1), null)),
+                max(if(line like "%- SegmentsReadCount%",
+                       regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1), null))) as value
+            from profile
+            where line like "%- PhySegmentsCount%" or line like "%- SegmentsReadCount%"
         """
 
         while timeout > 0:
@@ -3867,6 +3976,24 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_explain_matches(self, query, *expects):
+        """
+        assert explain result matches every expect pattern
+
+        The contains form covers almost every case. This one is for an expectation that is
+        only meaningful with a wildcard in the middle of it -- a residual predicate on some
+        column of a table, say, where the plan's slot numbering is not what is being
+        asserted and pinning it would make the case brittle.
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_regex(
+                str(res["result"]),
+                expect,
+                "assert expect {} does not match plan {}".format(expect, res["result"]),
             )
 
     def assert_explain_not_contains(self, query, *expects):

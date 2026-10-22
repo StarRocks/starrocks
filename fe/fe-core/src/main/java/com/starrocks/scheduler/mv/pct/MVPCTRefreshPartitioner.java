@@ -71,8 +71,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsWithUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
+import static com.starrocks.catalog.MvRefreshArbiter.hasUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.catalog.MvRefreshArbiter.tracksPartitionVersions;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
@@ -118,7 +122,8 @@ public abstract class MVPCTRefreshPartitioner {
 
     // Set of table types that support adaptive materialized view (MV) refresh.
     //
-    // Internal tables (e.g., OLAP) have direct access to partition information,
+    // Internal tables (OLAP/cloud-native tables and materialized views, both shared-nothing
+    // and shared-data) have direct access to partition information,
     // enabling accurate and efficient adaptive MV refresh.
     //
     // For external tables (e.g., Hive, Iceberg, Hudi, Delta Lake),
@@ -128,6 +133,9 @@ public abstract class MVPCTRefreshPartitioner {
     // which currently only supports these external table types (since v3.3.0).
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH = EnumSet.of(
             Table.TableType.OLAP,
+            Table.TableType.CLOUD_NATIVE,
+            Table.TableType.MATERIALIZED_VIEW,
+            Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW,
             Table.TableType.HIVE,
             Table.TableType.ICEBERG,
             Table.TableType.HUDI,
@@ -468,6 +476,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected PCellSortedSet getMvPartitionNamesToRefresh(PCellSortedSet toRefreshPartitions) {
         PCellSortedSet result = PCellSortedSet.of();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         for (Table baseTable : refBaseTablePartitionColumns.keySet()) {
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
@@ -482,6 +493,21 @@ public abstract class MVPCTRefreshPartitioner {
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
+            }
+
+            // Partition sync only drops an mv partition that lost every base partition it covered; a coarser one
+            // survives still holding the dropped partition's rows.
+            PCellSortedSet affectedByDrops = PCellSortedSet.of(toRefreshPartitions);
+            affectedByDrops.retainAllNames(getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, pinnedRangeFor(baseTable))));
+            result.addAll(affectedByDrops);
+
+            PCellSortedSet withUntrackedRows = PCellSortedSet.of(toRefreshPartitions);
+            withUntrackedRows.retainAllNames(getMvPartitionsWithUntrackedRows(mv, baseTable, mvToBasePartitions));
+            if (!withUntrackedRows.isEmpty()) {
+                logger.info("No tracked partition of base table {} accounts for the rows of mv partitions {}",
+                        baseTable.getName(), withUntrackedRows);
+                result.addAll(withUntrackedRows);
             }
 
             PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPCells();
@@ -531,6 +557,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
+            // A non-ref base table is not partition-aligned with the mv, so losing a partition invalidates all of it.
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRangeFor(snapshotTable))) {
+                return true;
+            }
         }
         return false;
     }
@@ -552,8 +582,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
+            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
+                return true;
+            }
+            if (hasUntrackedRows(mv, snapshotTable)) {
                 return true;
             }
         }

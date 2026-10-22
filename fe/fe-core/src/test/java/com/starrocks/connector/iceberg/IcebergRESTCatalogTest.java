@@ -48,6 +48,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
@@ -159,6 +160,29 @@ public class IcebergRESTCatalogTest {
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases(connectContext);
         Assertions.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
+    }
+
+    @Test
+    public void testListAllDatabasesWhenChildNamespaceDroppedConcurrently(@Mocked RESTSessionCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.listNamespaces((SessionContext) any, Namespace.empty());
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db_dropped"), Namespace.of("db2"));
+
+                restCatalog.listNamespaces((SessionContext) any, Namespace.of("db1"));
+                result = ImmutableList.of(Namespace.of("db1", "ns1"));
+
+                restCatalog.listNamespaces((SessionContext) any, Namespace.of("db_dropped"));
+                result = new NoSuchNamespaceException("Namespace does not exist: db_dropped");
+            }
+        };
+
+        Map<String, String> icebergProperties = ImmutableMap.of(
+                "iceberg.catalog.rest.nested-namespace-enabled", "true");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), icebergProperties);
+        List<String> dbs = icebergRESTCatalog.listAllDatabases(connectContext);
+        Assertions.assertEquals(Arrays.asList("db1", "db1.ns1", "db_dropped", "db2"), dbs);
     }
 
     @Test

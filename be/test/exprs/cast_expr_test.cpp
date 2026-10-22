@@ -22,6 +22,7 @@
 #include "base/string/slice.h"
 #include "butil/time.h"
 #include "column/array_column.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
@@ -675,6 +676,178 @@ TEST_F(VectorizedCastExprTest, intCastString) {
         // error cast
         ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
+}
+
+TEST_F(VectorizedCastExprTest, bigintCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::BIGINT;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(10);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 4, (int64_t)1775580223839LL);
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("1775580223"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastVarcharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastWildcardCharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(-1); // wildcard CHAR: no truncation
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, charTruncateHandlesInvalidUtf8WithoutOverrun) {
+    // Truncating invalid UTF-8 / raw VARBINARY bytes to CHAR(N) must not read past the slice end.
+    // 0xE4 advertises a 3-byte UTF-8 char, but only 2 bytes are present.
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(1);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string bytes = "\xE4\xB8";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 2, Slice(bytes));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(2, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        // Clamped to the slice end: never longer than the available bytes.
+        ASSERT_LE(v->get_slice(j).size, bytes.size());
+    }
+}
+
+TEST_F(VectorizedCastExprTest, implicitCharCastPreservesOversizedValues) {
+    // Missing flags from older FEs and explicit false both keep values for sink validation.
+    for (bool set_flag : {false, true}) {
+        expr_node.child_type = TPrimitiveType::BIGINT;
+        expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+        expr_node.type.types[0].scalar_type.__set_len(10);
+        if (set_flag) {
+            expr_node.__set_cast_char_truncate(false);
+        }
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+        TExprNode child_node = expr_node;
+        child_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+        MockVectorizedExpr<TYPE_BIGINT> child(child_node, 4, 1775580223839LL);
+        expr->_children.push_back(&child);
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        auto* strings = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(result.get());
+        ASSERT_EQ(4, strings->size());
+        for (size_t row = 0; row < strings->size(); ++row) {
+            ASSERT_EQ(std::string("1775580223839"), strings->get_slice(row));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, explicitCharCastPreservesUnicodeNullsAndConstants) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(2);
+    expr_node.__set_cast_char_truncate(true);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    ColumnBuilder<TYPE_VARCHAR> builder(3);
+    builder.append(Slice("中😀文"));
+    builder.append_null();
+    builder.append(Slice("hi"));
+    TExprNode child_node = expr_node;
+    child_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    MockExpr child(child_node, builder.build(false));
+    expr->_children.push_back(&child);
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    ColumnViewer<TYPE_VARCHAR> viewer(result);
+    ASSERT_EQ(3, viewer.size());
+    ASSERT_EQ(std::string("中😀"), viewer.value(0).to_string());
+    ASSERT_TRUE(viewer.is_null(1));
+    ASSERT_EQ(std::string("hi"), viewer.value(2).to_string());
+
+    ColumnBuilder<TYPE_VARCHAR> const_builder(1);
+    const_builder.append(Slice("中😀文"));
+    MockExpr constant(child_node, const_builder.build(true));
+    expr->_children[0] = &constant;
+    ObjectPool pool;
+    Expr* cloned = Expr::copy(&pool, expr.get());
+    result = cloned->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(result->is_constant());
+    ColumnViewer<TYPE_VARCHAR> const_viewer(result);
+    ASSERT_EQ(std::string("中😀"), const_viewer.value(0).to_string());
+
+    MockExpr nulls(child_node, ColumnHelper::create_const_null_column(3));
+    expr->_children[0] = &nulls;
+    ASSERT_TRUE(expr->evaluate(nullptr, nullptr)->only_null());
 }
 
 TEST_F(VectorizedCastExprTest, booleanCastString) {
@@ -2742,7 +2915,8 @@ static ColumnPtr make_base_shredded_root_typed_variant_column(const VariantRowVa
 
 static void assert_const_or_expanded_result(const ColumnPtr& result, size_t input_size,
                                             const std::string& expected_debug) {
-    ASSERT_TRUE(result->size() == 1 || result->size() == input_size);
+    // A constant input must still cover every input row: the caller reads the result at the chunk's row count.
+    ASSERT_EQ(input_size, result->size());
     const size_t rows = result->size();
     for (size_t i = 0; i < rows; ++i) {
         ASSERT_FALSE(result->is_null(i));
@@ -2770,6 +2944,44 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
     EXPECT_EQ(R"(NULL)", cast_json_to_map(TYPE_VARCHAR, TYPE_JSON, R"([1,2,3])"));
     EXPECT_EQ(R"({1:1,3:NULL,NULL:NULL})",
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
+}
+
+// A constant JSON input is viewed as its single row; the map result must still span every input row,
+// or an aggregate such as count() reads past the end of its null column.
+TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
+    constexpr size_t kInputSize = 3;
+    for (const auto& [text, expected] :
+         std::vector<std::pair<std::string, std::string>>{{R"({"1":2})", "{1:2}"}, {R"(1)", "NULL"}}) {
+        TExprNode cast_expr;
+        cast_expr.opcode = TExprOpcode::CAST;
+        cast_expr.node_type = TExprNodeType::CAST_EXPR;
+        cast_expr.num_children = 1;
+        cast_expr.__isset.opcode = true;
+        cast_expr.__isset.child_type = true;
+        cast_expr.child_type = to_thrift(TYPE_JSON);
+        cast_expr.type = gen_map_type_desc(to_thrift(TYPE_INT), to_thrift(TYPE_INT));
+
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+        auto json = JsonValue::parse(text);
+        ASSERT_TRUE(json.ok());
+        auto json_column = JsonColumn::create();
+        json_column->append(&json.value());
+        MockExpr child(TypeDescriptor(TYPE_JSON), ConstColumn::create(std::move(json_column), kInputSize));
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kInputSize, result->size());
+        for (size_t i = 0; i < kInputSize; ++i) {
+            std::string debug = result->debug_item(i);
+            constexpr std::string_view kConstPrefix = "CONST: ";
+            if (debug.rfind(kConstPrefix.data(), 0) == 0) {
+                debug.erase(0, kConstPrefix.size());
+            }
+            EXPECT_EQ(expected, debug);
+        }
+    }
 }
 
 // Test that struct-to-struct cast correctly reorders fields by name when field order differs

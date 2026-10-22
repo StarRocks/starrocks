@@ -76,6 +76,13 @@ public class BaseResponse {
         addHeader(name, value);
     }
 
+    // Append a custom header value, keeping any value already set under the same name (e.g.
+    // multiple WWW-Authenticate challenges). Unlike updateHeader, this does not replace existing
+    // values.
+    public void addCustomHeader(String name, String value) {
+        addHeader(name, value);
+    }
+
     // Add a custom header.
     private void addHeader(String name, String value) {
         if (customHeaders == null) {

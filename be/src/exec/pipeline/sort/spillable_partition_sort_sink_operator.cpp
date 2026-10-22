@@ -139,6 +139,9 @@ OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_
 
     auto sort_context = _sort_context_factory->create(driver_sequence);
     sort_context->add_partition_chunks_sorter(chunks_sorter);
+    // Anchor the spill channel to the sort context, which owns the sorter the spill tasks reference
+    // (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(sort_context.get());
     auto ope = std::make_shared<SpillablePartitionSortSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
             _materialized_record_desc, sort_context.get(), _runtime_filter_hub);

@@ -69,6 +69,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -1042,8 +1043,14 @@ public class FunctionAnalyzer {
                                                         List<Type> newArgumentTypes) {
         Function fn = null;
         String fnName = node.getFunctionName();
-        // throw exception direct
-        if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
+        if (FunctionSet.AI_COMPLETE.equalsIgnoreCase(fnName) && argumentTypes.length == 3
+                && argumentTypes[2].isNull() && !argumentTypes[0].isFileType() && !argumentTypes[1].isFileType()) {
+            // Preserve the legacy options role of an ambiguous third NULL: concrete FILE overloads otherwise
+            // precede polymorphic ANY_MAP overloads. Typed FILE arguments, including typed NULLs, are unchanged.
+            Type[] lookupTypes = argumentTypes.clone();
+            lookupTypes[2] = new MapType(NullType.NULL, NullType.NULL);
+            fn = ExprUtils.getBuiltinFunction(fnName, lookupTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        } else if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
             // For the typeof function, the parameter type of the function is the result of this function.
             // At this time, the parameter type has been obtained. You can directly replace the current
             // function with StringLiteral. However, since the parent node of the current node in ast
@@ -1056,6 +1063,44 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if (FunctionSet.ST_COVERAGE_SIMPLIFY.equalsIgnoreCase(fnName)) {
+            if (argumentTypes.length != 2 && argumentTypes.length != 3) {
+                throw new SemanticException("ST_CoverageSimplify requires two or three arguments");
+            }
+            if (argumentTypes[0].getPrimitiveType() != PrimitiveType.GEOMETRY ||
+                    ((ScalarType) argumentTypes[0]).getGeoDescriptor() == null) {
+                throw new SemanticException("ST_CoverageSimplify requires a native GEOMETRY CRS descriptor");
+            }
+            if (!argumentTypes[1].isNumericType() && !argumentTypes[1].isNull()) {
+                throw new SemanticException("ST_CoverageSimplify tolerance must be numeric");
+            }
+            if (argumentTypes.length == 3 && !argumentTypes[2].isBoolean() && !argumentTypes[2].isNull()) {
+                throw new SemanticException("ST_CoverageSimplify boundary must be BOOLEAN");
+            }
+            Expr[] folded = new Expr[argumentTypes.length];
+            for (int i = 1; i < argumentTypes.length; ++i) {
+                if (!node.getChild(i).isConstant()) {
+                    throw new SemanticException("ST_CoverageSimplify tolerance and boundary must be plan-constant");
+                }
+                folded[i] = ExprUtils.analyzeAndCastFold(node.getChild(i).clone());
+                if (!(folded[i] instanceof LiteralExpr)) {
+                    throw new SemanticException("ST_CoverageSimplify parameters must fold to constants");
+                }
+            }
+            boolean nullParameter = folded[1] instanceof NullLiteral ||
+                    (argumentTypes.length == 3 && folded[2] instanceof NullLiteral);
+            if (!nullParameter) {
+                double value = ((LiteralExpr) folded[1]).getDoubleValue();
+                if (!Double.isFinite(value) || value < 0 || !Double.isFinite(value * value)) {
+                    throw new SemanticException("ST_CoverageSimplify requires finite nonnegative tolerance " +
+                            "and representable tolerance squared");
+                }
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
         } else if ((FunctionSet.ST_BUFFER.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_SIMPLIFY_PRESERVE_TOPOLOGY.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
                 argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {

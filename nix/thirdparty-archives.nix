@@ -189,6 +189,11 @@ let
       md5 = "09a8328574dab22a7df848eae6dbbf53";
       sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
     };
+    "kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz" = {
+      url = "https://github.com/google/kafel/archive/76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz";
+      md5 = "ebc4f191e6ed09a1f1b271dc3f0679a5";
+      sha256 = "0cwgxy9ls5838m48d5pksdyphskzxrr90w0391k89g3smy8rpadr";
+    };
     "krb5-1.21.3.tar.gz" = {
       url = "https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz";
       md5 = "beb34d1dfc72ba0571ce72bed03e06eb";
@@ -218,6 +223,11 @@ let
       url = "https://blitiri.com.ar/p/libfiu/files/1.1/libfiu-1.1.tar.gz";
       md5 = "51092dcb7801efb511b7b962388d9ff4";
       sha256 = "10sxmlhlb3f4smvwaaqvxsxwafi1gb58c5k60mw4cbx9zm4jglsp";
+    };
+    "libnl-3.12.0.tar.gz" = {
+      url = "https://github.com/thom311/libnl/releases/download/libnl3_12_0/libnl-3.12.0.tar.gz";
+      md5 = "f9112ca215807fe65eecd583d8f180cc";
+      sha256 = "066xq01y2mx0xi7bwa5y6ciw1ygla15qdlzzyvyzb8zijrqwllgw";
     };
     "librdkafka-2.11.0.tar.gz" = {
       url = "https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz";
@@ -253,6 +263,11 @@ let
       url = "https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz";
       md5 = "86c4052adeb8447900bf33b4e2ddd1f9";
       sha256 = "13ia4a1zh9r22pnwsdi55wax9kj9y8b9b02lis0rfw269j1g0596";
+    };
+    "nsjail-3.6.tar.gz" = {
+      url = "https://github.com/google/nsjail/archive/refs/tags/3.6.tar.gz";
+      md5 = "9abc3a5567dd3cd2fc1c79c41ea0e5eb";
+      sha256 = "1kg1lwx5bnqw3gazc3kf8pv77647vnj9cai9cwdv06ghr5ys0ccp";
     };
     "openssl-3.5.7.tar.gz" = {
       url = "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz";
@@ -530,6 +545,9 @@ let
       "xxHash-0.8.3.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
+      "libnl-3.12.0.tar.gz"
+      "kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz"
+      "nsjail-3.6.tar.gz"
     ];
     "aarch64-linux" = [
       "starrocks-clucene-2026.06.23.tar.gz"
@@ -601,6 +619,9 @@ let
       "xxHash-0.8.3.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
+      "libnl-3.12.0.tar.gz"
+      "kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz"
+      "nsjail-3.6.tar.gz"
     ];
     "aarch64-darwin" = [
       "starrocks-clucene-2026.06.23.tar.gz"
@@ -747,6 +768,9 @@ let
       "XXHASH"
       "BLAKE3"
       "BENCHGEN"
+      "LIBNL"
+      "KAFEL"
+      "NSJAIL"
     ];
     "aarch64-linux" = [
       "CLUCENE"
@@ -818,6 +842,9 @@ let
       "XXHASH"
       "BLAKE3"
       "BENCHGEN"
+      "LIBNL"
+      "KAFEL"
+      "NSJAIL"
     ];
     "aarch64-darwin" = [
       "CLUCENE"
@@ -963,6 +990,8 @@ let
       "blake3"
       "benchgen"
       "libdeflate"
+      "libnl"
+      "nsjail"
       "breakpad"
     ];
     "aarch64-linux" = [
@@ -1035,6 +1064,8 @@ let
       "blake3"
       "benchgen"
       "libdeflate"
+      "libnl"
+      "nsjail"
     ];
     "aarch64-darwin" = [
       "libevent"

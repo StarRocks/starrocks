@@ -940,7 +940,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
+- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数，且至少为 1。运行时将此参数设置为 0 可恢复自动设置。
 - 引入版本：-
 
 ### pk_index_parallel_rebuild_mem_ratio

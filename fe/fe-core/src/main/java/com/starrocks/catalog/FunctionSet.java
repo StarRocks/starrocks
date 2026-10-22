@@ -55,6 +55,7 @@ import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -83,6 +84,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -207,6 +209,7 @@ public class FunctionSet {
     public static final String ST_CENTROID = "st_centroid";
     public static final String ST_BUFFER = "st_buffer";
     public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_COVERAGE_SIMPLIFY = "st_coveragesimplify";
     public static final String ST_INTERSECTION = "st_intersection";
     public static final String ST_UNION = "st_union";
     public static final String ST_DIFFERENCE = "st_difference";
@@ -305,6 +308,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -816,6 +820,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -884,6 +889,7 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add(FunctionSet.ST_COVERAGE_SIMPLIFY)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -1209,6 +1215,24 @@ public class FunctionSet {
             return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
         return null;
+    }
+
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        TAIModelSource modelSource = family.get(0).getAiModelSource();
+        if (modelSource == null || family.stream().anyMatch(fn -> !fn.isAi() || !fn.isUserVisible()
+                || fn.getAiModelSource() != modelSource)) {
+            return null;
+        }
+        return canonicalName;
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
@@ -1615,13 +1639,14 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
-        // Contract 5.4 window reservations, without overloads or BE dispatch.
-        // Analytic builtins currently resolve by name/type, not generated scalar IDs.
-        // Reserve separate IDs for explicit future signatures (no default-argument alias):
-        // Reserved 120420: ST_CoverageSimplify / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY, window.
-        // Reserved 120421: ST_CoverageSimplify / 2 (GEOMETRY, DOUBLE) -> GEOMETRY, window.
-        // Reserved 120430: ST_CoverageSimplify / 3 (GEOGRAPHY, DOUBLE, BOOLEAN) -> GEOGRAPHY, window.
-        // Reserved 120431: ST_CoverageSimplify / 3 (GEOMETRY, DOUBLE, BOOLEAN) -> GEOMETRY, window.
+        Type coverageGeometry = AnyGeometryType.GEOMETRY;
+        AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageTwo);
+        AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
+                coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));

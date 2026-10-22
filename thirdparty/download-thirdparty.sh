@@ -734,6 +734,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
         # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
+        # cap parser nesting depth so deeply nested JSON fails instead of overflowing the stack
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -958,4 +960,38 @@ if [[ -d $TP_SOURCE_DIR/$SNAPPY_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $SNAPPY_SOURCE"
+fi
+
+# nsjail builds the kafel seccomp policy compiler from a git submodule, which its
+# release archive does not carry: its Makefile would run `git submodule update` at
+# build time, which a source build has no repository for. Put the separately
+# downloaded kafel tree where that Makefile looks for it instead.
+if [[ -d $TP_SOURCE_DIR/$NSJAIL_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] ; then
+        rm -rf kafel
+        cp -r "$TP_SOURCE_DIR/$KAFEL_SOURCE" kafel
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $NSJAIL_SOURCE"
+fi
+
+# boost 1.80.0 patch to build with clang 20. MPL's integral_c forms its next/prior
+# values with static_cast<T>(N + 1) / static_cast<T>(N - 1) inside a template
+# argument, which for an enum at the edge of its range is an out-of-range enum value
+# in a constant expression. Clang 16 started rejecting that as the default-error
+# warning -Wenum-constexpr-conversion; clang 20 made it a hard error that no flag can
+# turn off, which breaks every BE file that pulls in boost/numeric/conversion (e.g.
+# through boost/geometry). Backport the upstream fix from Boost 1.86.0
+# (boostorg/mpl 8499ae7e4ff0 and fb6b861834e2, https://github.com/boostorg/mpl/issues/69),
+# which computes them as static constants instead.
+if [[ -d $TP_SOURCE_DIR/$BOOST_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BOOST_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BOOST_SOURCE == "boost_1_80_0" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/boost-1.80.0-mpl-clang20.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $BOOST_SOURCE"
 fi

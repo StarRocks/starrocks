@@ -1,0 +1,147 @@
+-- name: test_iceberg_eq_delete_partition_scope
+-- An equality delete written in one partition must not delete rows with the same key in another partition.
+-- The delete files are written by hive tables and registered with add_equality_delete_files.
+
+create external catalog iceberg_eq_scope_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_eq_scope_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+
+-- the equality key (id) does not contain the partition column: p=a deletes id 1, p=b deletes id 2
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b'), (1, 'c1', 'c');
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes values (1, 'a'), (2, 'b');
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_deletes", file_format="parquet", equality_columns="id");
+
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id order by p, id;
+select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id;
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where p = 'b' order by id;
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where id = 1 order by p;
+function: assert_explain_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
+
+-- the equality key contains the identity partition column (as in a Flink upsert table): a key match already
+-- implies the same partition, so the plan needs no partition check
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b');
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes(
+    id int,
+    p string
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_p_deletes/p=a");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes values (1, 'a');
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_p_deletes", file_format="parquet", equality_columns="id,p");
+
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p order by p, id;
+function: assert_explain_not_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p', '$partition_key')
+
+-- a global delete (unpartitioned spec) and a partitioned delete on the same key: the global one deletes id 1
+-- in every partition, the partitioned one deletes id 2 in p=a only
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b');
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed drop partition column p;
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_global_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes values (1);
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_global_deletes", file_format="parquet", equality_columns="id");
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed add partition column p;
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes values (2, 'a');
+
+-- deletes under two specs are read (and can be added) only with this session variable
+set enable_read_iceberg_equality_delete_with_partition_evolution = true;
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes", file_format="parquet", equality_columns="id");
+
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed order by p, id;
+set enable_read_iceberg_equality_delete_with_partition_evolution = false;
+
+-- two equality keys in one partition: a delete by a and a delete by b. Each delete applies only by its own key,
+-- so the row whose a is NULL is kept (the b delete has no a column, which must not read as a = NULL)
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys(
+    a int,
+    b int,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys values (null, 20, 'x'), (1, 10, 'x'), (2, 30, 'x'), (3, 40, 'x');
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes(
+    a int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_a_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes values (1, 'x');
+
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes(
+    b int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_b_deletes");
+
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes values (40, 'x');
+
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_a_deletes", file_format="parquet", equality_columns="a");
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_b_deletes", file_format="parquet", equality_columns="b");
+
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys order by b;
+
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes force;
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id force;
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes force;
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes force;
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes force;
+drop database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+drop catalog iceberg_eq_scope_${uuid0};
+drop catalog hive_eq_scope_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/eq_scope_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null

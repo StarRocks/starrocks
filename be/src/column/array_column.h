@@ -208,8 +208,6 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    bool has_large_column() const override { return _elements->has_large_column(); }
-
     void check_or_die() const override;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;

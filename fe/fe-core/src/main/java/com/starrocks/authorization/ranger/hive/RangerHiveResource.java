@@ -31,7 +31,11 @@ public class RangerHiveResource extends RangerAccessResourceImpl {
             } else if (objectType.equals(ObjectType.TABLE)) {
                 return "table";
             } else {
-                return "unknown";
+                // The Ranger `hive` service def only knows database/table/column. Any other key
+                // (e.g. catalog) is outside every resource hierarchy and would make the policy
+                // engine reject every request for this catalog, so fail loudly instead.
+                throw new IllegalArgumentException(
+                        "Object type " + objectType + " is not supported by the Ranger hive service definition");
             }
         }
     }

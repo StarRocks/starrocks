@@ -1778,7 +1778,7 @@ TEST_F(GroupReaderTest, VariantScalarMaterializeModeKeepsAllNullBinding) {
               VariantColumnReader::decide_variant_scalar_materialize_mode(&node, 3));
 }
 
-TEST_F(GroupReaderTest, VariantScalarMaterializeModeDemotesMixedBinding) {
+TEST_F(GroupReaderTest, VariantScalarMaterializeModeKeepsMixedBindingWithFallback) {
     ShreddedFieldNode node;
     node.kind = ShreddedFieldNode::Kind::SCALAR;
     node.typed_value_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
@@ -1787,7 +1787,7 @@ TEST_F(GroupReaderTest, VariantScalarMaterializeModeDemotesMixedBinding) {
     Slice fallback("S1");
     node.value_column->as_mutable_ptr()->append_datum(fallback);
 
-    ASSERT_EQ(VariantScalarMaterializeMode::DEMOTE_VARIANT,
+    ASSERT_EQ(VariantScalarMaterializeMode::KEEP_SCALAR_WITH_FALLBACK,
               VariantColumnReader::decide_variant_scalar_materialize_mode(&node, 1));
 }
 

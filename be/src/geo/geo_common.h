@@ -17,10 +17,15 @@
 
 #pragma once
 
+#include <cmath>
 #include <ostream>
 #include <string>
 
 namespace starrocks {
+
+inline bool is_valid_crs84_coordinate(double x, double y) {
+    return std::isfinite(x) && std::isfinite(y) && x >= -180 && x <= 180 && y >= -90 && y <= 90;
+}
 
 enum GeoShapeType {
     GEO_SHAPE_ANY = 0,

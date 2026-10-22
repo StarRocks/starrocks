@@ -19,12 +19,14 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -34,6 +36,7 @@
 #include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
+#include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/rowset/column_reader.h"
 #include "storage_primitive/flat_json_config.h"
@@ -44,6 +47,82 @@ namespace starrocks {
 
 static const double FILTER_TEST_FPP[]{0.05, 0.1, 0.15, 0.2, 0.25, 0.3};
 static const uint64_t FILTER_MAX_ELEMNT_NUMS = 1024;
+// The trie keeps at most kNodesPerFlatColumn nodes per column json_flat_column_max allows to extract
+// (and never budgets for fewer than kMinColumnBudget columns): plenty for nested documents whose
+// keys repeat, while bounding documents whose key names are data.
+static constexpr int kMinColumnBudget = 100;
+static constexpr size_t kNodesPerFlatColumn = 64;
+
+// Hits of an already-flattened path that the complex-type check may count as base-typed values
+// (JsonFlatPath::flat_base_type_hits). Values only reach a non-JSON sub-column after being flattened
+// as a base type; a JSON sub-column holds complex values, so it stays subject to
+// enable_json_flat_complex_type exactly as when deriving from data.
+static uint64_t base_type_hits(LogicalType sub_column_type, uint64_t hits) {
+    return sub_column_type == LogicalType::TYPE_JSON ? 0 : hits;
+}
+
+// Value range of a BIGINT sub-column; nullopt when unknown.
+using BigintRange = std::optional<std::pair<int64_t, int64_t>>;
+
+static BigintRange bigint_range_of(const ColumnReader* sub) {
+    const ZoneMapPB* zm = sub->segment_zone_map();
+    if (zm == nullptr) {
+        return std::nullopt;
+    }
+    if (!zm->has_not_null()) {
+        return std::make_pair(int64_t{0}, int64_t{0});
+    }
+    if (!zm->has_min() || !zm->has_max()) {
+        return std::nullopt;
+    }
+    StringParser::ParseResult min_result;
+    StringParser::ParseResult max_result;
+    auto min = StringParser::string_to_int<int64_t>(zm->min().data(), zm->min().size(), &min_result);
+    auto max = StringParser::string_to_int<int64_t>(zm->max().data(), zm->max().size(), &max_result);
+    if (min_result != StringParser::PARSE_SUCCESS || max_result != StringParser::PARSE_SUCCESS) {
+        return std::nullopt;
+    }
+    return std::make_pair(min, max);
+}
+
+static BigintRange bigint_range_of(const Column& sub) {
+    if (sub.is_nullable()) {
+        const auto& nullable = down_cast<const NullableColumn&>(sub);
+        const auto* data = down_cast<const Int64Column*>(nullable.data_column().get());
+        int64_t min = 0;
+        int64_t max = 0;
+        for (size_t i = 0; i < sub.size(); i++) {
+            if (!nullable.is_null(i)) {
+                min = std::min(min, data->get_data()[i]);
+                max = std::max(max, data->get_data()[i]);
+            }
+        }
+        return std::make_pair(min, max);
+    }
+    return std::nullopt;
+}
+
+// Accounts an already-flattened sub-column of type `type` holding `hits` values to `leaf`.
+//
+// The layout derived from sub-columns is read by casting each source sub-column to the derived type, so the
+// derived type must hold every source value exactly; dfs_keep_numbers_exact() checks that from the value range
+// of the path. A LARGEINT sub-column only exists for values past INT64_MAX; a BIGINT sub-column contributes its
+// value range, or the whole BIGINT range when it is unknown.
+static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, const BigintRange& range) {
+    leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(type);
+    if (type == LogicalType::TYPE_LARGEINT) {
+        leaf->max_uint = std::numeric_limits<uint64_t>::max();
+    } else if (type == LogicalType::TYPE_BIGINT) {
+        const auto [min, max] = range.value_or(
+                std::make_pair(std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max()));
+        leaf->min_int = std::min(leaf->min_int, min);
+        if (max > 0) {
+            leaf->max_uint = std::max(leaf->max_uint, static_cast<uint64_t>(max));
+        }
+    }
+    leaf->hits += hits;
+    leaf->flat_base_type_hits += base_type_hits(type, hits);
+}
 
 double estimate_filter_fpp(uint64_t element_nums) {
     uint32_t bytes[6];
@@ -133,6 +212,8 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _path_root = std::make_shared<JsonFlatPath>();
     // init path by flat JSON
     _derived_on_flat_json(json_datas);
+    _max_nodes = static_cast<size_t>(std::max(_max_column, kMinColumnBudget)) * kNodesPerFlatColumn;
+    _num_nodes = _count_nodes(_path_root.get());
 
     // extract common keys, type
     size_t mark_row = 0;
@@ -187,8 +268,9 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             const auto& sub = (*reader->sub_readers())[i];
             // compaction only extract common leaf, extract parent node need more compute on remain, it's bad performance
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
-            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
-            leaf->hits += reader->num_rows();
+            add_flat_sub_column(
+                    leaf, sub->column_type(), reader->num_rows(),
+                    sub->column_type() == LogicalType::TYPE_BIGINT ? bigint_range_of(sub.get()) : std::nullopt);
         }
     }
 
@@ -220,8 +302,9 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
-            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
-            leaf->hits += hits;
+            add_flat_sub_column(leaf, types[i], hits,
+                                types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(*json_col->get_flat_field(i))
+                                                                     : std::nullopt);
         }
     }
 }
@@ -247,7 +330,7 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
 
     size_t ignore_max = _total_rows * _min_json_sparsity_factory;
     ignore_max = _total_rows > ignore_max ? _total_rows - ignore_max : 0;
-    size_t check_batch = std::max(ignore_max, (size_t)config::vector_chunk_size);
+    const size_t check_batch = std::max<size_t>(1, config::vector_chunk_size);
     for (size_t i = 0; i < row_count; ++i) {
         if (col->is_null(i)) {
             continue;
@@ -269,9 +352,14 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
 
         // we required the hit-rate of the path >= _min_json_sparsity_factor, so the max number of missed rows is (1 - _min_json_sparsity_factor) * total_rows.
         // if the number of missed rows exceeds (1 - _min_json_sparsity_factor) * total_rows, then the path must not be extracted.
-        if (((mark_row + i) % check_batch) == 0) {
-            size_t hits_min = mark_row + i > ignore_max ? mark_row + i - ignore_max : 0;
-            _clean_sparsity_path("", _path_root.get(), hits_min);
+        // Nothing can be ruled out that way before ignore_max rows, so start checking there.
+        const size_t row = mark_row + i;
+        if (row > ignore_max && (row % check_batch) == 0) {
+            _clean_sparsity_path("", _path_root.get(), row - ignore_max);
+            _num_nodes = _count_nodes(_path_root.get());
+        }
+        if (!_path_tree_full && _max_nodes > 0 && _num_nodes >= _max_nodes) {
+            _shrink_path_tree(row);
         }
     }
 }
@@ -286,6 +374,7 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
         if (child->hits < check_hits_min) {
             if (_generate_filter) {
                 _remain_keys.insert(iter->first);
+                _add_remain_subtree(child);
             }
             node->remain = true;
             iter = node->children.erase(iter);
@@ -302,6 +391,75 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
     }
 }
 
+size_t JsonPathDeriver::_count_nodes(const JsonFlatPath* node) {
+    size_t n = node->children.size();
+    for (const auto& [_, child] : node->children) {
+        n += _count_nodes(child.get());
+    }
+    return n;
+}
+
+void JsonPathDeriver::_add_remain_key(const std::string_view& key) {
+    if (!_generate_filter) {
+        return;
+    }
+    _remain_keys.insert(key);
+    if (_remain_keys.size() > FILTER_MAX_ELEMNT_NUMS) {
+        _generate_filter = false;
+        _remain_keys.clear();
+    }
+}
+
+void JsonPathDeriver::_add_remain_keys_in(const vpack::Slice& value) {
+    if (!value.isObject()) {
+        return;
+    }
+    for (vpack::ObjectIterator it(value, true); _generate_filter && it.valid(); it.next()) {
+        auto current = (*it);
+        _add_remain_key(current.key.stringView());
+        _add_remain_keys_in(current.value);
+    }
+}
+
+void JsonPathDeriver::_add_remain_subtree(const JsonFlatPath* node) {
+    for (auto iter = node->children.begin(); _generate_filter && iter != node->children.end(); ++iter) {
+        _add_remain_key(iter->first);
+        _add_remain_subtree(iter->second.get());
+    }
+}
+
+// Drops paths seen in a single row so far (other than the current one), like _clean_sparsity_path
+// drops the ones that can no longer reach the sparsity threshold.
+size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current_row) {
+    size_t dropped = 0;
+    for (auto& [_, child] : node->children) {
+        dropped += _drop_singleton_paths(child.get(), current_row);
+    }
+    auto iter = node->children.begin();
+    while (iter != node->children.end()) {
+        const auto* child = iter->second.get();
+        if (child->hits < 2 && child->last_row != current_row) {
+            _add_remain_key(iter->first);
+            _add_remain_subtree(child);
+            node->remain = true;
+            iter = node->children.erase(iter);
+            dropped++;
+        } else {
+            ++iter;
+        }
+    }
+    return dropped;
+}
+
+void JsonPathDeriver::_shrink_path_tree(size_t current_row) {
+    _drop_singleton_paths(_path_root.get(), current_row);
+    _num_nodes = _count_nodes(_path_root.get());
+    if (_num_nodes >= _max_nodes) {
+        _path_tree_full = true;
+        VLOG(2) << "flat json path tree full at row " << current_row << ", nodes: " << _num_nodes;
+    }
+}
+
 void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
     vpack::ObjectIterator it(value, true);
 
@@ -311,9 +469,19 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         auto v = current.value;
         auto k = current.key.stringView();
 
-        auto [iter, inserted] = root->children.try_emplace(k);
-        if (inserted) {
-            iter->second = std::make_unique<JsonFlatPath>();
+        auto iter = root->children.find(k);
+        if (iter == root->children.end()) {
+            // The budget also holds within a row: a single row can carry more paths than the whole
+            // trie may have, so stop adding as soon as it is reached, not only between rows.
+            if (_path_tree_full || (_max_nodes > 0 && _num_nodes >= _max_nodes)) {
+                // Never flattened, so it stays in this node's remain.
+                root->remain = true;
+                _add_remain_key(k);
+                _add_remain_keys_in(v);
+                continue;
+            }
+            iter = root->children.emplace(k, std::make_unique<JsonFlatPath>()).first;
+            _num_nodes++;
         }
         auto child = iter->second.get();
         child->hits++;
@@ -343,8 +511,33 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             child->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
             if (json_type == vpack::ValueType::UInt) {
                 child->max_uint = std::max(child->max_uint, v.getUIntUnchecked());
+            } else if (json_type == vpack::ValueType::Int || json_type == vpack::ValueType::SmallInt) {
+                const int64_t value = v.getInt();
+                if (value < 0) {
+                    child->min_int = std::min(child->min_int, value);
+                } else {
+                    child->max_uint = std::max(child->max_uint, static_cast<uint64_t>(value));
+                }
             }
         }
+    }
+}
+
+// A numeric type the bits meet at must hold every value of the path exactly, or the value read back differs from
+// the one loaded. Integers and doubles meet at DOUBLE, which rounds integers past 2^53; negative and unsigned
+// integers meet at LARGEINT, which is rebuilt as uint64 (JsonMerger). Such a path is flattened as JSON instead,
+// which keeps each value as it was.
+void dfs_keep_numbers_exact(JsonFlatPath* node) {
+    constexpr int64_t kMaxExactDoubleInt = int64_t{1} << 53;
+    const bool past_double =
+            node->max_uint > static_cast<uint64_t>(kMaxExactDoubleInt) || node->min_int < -kMaxExactDoubleInt;
+    const bool past_bigint = node->max_uint > static_cast<uint64_t>(RunTimeTypeLimits<TYPE_BIGINT>::max_value());
+    if ((node->json_type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::Double) && past_double) ||
+        (node->json_type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && node->min_int < 0 && past_bigint)) {
+        node->json_type = flat_json::JSON_BASE_TYPE_BITS;
+    }
+    for (auto& [_, child] : node->children) {
+        dfs_keep_numbers_exact(child.get());
     }
 }
 
@@ -394,7 +587,8 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         // leaf node or all children is remain
         // check sparsity, same key may appear many times in json, so we need avoid duplicate compute hits
 
-        bool is_base_type = node->base_type_count >= node->hits - (node->hits * config::json_flat_complex_type_factor);
+        bool is_base_type = node->base_type_count + node->flat_base_type_hits >=
+                            node->hits - (node->hits * config::json_flat_complex_type_factor);
         bool type_check = config::enable_json_flat_complex_type || is_base_type;
         if (type_check && node->multi_times <= 0 && node->hits >= _total_rows * _min_json_sparsity_factory) {
             hit_leaf->emplace_back(node, absolute_path);
@@ -431,6 +625,7 @@ void dfs_add_remain_keys(JsonFlatPath* node, std::unordered_set<std::string_view
 }
 
 void JsonPathDeriver::_finalize() {
+    dfs_keep_numbers_exact(_path_root.get());
     // try downgrade json-uint to bigint
     dfs_downgrade_uint(_path_root.get());
 

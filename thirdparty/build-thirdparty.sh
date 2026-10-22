@@ -1094,7 +1094,6 @@ build_h3() {
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF \
-        -DH3_ALLOC_PREFIX=starrocks_h3_ \
         -DBUILD_TESTING=OFF \
         -DBUILD_BENCHMARKS=OFF \
         -DBUILD_FUZZERS=OFF \
@@ -1937,6 +1936,56 @@ build_paimon_cpp() {
         exit 1
     fi
     restore_compile_flags
+}
+
+# libnl
+# Only nsjail uses it, and only for the macvlan support it includes unconditionally.
+build_libnl() {
+    check_if_source_exist $LIBNL_SOURCE
+    cd $TP_SOURCE_DIR/$LIBNL_SOURCE
+
+    # Its configure insists on pkg-config existing, but only consults it for optional
+    # dependencies none of which are built here, so hand it a stand-in rather than
+    # require the tool (`true` is resolved from PATH: a build sandbox may have no
+    # /bin). The objects are linked into nsjail, which is a PIE.
+    PKG_CONFIG=true \
+    CFLAGS="$(append_flags "${CFLAGS}" "-fPIC")" \
+        ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static --disable-cli
+    make -j$PARALLEL
+    make install
+}
+
+# nsjail
+build_nsjail() {
+    check_if_source_exist $NSJAIL_SOURCE
+    cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
+
+    # Kafel's Makefile gives parser.c/parser.h and lexer.c/lexer.h separate
+    # recipes that write the same files. Parallel make can run bison or flex
+    # twice and compile an incomplete generated header. Build Kafel serially
+    # before the parallel nsjail build.
+    LDFLAGS="" CFLAGS=-fPIE make -j1 -C kafel
+
+    # nsjail resolves protobuf and libnl through pkg-config, which here would find a
+    # host protobuf or nothing at all. Hand it the ones built above instead: PKG_CONFIG
+    # only has to be set for its "install pkg-config" check, NL3_EXISTS=no stops it from
+    # calling pkg-config for libnl, and the flags below are what pkg-config would have
+    # printed. protoc is taken from PATH, and the generated config parser links the
+    # static libraries, so the binary needs none of them at run time.
+    #
+    # The include directories are given with -isystem because nsjail builds with -Werror
+    # and protobuf's headers still use std::iterator, which C++17 deprecates.
+    PATH="$TP_INSTALL_DIR/bin:$PATH" \
+    LDFLAGS="$TP_LIB_DIR/libnl-route-3.a $TP_LIB_DIR/libnl-3.a" \
+        make -j$PARALLEL \
+            PKG_CONFIG=none \
+            NL3_EXISTS=no \
+            PROTOBUF_CFLAGS="-isystem $TP_INCLUDE_DIR" \
+            PROTOBUF_LIBS="$TP_LIB_DIR/libprotobuf.a" \
+            USER_DEFINES="-isystem $TP_INCLUDE_DIR/libnl3"
+
+    mkdir -p $TP_INSTALL_DIR/bin
+    cp -f nsjail $TP_INSTALL_DIR/bin/nsjail
 }
 
 # restore cxxflags/cppflags/cflags to default one

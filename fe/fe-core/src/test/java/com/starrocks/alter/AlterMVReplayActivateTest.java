@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -30,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -42,8 +42,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.spy;
@@ -84,33 +82,25 @@ public class AlterMVReplayActivateTest extends MVTestBase {
     }
 
     /**
-     * Samples {@link LockHoldDepth#isUnderLock()} on getTable, OR-accumulated, for calls made on the thread
-     * that installed it only: creating an MV hands its definition to the mv-plan-cache executor, which
-     * resolves the same hive table at an arbitrary moment on a thread whose lock state is unrelated.
-     * The asynchronous rebuild of a replayed activation can instead be parked on {@link #gate}.
+     * Probes getTable on the thread that installed it only: creating an MV hands its definition to the
+     * mv-plan-cache executor, which resolves the same hive table at an arbitrary moment on a thread whose lock
+     * state is unrelated. The asynchronous rebuild of a replayed activation is probed separately, and can be
+     * parked on {@link #gate}.
      */
     private static class LockProbeHiveMetadata extends MockedHiveMetadata {
-        private final Thread owner = Thread.currentThread();
-        private final AtomicBoolean underLock = new AtomicBoolean(false);
-        private final AtomicInteger calls = new AtomicInteger();
+        private static final String GET_TABLE = "getTable";
+        private final LockProbe lock = LockProbe.onCurrentThread();
         // The same, for the calls made by the asynchronous rebuild of a replayed activation.
-        private final AtomicBoolean rebuildUnderLock = new AtomicBoolean(false);
-        private final AtomicInteger rebuildCalls = new AtomicInteger();
+        private final LockProbe rebuildLock = LockProbe.onAnyThread();
         private volatile CountDownLatch gate;
         private final CountDownLatch gateEntered = new CountDownLatch(1);
 
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            if (Thread.currentThread() == owner) {
-                calls.incrementAndGet();
-                if (LockHoldDepth.isUnderLock()) {
-                    underLock.set(true);
-                }
+            if (lock.isProbedThread()) {
+                lock.record(GET_TABLE);
             } else if (isReplayRebuild()) {
-                rebuildCalls.incrementAndGet();
-                if (LockHoldDepth.isUnderLock()) {
-                    rebuildUnderLock.set(true);
-                }
+                rebuildLock.record(GET_TABLE);
                 CountDownLatch current = gate;
                 if (current != null) {
                     gateEntered.countDown();
@@ -125,10 +115,12 @@ public class AlterMVReplayActivateTest extends MVTestBase {
         }
     }
 
-    // The mv-plan-cache executor also runs unrelated plan builds; park only the replayed activation's rebuild.
+    // The mv-plan-cache executor also runs unrelated plan builds; park only an asynchronous activation: the
+    // rebuild of a replayed one, or the check that follows a reload.
     private static boolean isReplayRebuild() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            if (frame.getMethodName().contains("activateOnReplay")) {
+            if (frame.getMethodName().contains("activateOnReplay")
+                    || frame.getMethodName().contains("checkAndSetActive")) {
                 return true;
             }
         }
@@ -225,14 +217,12 @@ public class AlterMVReplayActivateTest extends MVTestBase {
             installProbe();
             GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewStatus(activeLog(mv, infos));
 
-            Assertions.assertFalse(probe.underLock.get(),
+            Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE),
                     "replay resolved an external base table while holding the MV lock");
             awaitActive(mv);
             Assertions.assertEquals(infos, mv.getBaseTableInfos());
             // The resolution moved out of the lock rather than disappearing: the rebuild did reach the connector.
-            Assertions.assertTrue(probe.rebuildCalls.get() > 0,
-                    "the rebuild never resolved the external base table, so this test proves nothing");
-            Assertions.assertFalse(probe.rebuildUnderLock.get(),
+            probe.rebuildLock.assertReachedOutsideTheLock(LockProbeHiveMetadata.GET_TABLE,
                     "the rebuild resolved an external base table while holding an FE metadata lock");
         } finally {
             starRocksAssert.dropMaterializedView(mvName);
@@ -315,6 +305,39 @@ public class AlterMVReplayActivateTest extends MVTestBase {
     }
 
     /**
+     * After an image is loaded every active mv is reloaded and checked asynchronously. A follower replays the
+     * leader's INACTIVE while that check is in flight; the check's verdict, computed for the status before,
+     * must not set the mv back to active.
+     */
+    @Test
+    public void testAStaleReloadVerdictDoesNotOverrideAReplayedInactive() throws Exception {
+        String mvName = "mv_reload_activate_stale";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            Assertions.assertTrue(mv.isActive());
+
+            installProbe();
+            probe.gate = new CountDownLatch(1);
+            // as after loading an image: not reloaded yet, and reloaded asynchronously
+            mv.changeReloadState(-1);
+            mv.onReload(true);
+            Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
+                    "the activation check never reached the connector, so nothing was in flight");
+
+            mv.setInactiveAndReason("test: a later replayed INACTIVE");
+            probe.gate.countDown();
+            // the asynchronous check marks the reload done when it finishes
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).until(mv::hasReloaded);
+
+            Assertions.assertFalse(mv.isActive(), "the stale verdict re-activated the MV");
+            Assertions.assertEquals("test: a later replayed INACTIVE", mv.getInactiveReason());
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    /**
      * The rebuild runs outside the lock, so a DROP can be replayed while it is in flight. DROP cleans up the
      * base-table links, constraints and rewrite cache; whatever the rebuild publishes afterwards must not
      * resurrect them for an mv that no longer exists.
@@ -387,7 +410,8 @@ public class AlterMVReplayActivateTest extends MVTestBase {
             }
 
             Assertions.assertTrue(mv.isActive(), "the checkpoint replay must adopt the leader's ACTIVE");
-            Assertions.assertEquals(0, probe.calls.get() + probe.rebuildCalls.get(),
+            Assertions.assertEquals(0, probe.lock.calls(LockProbeHiveMetadata.GET_TABLE)
+                            + probe.rebuildLock.calls(LockProbeHiveMetadata.GET_TABLE),
                     "the checkpoint replay reached the connector");
 
             Table reloaded = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(mv, Table.class), Table.class);

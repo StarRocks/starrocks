@@ -91,3 +91,9 @@ If you cannot access a browser in your environment (such as using terminal or se
 - When you first connect to StarRocks, a URL will be returned.
 - You need to access this URL on a browser and complete the authentication.
 - After the authentication, you can then interact with StarRocks.
+
+## Connect over HTTP or Arrow Flight with OAuth 2.0
+
+An access token issued by the OAuth 2.0 provider can also be sent as `Authorization: Bearer <token>` to the HTTP API and to Arrow Flight SQL. StarRocks verifies it against the `jwks_url`, `required_issuer` and `required_audience` of the OAuth 2.0 security integration, with no browser round trip. See [Connect over HTTP and Arrow Flight](./security_integration.md#connect-over-http-and-arrow-flight).
+
+> A user created with `IDENTIFIED WITH authentication_oauth2` can only complete the browser flow over the MySQL protocol. To accept an access token on the HTTP API or Arrow Flight SQL, create an OAuth 2.0 [security integration](./security_integration.md), which acts as a Resource Server, and see [Where each authentication method works](./authentication.mdx#where-each-authentication-method-works).

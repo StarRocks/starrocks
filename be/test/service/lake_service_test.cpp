@@ -129,6 +129,15 @@ protected:
         return seg_name;
     }
 
+    std::string generate_sst_file(int64_t txn_id) {
+        auto sst_name = lake::gen_sst_filename(txn_id);
+        auto sst_path = _tablet_mgr->sst_location(_tablet_id, sst_name);
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(sst_path));
+        CHECK_OK(f->append(sst_path));
+        CHECK_OK(f->close());
+        return sst_name;
+    }
+
     std::string generate_segment_file_for_tablet(int64_t tablet_id, int64_t txn_id) {
         auto seg_name = lake::gen_segment_filename(txn_id);
         auto seg_path = _tablet_mgr->segment_location(tablet_id, seg_name);
@@ -473,6 +482,75 @@ TEST_F(LakeServiceTest, test_publish_version_rejects_reshard_split_count_one) {
 
 TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_one) {
     expect_invalid_split_count(false, 1);
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_unchanged_tablet) {
+    ASSIGN_OR_ABORT(auto original, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    auto base = std::make_shared<TabletMetadataPB>(*original);
+    auto* rowset = base->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(17);
+    rowset->set_data_size(29);
+    rowset->add_segment_metas()->set_filename("unchanged.dat");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(base));
+
+    // A CN can hold only the indexes left unchanged by a split or merge on another CN.
+    // No txnlog exists for these tablets; they must retain their data at the new version.
+    for (bool aggregate : {false, true}) {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.set_enable_aggregate_publish(aggregate);
+        request.add_tablet_ids(_tablet_id);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_TABLET_RESHARD);
+        txn->set_gtid(12345);
+
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            brpc::Controller cntl;
+            PublishVersionResponse response;
+            _lake_service.publish_version(&cntl, &request, &response, nullptr);
+            ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+            ASSERT_EQ(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.tablet_ranges_size());
+            EXPECT_EQ(aggregate ? 1 : 0, response.tablet_metas_size());
+            TabletMetadataPB metadata;
+            if (aggregate) {
+                metadata.CopyFrom(response.tablet_metas().at(_tablet_id));
+            } else {
+                ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+                metadata.CopyFrom(*persisted);
+            }
+            EXPECT_EQ(_tablet_id, metadata.id());
+            EXPECT_EQ(2, metadata.version());
+            EXPECT_EQ(12345, metadata.gtid());
+            EXPECT_EQ(base->schema().SerializeAsString(), metadata.schema().SerializeAsString());
+            ASSERT_EQ(1, metadata.rowsets_size());
+            EXPECT_EQ(1, metadata.rowsets(0).id());
+            EXPECT_EQ(17, metadata.rowsets(0).num_rows());
+            EXPECT_EQ(29, metadata.rowsets(0).data_size());
+            ASSERT_EQ(1, metadata.rowsets(0).segment_metas_size());
+            EXPECT_EQ("unchanged.dat", metadata.rowsets(0).segment_metas(0).filename());
+        }
+    }
+    ASSIGN_OR_ABORT(auto unchanged, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    EXPECT_EQ(base->SerializeAsString(), unchanged->SerializeAsString());
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_rejects_empty_tablets) {
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    auto* txn = request.add_txn_infos();
+    txn->set_txn_id(next_id());
+    txn->set_txn_type(TXN_TABLET_RESHARD);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    EXPECT_TRUE(cntl.Failed());
+    EXPECT_FALSE(_tablet_mgr->get_tablet_metadata(_tablet_id, 2).ok());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
@@ -2186,6 +2264,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        log.mutable_op_write()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_write()->add_ssts(); // a segment without a pre-built sstable
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2205,6 +2285,8 @@ TEST_F(LakeServiceTest, test_abort) {
                 generate_segment_file(txn_id));
         log.mutable_op_compaction()->set_new_segment_offset(0);
         log.mutable_op_compaction()->set_new_segment_count(2);
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2255,6 +2337,14 @@ TEST_F(LakeServiceTest, test_abort) {
         }
         for (auto&& s : log.op_compaction().output_rowset().segment_metas()) {
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
+        }
+        for (auto&& f : log.op_write().ssts()) {
+            if (!f.name().empty()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
+            }
+        }
+        for (auto&& f : log.op_compaction().ssts()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
         }
         for (auto&& r : log.op_schema_change().rowsets()) {
             for (auto&& s : r.segment_metas()) {
@@ -4737,7 +4827,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
 
         MockClosure closure;
         load_mgr->open(nullptr, request, &response, &closure);
-        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
+        ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 

@@ -198,8 +198,6 @@ public:
         return Status::OK();
     }
 
-    bool has_large_column() const override { return false; }
-
     void check_or_die() const override {}
 
     void build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const;

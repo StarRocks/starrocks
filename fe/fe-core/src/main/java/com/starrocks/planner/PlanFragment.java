@@ -485,7 +485,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public TPlanFragment toThrift() {
-        TPlanFragment result = new TPlanFragment();
+        return toThrift(new TPlanFragment());
+    }
+
+    /**
+     * Fill the thrift fragment into {@code result}, which lets the caller choose a subclass such as
+     * {@link com.starrocks.qe.scheduler.SerializeOnceTPlanFragment}.
+     */
+    public <T extends TPlanFragment> T toThrift(T result) {
         if (planRoot != null) {
             result.setPlan(planRoot.treeToThrift());
         }
@@ -531,6 +538,15 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     /**
+     * Whether the thrift output sink differs between the instances of this fragment: a multicast sink only sends to
+     * the instance's own destinations, and an export sink adds the instance index to the file name prefix. These are
+     * the only parts of the thrift fragment that differ between instances.
+     */
+    public boolean hasInstanceSpecificSink() {
+        return sink != null && (this instanceof MultiCastPlanFragment || sink instanceof ExportSink);
+    }
+
+    /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
      *
@@ -541,7 +557,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         // Fill the required field.
         result.setPartition(dataPartition.toThrift());
 
-        if (sink != null && (this instanceof MultiCastPlanFragment || sink instanceof ExportSink)) {
+        if (hasInstanceSpecificSink()) {
             result.setOutput_sink(sink.toThrift());
         }
 

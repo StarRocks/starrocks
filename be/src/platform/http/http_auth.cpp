@@ -14,6 +14,9 @@
 
 #include "platform/http/http_auth.h"
 
+#include <boost/algorithm/string.hpp>
+#include <cctype>
+
 #include "base/url_coding.h"
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
@@ -28,13 +31,23 @@ std::string encode_basic_auth(const std::string& user, const std::string& passwd
     return s_prefix + encoded_auth;
 }
 
+// Split "<scheme> <value>" the way RFC 7235 reads it: the scheme is case-insensitive, any amount
+// of blank separates it from the value, and blanks around the value carry no meaning. Returns false
+// when the header does not start with this scheme (so the next scheme can be tried) or has no value.
+static bool scheme_value(const std::string& header, const std::string& scheme, std::string* value) {
+    std::string h = boost::algorithm::trim_copy(header);
+    if (!boost::algorithm::istarts_with(h, scheme) || h.size() == scheme.size() || !std::isspace(h[scheme.size()])) {
+        return false; // "Basicxyz" is not the Basic scheme, and a bare "Basic" has no value
+    }
+    *value = boost::algorithm::trim_copy(h.substr(scheme.size()));
+    return !value->empty();
+}
+
 bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* passwd) {
-    const char k_basic[] = "Basic ";
-    auto& auth = req.header(HttpHeaders::AUTHORIZATION);
-    if (auth.compare(0, sizeof(k_basic) - 1, k_basic, sizeof(k_basic) - 1) != 0) {
+    std::string encoded_str;
+    if (!scheme_value(req.header(HttpHeaders::AUTHORIZATION), "Basic", &encoded_str)) {
         return false;
     }
-    std::string encoded_str = auth.substr(sizeof(k_basic) - 1);
     std::string decoded_auth;
     if (!base64_decode(encoded_str, &decoded_auth)) {
         return false;
@@ -69,6 +82,33 @@ bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth) {
     }
 
     return true;
+}
+
+// Bearer: the token travels in `passwd` (there is no separate token field on the wire) and there is
+// no declared user - the username comes out of the token's claims on the FE side.
+static bool parse_bearer_auth(const HttpRequest& req, AuthInfo* auth) {
+    std::string token;
+    if (!scheme_value(req.header(HttpHeaders::AUTHORIZATION), "Bearer", &token)) {
+        return false;
+    }
+    auth->passwd = std::move(token);
+    auth->auth_type = AuthInfo::AUTH_TYPE_BEARER;
+    if (req.remote_host() != nullptr) {
+        auth->user_ip.assign(req.remote_host());
+    } else {
+        auth->user_ip.assign("");
+    }
+    return true;
+}
+
+// Dispatch on the Authorization scheme:
+//   "Bearer ..."  -> parse_bearer_auth
+//   anything else -> parse_basic_auth, leaving auth_type empty, which the FE reads as basic
+bool parse_auth(const HttpRequest& req, AuthInfo* auth) {
+    if (parse_bearer_auth(req, auth)) {
+        return true;
+    }
+    return parse_basic_auth(req, auth);
 }
 
 } // namespace starrocks

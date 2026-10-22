@@ -188,8 +188,6 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    bool has_large_column() const override { return false; }
-
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;

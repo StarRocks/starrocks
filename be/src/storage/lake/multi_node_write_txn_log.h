@@ -34,7 +34,7 @@ namespace starrocks::lake {
 //     once any of them is a bundled slice, each standalone one gets bundle_file_offset 0, because a
 //     node that bundled and a node that flushed mid-load leave logs of both kinds for one tablet;
 //   - ssts / sst_ranges / seg_delvecs are appended alongside them and stay positionally aligned,
-//     which is what publish relies on (update_manager indexes op_write.ssts() by segment id and
+//     which is what publish relies on (primary_key_manager indexes op_write.ssts() by segment id and
 //     stamps the resulting sstable's rssid from that position, so no rssid rewriting is needed);
 //   - dels_meta are appended with their op_offset shifted by the segments already in |dst|, so a
 //     delete keeps beating the upserts it followed on its own node;

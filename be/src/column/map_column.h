@@ -171,8 +171,6 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    bool has_large_column() const override { return _keys->has_large_column() || _values->has_large_column(); }
-
     void check_or_die() const override;
 
     const Column& keys() const { return *_keys; }

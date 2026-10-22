@@ -671,7 +671,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
-    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`,
+    // and in the task run definitions archived to `_statistics_.task_run_history`
     // if task count is big, mask process can be time consuming
     @ConfField(mutable = true)
     public static boolean enable_task_info_mask_credential = true;
@@ -682,6 +683,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
+
+    /**
+     * The max number of finished or cancelled alter jobs kept per alter handler (schema change and
+     * optimize jobs share one budget, rollup jobs have another). Beyond it, the jobs that finished
+     * earliest are removed first, regardless of {@link #history_job_keep_max_second}. A job is kept
+     * while a running transaction may still be bound to its history schema or, in shared-data mode,
+     * while a cluster snapshot still needs it, so the count can temporarily exceed this limit.
+     * A value <= 0 disables the limit.
+     */
+    @ConfField(mutable = true)
+    public static int history_job_keep_max_num = 10000;
 
     /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted
@@ -1058,6 +1070,17 @@ public class Config extends ConfigBase {
             "Internal endpoints (FE meta sync, health/metrics probes, OAuth2 callback) are always exempt. " +
             "Default false for backward compatibility. Immutable; requires an FE restart to change.")
     public static boolean enable_http_auth = false;
+
+    /**
+     * Master switch for Bearer-token authentication on the non-MySQL channels: the HTTP endpoints
+     * (SQL API, Stream Load, Web UI, /metrics), Arrow Flight SQL, and the load RPCs a BE forwards
+     * with auth_type=bearer. The token is verified against the JWT and OAuth2 security integrations
+     * in {@code authentication_chain}, routed by its issuer, exactly as a MySQL token login is.
+     * When false those channels refuse any {@code Authorization: Bearer ...} and only Basic (and the
+     * Arrow Flight session tokens) remain; MySQL protocol authentication is never gated by this.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_rest_bearer_authentication = true;
 
     /**
      * Fe https port
@@ -2495,6 +2518,35 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
+
+    /**
+     * JWKS cache lifetime in seconds. HTTP Bearer authenticates fully on every request, so the JWK
+     * set is cached per JWKS URL instead of being fetched each time.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_ttl_seconds = 600;
+
+    /**
+     * Refresh the cached JWKS this many seconds before it expires, in the background, to reduce
+     * cache misses.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_ahead_seconds = 300;
+
+    /**
+     * When the IdP is unreachable, keep serving the stale (expired) JWKS for at most this many
+     * seconds.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_outage_ttl_seconds = 3600;
+
+    /**
+     * Lower bound (seconds) on how often an unknown {@code kid} may trigger a forced JWKS refresh,
+     * to guard against kid-flooding.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_rate_limit_seconds = 30;
+
     /**
      * If set to true, the granularity of auth check extends to the column level
      */
@@ -2615,6 +2667,24 @@ public class Config extends ConfigBase {
             "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
             "Does not affect native-password, JWT or OAuth2 users.")
     public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
+     * Whether a group name from a login matches a {@code GRANT ... TO EXTERNAL GROUP} entry or a
+     * {@code permitted_groups} entry that differs from it only in case.
+     * <p>
+     * On by default because the first source of such groups was LDAP, whose {@code cn} is
+     * case-insensitive in the directory: a GRANT written in another case than the directory
+     * returns must not silently have no effect. An identity provider that distinguishes groups by
+     * case (groups read from a JWT claim, for instance) wants this off, so that {@code Admins} and
+     * {@code admins} stay two groups.
+     * <p>
+     * Only the comparison is affected. The names are stored and reported exactly as they arrived,
+     * and handed to Apache Ranger unchanged, whatever this is set to.
+     */
+    @ConfField(mutable = true, comment = "Whether group names are matched ignoring case in " +
+            "GRANT ... TO EXTERNAL GROUP and in the permitted_groups of a security integration. " +
+            "Names are never rewritten; only the comparison changes.")
+    public static boolean authentication_group_case_insensitive = true;
 
     /**
      * For forward compatibility, will be removed later.
@@ -3836,6 +3906,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int star_client_write_timeout_seconds = 30;
 
+    @ConfField(mutable = true, comment = "Max number of shards in one StarMgr getShardInfo call when FE resolves the "
+            + "compute nodes of many tablets at once (query planning, loads, vacuum, shard deletion). StarMgr holds "
+            + "its shard lock while it builds the reply, which blocks StarMgr writes and journal replay, so a larger "
+            + "batch blocks them for longer; values < 1 are treated as 1.")
+    public static int star_client_get_shard_info_batch_size = 1024;
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
@@ -4638,6 +4714,25 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ranger_user_ugi = false;
 
+    /**
+     * Default for the catalog property `ranger.plugin.hive.catalog_prefix.enabled` on external catalogs
+     * that use a Ranger hive service (`ranger.plugin.hive.service.name`). When true, the `database`
+     * resource sent to Ranger is `<catalog><ranger_hive_catalog_prefix_separator><schema>` instead of
+     * the bare schema name, so catalogs sharing one Ranger service do not collide on same-named schemas.
+     * A catalog-level property, when set, overrides this value.
+     */
+    @ConfField(mutable = true, comment = "Default of catalog property ranger.plugin.hive.catalog_prefix.enabled: " +
+            "prefix the Ranger hive `database` resource with the catalog name")
+    public static boolean ranger_hive_catalog_prefix_enabled = false;
+
+    /**
+     * Separator between catalog name and schema name when ranger_hive_catalog_prefix_enabled applies.
+     * Must be identical for every catalog that shares one Ranger service, hence global only.
+     */
+    @ConfField(mutable = true, comment = "Separator between catalog and schema in the Ranger hive `database` " +
+            "resource when the catalog prefix is enabled")
+    public static String ranger_hive_catalog_prefix_separator = "_";
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
@@ -4679,7 +4774,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
             "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
-            "Combine values for multiple types.")
+            "Combine values for multiple types. Does not apply to a materialized view whose "
+            + "refresh_mode is INCREMENTAL, which is maintained from base table changes by definition.")
     public static int mv_refresh_force_partition_type = 0;
 
     /**
@@ -4907,6 +5003,18 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int arrow_flight_port = -1;
+
+    /**
+     * Largest request header block, in bytes, the Arrow Flight SQL server accepts - all headers of
+     * one gRPC request together. The first request of a session carries the client's credential in
+     * a header, and a JWT that lists many groups grows with them: two hundred group IDs, the most
+     * Microsoft Entra ID puts into a token, come to about 10 KB. gRPC's own default is 8 KB, which
+     * would refuse such a token before authentication even starts; the default here matches
+     * http_max_header_size so the same token works on both channels.
+     */
+    @ConfField(comment = "Maximum size in bytes of the request header block the Arrow Flight SQL server "
+            + "accepts. Raise it when clients send large JWTs, for example ones that list many groups.")
+    public static int arrow_flight_max_header_size = 32768;
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
@@ -5460,18 +5568,18 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
     public static String ai_default_chat_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
     public static String ai_default_chat_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
     public static String ai_default_chat_provider = "";
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
     public static String ai_default_embedding_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
     public static String ai_default_embedding_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
     public static String ai_default_embedding_provider = "";
 
     /**

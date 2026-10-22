@@ -27,6 +27,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -50,6 +51,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.table.source.DataSplit;
@@ -162,28 +164,37 @@ public class PaimonScanNode extends ScanNode {
         paimonReaderMode = resolveAutoReaderModeForFileColumns(tupleDescriptor, paimonReaderMode);
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            if (split instanceof DataSplit dataSplit) {
-                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-                if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
-                    List<RawFile> rawFiles = optionalRawFiles.get();
-                    boolean supportedDataFileFormat =
-                            rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
-                    if (supportedDataFileFormat) {
-                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
-                        for (int i = 0; i < rawFiles.size(); i++) {
-                            if (deletionFiles.isPresent()) {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
-                            } else {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+            Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+            if (optionalDataSplit.isPresent()) {
+                DataSplit dataSplit = optionalDataSplit.get();
+                if (PaimonSplitUtils.isGlobalIndexSplit(split)) {
+                    // Keep row ranges attached to the SDK split. Raw-file conversion would lose
+                    // the global-index row selection.
+                    addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo,
+                            getTotalFileLength(dataSplit));
+                } else {
+                    Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                    if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
+                        List<RawFile> rawFiles = optionalRawFiles.get();
+                        boolean supportedDataFileFormat =
+                                rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                        if (supportedDataFileFormat) {
+                            Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                            for (int i = 0; i < rawFiles.size(); i++) {
+                                if (deletionFiles.isPresent()) {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                                } else {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                                }
                             }
+                        } else {
+                            addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo,
+                                    getTotalFileLength(dataSplit));
                         }
                     } else {
-                        long totalFileLength = getTotalFileLength(dataSplit);
-                        addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
+                        addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo,
+                                getTotalFileLength(dataSplit));
                     }
-                } else {
-                    long totalFileLength = getTotalFileLength(dataSplit);
-                    addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                 }
                 selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
             } else {
@@ -342,9 +353,11 @@ public class PaimonScanNode extends ScanNode {
             if (slot.getType().containsVariant()) {
                 throw new StarRocksConnectorException(
                         "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
-                        "reader (merge-on-read data, system table, or paimon_force_jni_reader=true). Reading " +
-                        "VARIANT through the Paimon JNI reader is not yet supported. Compact the table or " +
-                        "exclude the VARIANT column from the query.",
+                        "reader. Reading VARIANT through the Paimon JNI reader is not yet supported. " +
+                        "If JNI was forced, run SET paimon_force_jni_reader=false; also run " +
+                        "SET paimon_reader_mode=AUTO if that mode was selected. " +
+                        "For merge-on-read data, compact the Paimon table. " +
+                        "You can also exclude the VARIANT column from the query.",
                         slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
             }
         }
@@ -362,24 +375,31 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setLength(totalFileLength);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
         // Only uses for hasher in HDFSBackendSelector to select BE
-        if (split instanceof DataSplit dataSplit) {
-            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
-        } else {
-            // For splits that are not DataSplit, we have to fall back to JNI
+        Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+        optionalDataSplit.ifPresent(dataSplit -> hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode())));
+        if (!optionalDataSplit.isPresent()) {
+            // System-table splits do not have a native reader.
             paimonReaderMode = PaimonReaderMode.JNI;
+        } else if (PaimonSplitUtils.isGlobalIndexSplit(split)) {
+            // Global-index row ranges require paimon-cpp, regardless of the requested reader mode.
+            paimonReaderMode = PaimonReaderMode.NATIVE;
         }
 
-        // TODO We will change later
-        // Only an explicit NATIVE choice routes SDK splits to paimon-cpp; under AUTO they keep
-        // the legacy JNI reader.
+        // Ordinary SDK splits retain the legacy JNI reader under AUTO. IndexedSplit always uses
+        // paimon-cpp so its row ranges are preserved.
         if (paimonReaderMode == PaimonReaderMode.NATIVE) {
             hdfsScanRange.setUse_paimon_jni_reader(false);
             hdfsScanRange.setUse_paimon_native_reader(true);
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-                ((DataSplit) split).serialize(new DataOutputViewStreamWrapper(outputStream));
+                DataOutputViewStreamWrapper output = new DataOutputViewStreamWrapper(outputStream);
+                if (split instanceof IndexedSplit) {
+                    ((IndexedSplit) split).serialize(output);
+                } else {
+                    ((DataSplit) split).serialize(output);
+                }
                 hdfsScanRange.setPaimon_split_info_binary(outputStream.toByteArray());
             } catch (IOException e) {
-                throw new RuntimeException("Failed to serialize Paimon data split", e);
+                throw new RuntimeException("Failed to serialize Paimon split", e);
             }
         } else {
             checkJniReaderVariantSupport(desc);

@@ -74,3 +74,9 @@ mysql -h <hostname> -P <query_port> --authentication-openid-connect-client-id-to
 ```Bash
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
+
+## HTTP または Arrow Flight から JWT で接続する
+
+JWT セキュリティインテグレーションのユーザーは、トークンを `Authorization: Bearer <token>` ヘッダーに載せて、ユーザー名なしで HTTP API（SQL API、Stream Load、Web UI）と Arrow Flight SQL にもアクセスできます。[HTTP と Arrow Flight から接続する](./security_integration.md#http-と-arrow-flight-から接続する) を参照してください。
+
+> `IDENTIFIED WITH authentication_jwt` で作成したユーザーがトークンを提示できるのは、ハンドシェイクがユーザー名を運ぶ MySQL プロトコルだけです。HTTP API や Arrow Flight SQL で JWT を使うには、代わりに JWT [セキュリティインテグレーション](./security_integration.md)を作成し、[各認証方式が使えるエントリポイント](./authentication.mdx#各認証方式が使えるエントリポイント)を参照してください。

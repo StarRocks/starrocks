@@ -481,4 +481,40 @@ public class TimeUtils {
         }
         return value;
     }
+
+    /**
+     * Parse the local date-time part of the given timestampLiteral
+     * using DATETIME_WITH_TIME_ZONE_PATTERN regular expressions.
+     * Like Trino, fields may have one digit (e.g. `2001-1-2 3:4:5`) and the time of day is optional.
+     *
+     * @param value the value of the timestampLiteral
+     * @return the local date-time, ignoring the time zone
+     */
+    public static LocalDateTime parseLocalDateTimeFromString(String value) {
+        Matcher matcher = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Invalid TIMESTAMP:" + value);
+        }
+        int year = Integer.parseInt(matcher.group("year"));
+        if (year < 0 || year > 9999) {
+            throw new IllegalArgumentException("Invalid TIMESTAMP:" + value);
+        }
+        String fraction = matcher.group("fraction");
+        if (fraction != null && fraction.length() > 6) {
+            // DATETIME keeps at most microseconds
+            throw new IllegalArgumentException("Invalid TIMESTAMP:" + value);
+        }
+        int nano = fraction == null ? 0 : Integer.parseInt((fraction + "00000000").substring(0, 9));
+        return LocalDateTime.of(year,
+                Integer.parseInt(matcher.group("month")),
+                Integer.parseInt(matcher.group("day")),
+                parseIntOrZero(matcher.group("hour")),
+                parseIntOrZero(matcher.group("minute")),
+                parseIntOrZero(matcher.group("second")),
+                nano);
+    }
+
+    private static int parseIntOrZero(String value) {
+        return value == null ? 0 : Integer.parseInt(value);
+    }
 }

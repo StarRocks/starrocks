@@ -52,13 +52,14 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
      * than a FILES column, and {@code targetToExpressionSql} those it computes from FILES columns.
      * {@code scannedFileBytes} is how much of {@code totalFileBytes} the
      * sample scans, and {@code partitionSourceBytes} the exact per-path-partition breakdown when a
-     * file subset is sampled.
+     * file subset is sampled. {@code sessionSemantics} are the load session's variables the sub-query runs under.
      */
     protected record Source(
             Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource,
             String wherePredicateSqlOrNull, Map<String, String> targetToSourceColumnNames,
             Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql,
-            long scannedFileBytes, List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
+            long scannedFileBytes, List<Estimates.PartitionSourceBytes> partitionSourceBytes,
+            SampleSessionSemantics sessionSemantics) {
         public Source {
             Objects.requireNonNull(filesProperties, "filesProperties");
             Objects.requireNonNull(computeResource, "computeResource");
@@ -66,6 +67,7 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
             Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
             Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
             Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
+            Objects.requireNonNull(sessionSemantics, "sessionSemantics");
             if (totalFileBytes < 0) {
                 throw new IllegalArgumentException("totalFileBytes must be non-negative, was " + totalFileBytes);
             }
@@ -103,7 +105,7 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
                 filesProjections(sortKeyColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
                 filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
                 sortKeyColumns, partitionSourceColumns, 0L, false,
-                source.scannedFileBytes(), source.partitionSourceBytes());
+                source.scannedFileBytes(), source.partitionSourceBytes(), source.sessionSemantics());
     }
 
     /**

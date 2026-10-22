@@ -515,13 +515,35 @@ PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
 PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
 PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
 
+# nsjail, the sandbox a deployment can launch Python UDF workers under (see the
+# PyWorkerManager launch hook in be/src/exprs/udf/python/env.h)
+NSJAIL_DOWNLOAD="https://github.com/google/nsjail/archive/refs/tags/3.6.tar.gz"
+NSJAIL_NAME=nsjail-3.6.tar.gz
+NSJAIL_SOURCE=nsjail-3.6
+NSJAIL_MD5SUM="9abc3a5567dd3cd2fc1c79c41ea0e5eb"
+
+# kafel, the seccomp policy compiler nsjail builds into itself. nsjail keeps it as a
+# git submodule, which its release archive does not carry, so it is downloaded on its
+# own and moved into the nsjail source tree (see download-thirdparty.sh). The revision
+# is the one nsjail 3.6 pins.
+KAFEL_DOWNLOAD="https://github.com/google/kafel/archive/76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz"
+KAFEL_NAME=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz
+KAFEL_SOURCE=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3
+KAFEL_MD5SUM="ebc4f191e6ed09a1f1b271dc3f0679a5"
+
+# libnl, which nsjail includes unconditionally for its macvlan support
+LIBNL_DOWNLOAD="https://github.com/thom311/libnl/releases/download/libnl3_12_0/libnl-3.12.0.tar.gz"
+LIBNL_NAME=libnl-3.12.0.tar.gz
+LIBNL_SOURCE=libnl-3.12.0
+LIBNL_MD5SUM="f9112ca215807fe65eecd583d8f180cc"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 H3 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN PAIMON_CPP"
+            BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

@@ -85,8 +85,6 @@ public:
 
     virtual bool is_binary() const { return false; }
 
-    virtual bool is_large_binary() const { return false; }
-
     virtual bool is_decimal() const { return false; }
 
     virtual bool is_date() const { return false; }
@@ -133,10 +131,6 @@ public:
     virtual void reserve(size_t n) = 0;
 
     virtual void resize(size_t n) = 0;
-
-    // Check if the column contains large column.
-    // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
-    virtual bool has_large_column() const = 0;
 
     virtual void resize_uninitialized(size_t n) { resize(n); }
 
