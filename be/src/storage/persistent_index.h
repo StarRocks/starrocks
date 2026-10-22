@@ -446,8 +446,8 @@ public:
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size, IOStat* stat = nullptr);
 
-    // batch check that none of |keys| already exist in this immutable index. Keys are grouped
-    // internally by the index's own shard layout (_shard_info_by_length)
+    // Check that none of |keys| already exist (including tombstones). Group keys by the index's
+    // own shard layout and reuse get() for Bloom filtering and page/shard reads.
     Status check_not_exist(size_t n, const Slice* keys);
 
     // get Immutable index file size;
@@ -564,14 +564,6 @@ private:
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
-
-    Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
     bool _need_bloom_filter(size_t idx_begin, size_t idx_end, std::vector<KeysInfo>& keys_info_by_shard) const;
 
