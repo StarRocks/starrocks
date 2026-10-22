@@ -293,15 +293,38 @@ starrocks_detect_linker_type() {
     local cxx_compiler=""
     local cached_c=""
     local cached_cxx=""
+    local cached_build_type=""
+    local cached_config_cxx_flags=""
     local cached_exe_linker_flags=""
+    local cached_config_exe_linker_flags=""
     local has_cached_exe_linker_flags=0
     local has_cmake_compiler_override=0
     if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
         cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
         cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        cached_build_type="$(sed -n -E 's/^CMAKE_BUILD_TYPE(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
         if grep -q -E '^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=' "${build_dir}/CMakeCache.txt" 2>/dev/null; then
             has_cached_exe_linker_flags=1
             cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        fi
+        local active_config=""
+        if [[ -n "${cached_build_type}" ]]; then
+            active_config="${cached_build_type}"
+        elif [[ -n "${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}" ]]; then
+            active_config="${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}"
+        elif [[ "${build_dir%/}" =~ (^|/|_)build_([A-Za-z0-9_]+)$ ]]; then
+            active_config="${BASH_REMATCH[2]}"
+        else
+            active_config="ASAN"
+        fi
+        active_config="$(printf '%s' "${active_config}" | tr '[:lower:]' '[:upper:]')"
+        if [[ "${active_config}" =~ ^[A-Z0-9_]+$ ]]; then
+            if grep -q -E "^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+                cached_config_cxx_flags="$(sed -n -E "s/^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            fi
+            if grep -q -E "^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+                cached_config_exe_linker_flags="$(sed -n -E "s/^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            fi
         fi
         if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
             has_cmake_compiler_override=1
@@ -367,18 +390,20 @@ starrocks_detect_linker_type() {
     fi
 
     # Inspect explicit compiler-driver linker flags (-fuse-ld=* / --ld-path=*) that survive into
-    # be/CMakeLists.txt's UT executable link command:
-    # - be/CMakeLists.txt:481-498 overwrites CMAKE_CXX_FLAGS with ${CXX_COMMON_FLAGS} ${CXX_FLAGS_<BUILD_TYPE>}
-    #   (which includes ENV{STARROCKS_CXX_COMMON_FLAGS}, while ignoring ENV{CXXFLAGS} and cached CMAKE_CXX_FLAGS).
-    # - UT executables use CMAKE_EXE_LINKER_FLAGS (seeded from cached CMAKE_EXE_LINKER_FLAGS if present in
-    #   CMakeCache.txt, otherwise from ENV{LDFLAGS}) followed by ENV{STARROCKS_CXX_LINKER_FLAGS}.
+    # be/CMakeLists.txt's UT executable link command in CMake's CMAKE_CXX_LINK_EXECUTABLE order:
+    # - <FLAGS>: be/CMakeLists.txt:481-498 overwrites base CMAKE_CXX_FLAGS with ${CXX_COMMON_FLAGS}
+    #   ${CXX_FLAGS_<BUILD_TYPE>} (including ENV{STARROCKS_CXX_COMMON_FLAGS}, while ignoring ENV{CXXFLAGS}
+    #   and cached base CMAKE_CXX_FLAGS), followed by CMake's configuration-specific CMAKE_CXX_FLAGS_<CONFIG>.
+    # - <LINK_FLAGS>: base CMAKE_EXE_LINKER_FLAGS (seeded from cached CMAKE_EXE_LINKER_FLAGS if present in
+    #   CMakeCache.txt, otherwise from ENV{LDFLAGS}) + ENV{STARROCKS_CXX_LINKER_FLAGS} (appended by
+    #   be/CMakeLists.txt:291), followed by CMake's configuration-specific CMAKE_EXE_LINKER_FLAGS_<CONFIG>.
     local base_exe_linker_flags=""
     if [[ "${has_cached_exe_linker_flags}" -eq 1 ]]; then
         base_exe_linker_flags="${cached_exe_linker_flags}"
     else
         base_exe_linker_flags="${LDFLAGS:-}"
     fi
-    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-}"
+    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${cached_config_cxx_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
     local flag_tokens=()
     read -r -a flag_tokens <<< "${combined_flags}"
     local flag_linker=""

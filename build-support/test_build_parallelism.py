@@ -35,6 +35,7 @@ class TestBuildParallelism(unittest.TestCase):
             "STARROCKS_PROC_SELF_CGROUP",
             "CMAKE_BUILD_DIR",
             "CMAKE_BUILD_PREFIX",
+            "CMAKE_BUILD_TYPE",
             "BUILD_TYPE",
         ):
             env.pop(key, None)
@@ -647,6 +648,140 @@ class TestBuildParallelism(unittest.TestCase):
                     ),
                     "modern",
                 )
+
+    def test_detect_linker_type_honors_cmake_cache_config_linker_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+            legacy_host_cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            g++() {{ echo "12.1.0"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.38"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+
+            modern_host_cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            g++() {{ echo "12.1.0"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "LLD 16.0.0"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+
+            # 1. Standalone CMAKE_EXE_LINKER_FLAGS_<CONFIG> overrides host default linker.
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=lld\n")
+            self.assertEqual(self.run_bash(legacy_host_cmd), "modern")
+
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=bfd\n")
+            self.assertEqual(self.run_bash(modern_host_cmd), "legacy")
+
+            # 2. CMAKE_EXE_LINKER_FLAGS_<CONFIG> is appended after base CMAKE_EXE_LINKER_FLAGS
+            # and STARROCKS_CXX_LINKER_FLAGS.
+            with open(cache_file, "w") as f:
+                f.write(
+                    "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=bfd\n"
+                    "CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=lld\n"
+                )
+            self.assertEqual(self.run_bash(legacy_host_cmd), "modern")
+            self.assertEqual(
+                self.run_bash(
+                    legacy_host_cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=bfd"},
+                ),
+                "modern",
+            )
+
+            with open(cache_file, "w") as f:
+                f.write(
+                    "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=lld\n"
+                    "CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=bfd\n"
+                )
+            self.assertEqual(self.run_bash(modern_host_cmd), "legacy")
+            self.assertEqual(
+                self.run_bash(
+                    modern_host_cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
+                ),
+                "legacy",
+            )
+
+            # 3. Active configuration selection from CMAKE_BUILD_TYPE in CMakeCache.txt (case-insensitive).
+            with open(cache_file, "w") as f:
+                f.write(
+                    "CMAKE_BUILD_TYPE:STRING=Release\n"
+                    "CMAKE_EXE_LINKER_FLAGS_RELEASE:STRING=-fuse-ld=lld\n"
+                    "CMAKE_EXE_LINKER_FLAGS_DEBUG:STRING=-fuse-ld=bfd\n"
+                    "CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=bfd\n"
+                )
+            self.assertEqual(self.run_bash(legacy_host_cmd), "modern")
+
+            with open(cache_file, "w") as f:
+                f.write(
+                    "CMAKE_BUILD_TYPE:STRING=RelWithDebInfo\n"
+                    "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO:STRING=-fuse-ld=lld\n"
+                    "CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=bfd\n"
+                )
+            self.assertEqual(self.run_bash(legacy_host_cmd), "modern")
+
+            # 4. Fallback configuration inference from directory basename (ut_build_DEBUG) or env
+            # when CMAKE_BUILD_TYPE is absent from CMakeCache.txt.
+            debug_build_dir = os.path.join(tmpdir, "ut_build_DEBUG")
+            os.makedirs(debug_build_dir, exist_ok=True)
+            with open(os.path.join(debug_build_dir, "CMakeCache.txt"), "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS_DEBUG:STRING=-fuse-ld=lld\n")
+            debug_dir_cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            g++() {{ echo "12.1.0"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.38"; }}
+            starrocks_detect_linker_type "{debug_build_dir}"
+            """
+            self.assertEqual(self.run_bash(debug_dir_cmd), "modern")
+
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS_DEBUG:STRING=-fuse-ld=lld\n")
+            self.assertEqual(
+                self.run_bash(legacy_host_cmd, {"BUILD_TYPE": "Debug"}),
+                "modern",
+            )
+            self.assertEqual(
+                self.run_bash(legacy_host_cmd, {"CMAKE_BUILD_TYPE": "debug"}),
+                "modern",
+            )
+
+            # 5. Uncached base CMAKE_EXE_LINKER_FLAGS uses LDFLAGS, then appends CMAKE_EXE_LINKER_FLAGS_<CONFIG>.
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-fuse-ld=lld\n")
+            self.assertEqual(
+                self.run_bash(legacy_host_cmd, {"LDFLAGS": "-fuse-ld=bfd"}),
+                "modern",
+            )
+
+            # 6. Survivor CMAKE_CXX_FLAGS_<CONFIG> overrides STARROCKS_CXX_COMMON_FLAGS,
+            # and is overridden by CMAKE_EXE_LINKER_FLAGS.
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_CXX_FLAGS_ASAN:STRING=-fuse-ld=lld\n")
+            self.assertEqual(
+                self.run_bash(
+                    legacy_host_cmd,
+                    {"STARROCKS_CXX_COMMON_FLAGS": "-fuse-ld=bfd"},
+                ),
+                "modern",
+            )
+            with open(cache_file, "w") as f:
+                f.write(
+                    "CMAKE_CXX_FLAGS_ASAN:STRING=-fuse-ld=lld\n"
+                    "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=bfd\n"
+                )
+            self.assertEqual(self.run_bash(modern_host_cmd), "legacy")
 
     def test_detect_linker_type_probes_compiler_prog_name_ld(self):
         with tempfile.TemporaryDirectory() as tmpdir:
