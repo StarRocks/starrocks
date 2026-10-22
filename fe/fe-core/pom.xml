@@ -1232,6 +1232,7 @@ under the License.
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -XX:ReservedCodeCacheSize=128m
                         -Duser.timezone=Asia/Shanghai
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                         ${security.manager.arg}
                     </argLine>
