@@ -85,7 +85,7 @@ public class PushDownTopNBelowAIProjectRuleTest {
     @ParameterizedTest
     @CsvSource({"0, PARTIAL", "1, PARTIAL", "4, PARTIAL", "5, FINAL", "6, FINAL", "9223372036854775807, FINAL"})
     public void testThresholdControlsBothProjectionShapes(long threshold, SortPhase expectedPhase) {
-        optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
+        optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
         for (boolean withProject : List.of(false, true)) {
             OptExpression input = input(withProject);
             OptExpression child = input.inputAt(0);
@@ -113,7 +113,7 @@ public class PushDownTopNBelowAIProjectRuleTest {
         Assertions.assertTrue(rule.check(input, optimizerContext));
 
         optimizerContext.getSessionVariable().setCboPushDownTopNLimit(Long.MAX_VALUE);
-        optimizerContext.getSessionVariable().setEnableAiTopnPushdown(false);
+        optimizerContext.getSessionVariable().setEnableAITopnPushdown(false);
         assertSkipped(input);
     }
 
@@ -122,14 +122,14 @@ public class PushDownTopNBelowAIProjectRuleTest {
     public void testSwitchDisablesBothProjectionShapes(boolean withProject, long limit) {
         OptExpression input = input(withProject);
         input.getOp().setLimit(limit);
-        optimizerContext.getSessionVariable().setEnableAiTopnPushdown(false);
+        optimizerContext.getSessionVariable().setEnableAITopnPushdown(false);
         assertSkipped(input);
     }
 
     @ParameterizedTest
     @CsvSource({"false, 0", "true, 0", "false, 1000", "true, 1000"})
     public void testRewriteTreePreservesOrderingOutputsAndAIOccurrences(boolean withProject, long threshold) {
-        optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
+        optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
         OptExpression input = input(withProject);
         Projection projection = new Projection(Map.of(answer, answer));
         input.getOp().setProjection(projection);
@@ -290,15 +290,15 @@ public class PushDownTopNBelowAIProjectRuleTest {
     }
 
     private void assertSkipped(OptExpression input) {
-        long oldThreshold = optimizerContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit();
+        long oldThreshold = optimizerContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit();
         try {
             for (long threshold : new long[] {0, 1000}) {
-                optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
+                optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
                 Assertions.assertFalse(rule.check(input, optimizerContext));
                 Assertions.assertTrue(rule.transform(input, optimizerContext).isEmpty());
             }
         } finally {
-            optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(oldThreshold);
+            optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(oldThreshold);
         }
     }
 }

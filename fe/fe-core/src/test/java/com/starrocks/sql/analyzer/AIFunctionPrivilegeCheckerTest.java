@@ -47,6 +47,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -73,12 +74,12 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @BeforeAll
     public static void setUpAIObjects() throws Exception {
-        previousEndpoint = Config.ai_default_chat_endpoint;
-        previousModel = Config.ai_default_chat_model;
-        previousProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "rbac-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+        previousEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        previousModel = AIProviderTestUtil.chatProperty("model");
+        previousProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "rbac-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
         starRocksAssert.withDatabase("ai_rbac").useDatabase("ai_rbac");
         starRocksAssert.withTable("CREATE TABLE prompts (id BIGINT, prompt VARCHAR(100)) "
                 + "PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')");
@@ -90,14 +91,14 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
                 Map.of("endpoint", "https://models.example.test/v1/chat/completions", "model", "provider-model",
                         "api_key", "private-rbac-test-key"), "");
         starRocksAssert.withView("CREATE VIEW ai_provider_view SECURITY NONE AS "
-                + "SELECT ai_custom_query('ai_rbac_provider', prompt) AS answer FROM prompts");
+                + "SELECT ai_complete('ai_rbac_provider', 'explicit-model', prompt) AS answer FROM prompts");
     }
 
     @AfterAll
     public static void restoreAIConfiguration() throws Exception {
-        Config.ai_default_chat_endpoint = previousEndpoint;
-        Config.ai_default_chat_model = previousModel;
-        Config.ai_default_chat_provider = previousProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", previousEndpoint);
+        AIProviderTestUtil.setChatProperty("model", previousModel);
+        AIProviderTestUtil.setChatProperty("protocol", previousProvider);
         GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider("ai_rbac_provider", true);
     }
 
@@ -105,6 +106,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     public void createCaller() throws Exception {
         user = "ai_usage_" + NEXT_USER.incrementAndGet();
         executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
         caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
         caller.setCurrentRoleIds(Set.of());
         caller.setDatabase("ai_rbac");
@@ -138,7 +140,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             QueryStatement statement = (QueryStatement) analyze(sql);
             FunctionCallExpr call = (FunctionCallExpr) statement.getQueryRelation().getOutputExpression().get(0);
             Assertions.assertInstanceOf(SqlFunction.class, call.getFn());
-            Assertions.assertFalse(call.getFn().isAi());
+            Assertions.assertFalse(call.getFn().isAI());
             authorize(sql);
             executeAsRoot("REVOKE USAGE ON FUNCTION " + signature + " FROM '" + user + "'");
             assertDenied(sql, "FUNCTION");
@@ -199,10 +201,10 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @Test
     public void testFunctionAndProviderUsageAreBothRequired() throws Exception {
-        String query = "SELECT ai_custom_query('ai_rbac_provider', prompt) FROM prompts";
+        String query = "SELECT ai_complete('ai_rbac_provider', 'explicit-model', prompt) FROM prompts";
         executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
         assertDenied(query);
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
         authorize(query);
         executeAsRoot("REVOKE USAGE ON AI PROVIDER ai_rbac_provider FROM '" + user + "'");
         assertDenied(query, "AI PROVIDER");
@@ -216,7 +218,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         boolean previousUseCreator = Config.mv_use_creator_based_authorization;
         Config.mv_use_creator_based_authorization = true;
         String role = user + "_task_role";
-        List<String> objects = List.of("AI FUNCTION ai_custom_query", "AI PROVIDER ai_rbac_provider");
+        List<String> objects = List.of("AI FUNCTION ai_complete", "AI PROVIDER ai_rbac_provider");
         executeAsRoot("CREATE ROLE " + role);
         try {
             for (String object : objects) {
@@ -226,7 +228,7 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             Long roleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull(role);
             caller.setCurrentRoleIds(Set.of(roleId));
             SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE task_output AS "
-                    + "SELECT ai_custom_query('ai_rbac_provider', 'prompt') AS answer");
+                    + "SELECT ai_complete('ai_rbac_provider', 'explicit-model', 'prompt') AS answer");
             Task task = GsonUtils.GSON.fromJson(
                     GsonUtils.GSON.toJson(TaskBuilder.buildTask(submit, caller)), Task.class);
             caller = restoreTaskContext(task);
@@ -274,7 +276,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     @Test
     public void testPreparedAIIsFreshlyPlannedAndRechecksRevokedUsage() throws Exception {
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
-        PrepareStmt prepared = prepare("SELECT ai_complete(prompt) FROM prompts WHERE id = ?");
+        PrepareStmt prepared = prepare("SELECT ai_complete(prompt) "
+                    + "FROM prompts WHERE id = ?");
         PrepareStmtContext preparedContext = caller.getPreparedStmt(prepared.getName());
         try {
             ExecPlan first = executePrepared(prepared, 1);
@@ -297,7 +300,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             executeAsRoot("GRANT " + role + " TO '" + user + "'");
             Long roleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull(role);
             caller.setCurrentRoleIds(Set.of(roleId));
-            PrepareStmt prepared = prepare("SELECT ai_complete(prompt) FROM prompts WHERE id = ?");
+            PrepareStmt prepared = prepare("SELECT ai_complete(prompt) "
+                    + "FROM prompts WHERE id = ?");
             try {
                 executePrepared(prepared, 1);
                 caller.setCurrentRoleIds(Set.of());
@@ -321,9 +325,10 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
                 "model", "original-model", "api_key", "private-rbac-test-key");
         String originalId = manager.createProvider(provider, AIProviderType.CHAT, properties, "");
         try {
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
             executeAsRoot("GRANT USAGE ON AI PROVIDER " + provider + " TO '" + user + "'");
-            PrepareStmt prepared = prepare("SELECT ai_custom_query('" + provider + "', prompt) FROM prompts WHERE id = ?");
+            PrepareStmt prepared = prepare("SELECT ai_complete('" + provider + "', 'explicit-model', prompt) "
+                    + "FROM prompts WHERE id = ?");
             try {
                 ExecPlan first = executePrepared(prepared, 1);
                 Assertions.assertEquals(Set.of("original-model"), providerModels(first));
@@ -435,8 +440,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         return plan.getFragments().stream()
                 .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
                 .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
-                .flatMap(node -> node.getAi_project_node().getAi_model_configs().values().stream())
-                .map(config -> config.getChat().getModel())
+                .flatMap(node -> node.getAi_project_node().getAi_provider_mapping().values().stream())
+                .map(config -> config.getParams().get("model"))
                 .collect(Collectors.toSet());
     }
 

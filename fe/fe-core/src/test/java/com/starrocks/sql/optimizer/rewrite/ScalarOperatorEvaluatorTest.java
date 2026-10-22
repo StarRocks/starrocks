@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -41,6 +42,37 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
+    @Test
+    public void evaluationPreservesAiCallsIncludingNullArguments() {
+        Function fn = new Function(new FunctionName("ai_test_function"),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+        fn.setBinaryType(TFunctionBinaryType.AI);
+        for (ConstantOperator argument : List.of(ConstantOperator.createNull(VarcharType.VARCHAR),
+                ConstantOperator.createVarchar("prompt"))) {
+            CallOperator call = new CallOperator("ai_test_function", VarcharType.VARCHAR, List.of(argument), fn);
+            Assertions.assertSame(call, ScalarOperatorEvaluator.INSTANCE.evaluation(call));
+            Assertions.assertSame(call, ScalarOperatorEvaluator.INSTANCE.evaluation(call, true));
+        }
+    }
+
+    @Test
+    public void foldingAiArgumentsPreservesTheAiCall() {
+        Function lower = new Function(new FunctionName(FunctionSet.LOWER),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+        CallOperator argument = new CallOperator(FunctionSet.LOWER, VarcharType.VARCHAR,
+                List.of(ConstantOperator.createVarchar("PROMPT")), lower);
+        Function ai = new Function(new FunctionName("ai_test_function"),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+        ai.setBinaryType(TFunctionBinaryType.AI);
+        CallOperator call = new CallOperator("ai_test_function", VarcharType.VARCHAR, List.of(argument), ai);
+
+        ScalarOperator result = new ScalarOperatorRewriter().rewrite(call, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
+
+        Assertions.assertInstanceOf(CallOperator.class, result);
+        assertTrue(((CallOperator) result).getFunction().isAI());
+        assertEquals(ConstantOperator.createVarchar("prompt"), result.getChild(0));
+    }
+
     @Test
     public void evaluationNotConstant() {
         CallOperator operator = new CallOperator(FunctionSet.IFNULL, IntegerType.INT,

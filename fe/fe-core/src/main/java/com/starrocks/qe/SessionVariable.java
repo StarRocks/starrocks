@@ -2383,7 +2383,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long cboPushDownTopNLimit = 1000;
 
     @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enableAiTopnPushdown = true;
+    private boolean enableAITopnPushdown = true;
 
     // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
     @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
@@ -2727,19 +2727,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
-    public boolean isEnableAiTopnPushdown() {
-        return enableAiTopnPushdown;
+    public boolean isEnableAITopnPushdown() {
+        return enableAITopnPushdown;
     }
 
-    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
-        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    public void setEnableAITopnPushdown(boolean enableAITopnPushdown) {
+        this.enableAITopnPushdown = enableAITopnPushdown;
     }
 
-    public long getAiTopnPushdownMaxGlobalLimit() {
+    public long getAITopnPushdownMaxGlobalLimit() {
         return aiTopnPushdownMaxGlobalLimit;
     }
 
-    public void setAiTopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
+    public void setAITopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
         // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
         if (aiTopnPushdownMaxGlobalLimit < 0) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,

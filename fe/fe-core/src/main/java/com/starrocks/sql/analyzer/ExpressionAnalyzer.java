@@ -1107,6 +1107,8 @@ public class ExpressionAnalyzer {
                 return visitFunctionCall(node, scope);
             }
  
+            AIFunctionAnalyzer.prepareNamedArguments(node);
+
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 
@@ -1153,7 +1155,7 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
-                verifyNoAiInConditionalFunction(node);
+                verifyNoAIInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
                 Authorizer.checkAIFunctionUsage(session, node);
                 return null;
@@ -1180,7 +1182,7 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
-                    verifyNoAiInConditionalFunction(node);
+                    verifyNoAIInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
                     Authorizer.checkAIFunctionUsage(session, node);
                     return null;
@@ -1197,7 +1199,7 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
-            verifyNoAiInConditionalFunction(node);
+            verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
             Authorizer.checkAIFunctionUsage(session, node);
             return null;
@@ -1212,7 +1214,7 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
             String resolvedFunctionName = node.getFn().functionName();
             if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
                     || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)

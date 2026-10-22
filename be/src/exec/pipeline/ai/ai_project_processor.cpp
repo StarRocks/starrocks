@@ -445,7 +445,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                                          .model = row.model,
                                          .prompt = row.prompt,
                                          .options = output.input.options.get(),
-                                         .model_config_id = output.model_config_id,
+                                         .provider_id = output.provider_id,
                                          .capability = output.capability,
                                          .media = row.media ? &*row.media : nullptr};
             AITaskCallback callback;

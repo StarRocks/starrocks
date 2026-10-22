@@ -84,7 +84,7 @@ class StatementPlannerTest extends PlanTestBase {
         try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
             authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+                    "select ai_complete('missing_authorization_order_provider', 'explicit-model', 'prompt')", connectContext);
 
             Assertions.assertSame(denied,
                     Assertions.assertThrows(RuntimeException.class,

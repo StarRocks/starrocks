@@ -161,7 +161,6 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -1387,9 +1386,8 @@ public class UtFrameUtils {
     }
 
     private static void rejectUncapturedAIProviders(StatementBase statement) {
-        if (ResolvedAIFunctionDetector.findAll(statement).stream()
-                .anyMatch(call -> call.getFn().getAiModelSource() == TAIModelSource.PROVIDER)) {
-            throw new SemanticException("Query dump replay does not support named AI providers");
+        if (!ResolvedAIFunctionDetector.findAll(statement).isEmpty()) {
+            throw new SemanticException("Query dump replay does not support AI providers");
         }
     }
 

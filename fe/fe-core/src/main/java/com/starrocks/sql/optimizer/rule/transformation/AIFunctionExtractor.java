@@ -36,15 +36,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Shared, occurrence-aware extraction support for AI scalar calls. */
-public final class AiFunctionExtractor {
-    private AiFunctionExtractor() {
+public final class AIFunctionExtractor {
+    private AIFunctionExtractor() {
     }
 
     public static boolean isAICall(ScalarOperator expression) {
         if (!(expression instanceof CallOperator call)) {
             return false;
         }
-        return call.getFunction() != null && call.getFunction().isAi();
+        return call.getFunction() != null && call.getFunction().isAI();
     }
 
     public static boolean containsAI(ScalarOperator expression) {
@@ -54,7 +54,7 @@ public final class AiFunctionExtractor {
         if (isAICall(expression)) {
             return true;
         }
-        return expression.getChildren().stream().anyMatch(AiFunctionExtractor::containsAI);
+        return expression.getChildren().stream().anyMatch(AIFunctionExtractor::containsAI);
     }
 
     public static Result extract(OptExpression child, List<ScalarOperator> expressions, OptimizerContext context) {
@@ -63,7 +63,7 @@ public final class AiFunctionExtractor {
         List<ColumnRefOperator> availableColumns = child.getOutputColumns().getStream()
                 .map(context.getColumnRefFactory()::getColumnRef).toList();
 
-        while (rewritten.stream().anyMatch(AiFunctionExtractor::containsAI)) {
+        while (rewritten.stream().anyMatch(AIFunctionExtractor::containsAI)) {
             LinkedHashMap<CallOperator, ColumnRefOperator> calls = new LinkedHashMap<>();
             rewritten.forEach(expression -> collectInnermostCalls(expression, calls, context));
             if (calls.isEmpty()) {
@@ -112,7 +112,7 @@ public final class AiFunctionExtractor {
     }
 
     private static boolean isSafeCommonMap(Map<ColumnRefOperator, ScalarOperator> commonMap) {
-        return commonMap.values().stream().noneMatch(AiFunctionExtractor::containsNonReusableExpression);
+        return commonMap.values().stream().noneMatch(AIFunctionExtractor::containsNonReusableExpression);
     }
 
     static boolean containsNonReusableExpression(ScalarOperator expression) {
@@ -128,7 +128,7 @@ public final class AiFunctionExtractor {
             return true;
         }
         return expression.getChildren().stream()
-                .anyMatch(AiFunctionExtractor::containsNonReusableExpression);
+                .anyMatch(AIFunctionExtractor::containsNonReusableExpression);
     }
 
     private static void collectInnermostCalls(ScalarOperator expression,

@@ -5488,23 +5488,6 @@ public class Config extends ConfigBase {
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
 
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
-    public static String ai_default_chat_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
-    public static String ai_default_chat_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
-    public static String ai_default_chat_provider = "";
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
-    public static String ai_default_embedding_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
-    public static String ai_default_embedding_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
-    public static String ai_default_embedding_provider = "";
-
     /**
      * How the FE reacts when a metadata lock is requested on an object the internal catalog does
      * not own -- a database from an external catalog, or a placeholder table id such as the

@@ -1,51 +1,58 @@
 ---
 displayed_sidebar: docs
-description: "Use SYSTEM chat models to classify, extract, translate, summarize, and transform text."
+description: "Use AI Providers to classify, extract, translate, summarize, and transform text."
 sidebar_position: 21
 ---
 
 # AI text functions
 
-For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
+Text helpers build task-specific prompts through a `chat` Provider using the `openai` protocol. Each supports a default model, an explicit model, or an explicit Provider and model. These helpers do not accept options MAPs.
 
-These functions use the SYSTEM chat endpoint and credentials configured for [ai_complete](ai_complete.md#configuration). They build task-specific prompts and return typed results. Upgrade all FE and BE nodes before using these new functions.
-
-:::warning
-Input text is sent to the model provider and can incur charges. Use only approved endpoints and data. In particular, `ai_redact` sends the original, unredacted text to the provider; it is not a local privacy filter.
-:::
+Both `USAGE ON AI FUNCTION <function_name>` and `USAGE ON AI PROVIDER <provider_name>` are required, including for the selected default Provider. See [AI function privileges](ai_functions.mdx#ai-function-privileges).
 
 ## Syntax
-
-Each function has exactly two forms: use the default chat model, or supply a model as the first argument. These helpers do not accept an options MAP.
 
 ```sql
 ai_sentiment(text)
 ai_sentiment(model, text)
+ai_sentiment(provider, model, text)
 ai_classify(text, categories)
 ai_classify(model, text, categories)
+ai_classify(provider, model, text, categories)
 ai_extract(text, keys)
 ai_extract(model, text, keys)
+ai_extract(provider, model, text, keys)
 ai_fix_grammar(text)
 ai_fix_grammar(model, text)
+ai_fix_grammar(provider, model, text)
 ai_redact(text, categories)
 ai_redact(model, text, categories)
+ai_redact(provider, model, text, categories)
 ai_translate(text, source_language, target_language)
 ai_translate(model, text, source_language, target_language)
+ai_translate(provider, model, text, source_language, target_language)
 ai_similarity(text1, text2)
 ai_similarity(model, text1, text2)
+ai_similarity(provider, model, text1, text2)
 ai_summarize(text)
 ai_summarize(model, text)
+ai_summarize(provider, model, text)
 ai_filter(text, condition)
 ai_filter(model, text, condition)
+ai_filter(provider, model, text, condition)
 ```
 
-Text, model, condition, and language arguments are VARCHAR expressions. Explicit models can vary by row. A constant explicit model must not be blank. Without an explicit model, `ai_default_chat_model` must be configured.
+## Parameters
 
-`categories` and `keys` must be constant, nonempty `ARRAY<VARCHAR>` values with no NULL or blank elements. A VARCHAR containing a URL remains text: StarRocks does not fetch the URL. FILE, image, and multimodal inputs are not supported.
+Omitting `provider` selects the cluster default Provider for the function type: `chat` for completion and text helpers, `embedding` for embeddings. Omitting `model` uses that Provider's required default model. An explicit model takes precedence and may vary by row. `provider` must be a nonblank constant string; a constant explicit model must not be blank. An explicit Provider call does not require a cluster default.
 
-## Return values
+Text, model, condition, and language arguments are VARCHAR expressions. `categories` and `keys` must be constant, nonempty `ARRAY<VARCHAR>` values without NULL or blank elements. FILE inputs are unsupported. `ai_redact` sends the original text to the model; it is not a local privacy filter.
 
-All results are nullable and non-deterministic.
+NULL text, explicit model, or FILE input returns NULL without a model request, whether it is a constant or a runtime column value. A NULL options MAP means no options; a NULL translation source language requests automatic detection. Provider names and helper arrays retain their parameter validation. Nested NULL values inside options retain their JSON-compatible semantics. If an untyped NULL matches different argument types across overloads, specify its type with `CAST`, for example `CAST(NULL AS VARCHAR)` or `CAST(NULL AS MAP<VARCHAR, JSON>)`.
+
+Use language codes such as `en`, `zh`, and `fr`. A NULL or empty source language (`''`) requests automatic detection. A NULL target language returns NULL without a request. An empty or ASCII-whitespace-only target language also returns NULL without a request. No fixed language whitelist or `return_error_details` parameter is provided.
+
+## Return value
 
 | Function | Type | Meaning |
 |----------|------|---------|
@@ -54,29 +61,19 @@ All results are nullable and non-deterministic.
 | `ai_extract` | JSON | Asks for an object such as `{"response":{"key":"value"}}`, with NULL for missing values. |
 | `ai_fix_grammar` | VARCHAR | Corrected text. |
 | `ai_redact` | VARCHAR | Text with detected values replaced by category markers such as `[EMAIL]`. |
-| `ai_translate` | VARCHAR | Translated text. NULL or an empty source language requests automatic detection. A NULL, empty, or ASCII-whitespace-only target language returns NULL without a request. |
+| `ai_translate` | VARCHAR | Translated text. See language and NULL rules below. |
 | `ai_similarity` | FLOAT | A model-generated semantic similarity score from 0 through 1, not a vector-distance calculation. |
 | `ai_summarize` | VARCHAR | A text summary. |
 | `ai_filter` | BOOLEAN | Whether the model considers the text to satisfy the condition. |
 
-Classification and extraction responses must be valid JSON objects. StarRocks does not enforce the requested object schema or verify the factual accuracy of model output.
-
-NULL text or an explicitly supplied NULL model returns NULL without a provider request. For translation, NULL source language is the exception described above. Malformed typed responses and other row-level failures follow [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error): `ignore` returns NULL and `fail` aborts the query. Configuration errors, cancellation, and deadlines are not converted into NULL.
-
-The [SQL placement restrictions, prepared-statement replanning, and runtime limits of ai_complete](ai_complete.md#limitations-and-security) also apply to these functions.
+Classification and extraction require JSON objects, but do not validate the requested object schema or factual accuracy. All results are nullable and non-deterministic. Row failures follow `ai_function_on_error`; the [SQL restrictions and runtime controls](ai_complete.md#limitations-and-security) also apply.
 
 ## Examples
-
-These examples only plan the queries. `EXPLAIN` requires valid SYSTEM chat configuration but does not submit provider requests.
 
 ```sql
 EXPLAIN SELECT ai_sentiment('The delivery was excellent.');
 EXPLAIN SELECT ai_classify('Please reset my password.', ['support', 'sales']);
-EXPLAIN SELECT ai_extract('Order 42 ships Friday.', ['order', 'ship_date']);
-EXPLAIN SELECT ai_translate('Hello', NULL, 'Chinese');
-EXPLAIN SELECT ai_similarity('A quick reply', 'A fast response');
-EXPLAIN SELECT ai_filter('The package arrived damaged.', 'describes a damaged item');
-EXPLAIN SELECT ai_summarize('approved-chat-model', 'A local test paragraph.');
+EXPLAIN SELECT ai_translate('Hello', '', 'zh');
+EXPLAIN SELECT ai_translate('support_chat', 'chat-model', 'Bonjour', 'fr', 'en');
+EXPLAIN SELECT ai_summarize('chat-model', 'A local test paragraph.');
 ```
-
-For text embeddings, see [ai_embed](ai_embed.md). For chat or embeddings through a registered AI provider, see [AI provider functions](ai_custom_functions.md). Setting a default AI provider does not change these helpers' SYSTEM routing; their explicit `model` argument still selects a remote model name.
