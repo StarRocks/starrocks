@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.mv.IvmSchemaCompat;
 import com.starrocks.type.ArrayType;
@@ -177,6 +178,48 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
         Assertions.assertFalse(isCompatible(existed, new ArrayType(driftedElem)));
     }
 
+    @Test
+    public void testNativeDecimalScaleDriftDetectedAfterReactivation() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE native_decimal_base (id INT, amount DECIMAL(10,2)) "
+                + "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num'='1')");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW native_decimal_mv "
+                    + "REFRESH DEFERRED MANUAL AS SELECT id, amount FROM native_decimal_base", () -> {
+                        MaterializedView mv = getMv("test", "native_decimal_mv");
+                        MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
+                        Assertions.assertTrue(mv.isActive());
+
+                        // Model the schema seen after ALTER and relaxed reactivation: the MV is
+                        // active again, but still stores DECIMAL(10,2). INSERT would round 12.3456.
+                        OlapTable base = (OlapTable) getTable("test", "native_decimal_base");
+                        base.getColumn("amount").setType(new DecimalType(PrimitiveType.DECIMAL64, 12, 4));
+                        MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
+                        Assertions.assertFalse(mv.isActive());
+                        Assertions.assertTrue(mv.getInactiveReason().contains("column schema not compatible"));
+                    });
+        } finally {
+            starRocksAssert.dropTable("native_decimal_base");
+        }
+    }
+
+    @Test
+    public void testNativeStringWidthInferenceStillCompatible() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE native_string_base (id INT, value VARCHAR(100)) "
+                + "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num'='1')");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW native_string_mv "
+                    + "REFRESH DEFERRED MANUAL AS SELECT id, value FROM native_string_base", () -> {
+                        MaterializedView mv = getMv("test", "native_string_mv");
+                        // Older MVs can store a bounded VARCHAR while current inference prefers STRING.
+                        mv.getColumn("value").setType(new VarcharType(100));
+                        MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
+                        Assertions.assertTrue(mv.isActive());
+                    });
+        } finally {
+            starRocksAssert.dropTable("native_string_base");
+        }
+    }
+
     /**
      * Pins Task 6: with no frozen ivmDefineSql (every new IVM MV), the checker must re-derive the
      * rewritten query so its arity (including the hidden __ROW_ID__/__AGG_STATE columns) matches the
@@ -193,7 +236,7 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
             MaterializedView mv = getMv("test", "mv_checker_no_drift");
             Assertions.assertTrue(mv.getCurrentRefreshMode().isIncremental(),
                     "guard: this shape must resolve to an incremental MV, else the test is vacuous");
-            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
             Assertions.assertTrue(mv.isActive(),
                     "new IVM MV with unchanged external base must stay active, not false-trip schema drift");
         });
@@ -216,7 +259,7 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
             mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
             Assertions.assertTrue(mv.getCurrentRefreshMode().isAuto());
             Assertions.assertNotNull(mv.getRowIdStrategy(), "this MV IS an IVM MV (has __ROW_ID__)");
-            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
             Assertions.assertTrue(mv.isActive(),
                     "AUTO-mode IVM MV with unchanged external base must stay active, not false-trip schema drift");
         });
@@ -239,7 +282,7 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
             MaterializedView mv = getMv("test", "mv_checker_auto_pct");
             Assertions.assertNull(mv.getRowIdStrategy(), "PCT-schema MV has no __ROW_ID__");
             mv.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
-            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            MVRefreshSchemaChecker.checkBaseSchemaCompat(mv);
             Assertions.assertTrue(mv.isActive(),
                     "AUTO-mode non-IVM MV (plain PCT schema) must not be re-derived / false-inactivated");
         });
