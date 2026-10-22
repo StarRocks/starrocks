@@ -57,7 +57,7 @@ under the License.
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.18.1</parquet.version>
         <ranger.version>2.9.0</ranger.version>
-        <zookeeper.version>3.9.5</zookeeper.version>
+        <zookeeper.version>3.9.6</zookeeper.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
