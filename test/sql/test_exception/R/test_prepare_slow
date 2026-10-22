@@ -28,11 +28,4 @@ admin enable failpoint 'fragment_prepare_sleep';
 [UC] select count(*) from t0;
 admin disable failpoint 'fragment_prepare_sleep';
 -- result:
-<<<<<<< HEAD
 -- !result
-=======
--- !result
-CLEANUP {
-  admin disable failpoint 'fragment_prepare_sleep';
-} END CLEANUP
->>>>>>> 8c527bc ([UT] Give test_prepare_slow its own case name so both exception cases run (#81341))
