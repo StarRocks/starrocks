@@ -292,13 +292,14 @@ public:
     size_t object_size() const { return _object_size; }
     size_t size() const { return _size; }
 
-    size_t capacity() const { return _capacity; }
+    // Read without _lock (e.g. by background eviction) while set_capacity() may run concurrently.
+    size_t capacity() const { return _capacity.load(std::memory_order_relaxed); }
 
     // adjust capacity
     // return false if actual memory usage is larger than capacity
     bool set_capacity(size_t capacity) {
         std::lock_guard<Lock> lg(_lock);
-        _capacity = capacity;
+        _capacity.store(capacity, std::memory_order_relaxed);
         return _evict();
     }
 
@@ -365,12 +366,12 @@ private:
                 itr++;
             }
         }
-        return _size <= _capacity;
+        return _size <= _capacity.load(std::memory_order_relaxed);
     }
 
     bool _evict() {
         std::vector<Entry*> entry_list;
-        bool ret = _evict(_capacity, &entry_list);
+        bool ret = _evict(_capacity.load(std::memory_order_relaxed), &entry_list);
         for (Entry* entry : entry_list) {
             delete entry;
         }
@@ -382,7 +383,7 @@ private:
     Map _map;
     size_t _object_size{0};
     std::atomic<size_t> _size;
-    size_t _capacity = 0;
+    std::atomic<size_t> _capacity{0};
 
     MemTracker* _mem_tracker = nullptr;
 };
