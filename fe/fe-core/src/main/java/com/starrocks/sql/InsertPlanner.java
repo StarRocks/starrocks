@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -325,7 +326,7 @@ public class InsertPlanner {
             // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
             // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
             // late, because the logical plan built here would still point at the live objects.
-            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt, plannerMetaLocker);
         }
         try {
             return planWithRetry(insertStmt, session);
@@ -1024,7 +1025,9 @@ public class InsertPlanner {
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
 
-                List<SlotRef> slots = targetColumn.getRefColumns();
+                Expr definition = ExprUtils.rewriteStructFieldSlotRefs(targetColumn.getDefineExpr());
+                List<SlotRef> slots = Lists.newArrayList();
+                definition.collect(SlotRef.class, slots);
                 for (SlotRef slot : slots) {
                     String originName = slot.getColumnName();
                     Optional<Column> optOriginColumn = outputFullSchema.stream()
@@ -1036,7 +1039,7 @@ public class InsertPlanner {
                 }
 
                 ScalarOperator scalarOperator =
-                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
+                        SqlToScalarOperatorTranslator.translate(definition, expressionMapping,
                                 columnRefFactory);
 
                 ColumnRefOperator columnRefOperator =

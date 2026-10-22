@@ -20,6 +20,7 @@
 #include <string>
 
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
@@ -32,6 +33,7 @@
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
@@ -49,6 +51,7 @@
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
@@ -127,6 +130,96 @@ TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_preload_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(
+                ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "10"));
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_index_block_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent",
+                                                                 saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "20"));
+    ASSERT_EQ(primary_key_mem_limit * 20 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
+    ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_percent = std::to_string(config::update_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", saved_percent));
+    });
+
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    ASSERT_EQ(_runtime_env->update_mem_tracker(), primary_key_mgr->mem_tracker());
+    const int64_t preload_mem_percent = config::lake_pk_preload_memory_limit_percent;
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "30"));
+    ASSERT_EQ(process_mem_limit * 30 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "50"));
+    ASSERT_EQ(process_mem_limit * 50 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, _runtime_env->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(registry->update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {

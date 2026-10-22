@@ -30,8 +30,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -43,7 +41,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -568,7 +565,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      *         light-weight path turned tablet creation into a no-op and the job can go straight on
      */
     private boolean createShadowTablets() throws AlterCancelException {
-        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -585,17 +581,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
                     && !hasZstdCompressionChange;
 
-            // disable tablet creation optimization to avoid overwriting files with the same name, and for a
-            // range-distribution table, whose tablets each carry their own range.
-            if (table.isFileBundling() || table.isRangeDistribution()) {
-                enableTabletCreationOptimization = false;
-            }
-            if (enableTabletCreationOptimization) {
-                numTablets = physicalPartitionIndexMap.size();
-            } else {
-                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
-                        .mapToLong(List::size).sum();
-            }
+            numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                    .mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
@@ -667,7 +654,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
-                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                // Never the partition-shared version-1 object: it is named after tablet id 0, so the
+                                // shadow index would overwrite the base index's one in the same partition path, and
+                                // it carries a single range where each tablet of a range-distribution table has its own.
+                                .setEnableTabletCreationOptimization(false)
                                 .setGtid(gtid)
                                 .setCompactionStrategy(table.getCompactionStrategy())
                                 .setRange(table.isRangeDistribution() ? shadowTablet.getRange() : null)
@@ -675,10 +665,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
-
-                        if (enableTabletCreationOptimization) {
-                            break;
-                        }
                     }
                 }
             }
@@ -956,8 +942,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             persistStateChange(this, JobState.FINISHED, () -> {
                 // Below this point, all query and load jobs will use the new schema.
                 visualiseShadowIndex(table);
-                // inactivate related mv
-                inactiveRelatedMv(modifiedColumns, table);
+                // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
                 table.onReload();
             });
         }
@@ -1134,33 +1120,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
-    }
-
-    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), tbl.getName());
-                    mv.setInactiveAndReason(
-                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                    // clear version map to make sure the MV will be refreshed
-                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-                    return;
-                }
-            }
-        }
     }
 
     boolean tableHasBeenDropped() {

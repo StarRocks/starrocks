@@ -64,8 +64,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
@@ -76,6 +80,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +96,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.FILE_PATH;
 import static com.starrocks.catalog.IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 import static com.starrocks.catalog.IcebergTable.ROW_ID;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -331,6 +337,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (file.content() != FileContent.EQUALITY_DELETES) {
                 continue;
             }
+            // each equality-id group has its own delete scan; a file of another group would be read with its
+            // missing key columns filled with NULL and match rows whose key is NULL
+            if (!file.equalityFieldIds().equals(morParams.getEqualityIds())) {
+                continue;
+            }
 
             if (!seenEqDeleteFiles.contains(file.path().toString())) {
                 THdfsScanRange hdfsScanRange = buildScanRange(task, file, partitionId);
@@ -411,6 +422,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
                 value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 setExtendedColumns(slot, extendedColumns, value);
+            } else if (isPartitionKeyColumn(name, table.getNativeTable().schema())) {
+                String partitionKey = buildPartitionKey(table.getNativeTable().specs().get(file.specId()), file.partition());
+                value = partitionKey == null ? new NullLiteral()
+                        : LiteralExprFactory.create(partitionKey, StringType.STRING);
+                setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(FILE_PATH)) {
                 value = LiteralExprFactory.create(file.location(), StringType.STRING);
                 setExtendedColumns(slot, extendedColumns, value);
@@ -438,6 +454,48 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return hdfsScanRange;
+    }
+
+    // A real table column of the same name is read from the file; only the column the equality delete rewrite
+    // adds is filled with the partition key.
+    static boolean isPartitionKeyColumn(String name, Schema schema) {
+        return name.equalsIgnoreCase(PARTITION_KEY) && schema.caseInsensitiveFindField(PARTITION_KEY) == null;
+    }
+
+    /**
+     * Encodes the spec id and partition values of a file, so that a data file and a partitioned equality delete
+     * file get the same key exactly when the delete applies to the data file by partition. Returns null for an
+     * unpartitioned spec: such deletes are global.
+     */
+    static String buildPartitionKey(PartitionSpec spec, StructLike partition) {
+        if (spec == null || spec.isUnpartitioned()) {
+            return null;
+        }
+        StringBuilder key = new StringBuilder().append(spec.specId());
+        List<Types.NestedField> fields = spec.partitionType().fields();
+        for (int i = 0; i < fields.size(); i++) {
+            Object partitionValue = partition.get(i, Object.class);
+            key.append('|');
+            if (partitionValue == null) {
+                key.append('n');
+            } else {
+                // int -> long and float -> double are allowed type promotions, so the two sides of one query may
+                // see a field under either type (an older schema, or a concurrent ALTER); always encode the wide one
+                Type type = fields.get(i).type();
+                if ((type.typeId() == Type.TypeID.INTEGER || type.typeId() == Type.TypeID.LONG) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.LongType.get();
+                    partitionValue = number.longValue();
+                } else if ((type.typeId() == Type.TypeID.FLOAT || type.typeId() == Type.TypeID.DOUBLE) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.DoubleType.get();
+                    partitionValue = number.doubleValue();
+                }
+                key.append('v').append(Base64.getEncoder().encodeToString(
+                        ByteBuffers.toByteArray(Conversions.toByteBuffer(type, partitionValue))));
+            }
+        }
+        return key.toString();
     }
 
     private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {

@@ -427,6 +427,10 @@ struct TQueryOptions {
   // Maximum number of elements in an array produced by an array function. The query fails once an
   // array exceeds it. Only array_agg enforces it so far. <=0 disables the limit. Default 0.
   226: optional i64 max_array_length = 0;
+
+  // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling
+  // (BE config exchange_sink_buffer_flush_threshold_bytes is the threshold).
+  227: optional bool enable_exchange_sink_buffer_flush = true;
 }
 
 // A scan range plus the parameters needed to execute that scan.

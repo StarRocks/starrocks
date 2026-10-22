@@ -287,7 +287,6 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getSeenEqDeleteFiles();
     }
 
-    // for unit tests
     public IcebergMORParams getMORParams() {
         return morParams;
     }

@@ -60,13 +60,12 @@ std::optional<EvHttpServer::AuthVerifyFailure> auth_failure_from_fe_status(const
 // db_admin holders.
 TPrivilegeRequirement::type to_thrift_privilege(HttpHandler::RequiredPrivilege priv);
 
-// The full BE auth-verifier hook. Returns `nullopt` when authentication +
-// authorization both succeed (or when `enable_http_auth=false`), otherwise an
-// `AuthVerifyFailure` the EvHttpServer wraps into the HTTP response. Order of
-// checks: flag gate → Basic-Auth header → FE master address known → FE
-// checkAuth RPC. Anything before the RPC is unit-testable; the RPC itself is
-// covered by the end-to-end smoke test.
-std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(
-        HttpRequest* req, HttpHandler::RequiredPrivilege required_privilege);
+// The full BE auth-verifier hook. Returns `nullopt` when authentication + authorization both
+// succeed (or when `enable_http_auth=false`), otherwise an `AuthVerifyFailure` the EvHttpServer
+// wraps into the HTTP response. Order of checks: flag gate → Authorization header (Basic or Bearer)
+// → FE master address known → FE checkAuth RPC. Anything before the RPC is unit-testable; the RPC
+// itself is covered by the end-to-end smoke test.
+std::optional<EvHttpServer::AuthVerifyFailure> verify_http_auth(HttpRequest* req,
+                                                                HttpHandler::RequiredPrivilege required_privilege);
 
 } // namespace starrocks

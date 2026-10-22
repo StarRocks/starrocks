@@ -55,6 +55,7 @@ import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -722,6 +723,19 @@ public abstract class AlterJobV2 implements Writable {
         indexMeta.setViewDefineSql(orgIndexMeta.getViewDefineSql());
         indexMeta.setColocateMVIndex(orgIndexMeta.isColocateMVIndex());
         indexMeta.setDefineStmt(orgIndexMeta.getDefineStmt());
+        indexMeta.setDbId(orgIndexMeta.getDbId());
+        indexMeta.setSyncMvRequiredTxnId(orgIndexMeta.getSyncMvRequiredTxnId());
+        if (orgIndexMeta.getSyncMvDefinition() != null) {
+            indexMeta.setSyncMvDefinition(orgIndexMeta.getSyncMvDefinition().withSchema(indexMeta.getSchema()));
+            // New definitions must fail closed; legacy recovery below remains best effort.
+            try {
+                indexMeta.gsonPostProcess();
+            } catch (IOException e) {
+                throw new SemanticException("Failed to rebuild synchronous MV definition for index " +
+                        indexMeta.getIndexMetaId(), e);
+            }
+            return;
+        }
         if (indexMeta.getDefineStmt() != null) {
             try {
                 indexMeta.gsonPostProcess();

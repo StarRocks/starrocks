@@ -21,6 +21,8 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorSinkSortScope;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.connector.iceberg.TestTables;
 import com.starrocks.planner.DescriptorTable;
@@ -28,6 +30,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.IcebergTableFactory;
 import com.starrocks.thrift.TBucketFunction;
+import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
 import mockit.Mock;
@@ -35,6 +38,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
@@ -453,5 +457,51 @@ public class IcebergTableTest extends TableTestBase {
         // No current snapshot (e.g. empty table) -> empty metadata, not an error.
         Mockito.when(nativeTable.currentSnapshot()).thenReturn(null);
         Assertions.assertTrue(table.getStatsCollectMetadata().isEmpty());
+    }
+
+    @Test
+    public void testToThriftIgnoresUnknownPartitionTransform() {
+        // Per the Iceberg spec a reader ignores a partition field whose transform it does not know.
+        // Before the fix toThrift threw "Unsupported partition transform", so the table was unqueryable.
+        Schema iceSchema = new Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "p", Types.IntegerType.get()));
+        PartitionSpec spec = PartitionSpecParser.fromJson(iceSchema, "{\"spec-id\": 0, \"fields\": [" +
+                "{\"name\": \"id_future\", \"transform\": \"future_transform[3]\", \"source-id\": 1, " +
+                "\"field-id\": 1000}, " +
+                "{\"name\": \"p\", \"transform\": \"identity\", \"source-id\": 2, \"field-id\": 1001}]}");
+        Assertions.assertFalse(IcebergApiConverter.isKnownPartitionTransform(spec.fields().get(0)));
+        Assertions.assertTrue(IcebergApiConverter.isKnownPartitionTransform(spec.fields().get(1)));
+
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        Mockito.when(nativeTable.schema()).thenReturn(iceSchema);
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(nativeTable.location()).thenReturn("s3://bucket/table");
+        Mockito.when(nativeTable.sortOrder()).thenReturn(SortOrder.unsorted());
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(Lists.newArrayList(new Column("id", INT, false), new Column("p", INT, false)))
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        Assertions.assertEquals(List.of("p"), table.getPartitionColumnNames());
+        TTableDescriptor desc = table.toThrift(new ArrayList<>());
+        List<TIcebergPartitionInfo> partitionInfos = desc.getIcebergTable().getPartition_info();
+        Assertions.assertEquals(1, partitionInfos.size());
+        Assertions.assertEquals("p", partitionInfos.get(0).getPartition_column_name());
+        // SHOW CREATE TABLE shows the unknown transform instead of failing.
+        Assertions.assertEquals(List.of("future_transform[3](`id`)", "`p`"),
+                table.getPartitionColumnNamesWithTransform());
+
+        // A writer cannot compute the unknown field, so writes still fail.
+        StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergApiConverter.checkPartitionTransformsWritable(spec));
+        Assertions.assertTrue(e.getMessage().contains("Unsupported partition transform"), e.getMessage());
     }
 }

@@ -303,6 +303,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.minRetainVersion.set(minRetainVersion);
     }
 
+    /**
+     * Clears the pin if it is still {@code version}, so a pin that another holder has since set to a different
+     * version stays. Returns whether the pin was cleared.
+     */
+    public boolean releaseMinRetainVersion(long version) {
+        return minRetainVersion.compareAndSet(version, 0);
+    }
+
     public long getLastSuccVacuumVersion() {
         return lastSuccVacuumVersion.get();
     }

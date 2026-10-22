@@ -78,6 +78,10 @@ public interface AnalyzeStatus {
 
     void setReason(String reason);
 
+    boolean isCancelled();
+
+    void setCancelled(boolean cancelled);
+
     long getProgress();
 
     void setProgress(long progress);

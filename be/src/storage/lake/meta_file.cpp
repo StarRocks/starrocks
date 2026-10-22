@@ -1210,6 +1210,38 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
         file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
+
+    // Nothing references the other files this compaction wrote either; without an orphan entry
+    // only a full vacuum would delete them.
+    remove_lcrm_file(op_compaction);
+    for (const auto& sst : op_compaction.ssts()) {
+        auto* added = _tablet_meta->add_orphan_files();
+        added->CopyFrom(sst);
+        added->set_version(_tablet_meta->version());
+    }
+    // The primary index compaction may keep an input sstable as its output: that file is still in
+    // the index and must not become an orphan.
+    std::unordered_set<std::string> input_sst_filenames;
+    for (const auto& input_sstable : op_compaction.input_sstables()) {
+        input_sst_filenames.insert(input_sstable.filename());
+    }
+    auto add_orphan_sstable = [&](const PersistentIndexSstablePB& output_sstable) {
+        if (input_sst_filenames.contains(output_sstable.filename())) {
+            return;
+        }
+        FileMetaPB file_meta;
+        file_meta.set_name(output_sstable.filename());
+        file_meta.set_size(output_sstable.filesize());
+        file_meta.set_shared(output_sstable.shared());
+        file_meta.set_version(_tablet_meta->version());
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+    };
+    if (op_compaction.has_output_sstable()) {
+        add_orphan_sstable(op_compaction.output_sstable());
+    }
+    for (const auto& output_sstable : op_compaction.output_sstables()) {
+        add_orphan_sstable(output_sstable);
+    }
 }
 
 Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels) {
@@ -1379,7 +1411,19 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
                                          iter->second.size()));
         return true;
     }
+    if (_delvecs_reset_by_recover) {
+        (*pdelvec) = std::make_shared<DelVector>();
+        return true;
+    }
     return false;
+}
+
+void MetaFileBuilder::reset_delvecs_for_recover() {
+    _buf.clear();
+    _delvecs.clear();
+    _segmentid_to_delvec.clear();
+    _cache_key_to_segment_id.clear();
+    _delvecs_reset_by_recover = true;
 }
 
 void MetaFileBuilder::_fill_delvec_cache() {

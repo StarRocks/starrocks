@@ -16,14 +16,13 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <map>
-#include <memory_resource>
 #include <numeric>
+#include <variant>
 #include <vector>
 
 #define BOOST_MATH_DISABLE_FLOAT128
@@ -34,6 +33,7 @@
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
+#include "geo/geo_exact_arithmetic.h"
 #include "types/geo_wkb.h"
 
 namespace starrocks {
@@ -45,144 +45,77 @@ using Key = std::pair<uint32_t, uint32_t>;
 struct Stop {
     Status status;
 };
-// Lives independently before the public object and survives its destructor.
-// The entire state/public-object allocation has one captured allocator owner.
-struct StateAllocation {
-    memory::Allocator* allocator;
-    void* raw;
-    size_t bytes;
-};
 [[noreturn]] void invalid(const char* message) {
     throw Stop{Status::InvalidArgument(message)};
 }
 
-// Bounded individually freed allocations, including temporary peaks. An aligned
-// view retains its raw allocation header; accounting uses the underlying size
-// class before alloc, not requested WKB length or a model expansion estimate.
-class Memory final : public std::pmr::memory_resource {
-public:
-    Memory(memory::Allocator* allocator, size_t limit) : allocator(allocator), limit(limit) {}
-    void retain(size_t count) {
-        size_t current = used.load(std::memory_order_relaxed);
-        do {
-            if (count > limit - current)
-                throw Stop{Status::MemoryLimitExceeded(
-                        "ST_CoverageSimplify exceeds geo_coverage_max_working_bytes_per_partition")};
-        } while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed));
-        size_t previous = peak.load(std::memory_order_relaxed);
-        while (previous < current + count &&
-               !peak.compare_exchange_weak(previous, current + count, std::memory_order_relaxed)) {
-        }
-    }
-    void release(size_t count) { used.fetch_sub(count, std::memory_order_relaxed); }
-    memory::Allocator* allocator;
-    size_t limit;
-    // The algorithm is single-owner. Immutable native output buffers can be
-    // released by independent downstream workers after it has finished.
-    std::atomic<size_t> used{0}, peak{0};
+// uint32_t graph indices reserve the largest value for absent links.
+uint32_t index(size_t size) {
+    if (size >= kAbsent) invalid("ST_CoverageSimplify graph index range exceeded");
+    return static_cast<uint32_t>(size);
+}
 
-private:
-    struct Header {
-        void* raw;
-        size_t requested;
-        size_t charged;
-    };
-    void* do_allocate(size_t count, size_t alignment) override {
-        if (alignment > std::numeric_limits<size_t>::max() - sizeof(Header) ||
-            count > std::numeric_limits<size_t>::max() - alignment - sizeof(Header))
-            throw std::bad_alloc();
-        const size_t request = count + alignment + sizeof(Header);
-        const int64_t size_class = allocator->nallox(request);
-        if (size_class <= 0 || uint64_t(size_class) < request) throw std::bad_alloc();
-        retain(size_class);
-        void* raw;
-        try {
-            raw = allocator->alloc(request);
-        } catch (...) {
-            release(size_class);
-            throw;
-        }
-        if (raw == nullptr) {
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        void* aligned = static_cast<char*>(raw) + sizeof(Header);
-        size_t space = request - sizeof(Header);
-        if (std::align(alignment, count, aligned, space) == nullptr) {
-            allocator->free(raw, request);
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        auto* header = static_cast<Header*>(aligned) - 1;
-        *header = {raw, request, size_t(size_class)};
-        return aligned;
-    }
-    void do_deallocate(void* pointer, size_t, size_t) override {
-        auto header = *(static_cast<Header*>(pointer) - 1);
-        allocator->free(header.raw, header.requested);
-        release(header.charged);
-    }
-    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override { return this == &other; }
-};
-
-// Only default construction needs the scoped resource. Each allocator instance
-// captures its owner, including multiprecision rebound/temporary allocations;
-// later frees never consult this TLS variable. No simultaneous mutable use of a
-// partition is allowed, but sequential movement between workers is supported.
-thread_local std::pmr::memory_resource* construction_memory = nullptr;
-struct MemoryScope {
-    std::pmr::memory_resource* previous;
-    explicit MemoryScope(Memory& memory) : previous(construction_memory) { construction_memory = &memory; }
-    ~MemoryScope() { construction_memory = previous; }
-};
-template <class T>
-struct Alloc {
-    using value_type = T;
-    std::pmr::memory_resource* memory = construction_memory;
-    Alloc() = default;
-    explicit Alloc(std::pmr::memory_resource* m) : memory(m) {}
-    template <class U>
-    Alloc(const Alloc<U>& other) : memory(other.memory) {}
-    T* allocate(size_t n) {
-        if (!memory || n > std::numeric_limits<size_t>::max() / sizeof(T)) throw std::bad_alloc();
-        return static_cast<T*>(memory->allocate(n * sizeof(T), alignof(T)));
-    }
-    void deallocate(T* pointer, size_t n) { memory->deallocate(pointer, n * sizeof(T), alignof(T)); }
-    template <class U>
-    bool operator==(const Alloc<U>& other) const {
-        return memory == other.memory;
-    }
-    template <class U>
-    bool operator!=(const Alloc<U>& other) const {
-        return !(*this == other);
-    }
-};
 // Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
-// ring sums with at most 1M positions <4219. 16384 checked bits also cover
-// tolerance^2 and doubled midpoint samples. Dynamic limbs use the budget.
-using Integer = boost::multiprecision::number<
+// ring sums with native WKB positions <4219. 16384 checked bits also cover
+// tolerance^2 and doubled midpoint samples. Dynamic limbs use the standard allocator.
+using DynamicInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
-                                               boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
+                                               boost::multiprecision::checked,
+                                               std::allocator<boost::multiprecision::limb_type>>,
         boost::multiprecision::et_off>;
-Integer scaled(double value) {
-    const uint64_t bits = std::bit_cast<uint64_t>(value);
-    const unsigned exponent = (bits >> 52) & 2047;
-    Integer result = bits & ((uint64_t{1} << 52) - 1);
-    if (exponent) {
-        result += uint64_t{1} << 52;
-        result <<= exponent - 1;
+using FixedInteger = boost::multiprecision::number<
+        boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::signed_magnitude,
+                                               boost::multiprecision::checked, void>,
+        boost::multiprecision::et_off>;
+
+// Finite binary64 as an odd significand times 2^shift, in the original 2^1074 scale.
+struct Binary64 {
+    uint64_t significand;
+    unsigned shift;
+    bool negative;
+    explicit Binary64(double value) {
+        const uint64_t bits = std::bit_cast<uint64_t>(value), exponent = (bits >> 52) & 0x7ff;
+        significand = bits & ((uint64_t{1} << 52) - 1);
+        if (exponent) significand |= uint64_t{1} << 52;
+        shift = exponent ? exponent - 1 : 0;
+        negative = bits >> 63;
+        if (significand) {
+            const unsigned zeros = std::countr_zero(significand);
+            significand >>= zeros;
+            shift += zeros;
+        }
     }
-    return bits >> 63 ? -result : result;
-}
+};
+struct ArithmeticBounds {
+    unsigned common_shift = 2098, high_bit = 0;
+    uint32_t positions = 0;
+    void include(double value) {
+        const Binary64 parts(value);
+        if (!parts.significand) return;
+        common_shift = std::min(common_shift, parts.shift);
+        high_bit = std::max(high_bit, parts.shift + unsigned(std::bit_width(parts.significand)));
+    }
+    bool fixed() const {
+        const unsigned b = high_bit ? high_bit - common_shift : 0;
+        // |coordinate|, tolerance <2^b. Determinants use <=2b+4 bits;
+        // every (also shortened) ring sum uses <=2b+1+bit_width(positions).
+        // The first bound also keeps multiplication operands within two limbs,
+        // so Boost's full four-limb multiplication scratch fits in 256 bits.
+        return b + 2 <= 128 && 2 * b + std::bit_width(positions) + 4 <= 255;
+    }
+};
+template <class Integer>
 int sign(const Integer& value) {
-    return (value > 0) - (value < 0);
+    return geo_exact::sign(value);
 }
-struct Point {
+template <class Integer>
+struct NumericPoint {
     double x, y;
     Integer ex, ey;
 };
-Integer orientation(const Point& a, const Point& b, const Point& c) {
-    return (b.ex - a.ex) * (c.ey - a.ey) - (b.ey - a.ey) * (c.ex - a.ex);
+template <class Integer>
+Integer orientation(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c) {
+    return geo_exact::orientation(a.ex, a.ey, b.ex, b.ey, c.ex, c.ey);
 }
 Key key(uint32_t a, uint32_t b) {
     return std::minmax(a, b);
@@ -192,9 +125,9 @@ Key key(uint32_t a, uint32_t b) {
 using BoxPoint = bg::model::d2::point_xy<long double>;
 using Box = bg::model::box<BoxPoint>;
 using Item = std::pair<Box, uint32_t>;
-using Tree = bgi::rtree<Item, bgi::quadratic<16>, bgi::indexable<Item>, bgi::equal_to<Item>, Alloc<Item>>;
-// query() traverses recursively with stack storage. qbegin() in Boost 1.80
-// instead owns an uncustomizable std::vector path stack, so it is not used.
+using Tree = bgi::rtree<Item, bgi::quadratic<16>>;
+// query() traverses recursively with stack storage; qbegin() in Boost 1.80
+// instead owns a std::vector path stack.
 template <class F>
 struct QueryOutput {
     F* visitor;
@@ -210,20 +143,26 @@ template <class F>
 void query(const Tree& tree, const Box& box, F&& visitor) {
     tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
 }
-Box bounds(const Point& a, const Point& b) {
+template <class Integer>
+Box bounds(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
     return {{std::min(a.x, b.x), std::min(a.y, b.y)}, {std::max(a.x, b.x), std::max(a.y, b.y)}};
 }
-bool between(const Point& p, const Point& a, const Point& b) {
+template <class Integer>
+bool between(const NumericPoint<Integer>& p, const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
     return std::min(a.x, b.x) <= p.x && p.x <= std::max(a.x, b.x) && std::min(a.y, b.y) <= p.y &&
            p.y <= std::max(a.y, b.y);
 }
 enum class Contact { NONE, ENDPOINT, TJUNCTION, CROSS, OVERLAP };
-Contact contact(const Point& a, const Point& b, const Point& c, const Point& d) {
+template <class Integer>
+Contact contact(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c,
+                const NumericPoint<Integer>& d) {
     const int ac = sign(orientation(a, b, c)), ad = sign(orientation(a, b, d));
     const int ca = sign(orientation(c, d, a)), cb = sign(orientation(c, d, b));
     if (ac * ad < 0 && ca * cb < 0) return Contact::CROSS;
     if (ac == 0 && ad == 0 && ca == 0 && cb == 0) {
-        auto less = [](const Point& p, const Point& q) { return p.x < q.x || (p.x == q.x && p.y < q.y); };
+        auto less = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+            return p.x < q.x || (p.x == q.x && p.y < q.y);
+        };
         const auto& lo1 = less(a, b) ? a : b;
         const auto& hi1 = less(a, b) ? b : a;
         const auto& lo2 = less(c, d) ? c : d;
@@ -233,7 +172,9 @@ Contact contact(const Point& a, const Point& b, const Point& c, const Point& d) 
         if (less(hi, lo)) return Contact::NONE;
         if (less(lo, hi)) return Contact::OVERLAP;
     }
-    auto equal = [](const Point& p, const Point& q) { return p.x == q.x && p.y == q.y; };
+    auto equal = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+        return p.x == q.x && p.y == q.y;
+    };
     if ((ac == 0 && between(c, a, b) && !equal(c, a) && !equal(c, b)) ||
         (ad == 0 && between(d, a, b) && !equal(d, a) && !equal(d, b)) ||
         (ca == 0 && between(a, c, d) && !equal(a, c) && !equal(a, d)) ||
@@ -249,7 +190,8 @@ struct Occurrence {
     uint32_t node, ring, previous, next;
     bool active = true;
 };
-struct Ring {
+template <class Integer>
+struct NumericRing {
     uint32_t first, count, component;
     bool hole;
     Integer area;
@@ -257,12 +199,23 @@ struct Ring {
 struct Component {
     uint32_t row, first, count;
 };
-struct Node {
-    Point point;
-    std::pmr::vector<uint32_t> occurrences;
+struct EdgeInterval {
+    uint32_t occurrence, ymin, ymax;
+};
+struct RingIndex {
+    uint32_t first, xmin, xmax, ymin, ymax;
+};
+struct LocationIndex {
+    std::vector<EdgeInterval> edges;
+    std::vector<RingIndex> rings;
+};
+template <class Integer>
+struct NumericNode {
+    NumericPoint<Integer> point;
+    std::vector<uint32_t> occurrences;
     uint32_t version = 0;
     bool fixed = false, active = true;
-    Node(Point p, Memory& m) : point(std::move(p)), occurrences(&m) {}
+    explicit NumericNode(NumericPoint<Integer> p) : point(std::move(p)) {}
 };
 struct Edge {
     uint32_t a, b;
@@ -271,18 +224,19 @@ struct Edge {
     bool active = true;
 };
 struct Row {
-    std::pmr::vector<uint8_t> bytes;
+    std::vector<uint8_t> bytes;
     size_t output_first = 0, output_size = 0;
     uint32_t first = 0, count = 0;
     bool null = false, multi = false;
-    explicit Row(Memory& m) : bytes(&m) {}
 };
-struct Candidate {
+template <class Integer>
+struct NumericCandidate {
     Integer area;
     uint32_t node, version;
 };
-struct CandidateLess {
-    bool operator()(const Candidate& a, const Candidate& b) const {
+template <class Integer>
+struct NumericCandidateLess {
+    bool operator()(const NumericCandidate<Integer>& a, const NumericCandidate<Integer>& b) const {
         return a.area != b.area ? a.area > b.area : a.node > b.node;
     }
 };
@@ -317,7 +271,7 @@ public:
     size_t components = 0;
 };
 template <class T>
-void write(std::pmr::vector<uint8_t>& output, T value) {
+void write(std::vector<uint8_t>& output, T value) {
     if constexpr (std::endian::native != std::endian::little) {
         auto* raw = reinterpret_cast<uint8_t*>(&value);
         std::reverse(raw, raw + sizeof(T));
@@ -325,57 +279,13 @@ void write(std::pmr::vector<uint8_t>& output, T value) {
     const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
     output.insert(output.end(), bytes, bytes + sizeof(T));
 }
-} // namespace
-
-struct GeoCoverageSimplify::Impl {
-    Memory memory;
-    GeoCoverageLimits limits;
-    GeoCoverageCheckpoint checkpoint;
-    std::pmr::vector<Row> rows;
-    std::pmr::vector<uint8_t> output_bytes;
-    std::pmr::vector<Node> nodes;
-    std::pmr::vector<Occurrence> occurrences;
-    std::pmr::vector<Ring> rings;
-    std::pmr::vector<Component> components;
-    std::pmr::map<std::pair<double, double>, uint32_t> node_map;
-    std::pmr::map<Key, uint32_t> edge_map;
-    std::pmr::vector<Edge> edges;
-    std::pmr::vector<Candidate> heap;
-    Tree edge_tree, node_tree;
-    size_t input_bytes = 0, vertices = 0, work = 0, last_check = 0, calls = 0, external = 0;
+struct Partition {
+    std::vector<Row> rows;
+    std::vector<uint8_t> output_bytes;
+    size_t input_bytes = 0, calls = 0;
     bool finished = false, failed = false, null_parameter = false;
-    Impl(memory::Allocator* allocator, GeoCoverageLimits limits, GeoCoverageCheckpoint checkpoint, size_t metadata)
-            : memory(allocator, limits.working_bytes),
-              limits(limits),
-              checkpoint(std::move(checkpoint)),
-              rows(&memory),
-              output_bytes(&memory),
-              nodes(&memory),
-              occurrences(&memory),
-              rings(&memory),
-              components(&memory),
-              node_map(&memory),
-              edge_map(&memory),
-              edges(&memory),
-              heap(&memory),
-              edge_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)),
-              node_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)) {
-        memory.retain(metadata);
-    }
-    void check() {
-        last_check = work;
-        if (checkpoint.check) {
-            auto status = checkpoint.check(checkpoint.context);
-            if (!status.ok()) throw Stop{std::move(status)};
-        }
-    }
-    void tick(size_t count = 1) {
-        if (count > limits.work - work) invalid("ST_CoverageSimplify exceeds kernel work limit");
-        work += count;
-        if (work - last_check >= 128) check();
-    }
-    void preflight(Reader& reader, bool child, size_t& count) {
-        check();
+    ArithmeticBounds arithmetic;
+    void preflight(Reader& reader, bool child) {
         const GeoWkbLimits native_limits;
         if (reader.bytes.size > native_limits.max_bytes)
             invalid("ST_CoverageSimplify exceeds native WKB payload limit");
@@ -394,41 +304,87 @@ struct GeoCoverageSimplify::Impl {
         if (n > (reader.bytes.size - reader.position) / (type == 3 ? 4 : 9))
             invalid("ST_CoverageSimplify truncated WKB components");
         for (uint32_t i = 0; i < n; ++i) {
-            tick();
             if (type == 6) {
-                preflight(reader, true, count);
+                preflight(reader, true);
                 continue;
             }
             const uint32_t positions = reader.number<uint32_t>(little);
             if (positions > native_limits.max_coordinates - reader.coordinates)
                 invalid("ST_CoverageSimplify exceeds native WKB coordinate limit");
             reader.coordinates += positions;
-            if (positions > limits.vertices - count)
-                invalid("ST_CoverageSimplify exceeds geo_coverage_max_vertices_per_partition");
+            arithmetic.positions = std::max(arithmetic.positions, positions);
             if (positions > (reader.bytes.size - reader.position) / 16)
                 invalid("ST_CoverageSimplify truncated WKB ring");
-            count += positions;
             for (uint32_t j = 0; j < positions; ++j) {
-                tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
                 if (!std::isfinite(x) || !std::isfinite(y)) invalid("ST_CoverageSimplify nonfinite XY coordinate");
+                arithmetic.include(x);
+                arithmetic.include(y);
             }
         }
     }
+};
+
+template <class Integer>
+struct Kernel {
+    using Point = NumericPoint<Integer>;
+    using Node = NumericNode<Integer>;
+    using Ring = NumericRing<Integer>;
+    using Candidate = NumericCandidate<Integer>;
+    using CandidateLess = NumericCandidateLess<Integer>;
+    std::vector<Row>& rows;
+    std::vector<uint8_t>& output_bytes;
+    size_t& input_bytes;
+    size_t& calls;
+    unsigned shift;
+    std::vector<Node> nodes;
+    std::vector<Occurrence> occurrences;
+    std::vector<Ring> rings;
+    std::vector<Component> components;
+    std::map<std::pair<double, double>, uint32_t> node_map;
+    std::map<Key, uint32_t> edge_map;
+    std::vector<Edge> edges;
+    std::vector<Candidate> heap;
+    Tree edge_tree, node_tree;
+    Kernel(Partition& partition, unsigned shift)
+            : rows(partition.rows),
+              output_bytes(partition.output_bytes),
+              input_bytes(partition.input_bytes),
+              calls(partition.calls),
+              shift(shift) {}
+    Integer scaled(double value) const {
+        if constexpr (std::is_same_v<Integer, DynamicInteger>) {
+            return geo_exact::scaled_binary64<Integer>(value);
+        } else {
+            const Binary64 parts(value);
+            Integer result(parts.significand);
+            if (parts.significand) result <<= parts.shift - shift;
+            return parts.negative ? -result : result;
+        }
+    }
+    void run(double tolerance, bool boundary) {
+        decode();
+        graph();
+        validate();
+        if (tolerance > 0 && !nodes.empty()) simplify(tolerance, boundary);
+        output(tolerance == 0);
+    }
     uint32_t intern(double x, double y) {
-        auto [it, fresh] = node_map.emplace(std::make_pair(x, y), nodes.size());
-        if (fresh) nodes.emplace_back(Point{x, y, scaled(x), scaled(y)}, memory);
+        auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
+        if (fresh) {
+            it->second = index(nodes.size());
+            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)});
+        }
         return it->second;
     }
     void polygon(Reader& reader, uint32_t row, bool little) {
-        uint32_t n = reader.number<uint32_t>(little), component = components.size();
+        uint32_t n = reader.number<uint32_t>(little), component = index(components.size());
         components.push_back({row, uint32_t(rings.size()), n});
         for (uint32_t r = 0; r < n; ++r) {
-            const uint32_t positions = reader.number<uint32_t>(little), ring = rings.size();
+            const uint32_t positions = reader.number<uint32_t>(little), ring = index(rings.size());
             if (positions < 4) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t first = kAbsent, previous = kAbsent, first_node = kAbsent, last_node = kAbsent;
             for (uint32_t j = 0; j < positions; ++j) {
-                tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
                 const uint32_t node = intern(x, y);
                 if (j == 0) first_node = node;
@@ -439,7 +395,7 @@ struct GeoCoverageSimplify::Impl {
                 // Consecutive repeated positions contribute to admission, but
                 // a zero-length edge is not a distinct coverage segment.
                 if (node == last_node) continue;
-                uint32_t occurrence = occurrences.size();
+                uint32_t occurrence = index(occurrences.size());
                 occurrences.push_back({node, ring, previous, kAbsent});
                 nodes[node].occurrences.push_back(occurrence);
                 if (previous != kAbsent)
@@ -465,7 +421,6 @@ struct GeoCoverageSimplify::Impl {
             if (rings.back().count < 3) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t o = first;
             do {
-                tick();
                 const auto& a = nodes[occurrences[o].node].point;
                 const auto& b = nodes[occurrences[occurrences[o].next].node].point;
                 rings.back().area += a.ex * b.ey - a.ey * b.ex;
@@ -476,7 +431,6 @@ struct GeoCoverageSimplify::Impl {
     }
     void decode() {
         for (uint32_t r = 0; r < rows.size(); ++r) {
-            check();
             auto& row = rows[r];
             row.first = components.size();
             if (row.null) continue;
@@ -496,15 +450,14 @@ struct GeoCoverageSimplify::Impl {
             reader.done();
         }
         for (uint32_t n = 0; n < nodes.size(); ++n) {
-            tick();
             node_tree.insert({bounds(nodes[n].point, nodes[n].point), n});
         }
     }
     void add_edge(uint32_t occurrence) {
-        tick();
         uint32_t a = occurrences[occurrence].node, b = occurrences[occurrences[occurrence].next].node;
-        auto [it, fresh] = edge_map.emplace(key(a, b), edges.size());
+        auto [it, fresh] = edge_map.emplace(key(a, b), 0);
         if (fresh) {
+            it->second = index(edges.size());
             edges.push_back({std::min(a, b), std::max(a, b)});
             edge_tree.insert({bounds(nodes[a].point, nodes[b].point), it->second});
         }
@@ -523,52 +476,102 @@ struct GeoCoverageSimplify::Impl {
     }
     void graph() {
         for (uint32_t o = 0; o < occurrences.size(); ++o) add_edge(o);
-        std::pmr::vector<unsigned> degree(nodes.size(), 0, &memory);
+        std::vector<unsigned> degree(nodes.size(), 0);
         for (const auto& edge : edges) {
-            tick();
             ++degree[edge.a];
             ++degree[edge.b];
         }
         for (size_t i = 0; i < nodes.size(); ++i) {
-            tick();
             nodes[i].fixed = degree[i] != 2;
         }
     }
+    LocationIndex prepare_locations() {
+        LocationIndex result;
+        size_t count = 0;
+        for (const auto& ring : rings) {
+            count += ring.count;
+        }
+        result.edges.reserve(count);
+        result.rings.reserve(rings.size());
+        for (const auto& ring : rings) {
+            uint32_t o = ring.first, n = occurrences[o].node;
+            RingIndex entry{index(result.edges.size()), n, n, n, n};
+            do {
+                uint32_t a = occurrences[o].node, b = occurrences[occurrences[o].next].node;
+                const auto& p = nodes[a].point;
+                if (p.x < nodes[entry.xmin].point.x) entry.xmin = a;
+                if (p.x > nodes[entry.xmax].point.x) entry.xmax = a;
+                if (p.y < nodes[entry.ymin].point.y) entry.ymin = a;
+                if (p.y > nodes[entry.ymax].point.y) entry.ymax = a;
+                result.edges.push_back({o, p.y <= nodes[b].point.y ? a : b, p.y >= nodes[b].point.y ? a : b});
+                o = occurrences[o].next;
+            } while (o != ring.first);
+            auto first = result.edges.begin() + entry.first;
+            std::sort(first, result.edges.end(), [&](const EdgeInterval& a, const EdgeInterval& b) {
+                double ay = nodes[a.ymin].point.y, by = nodes[b.ymin].point.y;
+                return ay != by ? ay < by : a.occurrence < b.occurrence;
+            });
+            uint32_t ymax = first->ymax;
+            for (auto it = first; it != result.edges.end(); ++it) {
+                if (nodes[it->ymax].point.y > nodes[ymax].point.y) ymax = it->ymax;
+                it->ymax = ymax; // Prefix maximum, not this edge's upper endpoint.
+            }
+            result.rings.push_back(entry);
+        }
+        return result;
+    }
     // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
-    int location(const Integer& x, const Integer& y, const Ring& ring) {
+    int location(const Integer& x, const Integer& y, const Ring& ring, const LocationIndex& locations) {
+        const auto& box = locations.rings[&ring - rings.data()];
+        if (x < 2 * nodes[box.xmin].point.ex || x > 2 * nodes[box.xmax].point.ex || y < 2 * nodes[box.ymin].point.ey ||
+            y > 2 * nodes[box.ymax].point.ey)
+            return -1;
+        auto first = locations.edges.begin() + box.first, last = first + ring.count;
+        first = std::lower_bound(first, last, y, [&](const EdgeInterval& edge, const Integer& value) {
+            return 2 * nodes[edge.ymax].point.ey < value;
+        });
+        last = std::upper_bound(first, last, y, [&](const Integer& value, const EdgeInterval& edge) {
+            return value < 2 * nodes[edge.ymin].point.ey;
+        });
         bool inside = false;
-        uint32_t o = ring.first;
-        do {
-            tick();
+        for (auto it = first; it != last; ++it) {
+            uint32_t o = it->occurrence;
             const auto& a = nodes[occurrences[o].node].point;
             const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            Integer side = (b.ex - a.ex) * (y - 2 * a.ey) - (b.ey - a.ey) * (x - 2 * a.ex);
-            if (side == 0 && 2 * std::min(a.ex, b.ex) <= x && x <= 2 * std::max(a.ex, b.ex) &&
-                2 * std::min(a.ey, b.ey) <= y && y <= 2 * std::max(a.ey, b.ey))
-                return 0;
-            if ((2 * a.ey > y) != (2 * b.ey > y) && sign(side) == sign(b.ey - a.ey)) inside = !inside;
-            o = occurrences[o].next;
-        } while (o != ring.first);
+            const Integer ay = 2 * a.ey, by = 2 * b.ey;
+            // Closed ranges retain boundary hits; the half-open test retains vertex parity.
+            if (y < std::min(ay, by) || y > std::max(ay, by)) continue;
+            const Integer ax = 2 * a.ex, bx = 2 * b.ex;
+            if (x > std::max(ax, bx)) continue;
+            const bool crosses = (ay > y) != (by > y);
+            if (x < std::min(ax, bx)) {
+                if (crosses) inside = !inside;
+                continue;
+            }
+            Integer side = (b.ex - a.ex) * (y - ay) - (b.ey - a.ey) * (x - ax);
+            if (side == 0) return 0; // Both coordinates are within the closed edge bounds.
+            if (crosses && sign(side) == sign(b.ey - a.ey)) inside = !inside;
+        }
         return inside ? 1 : -1;
     }
-    int location(const Integer& x, const Integer& y, const Component& component) {
+    int location(const Integer& x, const Integer& y, const Component& component, const LocationIndex& locations) {
         if (component.count == 0) return -1;
-        int outer = location(x, y, rings[component.first]);
+        int outer = location(x, y, rings[component.first], locations);
         if (outer != 1) return outer;
         for (uint32_t r = 1; r < component.count; ++r) {
-            int hole = location(x, y, rings[component.first + r]);
+            int hole = location(x, y, rings[component.first + r], locations);
             if (hole >= 0) return -hole;
         }
         return 1;
     }
     template <class Region>
-    int relation(const Ring& ring, const Region& region) {
+    int relation(const Ring& ring, const Region& region, const LocationIndex& locations) {
         int relation = 0;
         uint32_t o = ring.first;
         do {
             const auto& a = nodes[occurrences[o].node].point;
             const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-            int next = location(a.ex + b.ex, a.ey + b.ey, region);
+            int next = location(a.ex + b.ex, a.ey + b.ey, region, locations);
             if (next != 0) {
                 if (relation != 0 && relation != next) invalid("ST_CoverageSimplify crossing polygon interiors");
                 relation = next;
@@ -583,16 +586,14 @@ struct GeoCoverageSimplify::Impl {
         return sign(ring.area) * (ring.hole ? -1 : 1) * (occurrence.node == edge.a ? 1 : -1);
     }
     void validate() {
-        check();
         // Contact incidence forest detects disconnected interiors (e.g. a hole
         // touching its shell twice) without a quadratic ring-pair allocation.
-        std::pmr::vector<uint32_t> parent(rings.size(), &memory);
+        std::vector<uint32_t> parent(rings.size());
         std::iota(parent.begin(), parent.end(), 0);
-        std::pmr::map<Key, uint32_t> contacts(&memory);
-        std::pmr::map<Key, bool> links(&memory);
+        std::map<Key, uint32_t> contacts;
+        std::map<Key, bool> links;
         auto root = [&](uint32_t id) {
             while (parent[id] != id) {
-                tick();
                 parent[id] = parent[parent[id]];
                 id = parent[id];
             }
@@ -600,8 +601,11 @@ struct GeoCoverageSimplify::Impl {
         };
         auto link = [&](uint32_t ring, uint32_t node) {
             uint32_t component = rings[ring].component;
-            auto [it, fresh] = contacts.emplace(Key{component, node}, parent.size());
-            if (fresh) parent.push_back(parent.size());
+            auto [it, fresh] = contacts.emplace(Key{component, node}, 0);
+            if (fresh) {
+                it->second = index(parent.size());
+                parent.push_back(it->second);
+            }
             if (!links.emplace(Key{ring, it->second}, true).second) return;
             uint32_t a = root(ring), b = root(it->second);
             if (a == b) invalid("ST_CoverageSimplify disconnected polygon interior");
@@ -610,7 +614,6 @@ struct GeoCoverageSimplify::Impl {
         for (uint32_t i = 0; i < edges.size(); ++i) {
             auto& edge = edges[i];
             if (!edge.active) continue;
-            tick();
             if (edge.count == 2) {
                 const auto& a = rings[occurrences[edge.owners[0]].ring];
                 const auto& b = rings[occurrences[edge.owners[1]].ring];
@@ -618,12 +621,10 @@ struct GeoCoverageSimplify::Impl {
                     side(edge.owners[0], edge) == side(edge.owners[1], edge))
                     invalid("ST_CoverageSimplify overlapping polygon boundary owners");
             }
-            tick(edge_tree.size()); // Conservative bound includes index traversal.
             query(edge_tree, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](const Item& item) {
                 uint32_t j = item.second;
                 if (j <= i || !edges[j].active) return;
                 const auto& other = edges[j];
-                tick();
                 Contact c =
                         contact(nodes[edge.a].point, nodes[edge.b].point, nodes[other.a].point, nodes[other.b].point);
                 if (c == Contact::NONE) return;
@@ -644,46 +645,35 @@ struct GeoCoverageSimplify::Impl {
                     }
             });
         }
-        Tree polygons{bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)};
+        const auto locations = prepare_locations();
+        Tree polygons;
         for (uint32_t c = 0; c < components.size(); ++c) {
             const auto& component = components[c];
             if (component.count == 0) continue;
             const auto& outer = rings[component.first];
             for (uint32_t h = 1; h < component.count; ++h) {
                 const auto& hole = rings[component.first + h];
-                if (relation(hole, outer) != 1 || relation(outer, hole) >= 0)
+                if (relation(hole, outer, locations) != 1 || relation(outer, hole, locations) >= 0)
                     invalid("ST_CoverageSimplify hole outside its shell");
                 for (uint32_t k = 1; k < h; ++k)
-                    if (relation(hole, rings[component.first + k]) >= 0 ||
-                        relation(rings[component.first + k], hole) >= 0)
+                    if (relation(hole, rings[component.first + k], locations) >= 0 ||
+                        relation(rings[component.first + k], hole, locations) >= 0)
                         invalid("ST_CoverageSimplify overlapping holes");
             }
-            uint32_t o = outer.first;
-            const auto& first = nodes[occurrences[o].node].point;
-            long double xmin = first.x, xmax = first.x, ymin = first.y, ymax = first.y;
-            do {
-                tick();
-                const auto& p = nodes[occurrences[o].node].point;
-                xmin = std::min(xmin, (long double)p.x);
-                xmax = std::max(xmax, (long double)p.x);
-                ymin = std::min(ymin, (long double)p.y);
-                ymax = std::max(ymax, (long double)p.y);
-                o = occurrences[o].next;
-            } while (o != outer.first);
-            Box box{{xmin, ymin}, {xmax, ymax}};
-            tick(components.size());
+            const auto& bounds = locations.rings[component.first];
+            Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
+                    {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
             query(polygons, box, [&](const Item& item) {
                 const auto& other = components[item.second];
                 for (uint32_t r = 0; r < component.count; ++r)
-                    if (relation(rings[component.first + r], other) > 0)
+                    if (relation(rings[component.first + r], other, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
                 for (uint32_t r = 0; r < other.count; ++r)
-                    if (relation(rings[other.first + r], component) > 0)
+                    if (relation(rings[other.first + r], component, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
             });
             polygons.insert({box, c});
         }
-        check();
     }
     bool candidate(uint32_t n, bool boundary, uint32_t& a, uint32_t& c) {
         auto& node = nodes[n];
@@ -719,12 +709,10 @@ struct GeoCoverageSimplify::Impl {
         const auto& q = nodes[n].point;
         const auto& r = nodes[c].point;
         uint32_t left = edge_map.at(key(a, n)), right = edge_map.at(key(n, c));
-        tick(edge_tree.size());
         bool safe = true;
         query(edge_tree, bounds(p, r), [&](const Item& item) {
             uint32_t id = item.second;
             if (id == left || id == right || !edges[id].active || !safe) return;
-            tick();
             const auto& e = edges[id];
             auto kind = contact(p, r, nodes[e.a].point, nodes[e.b].point);
             if (kind != Contact::NONE && kind != Contact::ENDPOINT) safe = false;
@@ -735,11 +723,9 @@ struct GeoCoverageSimplify::Impl {
         if (area != 0) {
             Box box{{std::min({p.x, q.x, r.x}), std::min({p.y, q.y, r.y})},
                     {std::max({p.x, q.x, r.x}), std::max({p.y, q.y, r.y})}};
-            tick(nodes.size());
             query(node_tree, box, [&](const Item& item) {
                 uint32_t id = item.second;
                 if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
-                tick();
                 const auto& point = nodes[id].point;
                 int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
                     z = sign(orientation(r, p, point));
@@ -781,11 +767,9 @@ struct GeoCoverageSimplify::Impl {
         const Integer t = scaled(tolerance), threshold = 2 * t * t;
         Integer floor = 0;
         for (uint32_t n = 0; n < nodes.size(); ++n) {
-            tick();
             enqueue(n, boundary, floor);
         }
         while (!heap.empty()) {
-            tick();
             std::pop_heap(heap.begin(), heap.end(), CandidateLess{});
             Candidate next = std::move(heap.back());
             heap.pop_back();
@@ -800,7 +784,7 @@ struct GeoCoverageSimplify::Impl {
         }
         validate();
     }
-    void emit_polygon(std::pmr::vector<uint8_t>& output, const Component& component) {
+    void emit_polygon(std::vector<uint8_t>& output, const Component& component) {
         write<uint8_t>(output, 1);
         write<uint32_t>(output, 3);
         write<uint32_t>(output, component.count);
@@ -809,7 +793,6 @@ struct GeoCoverageSimplify::Impl {
             write<uint32_t>(output, ring.count + 1);
             uint32_t o = ring.first;
             do {
-                tick();
                 const auto& p = nodes[occurrences[o].node].point;
                 write<double>(output, p.x);
                 write<double>(output, p.y);
@@ -825,7 +808,6 @@ struct GeoCoverageSimplify::Impl {
         // allocation gives the window adapter contiguous read-only backing.
         output_bytes.reserve(input_bytes);
         for (auto& row : rows) {
-            check();
             row.output_first = output_bytes.size();
             if (row.null) continue;
             if (unchanged) {
@@ -840,78 +822,51 @@ struct GeoCoverageSimplify::Impl {
             }
             row.output_size = output_bytes.size() - row.output_first;
         }
-        check();
     }
 };
 
-StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memory::Allocator* allocator,
-                                                                           GeoCoverageLimits limits,
-                                                                           GeoCoverageCheckpoint checkpoint) {
-    if (!allocator || !limits.rows || !limits.vertices || !limits.input_bytes || !limits.working_bytes || !limits.work)
-        return Status::InvalidArgument("ST_CoverageSimplify requires positive coverage limits and an allocator");
-    const size_t request = sizeof(StateAllocation) + sizeof(GeoCoverageSimplify) + sizeof(Impl) +
-                           alignof(StateAllocation) + alignof(Impl);
-    const int64_t metadata = allocator->nallox(request);
-    if (metadata <= 0 || uint64_t(metadata) > limits.working_bytes)
-        return Status::MemoryLimitExceeded("ST_CoverageSimplify exceeds geo_coverage_max_working_bytes_per_partition");
-    void* raw = nullptr;
-    Impl* impl = nullptr;
+} // namespace
+
+struct GeoCoverageSimplify::Impl : Partition {
+    // Dispatch once, after every row and tolerance have contributed to the same bound.
+    std::variant<std::monostate, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
+    void run(double tolerance, bool boundary) {
+        arithmetic.include(tolerance);
+        if (arithmetic.fixed())
+            kernel.emplace<1>(*this, arithmetic.common_shift).run(tolerance, boundary);
+        else
+            kernel.emplace<2>(*this, 0).run(tolerance, boundary);
+    }
+};
+
+GeoCoverageSimplify::GeoCoverageSimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
+GeoCoverageSimplify::~GeoCoverageSimplify() = default;
+
+StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create() {
     try {
-        raw = allocator->alloc(request);
-        if (!raw) throw std::bad_alloc();
-        void* public_location = static_cast<char*>(raw) + sizeof(StateAllocation);
-        size_t space = request - sizeof(StateAllocation);
-        std::align(alignof(StateAllocation), sizeof(GeoCoverageSimplify), public_location, space);
-        new (static_cast<char*>(public_location) - sizeof(StateAllocation)) StateAllocation{allocator, raw, request};
-        void* impl_location = static_cast<char*>(public_location) + sizeof(GeoCoverageSimplify);
-        space = request - (static_cast<char*>(impl_location) - static_cast<char*>(raw));
-        std::align(alignof(Impl), sizeof(Impl), impl_location, space);
-        impl = new (impl_location) Impl(allocator, limits, checkpoint, metadata);
-        impl->check();
-        auto* result = new (public_location) GeoCoverageSimplify(impl);
-        return std::unique_ptr<GeoCoverageSimplify>(result);
-    } catch (const Stop& stop) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
-        return stop.status;
+        auto impl = std::make_unique<Impl>();
+        return std::unique_ptr<GeoCoverageSimplify>(new GeoCoverageSimplify(std::move(impl)));
     } catch (const std::bad_alloc&) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
         return Status::MemoryLimitExceeded("ST_CoverageSimplify state allocation failed");
     }
-}
-GeoCoverageSimplify::~GeoCoverageSimplify() {
-    _impl->~Impl();
-}
-void GeoCoverageSimplify::operator delete(void* pointer) noexcept {
-    auto* header = reinterpret_cast<StateAllocation*>(static_cast<char*>(pointer) - sizeof(StateAllocation));
-    auto allocation = *header;
-    header->~StateAllocation();
-    allocation.allocator->free(allocation.raw, allocation.bytes);
 }
 Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
-        s.check();
-        if (s.rows.size() == s.limits.rows) invalid("ST_CoverageSimplify exceeds geo_coverage_max_rows_per_partition");
-        size_t count = s.vertices;
+        index(s.rows.size());
         if (wkb) {
-            if (wkb->size > s.limits.input_bytes - s.input_bytes)
-                invalid("ST_CoverageSimplify exceeds geo_coverage_max_input_bytes_per_partition");
             Reader reader(*wkb);
-            s.preflight(reader, false, count);
+            s.preflight(reader, false);
             reader.done();
         }
-        s.rows.emplace_back(s.memory);
+        s.rows.emplace_back();
         auto& row = s.rows.back();
         row.null = !wkb;
         if (wkb) {
             row.bytes.assign(reinterpret_cast<const uint8_t*>(wkb->data),
                              reinterpret_cast<const uint8_t*>(wkb->data) + wkb->size);
             s.input_bytes += wkb->size;
-            s.vertices = count;
         }
         return Status::OK();
     } catch (const Stop& stop) {
@@ -929,18 +884,12 @@ Status GeoCoverageSimplify::finish(std::optional<double> tolerance, std::optiona
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
-        s.check();
         s.null_parameter = !tolerance || !boundary;
         if (!s.null_parameter) {
             if (!std::isfinite(*tolerance) || *tolerance < 0 || !std::isfinite(*tolerance * *tolerance))
                 invalid("ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance "
                         "squared");
-            s.decode();
-            s.graph();
-            s.validate();
-            if (*tolerance > 0 && !s.nodes.empty()) s.simplify(*tolerance, *boundary);
-            s.output(*tolerance == 0);
+            s.run(*tolerance, *boundary);
         }
         s.finished = true;
         return Status::OK();
@@ -968,32 +917,8 @@ StatusOr<Slice> GeoCoverageSimplify::result_buffer() const {
     if (!_impl->finished || _impl->failed) return Status::InvalidArgument("ST_CoverageSimplify result unavailable");
     return Slice(reinterpret_cast<const char*>(_impl->output_bytes.data()), _impl->output_bytes.size());
 }
-std::pmr::memory_resource* GeoCoverageSimplify::resource() {
-    return &_impl->memory;
-}
-Status GeoCoverageSimplify::retain_external(size_t bytes) {
-    try {
-        _impl->memory.retain(bytes);
-        _impl->external += bytes;
-        return Status::OK();
-    } catch (const Stop& stop) {
-        _impl->failed = true;
-        return stop.status;
-    }
-}
-void GeoCoverageSimplify::release_external(size_t bytes) {
-    const size_t release = std::min(bytes, _impl->external);
-    _impl->external -= release;
-    _impl->memory.release(release);
-}
 size_t GeoCoverageSimplify::rows() const {
     return _impl->rows.size();
-}
-size_t GeoCoverageSimplify::memory_usage() const {
-    return _impl->memory.used;
-}
-size_t GeoCoverageSimplify::peak_memory_usage() const {
-    return _impl->memory.peak;
 }
 size_t GeoCoverageSimplify::kernel_calls() const {
     return _impl->calls;

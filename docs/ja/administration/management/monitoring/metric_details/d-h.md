@@ -67,6 +67,30 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: DECIMALカラムプールで使用されるメモリ。
 
+## `default_cache_hit_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- 説明: データキャッシュインスタンス `default_cache` でキャッシュヒットした際に読み取った累積バイト数。共有データクラスタで [`datacache_unified_instance_enable`](../../../configuration/BE_parameters/shared_lake_other.md#datacache_unified_instance_enable) が `true`（デフォルト）の場合、クラウドネイティブテーブルのデータもこのインスタンスにキャッシュされます。クラウドネイティブテーブルについては、`fslib_open_cache_hits` と同じ読み取りを集計します。同じノード上の外部テーブルのデータキャッシュ読み取りも含まれます。`datacache_unified_instance_enable` が `false` の場合、クラウドネイティブテーブルは別のキャッシュインスタンスを使用し、そのメトリクスは `cloud_cache_hit_bytes`、`cloud_cache_miss_bytes`、`cloud_cache_hit_count`、`cloud_cache_miss_count` として出力されます。このメトリクスは BE 設定項目 `dump_metrics_with_bvar` が `true`（デフォルト）の場合にのみ出力されます。Prometheus の `gauge` タイプとして出力されますが、値は BE または CN が再起動するまで増加し続けるため、`rate()` を使用して計算してください。バイト数ベースのキャッシュヒット率は `sum(rate(default_cache_hit_bytes[5m])) / (sum(rate(default_cache_hit_bytes[5m])) + sum(rate(default_cache_miss_bytes[5m])))` です。`fslib_open_cache_hits` と `fslib_open_cache_misses` から計算する回数ベースのヒット率とは異なり、小さな読み取りのミスが多数発生してもほとんど下がりません。
+
+## `default_cache_hit_count`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: データキャッシュインスタンス `default_cache` の累積キャッシュヒット数。クラウドネイティブテーブルについては、`fslib_open_cache_hits` と同じ読み取りを集計します。集計範囲と出力条件については `default_cache_hit_bytes` を参照してください。
+
+## `default_cache_miss_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- 説明: データキャッシュインスタンス `default_cache` でキャッシュミスした際に読み取りを要求した累積バイト数。読み取りで要求されたサイズを計上し、その後オブジェクトストレージから読み取るサイズ（キャッシュブロック単位に揃えられます）ではありません。キャッシュ内のファイルサイズエントリがミスした場合は 0 を計上します。集計範囲と出力条件については `default_cache_hit_bytes` を参照してください。
+
+## `default_cache_miss_count`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: データキャッシュインスタンス `default_cache` の累積キャッシュミス数。クラウドネイティブテーブルについては、`fslib_open_cache_misses` と同じ読み取りを集計します。集計範囲と出力条件については `default_cache_hit_bytes` を参照してください。
+
 ## `delta_column_group_get_hit_cache`
 
 - 単位: カウント
@@ -395,6 +419,20 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: BEで実行中のフラグメントインスタンスの総数（非パイプラインエンジン用）。
+
+## `fslib_open_cache_hits`
+
+- 単位: カウント
+- タイプ: カウンター
+- ラベル: `fstype` (`cachefs`)
+- 説明: 共有データクラスタでクラウドネイティブテーブルのファイルを読み取る際の、データキャッシュの累積ヒット数。1 回の読み取りは最大で 1 つのキャッシュブロックを対象とします。読み取りはサイズに関係なく 1 回として数えられるため、メタデータの読み取りなど小さな読み取りのミスが多数発生すると、大部分のバイトがキャッシュから読み取られていても、このメトリクスと `fslib_open_cache_misses` から計算するヒット率は下がります。バイト数ベースのメトリクスについては `default_cache_hit_bytes` を参照してください。
+
+## `fslib_open_cache_misses`
+
+- 単位: カウント
+- タイプ: カウンター
+- ラベル: `fstype` (`cachefs`)
+- 説明: 共有データクラスタでクラウドネイティブテーブルのファイルを読み取る際の、データキャッシュの累積ミス数。1 回の読み取りは最大で 1 つのキャッシュブロックを対象とします。バイト数ベースのメトリクスについては `default_cache_miss_bytes` を参照してください。
 
 ## `hive_write_bytes`
 

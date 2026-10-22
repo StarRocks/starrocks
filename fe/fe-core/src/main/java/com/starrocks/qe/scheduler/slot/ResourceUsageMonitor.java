@@ -33,18 +33,31 @@ public class ResourceUsageMonitor {
 
     private final AtomicInteger numListeners = new AtomicInteger();
     private final Map<Integer, Runnable> resourceAvailableListeners = new ConcurrentHashMap<>();
+    private final Map<Integer, Runnable> resourceUsageUpdateListeners = new ConcurrentHashMap<>();
 
     public void registerResourceAvailableListener(Runnable listener) {
         Integer id = numListeners.getAndIncrement();
         resourceAvailableListeners.put(id, listener);
     }
 
+    /**
+     * Register a listener invoked after every resource usage report and every backend death, whether or not the
+     * overload flags above changed. The Query Queue V2 memory gate uses it to wake up admission when the nodes of a
+     * warehouse drop back under its memory usage limit.
+     */
+    public void registerResourceUsageUpdateListener(Runnable listener) {
+        Integer id = numListeners.getAndIncrement();
+        resourceUsageUpdateListeners.put(id, listener);
+    }
+
     public void notifyResourceUsageUpdate() {
         rejudgeResourceOverloaded();
+        resourceUsageUpdateListeners.values().forEach(Runnable::run);
     }
 
     public void notifyBackendDead() {
         rejudgeResourceOverloaded();
+        resourceUsageUpdateListeners.values().forEach(Runnable::run);
     }
 
     public boolean isGlobalResourceOverloaded() {

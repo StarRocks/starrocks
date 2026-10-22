@@ -484,6 +484,75 @@ TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_one) {
     expect_invalid_split_count(false, 1);
 }
 
+TEST_F(LakeServiceTest, test_publish_reshard_unchanged_tablet) {
+    ASSIGN_OR_ABORT(auto original, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    auto base = std::make_shared<TabletMetadataPB>(*original);
+    auto* rowset = base->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(17);
+    rowset->set_data_size(29);
+    rowset->add_segment_metas()->set_filename("unchanged.dat");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(base));
+
+    // A CN can hold only the indexes left unchanged by a split or merge on another CN.
+    // No txnlog exists for these tablets; they must retain their data at the new version.
+    for (bool aggregate : {false, true}) {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.set_enable_aggregate_publish(aggregate);
+        request.add_tablet_ids(_tablet_id);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_TABLET_RESHARD);
+        txn->set_gtid(12345);
+
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            brpc::Controller cntl;
+            PublishVersionResponse response;
+            _lake_service.publish_version(&cntl, &request, &response, nullptr);
+            ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+            ASSERT_EQ(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.tablet_ranges_size());
+            EXPECT_EQ(aggregate ? 1 : 0, response.tablet_metas_size());
+            TabletMetadataPB metadata;
+            if (aggregate) {
+                metadata.CopyFrom(response.tablet_metas().at(_tablet_id));
+            } else {
+                ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+                metadata.CopyFrom(*persisted);
+            }
+            EXPECT_EQ(_tablet_id, metadata.id());
+            EXPECT_EQ(2, metadata.version());
+            EXPECT_EQ(12345, metadata.gtid());
+            EXPECT_EQ(base->schema().SerializeAsString(), metadata.schema().SerializeAsString());
+            ASSERT_EQ(1, metadata.rowsets_size());
+            EXPECT_EQ(1, metadata.rowsets(0).id());
+            EXPECT_EQ(17, metadata.rowsets(0).num_rows());
+            EXPECT_EQ(29, metadata.rowsets(0).data_size());
+            ASSERT_EQ(1, metadata.rowsets(0).segment_metas_size());
+            EXPECT_EQ("unchanged.dat", metadata.rowsets(0).segment_metas(0).filename());
+        }
+    }
+    ASSIGN_OR_ABORT(auto unchanged, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    EXPECT_EQ(base->SerializeAsString(), unchanged->SerializeAsString());
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_rejects_empty_tablets) {
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    auto* txn = request.add_txn_infos();
+    txn->set_txn_id(next_id());
+    txn->set_txn_type(TXN_TABLET_RESHARD);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    EXPECT_TRUE(cntl.Failed());
+    EXPECT_FALSE(_tablet_mgr->get_tablet_metadata(_tablet_id, 2).ok());
+}
+
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     brpc::Controller cntl;
     PublishVersionRequest request;
@@ -4758,7 +4827,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
 
         MockClosure closure;
         load_mgr->open(nullptr, request, &response, &closure);
-        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
+        ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
