@@ -34,6 +34,9 @@
 
 package com.starrocks.qe;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
@@ -47,13 +50,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -111,6 +118,61 @@ public class AuditEventProcessorTest extends StarRocksTestBase {
             }
             Assertions.assertEquals(EventType.CONNECTION,  event.type);
         }
+    }
+
+    @Test
+    public void testAuditLogBuilderWritesMemUsageGiBHours() throws IOException {
+        List<String> lines = Collections.synchronizedList(new ArrayList<>());
+        new MockUp<AuditLog>() {
+            @Mock
+            public void log(String message) {
+                if (message.contains(MEM_USAGE_STMT)) {
+                    lines.add(message);
+                }
+            }
+        };
+        boolean jsonFormat = Config.audit_log_json_format;
+        try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
+            AuditEvent metered = memUsageEvent().addMemUsageGiBHours(0.75).build();
+            AuditEvent tiny = memUsageEvent().addMemUsageGiBHours(1e-5).build();
+            AuditEvent unset = memUsageEvent().build();
+
+            Config.audit_log_json_format = false;
+            auditLogBuilder.exec(metered);
+            Assertions.assertTrue(lines.get(lines.size() - 1).contains("|MemUsageGiBHours=0.75"));
+            auditLogBuilder.exec(tiny);
+            Assertions.assertTrue(lines.get(lines.size() - 1).contains("|MemUsageGiBHours=1.0E-5"));
+            auditLogBuilder.exec(unset);
+            Assertions.assertFalse(lines.get(lines.size() - 1).contains("MemUsageGiBHours"));
+
+            Config.audit_log_json_format = true;
+            ObjectMapper mapper = new ObjectMapper();
+            auditLogBuilder.exec(metered);
+            JsonNode meteredJson = mapper.readTree(lines.get(lines.size() - 1));
+            Assertions.assertTrue(meteredJson.get("MemUsageGiBHours").isNumber());
+            Assertions.assertEquals(0.75, meteredJson.get("MemUsageGiBHours").asDouble(), 1e-12);
+            auditLogBuilder.exec(tiny);
+            JsonNode tinyJson = mapper.readTree(lines.get(lines.size() - 1));
+            Assertions.assertTrue(tinyJson.get("MemUsageGiBHours").isNumber());
+            Assertions.assertEquals(1e-5, tinyJson.get("MemUsageGiBHours").asDouble(), 1e-12);
+            auditLogBuilder.exec(unset);
+            Assertions.assertFalse(mapper.readTree(lines.get(lines.size() - 1)).has("MemUsageGiBHours"));
+        } finally {
+            Config.audit_log_json_format = jsonFormat;
+        }
+    }
+
+    private static final String MEM_USAGE_STMT = "select 'audit_mem_usage_gib_hours_test'";
+
+    private static AuditEvent.AuditEventBuilder memUsageEvent() {
+        return new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp("127.0.0.1")
+                .setUser("user1")
+                .setDb("db1")
+                .setState("EOF")
+                .setQueryTime(1)
+                .setStmt(MEM_USAGE_STMT);
     }
 
     @Test

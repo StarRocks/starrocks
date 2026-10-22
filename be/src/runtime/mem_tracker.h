@@ -196,7 +196,16 @@ public:
     }
 
     // used for single mem_tracker
-    void set(int64_t bytes) { _consumption->set(bytes); }
+    void set(int64_t bytes) {
+        if (UNLIKELY(_memory_usage_meter != nullptr)) {
+            _metered_set(bytes);
+        } else {
+            _consumption->set(bytes);
+        }
+    }
+
+    void enable_memory_usage_accounting();
+    double memory_usage_gib_hours(bool delta);
 
     void update_allocation(int64_t bytes) {
         if (bytes <= 0) return;
@@ -217,7 +226,7 @@ public:
             return;
         }
         for (auto* tracker : _all_trackers) {
-            tracker->_consumption->add(bytes);
+            tracker->_add_consumption(bytes);
         }
     }
 
@@ -227,7 +236,7 @@ public:
             return;
         }
         for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-            _all_trackers[i]->_consumption->add(bytes);
+            _all_trackers[i]->_add_consumption(bytes);
         }
     }
 
@@ -250,14 +259,14 @@ public:
             MemTracker* tracker = _all_trackers[i];
             const int64_t limit = tracker->limit();
             if (limit < 0) {
-                tracker->_consumption->add(bytes); // No limit at this tracker.
+                tracker->_add_consumption(bytes); // No limit at this tracker.
             } else {
-                if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                if (LIKELY(tracker->_try_add_consumption(bytes, limit))) {
                     continue;
                 } else {
                     // Failed for this mem tracker. Roll back the ones that succeeded.
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
-                        _all_trackers[j]->_consumption->add(-bytes);
+                        _all_trackers[j]->_add_consumption(-bytes);
                     }
                     return tracker;
                 }
@@ -292,12 +301,12 @@ public:
             MemTracker* tracker = _all_trackers[i];
             const int64_t limit = tracker->limit();
             const int64_t effective_limit = limit < 0 ? std::numeric_limits<int64_t>::max() : limit;
-            if (LIKELY(tracker->_consumption->try_add(bytes, effective_limit))) {
+            if (LIKELY(tracker->_try_add_consumption(bytes, effective_limit))) {
                 continue;
             } else {
                 // Roll back only the non-root ancestors updated by this call.
                 for (int64_t j = static_cast<int64_t>(_all_trackers.size()) - 2; j > i; --j) {
-                    _all_trackers[j]->_consumption->add(-bytes);
+                    _all_trackers[j]->_add_consumption(-bytes);
                 }
                 return tracker;
             }
@@ -320,7 +329,7 @@ public:
 
             if (limit < 0) {
                 DCHECK_EQ(limit, -1);
-                tracker->_consumption->add(bytes);
+                tracker->_add_consumption(bytes);
             } else {
                 // If this tracker is not shared, ignore shared_reserve_bytes
                 size_t reserve = !tracker->is_shared() ? 0 : shared_reserve_bytes;
@@ -330,12 +339,12 @@ public:
                     adjusted_limit = 0;
                 }
                 // Try to consume memory under the adjusted limit
-                if (LIKELY(tracker->_consumption->try_add(bytes, adjusted_limit))) {
+                if (LIKELY(tracker->_try_add_consumption(bytes, adjusted_limit))) {
                     continue;
                 } else {
                     // fail to consume, roll back
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
-                        _all_trackers[j]->_consumption->add(-bytes);
+                        _all_trackers[j]->_add_consumption(-bytes);
                     }
                     return tracker;
                 }
@@ -380,7 +389,7 @@ public:
             return;
         }
         for (auto* tracker : _all_trackers) {
-            tracker->_consumption->add(-bytes);
+            tracker->_add_consumption(-bytes);
         }
     }
 
@@ -390,7 +399,7 @@ public:
         }
 
         for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-            _all_trackers[i]->_consumption->add(-bytes);
+            _all_trackers[i]->_add_consumption(-bytes);
         }
     }
 
@@ -512,6 +521,25 @@ public:
     }
 
 private:
+    class MemoryUsageMeter;
+
+    void _add_consumption(int64_t bytes) {
+        if (UNLIKELY(_memory_usage_meter != nullptr)) {
+            _metered_add(bytes);
+        } else {
+            _consumption->add(bytes);
+        }
+    }
+
+    bool _try_add_consumption(int64_t bytes, int64_t limit) {
+        return UNLIKELY(_memory_usage_meter != nullptr) ? _metered_try_add(bytes, limit)
+                                                        : _consumption->try_add(bytes, limit);
+    }
+
+    void _metered_set(int64_t bytes);
+    void _metered_add(int64_t bytes);
+    bool _metered_try_add(int64_t bytes, int64_t limit);
+
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
 
@@ -535,6 +563,8 @@ private:
     /// in bytes; not owned
     RuntimeProfile::HighWaterMarkCounter* _consumption = nullptr;
     std::unique_ptr<RuntimeProfile::HighWaterMarkCounter> _local_consumption_holder;
+
+    std::unique_ptr<MemoryUsageMeter> _memory_usage_meter;
 
     /// in bytes; not owned. Only record allocation but ignore deallocation
     /// And for sake of performance, it can only be updated through `update_allocation`

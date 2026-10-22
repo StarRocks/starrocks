@@ -34,11 +34,66 @@
 
 #include "runtime/mem_tracker.h"
 
+#include <algorithm>
+#include <chrono>
 #include <utility>
 
 #include "common/system/backend_options.h"
 
 namespace starrocks {
+
+class MemTracker::MemoryUsageMeter {
+private:
+    std::mutex _lock;
+    std::chrono::steady_clock::time_point _last_change_time;
+    int64_t _last_bytes;
+    double _total_gib_hours = 0;
+    double _reported_gib_hours = 0;
+
+    void _record(int64_t bytes) {
+        const auto now = std::chrono::steady_clock::now();
+        const double elapsed_hours = std::chrono::duration<double, std::ratio<3600>>(now - _last_change_time).count();
+        _total_gib_hours += static_cast<double>(_last_bytes) / (1ULL << 30) * elapsed_hours;
+        _last_change_time = now;
+        _last_bytes = std::max<int64_t>(bytes, 0);
+    }
+
+public:
+    explicit MemoryUsageMeter(int64_t bytes)
+            : _last_change_time(std::chrono::steady_clock::now()), _last_bytes(std::max<int64_t>(bytes, 0)) {}
+
+    void set(RuntimeProfile::HighWaterMarkCounter* consumption, int64_t bytes) {
+        std::lock_guard lock(_lock);
+        consumption->set(bytes);
+        _record(consumption->current_value());
+    }
+
+    void add(RuntimeProfile::HighWaterMarkCounter* consumption, int64_t bytes) {
+        std::lock_guard lock(_lock);
+        consumption->add(bytes);
+        _record(consumption->current_value());
+    }
+
+    bool try_add(RuntimeProfile::HighWaterMarkCounter* consumption, int64_t bytes, int64_t limit) {
+        std::lock_guard lock(_lock);
+        if (!consumption->try_add(bytes, limit)) {
+            return false;
+        }
+        _record(consumption->current_value());
+        return true;
+    }
+
+    double gib_hours(RuntimeProfile::HighWaterMarkCounter* consumption, bool delta) {
+        std::lock_guard lock(_lock);
+        _record(consumption->current_value());
+        if (!delta) {
+            return _total_gib_hours;
+        }
+        const double result = _total_gib_hours - _reported_gib_hours;
+        _reported_gib_hours = _total_gib_hours;
+        return result;
+    }
+};
 
 const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";
 const std::string MemTracker::ALLOCATED_MEMORY_USAGE = "AllocatedMemoryUsage";
@@ -176,6 +231,27 @@ void MemTracker::Init() {
     }
     DCHECK_GT(_all_trackers.size(), 0);
     DCHECK_EQ(_all_trackers[0], this);
+}
+
+void MemTracker::enable_memory_usage_accounting() {
+    DCHECK(_memory_usage_meter == nullptr);
+    _memory_usage_meter = std::make_unique<MemoryUsageMeter>(consumption());
+}
+
+double MemTracker::memory_usage_gib_hours(bool delta) {
+    return _memory_usage_meter != nullptr ? _memory_usage_meter->gib_hours(_consumption, delta) : 0;
+}
+
+void MemTracker::_metered_set(int64_t bytes) {
+    _memory_usage_meter->set(_consumption, bytes);
+}
+
+void MemTracker::_metered_add(int64_t bytes) {
+    _memory_usage_meter->add(_consumption, bytes);
+}
+
+bool MemTracker::_metered_try_add(int64_t bytes, int64_t limit) {
+    return _memory_usage_meter->try_add(_consumption, bytes, limit);
 }
 
 MemTracker::~MemTracker() {

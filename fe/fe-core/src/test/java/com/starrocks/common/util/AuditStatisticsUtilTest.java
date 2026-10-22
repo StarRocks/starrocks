@@ -350,4 +350,37 @@ public class AuditStatisticsUtilTest {
         Assertions.assertEquals(ts2.getRead_local_cnt(), 8);
         Assertions.assertEquals(ts2.getRead_remote_cnt(), 9);
     }
+
+    @Test
+    public void testMemoryGiBHoursRoundTripAndMerge() {
+        PQueryStatistics first = new PQueryStatistics();
+        first.memUsageGibHours = 0.25;
+        TAuditStatistics thrift = AuditStatisticsUtil.toThrift(first);
+        Assertions.assertTrue(thrift.isSetMem_usage_gib_hours());
+        Assertions.assertEquals(0.25, AuditStatisticsUtil.toProtobuf(thrift).memUsageGibHours.doubleValue(), 1e-12);
+
+        PQueryStatistics second = new PQueryStatistics();
+        second.memUsageGibHours = 0.5;
+        AuditStatisticsUtil.mergeProtobuf(second, first);
+        Assertions.assertEquals(0.75, first.memUsageGibHours.doubleValue(), 1e-12);
+    }
+
+    @Test
+    public void testMissingMemoryGiBHoursStaysMissing() {
+        TAuditStatistics oldWorkerStatistics = new TAuditStatistics();
+        Assertions.assertNull(AuditStatisticsUtil.toProtobuf(oldWorkerStatistics).memUsageGibHours);
+        Assertions.assertFalse(AuditStatisticsUtil.toThrift(new PQueryStatistics()).isSetMem_usage_gib_hours());
+    }
+
+    @Test
+    public void testMemoryGiBHoursMergeIntoEmptyTotal() {
+        PQueryStatistics total = new PQueryStatistics();
+        AuditStatisticsUtil.mergeProtobuf(new PQueryStatistics(), total);
+        Assertions.assertNull(total.memUsageGibHours);
+
+        PQueryStatistics worker = new PQueryStatistics();
+        worker.memUsageGibHours = 0.25;
+        AuditStatisticsUtil.mergeProtobuf(worker, total);
+        Assertions.assertEquals(0.25, total.memUsageGibHours.doubleValue(), 1e-12);
+    }
 }
