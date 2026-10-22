@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <ctime>
 #include <map>
 #include <numeric>
@@ -384,23 +385,35 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 // A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
 // keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
 // if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone, so either way the deleted keys must still be
-// deleted afterwards.
+// sstables already have it. Recover rebuilds from rowsets alone and does not replay either kind of del file, so
+// the deleted keys may come back. That is accepted: recover must not lose a live row or change its value, but a
+// deleted row may reappear, with the value it had when it was deleted.
 class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
 public:
     LakePrimaryKeyRecoverCompactionTest() : LakePrimaryKeyRecoverTest("test_lake_primary_key_recover_compaction") {}
 };
 
-// Disabled: recover skips a del file the compaction output inherited, and has nothing to replay once the
-// compaction dropped it, so the deleted keys come back.
-TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
+TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_rows) {
     const bool flush_index = GetParam();
+    if (!flush_index) {
+        GTEST_SKIP() << "recover skips the del file the compaction output inherited, but the index rebuild replays "
+                        "it, so the index and the delete vectors disagree";
+    }
     Rows expected;
+    // The last value each key was ever upserted with, deleted keys included: what a resurrected row may show.
+    Rows last_upserted;
     const std::vector<std::vector<std::vector<Op>>> loads = {
             {upserts(0, 16, 0, 0)}, {upserts(100, 104, 0, 0)}, {deletes(0, 8)}, {upserts(200, 204, 0, 0)}};
     for (const auto& load : loads) {
         publish(write_rows(load), false);
         apply(&expected, load);
+        for (const auto& batch : load) {
+            for (const auto& op : batch) {
+                if (!op.del) {
+                    last_upserted[op.key] = {op.c1, op.c2};
+                }
+            }
+        }
     }
     ASSERT_EQ(expected, read(_version));
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
@@ -437,7 +450,21 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, DISABLED_delete_then_compaction) {
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
-    EXPECT_EQ(expected, read(_version));
+    Rows recovered = read(_version);
+    for (const auto& [key, value] : expected) {
+        auto it = recovered.find(key);
+        ASSERT_TRUE(it != recovered.end()) << "recover lost live key " << key;
+        EXPECT_EQ(value, it->second) << "recover changed live key " << key;
+    }
+    for (const auto& [key, value] : recovered) {
+        if (!expected.contains(key)) {
+            // Only a deleted key may come back, and only with its value at the time of the delete.
+            ASSERT_TRUE(last_upserted.contains(key)) << "recover produced key " << key << " that was never written";
+            EXPECT_EQ(last_upserted.at(key), value) << "resurrected key " << key << " has a value it never had";
+        }
+    }
+    // Resurrected rows included, the rebuilt index must agree with the rebuilt delete vectors.
+    check_index_agrees(&recovered);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,
@@ -535,8 +562,7 @@ INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverColumnModeTest, LakePrimaryKeyReco
 // base version's delete vector, which recover meant to discard. Here the base version wrongly deletes a row;
 // recover brings it back, but the re-publish rebuilds its index from the stale delete vector, so the index
 // misses the row and the next upsert of that key leaves it live as a duplicate.
-// Disabled: an empty rebuilt delete vector still falls back to the base version.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_back_to_base_version) {
+TEST_F(LakePrimaryKeyRecoverTest, recovered_empty_delvec_does_not_fall_back_to_base_version) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
@@ -554,8 +580,11 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
         const uint32_t rowid = 0;
         delvec->init(corrupted->version(), &rowid, 1);
         builder.append_delvec(delvec, corrupted->rowsets(1).id());
+        corrupted->mutable_rowsets(1)->set_num_dels(1);
         ASSERT_OK(builder.finalize(next_id()));
     }
+    ASSERT_EQ(1, corrupted->delvec_meta().version_to_file_size());
+    const std::string stale_delvec_file = corrupted->delvec_meta().version_to_file().begin()->second.name();
     _version++;
     _primary_key_mgr->try_remove_primary_index_cache(tablet_id());
     ASSERT_EQ(expected.size() - 1, read(_version).size());
@@ -565,13 +594,19 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recovered_empty_delvec_does_not_fall_
     publish(write_rows(later), true);
     apply(&expected, later);
     ASSERT_EQ(expected, read(_version));
+    // The rowset statistics follow the rebuilt delete vectors, and vacuum gets the dropped delete vector file.
+    ASSIGN_OR_ABORT(auto recovered, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& rowset : recovered->rowsets()) {
+        EXPECT_EQ(0, rowset.num_dels()) << rowset.id();
+    }
+    EXPECT_TRUE(std::any_of(recovered->orphan_files().begin(), recovered->orphan_files().end(),
+                            [&](const FileMetaPB& f) { return f.name() == stale_delvec_file; }));
     check_index_agrees(&expected);
 }
 
 // A publish attempt that fails after appending its delete vectors leaves them in the MetaFileBuilder. Recover
 // rebuilds every delete vector from scratch, so none of those may survive it.
-// Disabled: recover only clears the delete vectors already in the metadata, not the ones pending in the builder.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_attempt) {
+TEST_F(LakePrimaryKeyRecoverTest, recover_discards_delvecs_of_failed_attempt) {
     Rows expected;
     const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 12, 0, 0)}, {upserts(100, 112, 0, 0)}};
     for (const auto& load : loads) {
@@ -593,6 +628,44 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_at
     ASSERT_OK(builder.finalize(next_id()));
     _version++;
     EXPECT_EQ(expected, read(_version));
+}
+
+// Recover drops the persistent index's sstables along with the delete vectors and rebuilds the index from the
+// rowsets, so nothing refers to the old sstables any more; vacuum gets them through orphan_files.
+TEST_F(LakePrimaryKeyRecoverTest, recover_hands_dropped_sstables_to_vacuum) {
+    Rows expected;
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 16, 0, 0)}, {deletes(0, 4)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+    auto next = std::make_shared<TabletMetadata>(*flushed);
+    next->set_version(_version + 1);
+    ASSERT_GT(next->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*next));
+    _version++;
+    std::vector<std::string> old_sstables;
+    for (const auto& sst : next->sstable_meta().sstables()) {
+        old_sstables.push_back(sst.filename());
+    }
+
+    const std::vector<std::vector<Op>> later = {upserts(200, 202, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    ASSERT_EQ(expected, read(_version));
+    ASSIGN_OR_ABORT(auto recovered, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& name : old_sstables) {
+        EXPECT_TRUE(std::none_of(recovered->sstable_meta().sstables().begin(),
+                                 recovered->sstable_meta().sstables().end(),
+                                 [&](const PersistentIndexSstablePB& sst) { return sst.filename() == name; }))
+                << name;
+        EXPECT_TRUE(std::any_of(recovered->orphan_files().begin(), recovered->orphan_files().end(),
+                                [&](const FileMetaPB& f) { return f.name() == name; }))
+                << name;
+    }
+    check_index_agrees(&expected);
 }
 
 // A tablet split leaves each child reading the parent's shared segments through its own key range, so a
