@@ -2735,6 +2735,144 @@ TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErr
     EXPECT_TRUE(rejected.status().is_not_supported());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeographyValidityAcrossDirectCheckCutoff) {
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    for (int n : {511, 512, 513}) {
+        for (auto center : {WkbCoordinate{1, 40}, WkbCoordinate{179.99, 0}, WkbCoordinate{0, 89.9}}) {
+            for (int kind = 0; kind < 4; ++kind) {
+                SCOPED_TRACE(::testing::Message() << n << ":" << center.x << ":" << center.y << ":" << kind);
+                WkbGeometry polygon;
+                polygon.type = WkbGeometryType::POLYGON;
+                auto& ring = polygon.rings.emplace_back();
+                for (int i = 0; i < n; ++i) {
+                    const double angle = 2 * std::acos(-1.0) * i / n;
+                    double x = center.x + 0.02 * std::cos(angle);
+                    if (x > 180) x -= 360;
+                    ring.push_back({x, center.y + 0.02 * std::sin(angle)});
+                }
+                if (kind == 1) std::swap(ring[1], ring[n / 2]);
+                if (kind == 2) ring[n / 2] = ring[1];
+                if (kind == 3) ring.insert(ring.begin() + 1, ring.front());
+                ring.push_back(ring.front());
+                auto input = GeoColumn::create(
+                        GeoColumnDescriptor{geography_type().geo_type.value(),
+                                            {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+                std::string wkb;
+                ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
+                input->append_wkb(Slice(wkb));
+                auto result = GeoFunctions::st_geography_is_valid(nullptr, {input});
+                ASSERT_TRUE(result.ok()) << result.status();
+                EXPECT_EQ(kind == 0 || kind == 3, ColumnViewer<TYPE_BOOLEAN>(*result).value(0));
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityAndFallbacks) {
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    const char* cases[] = {"POLYGON ((0 0, 2 0, 1 2, 0 0))",
+                           "POLYGON ((0 0, 1 2, 2 0, 0 0))",
+                           "POLYGON ((0 0, 0 0, 2 0, 1 2, 0 0))",
+                           "POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))",
+                           "POLYGON ((0 0, 2 0, 1 1, 2 0, 0 2, 0 0))",
+                           "POLYGON ((0 0, 0 0, 0 0, 0 0))",
+                           "POLYGON ((179 -1, -179 -1, -179 1, 179 1, 179 -1))",
+                           "POLYGON ((-135 80, -45 80, 45 80, 135 80, -135 80))",
+                           "POLYGON ((-135 -80, 135 -80, 45 -80, -45 -80, -135 -80))",
+                           "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 4 2, 4 4, 2 4, 2 2))",
+                           "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (12 2, 14 2, 14 4, 12 4, 12 2))",
+                           "MULTIPOLYGON (((0 0, 2 0, 1 2, 0 0)), ((10 0, 12 0, 11 2, 10 0)))",
+                           "MULTIPOLYGON (((0 0, 2 0, 1 2, 0 0)), ((10 0, 12 2, 10 2, 12 0, 10 0)))",
+                           "GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 1 2, 0 0)), POLYGON EMPTY)",
+                           "POLYGON EMPTY"};
+    auto input = GeoColumn::create(
+            GeoColumnDescriptor{geography_type().geo_type.value(),
+                                {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+    std::vector<bool> expected;
+    for (const auto* text : cases) {
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkt(text, &geometry).ok());
+        auto valid = spherical_is_valid(geometry);
+        ASSERT_TRUE(valid.ok()) << valid.status();
+        expected.push_back(*valid);
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb).ok());
+        input->append_wkb(Slice(wkb));
+    }
+    auto nulls = NullColumn::create(input->size(), 0);
+    input->append_default();
+    nulls->append(1);
+    auto actual = GeoFunctions::st_geography_is_valid(nullptr, {NullableColumn::create(input, nulls)});
+    ASSERT_TRUE(actual.ok()) << actual.status();
+    ColumnViewer<TYPE_BOOLEAN> values(*actual);
+    for (size_t i = 0; i < expected.size(); ++i) {
+        SCOPED_TRACE(cases[i]);
+        EXPECT_FALSE(values.is_null(i));
+        EXPECT_EQ(expected[i], values.value(i));
+    }
+    EXPECT_TRUE(values.is_null(expected.size()));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityWrappers) {
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    for (const auto& [text, expected] :
+         {std::pair{"POLYGON ((0 0, 2 0, 1 2, 0 0))", true}, std::pair{"POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))", false},
+          std::pair{"POLYGON EMPTY", true}}) {
+        auto constant = ConstColumn::create(geography({text}), 5);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geography_type()}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns({constant});
+        ASSERT_TRUE(GeoFunctions::native_geo_unary_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto actual = GeoFunctions::st_geography_is_valid(context.get(), {constant});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        EXPECT_TRUE((*actual)->is_constant());
+        EXPECT_EQ(5, (*actual)->size());
+        ColumnViewer<TYPE_BOOLEAN> values(*actual);
+        EXPECT_EQ(expected, values.value(0));
+        ASSERT_TRUE(GeoFunctions::native_geo_unary_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    }
+    for (const auto& input : Columns{geography({nullptr, nullptr}), ColumnHelper::create_const_null_column(5)}) {
+        auto actual = GeoFunctions::st_geography_is_valid(nullptr, {input});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ColumnViewer<TYPE_BOOLEAN> values(*actual);
+        for (size_t row = 0; row < input->size(); ++row) EXPECT_TRUE(values.is_null(row));
+        EXPECT_EQ(input->size(), (*actual)->size());
+    }
+    auto empty = GeoFunctions::st_geography_is_valid(nullptr, {geography({})});
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_EQ(0, (*empty)->size());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityPreservesCodecErrors) {
+    WkbGeometry geometry;
+    ASSERT_TRUE(WkbCodec::parse_wkt("POLYGON ((0 0, 2 0, 1 2, 0 0))", &geometry).ok());
+    std::string valid;
+    ASSERT_TRUE(WkbCodec::to_wkb(geometry, &valid).ok());
+    std::vector<std::string> inputs = {"", valid.substr(0, valid.size() - 1)};
+    for (const uint32_t type : {1003, 2003, 3003}) { // ISO WKB Z, M and ZM polygon types.
+        auto bytes = valid;
+        for (int i = 0; i < 4; ++i) bytes[1 + i] = static_cast<char>(type >> (8 * i));
+        inputs.emplace_back(std::move(bytes));
+    }
+    for (const auto& bytes : inputs) {
+        WkbGeometry parsed;
+        auto expected = WkbCodec::parse_wkb(Slice(bytes), &parsed);
+        ASSERT_FALSE(expected.ok());
+        auto input = GeoColumn::create(
+                GeoColumnDescriptor{geography_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        input->append_wkb(Slice(bytes));
+        auto actual = GeoFunctions::st_geography_is_valid(nullptr, {input});
+        ASSERT_FALSE(actual.ok());
+        EXPECT_EQ(expected.code(), actual.status().code());
+        EXPECT_EQ(expected.message(), actual.status().message());
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoUnaryLifecycleReusesPlanConstant) {
     const auto type = geography_type();
     auto constant = ConstColumn::create(geography({"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"}), 3);
