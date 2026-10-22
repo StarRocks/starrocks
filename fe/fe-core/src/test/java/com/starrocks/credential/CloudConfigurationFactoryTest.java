@@ -75,6 +75,27 @@ public class CloudConfigurationFactoryTest {
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
+
+        // Vended credentials without a session token (e.g. Cloudflare R2, MinIO vend static
+        // scoped keys) must still produce an AWS configuration carrying the endpoint.
+        map.remove(S3FileIOProperties.SESSION_TOKEN);
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertNotNull(cloudConfiguration);
+        Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assertions.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, useWebIdentityProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        // Without ak/sk there is nothing to vend: fall back to DEFAULT.
+        map.remove(S3FileIOProperties.ACCESS_KEY_ID);
+        map.remove(S3FileIOProperties.SECRET_ACCESS_KEY);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }
 
     @Test
