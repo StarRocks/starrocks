@@ -54,6 +54,15 @@ public:
     // Decrement the number of remaining senders for this queue
     virtual void decrement_senders(int be_number) = 0;
 
+    // Register (unregister=false) or unregister (unregister=true) a dynamically added sender,
+    // identified by be_number. Idempotent: re-registering a known sender or unregistering an
+    // unknown one is a no-op, so the coordinator may safely retry after an RPC timeout.
+    // Registration is rejected once the remaining-sender count has reached zero, because the
+    // exchange source may already have observed the stream as finished.
+    virtual Status try_update_senders(int be_number, bool unregister) {
+        return Status::NotSupported("dynamic senders are only supported by the pipeline exchange");
+    }
+
     virtual void cancel() = 0;
 
     virtual void close() = 0;
@@ -166,6 +175,8 @@ public:
 
     void decrement_senders(int be_number) override;
 
+    Status try_update_senders(int be_number, bool unregister) override;
+
     void cancel() override;
 
     void close() override;
@@ -229,6 +240,9 @@ private:
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
     std::atomic<bool> _is_cancelled{false};
+    // Set by close(): the exchange source is done with this queue, so sender registrations
+    // must be rejected instead of silently accepted for a stream nobody will ever drain.
+    std::atomic<bool> _is_closed{false};
     std::atomic<int> _num_remaining_senders;
 
     typedef SpinLock Mutex;
@@ -256,6 +270,8 @@ private:
     bool _is_pipeline_level_shuffle = false;
 
     std::unordered_set<int> _sender_eos_set;
+    // be_numbers registered through try_update_senders that have not sent EOS yet
+    std::unordered_set<int> _dynamic_senders;
 
     // distribution of received sequence numbers:
     // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
