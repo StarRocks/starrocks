@@ -596,8 +596,7 @@ TEST_F(LakePrimaryKeyRecoverTest, DISABLED_recover_discards_delvecs_of_failed_at
 // A tablet split leaves each child reading the parent's shared segments through its own key range, so a
 // segment iterator over such a segment starts at the first in-range row, not at row 0. Recover must address
 // the rows it replays by their physical row ids, or the delete vectors it rebuilds mark the wrong rows.
-// Disabled: recover numbers the replayed rows from 0 instead of using the row ids the iterator returns.
-TEST_F(LakePrimaryKeyRecoverTest, DISABLED_shared_segment_read_through_tablet_range) {
+TEST_F(LakePrimaryKeyRecoverTest, shared_segment_read_through_tablet_range) {
     // Range distribution requires the order-preserving primary key encoding.
     _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
