@@ -2708,15 +2708,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-<<<<<<< HEAD
-=======
-        if (versionMapResetPending == null) {
-            // An image written before the field existed. Its leader cleared the version map in memory only, on every
-            // inactivation but a manual one (an empty reason is replayed as manual), so the image still holds the
-            // map: mark the clear pending, for the activation to do it.
-            versionMapResetPending = !active && !Strings.isNullOrEmpty(inactiveReason)
-                    && !AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equals(inactiveReason);
-        }
         // The property is authoritative: images checkpointed before ALTER replay applied it carry a stale field.
         if (tableProperty != null) {
             String staleness = tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND);
@@ -2724,7 +2715,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 maxMVRewriteStaleness = Integer.parseInt(staleness);
             }
         }
->>>>>>> f90b7ac3e44... [BugFix][RB-595] Restore mv_rewrite_staleness_second from the MV property when loading an image (#66258)
         List<Column> partitionCols = getPartitionColumns();
         if (CollectionUtils.isEmpty(partitionCols)) {
             return;
