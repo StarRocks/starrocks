@@ -815,6 +815,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Arrow Flight SQL サーバーが受け付けるリクエストヘッダーの合計サイズの上限（バイト）。1 つの gRPC リクエストのすべてのヘッダーを合計して数えます。Arrow Flight SQL セッションの最初のリクエストはクライアントの認証情報をヘッダーで運び、ユーザーの所属グループを列挙した JWT はグループ数に応じて大きくなります。Microsoft Entra ID が 1 つのトークンに入れるグループ ID は最大 200 個で、約 10 KB になります。gRPC のデフォルトの 8 KB では認証が始まる前にこのようなリクエストが拒否されるため、デフォルト値は `http_max_header_size` に合わせています。クライアントがより大きなトークンを送る場合は値を大きくしてください。変更後は FE の再起動が必要です。
 - 導入時期：v4.2
 
+### `arrow_flight_ssl_enable`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：FE の Arrow Flight SQL サーバーが TLS（`grpc+tls://`）で提供されるかどうか。FE が Arrow Flight SQL のリクエストを他の FE に転送するときも TLS を使用します。`arrow_flight_ssl_cert_file` と `arrow_flight_ssl_key_file` が必要です。これらが存在しない、または読み取れない場合、FE は起動しません。BE の Arrow Flight サーバーへの接続は対象外で、平文のままです。クラスターのすべての FE で同じ設定を使用する必要があります。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
+### `arrow_flight_ssl_cert_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Arrow Flight SQL サーバーの証明書（チェーン）を含む PEM ファイル。FE 同士は各 FE が公開しているホスト名で接続するため、証明書はそのホスト名に対して有効である必要があります。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
+### `arrow_flight_ssl_key_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：`arrow_flight_ssl_cert_file` の秘密鍵を含む PEM ファイル。暗号化されておらず、PKCS#8 形式（`-----BEGIN PRIVATE KEY-----`）である必要があります。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
+### `arrow_flight_ssl_ca_cert_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：信頼する CA 証明書を含む PEM ファイル。FE は、接続先の他の FE を検証するためにこれらを使用します。`arrow_flight_ssl_require_client_auth` が `true` の場合、サーバーはクライアント証明書の検証にも使用します。空の場合は、他の FE の検証に JVM のデフォルトのトラストストアが使用されます。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
+### `arrow_flight_ssl_require_client_auth`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：クライアントに、`arrow_flight_ssl_ca_cert_file` 内のいずれかの CA によって署名された証明書の提示を要求するかどうか（相互 TLS）。FE は他の FE に接続するとき、`arrow_flight_ssl_cert_file` を自身のクライアント証明書として提示するため、その証明書はクライアント認証にも有効である必要があります。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - デフォルト：10000

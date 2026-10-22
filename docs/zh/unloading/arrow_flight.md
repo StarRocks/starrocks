@@ -185,6 +185,37 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::
 
+#### 启用 TLS（可选）
+
+默认情况下，FE 通过明文 `grpc://` 提供 Arrow Flight SQL 服务，客户端与 FE 之间传输的凭据和数据不会被加密。如需加密，请在 **fe.conf** 中设置以下配置项并重启 FE。
+
+| 配置项 | 默认值 | 描述 |
+| --- | --- | --- |
+| `arrow_flight_ssl_enable` | `false` | 是否通过 TLS（`grpc+tls://`）提供 Arrow Flight SQL 服务。如果为 `true`，当 `arrow_flight_ssl_cert_file` 或 `arrow_flight_ssl_key_file` 缺失或无法读取时，FE 将无法启动。 |
+| `arrow_flight_ssl_cert_file` | 空 | 服务端证书（链）的 PEM 文件。 |
+| `arrow_flight_ssl_key_file` | 空 | 证书私钥的 PEM 文件。私钥必须未加密，且为 PKCS#8 格式（`-----BEGIN PRIVATE KEY-----`）。可使用 `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pkcs8.pem` 转换私钥。 |
+| `arrow_flight_ssl_ca_cert_file` | 空 | 受信任的 CA 证书的 PEM 文件。FE 使用这些证书验证其转发请求的目标 FE。如果为空，则使用 JVM 默认的信任库。 |
+| `arrow_flight_ssl_require_client_auth` | `false` | 是否要求客户端提供由 `arrow_flight_ssl_ca_cert_file` 中某个 CA 签发的证书（双向 TLS）。如果为 `true`，必须设置 `arrow_flight_ssl_ca_cert_file`。 |
+
+示例：
+
+```Properties
+// fe.conf
+arrow_flight_port = 9408
+arrow_flight_ssl_enable = true
+arrow_flight_ssl_cert_file = /path/to/server.crt
+arrow_flight_ssl_key_file = /path/to/server.key
+```
+
+:::note
+
+- 这些配置项为静态配置，修改后需重启 FE 才能生效。
+- 集群中所有 FE 必须使用相同的设置。FE 将请求转发给另一个 FE 时，会使用该 FE 对外公布的主机名或 IP 地址通过 TLS 连接，因此每个 FE 的证书必须对该主机名或 IP 地址有效。如果 `arrow_flight_ssl_require_client_auth` 为 `true`，FE 会向其他 FE 出示自己的证书，因此该证书还必须可用于客户端认证。
+- 如果设置了 `arrow_flight_proxy`，请添加 `grpcs://` 前缀，使客户端通过 TLS 连接代理，例如 `grpcs://your-proxy-hostname:Port`。
+- 仅覆盖 FE 的 Arrow Flight 服务。FE 到 BE 的 Arrow Flight 服务的连接保持明文，禁用代理时客户端到 BE 的连接同样是明文。
+
+:::
+
 #### 建立连接
 
 在客户端，使用以下信息创建 Arrow Flight SQL 客户端：

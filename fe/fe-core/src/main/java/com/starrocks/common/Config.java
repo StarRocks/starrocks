@@ -5025,6 +5025,30 @@ public class Config extends ConfigBase {
             + "accepts. Raise it when clients send large JWTs, for example ones that list many groups.")
     public static int arrow_flight_max_header_size = 32768;
 
+    @ConfField(comment = "Whether the Arrow Flight SQL server of the FE serves TLS (grpc+tls://). The FE also uses TLS "
+            + "when it forwards Arrow Flight SQL requests to other FEs. Requires arrow_flight_ssl_cert_file and "
+            + "arrow_flight_ssl_key_file: the FE does not start if they are missing or unreadable. The connection to the "
+            + "Arrow Flight server of a BE is not covered and stays plaintext. All FEs of a cluster must use the same setting.")
+    public static boolean arrow_flight_ssl_enable = false;
+
+    @ConfField(comment = "PEM file with the certificate (chain) of the Arrow Flight SQL server. FEs reach each other by "
+            + "the host they advertise, so the certificate has to be valid for it.")
+    public static String arrow_flight_ssl_cert_file = "";
+
+    @ConfField(comment = "PEM file with the private key of arrow_flight_ssl_cert_file, unencrypted and in PKCS#8 format "
+            + "(BEGIN PRIVATE KEY).")
+    public static String arrow_flight_ssl_key_file = "";
+
+    @ConfField(comment = "PEM file with the CA certificates to trust. An FE uses them to verify the FEs it connects to, "
+            + "and the server uses them to verify client certificates when arrow_flight_ssl_require_client_auth is true. "
+            + "If empty, the default trust store of the JVM is used to verify other FEs.")
+    public static String arrow_flight_ssl_ca_cert_file = "";
+
+    @ConfField(comment = "Whether to require clients to present a certificate signed by one of the CAs in "
+            + "arrow_flight_ssl_ca_cert_file (mutual TLS). FEs present arrow_flight_ssl_cert_file as their own client "
+            + "certificate when they connect to other FEs, so it has to be valid for client authentication too.")
+    public static boolean arrow_flight_ssl_require_client_auth = false;
+
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 
