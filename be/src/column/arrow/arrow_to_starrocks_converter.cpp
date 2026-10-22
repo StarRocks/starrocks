@@ -1334,9 +1334,14 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
             auto cf = std::make_unique<ConvertFuncTree>();
             // Match the name used by the converter, not the position in a pruned slot.
             auto field = struct_type->GetFieldByName(type_desc->field_names[i]);
-            auto sub_at = field == nullptr ? arrow::null() : field->type();
-            RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
-                                                            cf.get(), need_cast, strict_mode));
+            if (field == nullptr) {
+                // Materialization appends NULLs for absent fields, including complex children.
+                type = type_desc->children[i];
+                cf->func = null_converter;
+            } else {
+                RETURN_IF_ERROR(build_arrow_column_convert_plan(field->type().get(), &type_desc->children[i], true,
+                                                                &type, cf.get(), need_cast, strict_mode));
+            }
             raw_type_desc->children.emplace_back(std::move(type));
             conv_func->children.emplace_back(std::move(cf));
         }

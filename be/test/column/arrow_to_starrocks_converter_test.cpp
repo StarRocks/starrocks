@@ -343,6 +343,42 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
     ASSERT_EQ("{score:NULL}", column->debug_item(2));
 }
 
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.emplace_back(TYPE_INT);
+    TypeDescriptor map_type(TYPE_MAP);
+    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    TypeDescriptor struct_type(TYPE_STRUCT);
+    struct_type.field_names = {"value"};
+    struct_type.children.emplace_back(TYPE_INT);
+    std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
+            arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
+            arrow::struct_({arrow::field("value", arrow::int32())})};
+    std::vector<TypeDescriptor> children = {array_type, map_type, struct_type};
+    for (size_t i = 0; i < children.size(); ++i) {
+        SCOPED_TRACE(children[i].debug_string());
+        auto arrow_type =
+                arrow::struct_({arrow::field("legacy", arrow_children[i]), arrow::field("keep", arrow::int32())});
+        auto array = arrow::ArrayFromJSON(arrow_type, R"([{"keep":7},null,{"keep":9}])");
+        TypeDescriptor type(TYPE_STRUCT);
+        type.field_names = {"new", "keep"};
+        type.children = {children[i], TypeDescriptor(TYPE_INT)};
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+        ASSERT_FALSE(need_cast);
+        ASSERT_EQ(type.children[0], raw_type.children[0]);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(3, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+        ASSERT_EQ("{new:NULL,keep:7}", column->debug_item(0));
+        ASSERT_TRUE(column->is_null(1));
+        ASSERT_EQ("{new:NULL,keep:9}", column->debug_item(2));
+    }
+}
+
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
     auto arrow_type = arrow::int32();
     TypeDescriptor type_desc(TYPE_ARRAY);
