@@ -35,6 +35,7 @@ import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.arrow.flight.CallHeaders;
+import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
@@ -462,6 +463,29 @@ public class ArrowFlightSqlServiceImplTest {
 
         // client not removed from cache on error
         assertEquals(service.getClientFromCacheForTesting("127.0.0.1:9400"), mockBeClient);
+    }
+
+    @Test
+    public void testStreamResultFromUnreachableBEDropsCachedClient() throws Exception {
+        FlightClient mockBeClient = mock(FlightClient.class);
+        FlightStream mockBeStream = mock(FlightStream.class);
+
+        service.addToCacheForTesting("127.0.0.1:9400", mockBeClient);
+
+        when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
+        when(mockBeStream.getRoot()).thenThrow(CallStatus.UNAVAILABLE.withDescription("io exception").toRuntimeException());
+
+        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8|19abc7b87307530-9965dc19f22a94a9|127.0.0.1|9400";
+        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
+                .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
+                .build();
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+
+        service.getStreamStatement(ticket, mockCallContext, listener);
+
+        verify(listener).error(any(Throwable.class));
+        assertNull(service.getClientFromCacheForTesting("127.0.0.1:9400"));
+        verify(mockBeClient).close();
     }
 
     @Test
@@ -1206,6 +1230,41 @@ public class ArrowFlightSqlServiceImplTest {
             testService.createPreparedStatement(createReq, callContext, listener);
             Thread.sleep(500);
             verify(listener).onError(any(FlightRuntimeException.class));
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_unreachableRemoteFEDropsCachedClient() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe|some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
+                    .thenThrow(CallStatus.UNAVAILABLE.withDescription("io exception").toRuntimeException());
+
+            FlightSql.ActionCreatePreparedStatementRequest createReq =
+                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                            .setQuery("SELECT 1").build();
+            FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+            testService.createPreparedStatement(createReq, callContext, listener);
+            Thread.sleep(500);
+            verify(listener).onError(any(FlightRuntimeException.class));
+            assertNull(testService.getClientFromCacheForTesting("remote-fe:9408"));
+            verify(mockFeClient).close();
         }
     }
 
