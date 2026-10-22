@@ -21,6 +21,14 @@
 #include <string>
 
 #include "agent/agent_server.h"
+<<<<<<< HEAD
+=======
+#include "base/container/lru_cache.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+>>>>>>> d60f9ae ([Enhancement] Make lake_pk_index_block_cache_limit_percent mutable (#81244))
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -113,9 +121,32 @@ TEST_F(UpdateConfigActionTest, test_update_lake_pk_preload_memory_limit_percent)
     ASSERT_EQ(update_mem_limit * 10 / 100, update_mgr->compaction_state_mem_tracker()->limit());
 }
 
+<<<<<<< HEAD
 TEST_F(UpdateConfigActionTest, test_update_load_sink_close_thread_pool_num_max) {
     UpdateConfigAction action(ExecEnv::GetInstance());
     auto* thread_pool = ExecEnv::GetInstance()->load_sink_close_thread_pool();
+=======
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_index_block_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent",
+                                                                 saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "20"));
+    ASSERT_EQ(primary_key_mem_limit * 20 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
+    ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
+>>>>>>> d60f9ae ([Enhancement] Make lake_pk_index_block_cache_limit_percent mutable (#81244))
     ASSERT_NE(nullptr, thread_pool);
     const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
     DeferOp restore_pool([&]() {

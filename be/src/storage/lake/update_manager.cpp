@@ -76,9 +76,13 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
 
     _index_cache.set_capacity(update_mem_limit);
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
     const int64_t block_cache_mem_limit =
             update_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
     _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
+=======
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
+>>>>>>> d60f9ae ([Enhancement] Make lake_pk_index_block_cache_limit_percent mutable (#81244)):be/src/storage/lake/primary_key_manager.cpp
 }
 
 UpdateManager::~UpdateManager() {
@@ -94,6 +98,18 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
         : _cache(new_lru_cache(cache_limit)) {
     _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::set_capacity(int64_t cache_limit) {
+    {
+        // Config-update callbacks run outside the registry lock, so serialize the paired writes to keep the
+        // tracker limit and the cache capacity consistent across concurrent resizes. Use a dedicated lock so
+        // that shrinking, which frees the evicted blocks, does not block update_memory_usage() on publish.
+        std::lock_guard<std::mutex> lg(_capacity_mutex);
+        _mem_tracker->set_limit(cache_limit);
+        _cache->set_capacity(cache_limit);
+    }
+    update_memory_usage();
 }
 
 void PersistentIndexBlockCache::update_memory_usage() {
@@ -2325,7 +2341,20 @@ int64_t UpdateManager::_calc_preload_mem_limit() const {
     return _update_mem_tracker->limit() * preload_mem_percent / 100;
 }
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
 void UpdateManager::refresh_preload_mem_limit() {
+=======
+int64_t PrimaryKeyManager::_calc_block_cache_mem_limit() const {
+    const int32_t block_cache_mem_percent = std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * block_cache_mem_percent / 100;
+}
+
+void PrimaryKeyManager::refresh_block_cache_mem_limit() {
+    _block_cache->set_capacity(_calc_block_cache_mem_limit());
+}
+
+void PrimaryKeyManager::refresh_preload_mem_limit() {
+>>>>>>> d60f9ae ([Enhancement] Make lake_pk_index_block_cache_limit_percent mutable (#81244)):be/src/storage/lake/primary_key_manager.cpp
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker->set_limit(preload_mem_limit);
     _compaction_state_mem_tracker->set_limit(preload_mem_limit);
