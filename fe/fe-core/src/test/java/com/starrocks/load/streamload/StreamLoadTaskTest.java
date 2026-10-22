@@ -340,17 +340,19 @@ public class StreamLoadTaskTest {
     public void testDuplicateBeginTxn() throws StarRocksException {
         TransactionResult resp = new TransactionResult();
         TUniqueId requestId = new TUniqueId(100056, 560001);
-        StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(),
-                                                                        "", "", "", 10, 10, false,
-                                                                        WarehouseManager.DEFAULT_RESOURCE));
+        StreamLoadTask task = Mockito.spy(streamLoadTask);
         TransactionState.TxnCoordinator coordinator =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "192.168.1.2");
-        doThrow(new DuplicatedRequestException("Duplicate request", 0L, ""))
-                .when(streamLoadTask1).unprotectedBeginTxn(same(requestId), same(coordinator));
-        streamLoadTask1.beginTxn(0, 1, requestId, coordinator, resp);
-        Assertions.assertTrue(resp.stateOK());
-        streamLoadTask1.beginTxn(0, 1, requestId, coordinator, resp);
-        Assertions.assertTrue(resp.stateOK());
+        DuplicatedRequestException duplicate = new DuplicatedRequestException("Duplicate request", 12345L, "");
+        doThrow(duplicate).when(task).unprotectedBeginTxn(same(requestId), same(coordinator));
+
+        DuplicatedRequestException actual = Assertions.assertThrows(DuplicatedRequestException.class,
+                () -> task.beginTxn(0, 1, requestId, coordinator, resp));
+        Assertions.assertSame(duplicate, actual);
+        Assertions.assertEquals(12345L, actual.getTxnId());
+        Assertions.assertEquals(-1L, task.getTxnId());
+        Assertions.assertEquals("BEGIN", task.getStateName());
+        Mockito.verify(task, Mockito.never()).cancelTask();
     }
 
     @Test
