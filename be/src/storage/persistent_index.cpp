@@ -4038,17 +4038,19 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
     RETURN_IF_ERROR(_l0->insert(n, keys, values));
-    if (!_l1_vec.empty()) {
-        int end_idx = _has_l1 ? 1 : 0;
-        for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
-            RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
+    if (!config::skip_pindex_l1_l2_check_in_insert) {
+        if (!_l1_vec.empty()) {
+            int end_idx = _has_l1 ? 1 : 0;
+            for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
+                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
+            }
         }
-    }
-    if (_has_l1 && check_l1) {
-        RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
-    }
-    for (int i = _l2_vec.size() - 1; i >= 0; i--) {
-        RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
+        if (_has_l1 && check_l1) {
+            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
+        }
+        for (int i = _l2_vec.size() - 1; i >= 0; i--) {
+            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
+        }
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
