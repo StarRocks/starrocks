@@ -372,6 +372,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
 
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
+if [[ "${HAS_EXPLICIT_PARALLEL}" -eq 0 ]]; then
+    PARALLEL="$(PARALLEL="" starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
+fi
+
 echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: ${SR_LINKER_TYPE}, RAM: ${SR_RAM_GB} GiB)"
 
 if [[ -n "$BUILD_TARGET" ]]; then
