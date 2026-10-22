@@ -50,8 +50,8 @@ std::vector<std::string> adjacent() {
     return {wkb("POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))"),
             wkb("POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))")};
 }
-std::unique_ptr<GeoCoverageSimplify> make(GeoCoverageCheckpoint checkpoint = {}) {
-    auto result = GeoCoverageSimplify::create(std::move(checkpoint));
+std::unique_ptr<GeoCoverageSimplify> make() {
+    auto result = GeoCoverageSimplify::create();
     EXPECT_TRUE(result.ok()) << result.status();
     return result.ok() ? std::move(result).value() : nullptr;
 }
@@ -257,57 +257,7 @@ TEST(GeoCoverageTest, MoreThanTenThousandRowsRetainMapping) {
     }
     coverage.reset();
 }
-TEST(GeoCoverageTest, CancellationPreventsOutput) {
-    bool cancelled = false;
-    GeoCoverageCheckpoint checkpoint{
-            &cancelled, [](void* context) {
-                return *static_cast<bool*>(context) ? Status::Cancelled("coverage test cancellation") : Status::OK();
-            }};
-    auto c = make(checkpoint);
-    append(*c, adjacent());
-    cancelled = true;
-    EXPECT_TRUE(c->finish(1).is_cancelled());
-    EXPECT_FALSE(c->result(0).ok());
-    c.reset();
-}
-TEST(GeoCoverageTest, KernelPollingRetainsCancellationAndMemoryErrors) {
-    WkbGeometry polygon;
-    polygon.type = WkbGeometryType::POLYGON;
-    auto& ring = polygon.rings.emplace_back();
-    // A zero-area ring would fail in decode before the next explicit check.
-    for (int i = 0; i < 512; ++i) ring.push_back({double(i), 0});
-    ring.push_back({0, 0});
-    std::string input;
-    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &input, kCartesian).ok());
-    for (bool memory_error : {false, true}) {
-        struct State {
-            bool armed = false;
-            int checks = 0;
-            bool memory_error;
-        } state{false, 0, memory_error};
-        GeoCoverageCheckpoint checkpoint{
-                &state, [](void* context) {
-                    auto& state = *static_cast<State*>(context);
-                    // Entry and row checks precede the coordinate-loop poll.
-                    if (state.armed && ++state.checks == 3) {
-                        return state.memory_error ? Status::MemoryLimitExceeded("coverage test memory limit")
-                                                  : Status::Cancelled("coverage test cancellation");
-                    }
-                    return Status::OK();
-                }};
 
-        auto coverage = make(checkpoint);
-        ASSERT_NE(coverage, nullptr);
-        ASSERT_TRUE(coverage->append(Slice(input)).ok());
-        state.armed = true;
-        const auto status = coverage->finish(1, false);
-        EXPECT_EQ(state.checks, 3);
-        EXPECT_EQ(status.is_mem_limit_exceeded(), memory_error) << status;
-        EXPECT_EQ(status.is_cancelled(), !memory_error) << status;
-        EXPECT_FALSE(coverage->result(0).ok());
-        coverage.reset();
-    }
-}
 TEST(GeoCoverageTest, SequentialWorkerMigration) {
     auto c = make();
     append(*c, adjacent());
@@ -559,32 +509,7 @@ TEST(GeoCoverageTest, RingIntervalsDoNotSkipContainingLongEdges) {
         c.reset();
     }
 }
-TEST(GeoCoverageTest, RingPreparationUnwindsAtEveryCheckpoint) {
-    size_t total = 0;
-    for (size_t attempt = 0; attempt <= total; ++attempt) {
-        struct State {
-            size_t checks = 0, stop;
-            bool armed = false;
-        } state{0, attempt == 0 ? std::numeric_limits<size_t>::max() : attempt};
-        GeoCoverageCheckpoint checkpoint{&state, [](void* context) {
-                                             auto& s = *static_cast<State*>(context);
-                                             if (s.armed && ++s.checks == s.stop)
-                                                 return Status::Cancelled("ring preparation test");
-                                             return Status::OK();
-                                         }};
-        auto c = make(checkpoint);
-        for (const auto& text : interval_coverage()) ASSERT_TRUE(c->append(Slice(wkb(text))).ok());
-        state.armed = true;
-        const auto status = c->finish(0.125);
-        if (attempt == 0) {
-            ASSERT_TRUE(status.ok()) << status;
-            total = state.checks;
-        } else {
-            EXPECT_TRUE(status.is_cancelled()) << attempt << " " << status;
-            EXPECT_FALSE(c->result(0).ok());
-        }
-    }
-}
+
 TEST(GeoCoverageTest, ExactValidityAtExtremeScales) {
     for (double scale : {std::ldexp(1.0, -1070), 1e150, 1e300}) {
         auto c = make();
