@@ -1529,7 +1529,8 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 CONF_mBool(lake_enable_del_file_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when

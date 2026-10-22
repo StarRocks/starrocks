@@ -49,10 +49,15 @@ public:
 
     void update_memory_usage();
 
+    void set_capacity(int64_t cache_limit);
+
     Cache* cache() { return _cache.get(); }
 
 private:
+    // Protects _memory_usage and its sync to _mem_tracker.
     std::mutex _mutex;
+    // Serializes set_capacity() so the cache capacity and the tracker limit change together.
+    std::mutex _capacity_mutex;
     size_t _memory_usage{0};
     std::unique_ptr<Cache> _cache;
     std::unique_ptr<MemTracker> _mem_tracker;
@@ -194,6 +199,9 @@ public:
     // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
     void refresh_preload_mem_limit();
 
+    // Re-apply lake_pk_index_block_cache_limit_percent to the primary index sstable block cache.
+    void refresh_block_cache_mem_limit();
+
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
@@ -261,6 +269,7 @@ public:
 
 private:
     int64_t _calc_preload_mem_limit() const;
+    int64_t _calc_block_cache_mem_limit() const;
 
     // print memory tracker state
     void _print_memory_stats();
