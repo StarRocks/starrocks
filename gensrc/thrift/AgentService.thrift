@@ -517,6 +517,8 @@ struct TExternalClusterSnapshotRequest {
     9: optional bool is_filebundling
     10: optional bool is_drop_partition
     11: optional list<TComputeNodeTablets> compute_node_tablets
+    // Milliseconds left before FE gives up on the job, as of sending the task. Not set by an older FE.
+    12: optional i64 timeout_ms
 }
 
 // Placeholder for external cluster snapshot feature.
