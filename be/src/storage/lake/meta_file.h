@@ -126,6 +126,10 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
+    // Drop the pending batch rowset: a batch apply replayed after recover must not keep the segments of its
+    // failed attempt. Recover itself drops the pending delvecs, see reset_delvecs_for_recover().
+    void reset_pending_rowset_for_recover() { _pending_rowset_data = PendingRowsetData{}; }
+
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 

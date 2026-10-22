@@ -512,26 +512,24 @@ public:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
-
-        // Collect all write operations data
-        for (const auto& log : txn_logs) {
-            if (log->has_op_write()) {
-                const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
-                if (is_column_mode_partial_update(op_write)) {
-                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
-                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
-                } else {
-                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_key_tablet(op_write, log->txn_id(), _metadata,
-                                                                                     &_tablet, _index_entry, &_builder,
-                                                                                     _base_version, true));
-                }
-            }
+        // The batch's rowset reaches _metadata only in set_final_rowset, after every log is applied, so recover
+        // cannot see any part of the batch whichever flag the failure raised. Roll back to the state before the
+        // batch, recover from it, and apply the whole batch again. The rollback needs a snapshot because a
+        // failed attempt also writes to _metadata directly: del stats, schema, and column-mode partial updates.
+        std::unique_ptr<TabletMetadata> before_batch;
+        if (config::enable_primary_key_recover) {
+            before_batch = std::make_unique<TabletMetadata>(*_metadata);
         }
-        RETURN_IF_ERROR(_builder.set_final_rowset());
-
-        return Status::OK();
+        auto ret = batch_apply_write_logs(txn_logs);
+        if (before_batch != nullptr && need_recover(ret)) {
+            LOG(WARNING) << "Batch apply needs recover, tablet_id: " << _tablet.id() << " status: " << ret;
+            _metadata->CopyFrom(*before_batch);
+            _builder.reset_pending_rowset_for_recover();
+            RETURN_IF_ERROR(recover());
+            _builder.set_recover_flag(RecoverFlag::OK);
+            ret = batch_apply_write_logs(txn_logs);
+        }
+        return ret;
     }
 
     Status finish() override {
@@ -586,22 +584,25 @@ private:
         return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
+    // Rebuild the delvecs and the primary index from the rowsets in _metadata.
+    Status recover() {
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
+        LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        // release and remove index entry's reference
+        _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+        _guard.reset(nullptr);
+        _index_entry = nullptr;
+        // rebuild delvec and pk index
+        LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
+        RETURN_IF_ERROR(recover.recover());
+        LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+        return Status::OK();
+    }
+
     Status check_and_recover(const std::function<Status()>& publish_func) {
         auto ret = publish_func();
         if (config::enable_primary_key_recover && need_recover(ret)) {
-            {
-                TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
-                LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-                // release and remove index entry's reference
-                _tablet.update_mgr()->release_primary_index_cache(_index_entry);
-                _guard.reset(nullptr);
-                _index_entry = nullptr;
-                // rebuild delvec and pk index
-                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.recover());
-                LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
-                          << " base_ver: " << _base_version;
-            }
+            RETURN_IF_ERROR(recover());
             if (need_re_publish(ret)) {
                 _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
@@ -640,6 +641,28 @@ private:
         RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
         _has_finalized = true;
         return Status::OK();
+    }
+
+    // Apply the op_writes of a multi-statement transaction as one rowset. The caller holds the pk index shard lock.
+    Status batch_apply_write_logs(const TxnLogVector& txn_logs) {
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Collect all write operations data
+        for (const auto& log : txn_logs) {
+            if (log->has_op_write()) {
+                const auto& op_write = log->op_write();
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
+                if (is_column_mode_partial_update(op_write)) {
+                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
+                } else {
+                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_key_tablet(op_write, log->txn_id(), _metadata,
+                                                                                     &_tablet, _index_entry, &_builder,
+                                                                                     _base_version, true));
+                }
+            }
+        }
+        return _builder.set_final_rowset();
     }
 
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
