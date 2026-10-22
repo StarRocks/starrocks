@@ -489,26 +489,24 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
     _release_spill();
     const uint32_t num_upt = _rowset_ptr->num_segments();
 
-    // Invert rssid -> upt_id -> (source rowid, upt rowid) into one list per update file, ordered by
-    // upt rowid, so the file can be streamed once and each row routed to its segment on the way.
+    // Each update file is streamed once with its rows routed to their source segments on the way,
+    // which needs the rssid -> upt_id -> (source rowid, upt rowid) pairs inverted into one list per
+    // update file, ordered by upt rowid. Only the per-file row counts are taken up front: the list
+    // itself is built one update file at a time inside the loop below, sized exactly and charged
+    // to the tracker while it lives, so the pass never holds a second copy of every mapped row next
+    // to rss_upt_id_to_rowid_pairs.
     struct Entry {
         uint32_t upt_rowid;
         uint32_t rssid;
         uint32_t src_rowid;
     };
-    std::vector<std::vector<Entry>> per_upt(num_upt);
+    std::vector<size_t> rows_per_upt(num_upt, 0);
     for (const auto& [rssid, upt_map] : rss_upt_id_to_rowid_pairs) {
         for (const auto& [upt_id, pairs] : upt_map) {
             RETURN_ERROR_IF_FALSE(upt_id < num_upt, fmt::format("update file id {} out of range {}, tablet {} txn {}",
                                                                 upt_id, num_upt, _rowset_ptr->tablet_id(), _txn_id));
-            for (const auto& p : pairs) {
-                per_upt[upt_id].push_back({p.second, rssid, p.first});
-            }
+            rows_per_upt[upt_id] += pairs.size();
         }
-    }
-    for (auto& entries : per_upt) {
-        std::sort(entries.begin(), entries.end(),
-                  [](const Entry& a, const Entry& b) { return a.upt_rowid < b.upt_rowid; });
     }
 
     const std::string dir = _spill_dir();
@@ -579,8 +577,7 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
     });
 
     for (uint32_t upt_id = 0; upt_id < num_upt; upt_id++) {
-        auto& entries = per_upt[upt_id];
-        if (entries.empty()) {
+        if (rows_per_upt[upt_id] == 0) {
             continue;
         }
         if (segment_iters[upt_id] == nullptr) {
@@ -591,6 +588,23 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                          << " (a lost segment via experimental_lake_ignore_lost_segment, or an unexpected empty slot)";
             continue;
         }
+        std::vector<Entry> entries;
+        entries.reserve(rows_per_upt[upt_id]);
+        for (const auto& [rssid, upt_map] : rss_upt_id_to_rowid_pairs) {
+            auto it = upt_map.find(upt_id);
+            if (it == upt_map.end()) {
+                continue;
+            }
+            for (const auto& p : it->second) {
+                entries.push_back({p.second, rssid, p.first});
+            }
+        }
+        std::sort(entries.begin(), entries.end(),
+                  [](const Entry& a, const Entry& b) { return a.upt_rowid < b.upt_rowid; });
+        int64_t entries_bytes = static_cast<int64_t>(entries.capacity() * sizeof(Entry));
+        _tracker->consume(entries_bytes);
+        DeferOp release_entries([&]() { _tracker->release(entries_bytes); });
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:routed", &entries_bytes);
         TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read", &upt_id);
         auto& iter = segment_iters[upt_id];
         auto chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);

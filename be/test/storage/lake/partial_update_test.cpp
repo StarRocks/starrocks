@@ -653,6 +653,14 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         flushes++;
         EXPECT_EQ(0, *static_cast<size_t*>(arg)) << "flushed buffers retained after the flush";
     });
+    // The routing entries of one update file are charged to the update tracker while they are alive.
+    std::atomic<int> charged_routes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed", [&](void* arg) {
+        charged_routes++;
+        const int64_t bytes = *static_cast<int64_t*>(arg);
+        EXPECT_GT(bytes, 0);
+        EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+    });
     // Every spill record a segment task reads back is charged to the update tracker while it is alive.
     std::atomic<int> charged_reads{0};
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
@@ -660,12 +668,13 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                               charged_reads++;
                                               const int64_t bytes = *static_cast<int64_t*>(arg);
                                               EXPECT_GT(bytes, 0);
-                                              EXPECT_GE(_update_mgr->mem_tracker()->consumption(), bytes);
+                                              EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
                                           });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp sync_point_guard([&]() {
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read");
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed");
         SyncPoint::GetInstance()->ClearCallBack(
                 "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
         SyncPoint::GetInstance()->DisableProcessing();
@@ -700,10 +709,11 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     };
 
     // Spill on: each update file is read exactly once, whatever the number of source segments.
-    const int64_t tracker_before_spill = _update_mgr->mem_tracker()->consumption();
+    const int64_t tracker_before_spill = _primary_key_mgr->mem_tracker()->consumption();
     run_update(5);
     EXPECT_EQ(kSourceSegments, upt_reads.load());
     EXPECT_GT(flushes.load(), 0);
+    EXPECT_EQ(kSourceSegments, charged_routes.load());
     EXPECT_GT(charged_reads.load(), 0);
     // Flushing on every chunk splits a segment's rows of one update file over several records.
     {
@@ -715,7 +725,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     }
     // Everything the spill charged (buffers, records read back) was released again; other caches
     // may legitimately keep bytes on this tracker, so compare against the pre-spill baseline.
-    EXPECT_EQ(tracker_before_spill, _update_mgr->mem_tracker()->consumption());
+    EXPECT_EQ(tracker_before_spill, _primary_key_mgr->mem_tracker()->consumption());
     // The spill files are removed with the handler.
     std::set<std::string> leftovers;
     if (fs::path_exist(spill_dir)) {
@@ -732,7 +742,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         run_update(9);
         EXPECT_EQ(0, upt_reads.load());
     }
-    EXPECT_EQ(0, _update_mgr->update_state_mem_tracker()->consumption());
+    EXPECT_EQ(0, _primary_key_mgr->update_state_mem_tracker()->consumption());
 }
 
 TEST_P(LakePartialUpdateTest, test_column_mode_sweeps_leftover_spill_files) {
