@@ -205,6 +205,21 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: long
 * **Unit**: Milliseconds
 
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
 ### catalog
 
 * **Description**: Used to specify the catalog to which the session belongs.

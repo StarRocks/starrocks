@@ -54,6 +54,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import org.apache.commons.lang3.StringUtils;
@@ -234,7 +235,16 @@ public class VariableMgr {
                     field.setFloat(obj, Float.parseFloat(convertedVal));
                     break;
                 case "double":
-                    field.setDouble(obj, Double.parseDouble(convertedVal));
+                    double doubleValue = Double.parseDouble(convertedVal);
+                    if (SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR.equals(variableName)) {
+                        // SET_VAR hints use reflective assignment on this branch and bypass the session setter.
+                        try {
+                            doubleValue = SessionVariable.checkBroadcastMemExceededPenaltyFactor(doubleValue);
+                        } catch (SemanticException e) {
+                            throw new DdlException(e.getMessage(), e);
+                        }
+                    }
+                    field.setDouble(obj, doubleValue);
                     break;
                 case "String":
                     field.set(obj, convertedVal);
