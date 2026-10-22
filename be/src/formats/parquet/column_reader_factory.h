@@ -93,6 +93,11 @@ public:
                                                           bool case_sensitive,
                                                           const TIcebergSchemaField* lake_schema_field,
                                                           bool parquet_has_field_id);
+
+    // For an Iceberg struct none of whose used subfields is in the file: a stored scalar column read only for the
+    // struct's levels (a direct subfield, else a leaf under a struct subfield), or nullptr if there is none. The
+    // reader factory and LakeMetaHelper use the same choice.
+    static const ParquetField* find_struct_level_source(const ParquetField& field);
 };
 
 } // namespace starrocks::parquet
