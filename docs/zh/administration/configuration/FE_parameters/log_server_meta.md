@@ -1314,7 +1314,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 一张表自上次访问后，StarRocks 继续刷新该表缓存元数据的时长。StarRocks 按表判断。对于已访问过的 Hive、Iceberg、Delta Lake 或 Paimon 表，如果超过该时间未被访问，StarRocks 停止刷新其缓存元数据。未被访问过的表不会被刷新。参与同一后台刷新的 MaxCompute catalog 不使用该截止时间。
+- 描述: 一张表自上次访问后，StarRocks 继续刷新该表缓存元数据的时长。该截止时间按表应用，但仅在记录了上次访问时间时生效。对于已记录上次访问时间的 Hive、Iceberg、Delta Lake 和 Paimon 表，自上次访问起超过该值后，StarRocks 停止刷新其缓存元数据。未被访问过的表不会被刷新。参与同一后台刷新的 MaxCompute catalog 不使用该截止时间。
 - 引入版本: v2.5.5
 
 ### `bdbje_cleaner_threads`
@@ -1503,7 +1503,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用外部 catalog 缓存元数据的周期性后台刷新。启用后，每个 FE 上的后台任务会刷新 Hive、Iceberg、Delta Lake、Paimon 和 MaxCompute catalog 的缓存元数据，以便感知数据变化。Hive 元数据从 Hive Metastore 或 AWS Glue 读取。Iceberg catalog（包括 Iceberg REST catalog）从其配置的 catalog 服务读取，服务类型可以是 Hive Metastore、AWS Glue、REST、Hadoop 或 JDBC。刷新会重新加载表元数据，并在表元数据发生变化时刷新已缓存的 manifest 和数据文件。`true` 表示启用，`false` 表示禁用。
+- 描述: 是否启用外部 catalog 缓存元数据的周期性后台刷新。启用后，每个 FE 上的后台任务会周期性刷新 Hive、Iceberg、Delta Lake、Paimon 和 MaxCompute catalog 的缓存元数据，以便感知数据变化。实际刷新行为取决于各 catalog 的缓存配置。Hive 元数据从 Hive Metastore 或 AWS Glue 读取。Iceberg catalog（包括 Iceberg REST catalog）从其配置的 catalog 服务读取，服务类型可以是 Hive Metastore、AWS Glue、REST、Hadoop 或 JDBC。刷新会重新加载表元数据，并在表元数据发生变化时刷新已缓存的 manifest 和数据文件。`true` 表示启用，`false` 表示禁用。
 - 引入版本: v2.5.5
 
 ### `refresh_other_fe_dispatch_executor_thread_num`

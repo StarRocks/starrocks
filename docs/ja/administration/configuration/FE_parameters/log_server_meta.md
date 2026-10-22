@@ -1306,7 +1306,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：テーブルが最後にアクセスされてから、StarRocks がそのテーブルのキャッシュ済みメタデータの更新を続ける時間。StarRocks はテーブルごとに判断します。アクセスされた Hive、Iceberg、Delta Lake、または Paimon のテーブルがこの時間を超えてアクセスされない場合、StarRocks はそのキャッシュ済みメタデータの更新を停止します。アクセスされていないテーブルは更新されません。同じバックグラウンド更新に参加する MaxCompute カタログは、この打ち切り時間を使いません。
+- 説明：テーブルが最後にアクセスされてから、StarRocks がそのテーブルのキャッシュ済みメタデータの更新を続ける時間。この打ち切りはテーブルごとに適用されますが、最終アクセス時刻が記録されている場合に限ります。最終アクセス時刻が記録されている Hive、Iceberg、Delta Lake、Paimon のテーブルでは、最終アクセスからの経過時間がこの値を超えると、StarRocks はキャッシュ済みメタデータの更新を停止します。アクセスされていないテーブルは更新されません。同じバックグラウンド更新に参加する MaxCompute カタログは、この打ち切り時間を使いません。
 - 導入時期：v2.5.5
 
 ### `bdbje_cleaner_threads`
@@ -1495,7 +1495,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：外部カタログのキャッシュ済みメタデータを定期的にバックグラウンド更新するかどうか。有効にすると、各 FE のバックグラウンドタスクが Hive、Iceberg、Delta Lake、Paimon、MaxCompute カタログのキャッシュ済みメタデータを更新し、データ変更を検知します。Hive のメタデータは Hive Metastore または AWS Glue から読み取ります。Iceberg REST カタログを含む Iceberg カタログは、設定されたカタログサービス（Hive Metastore、AWS Glue、REST、Hadoop、または JDBC）から読み取ります。更新ではテーブルメタデータを再取得し、そのメタデータが変わった場合はキャッシュ済みのマニフェストとデータファイルも更新します。`true` は更新を有効にし、`false` は無効にします。
+- 説明：外部カタログのキャッシュ済みメタデータを定期的にバックグラウンド更新するかどうか。有効にすると、各 FE のバックグラウンドタスクが Hive、Iceberg、Delta Lake、Paimon、MaxCompute カタログのキャッシュ済みメタデータを定期的に更新し、データ変更を検知します。実際の更新動作は各カタログのキャッシュ設定に依存します。Hive のメタデータは Hive Metastore または AWS Glue から読み取ります。Iceberg REST カタログを含む Iceberg カタログは、設定されたカタログサービス（Hive Metastore、AWS Glue、REST、Hadoop、または JDBC）から読み取ります。更新ではテーブルメタデータを再取得し、そのメタデータが変わった場合はキャッシュ済みのマニフェストとデータファイルも更新します。`true` は更新を有効にし、`false` は無効にします。
 - 導入時期：v2.5.5
 
 ### `refresh_other_fe_dispatch_executor_thread_num`
