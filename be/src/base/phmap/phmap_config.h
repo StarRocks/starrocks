@@ -627,6 +627,21 @@
 #endif
 
 // ----------------------------------------------------------------------
+// Figure out ARM NEON support
+// ----------------------------------------------------------------------
+#ifndef PHMAP_HAVE_ARM_NEON
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(PHMAP_IS_LITTLE_ENDIAN)
+#define PHMAP_HAVE_ARM_NEON 1
+#else
+#define PHMAP_HAVE_ARM_NEON 0
+#endif
+#endif
+
+#if PHMAP_HAVE_ARM_NEON
+#include <arm_neon.h>
+#endif
+
+// ----------------------------------------------------------------------
 // constexpr if
 // ----------------------------------------------------------------------
 #if PHMAP_HAVE_CC17
