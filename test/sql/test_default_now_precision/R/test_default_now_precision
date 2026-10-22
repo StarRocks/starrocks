@@ -1,0 +1,88 @@
+-- name: test_add_column_default_now_precision
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column c DATETIME DEFAULT now(3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where c is NULL;
+-- result:
+0
+-- !result
+select count(distinct c) from t where id in (1, 2);
+-- result:
+1
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'c';
+-- result:
+CURRENT_TIMESTAMP(3)
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_add_column_default_current_timestamp_precision_not_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column c DATETIME NOT NULL DEFAULT current_timestamp(6);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where c is NULL;
+-- result:
+0
+-- !result
+select count(distinct c) from t where id in (1, 2);
+-- result:
+1
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'c';
+-- result:
+CURRENT_TIMESTAMP(6)
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

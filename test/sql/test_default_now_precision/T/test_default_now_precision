@@ -1,0 +1,61 @@
+-- name: test_add_column_default_now_precision
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+-- two rows written before column c exists: they physically lack c and are backfilled on read
+insert into t values (1), (2);
+
+-- now(3) is a precision-bearing time function: stable within a statement (NOT volatile like uuid),
+-- so ADD COLUMN must accept it (it was previously rejected as "unsupported default expr") and freeze
+-- a single ALTER-time value for the pre-existing rows.
+alter table t add column c DATETIME DEFAULT now(3);
+function: wait_alter_table_finish()
+
+-- row written after the column was added gets the current statement's now(3)
+insert into t (id) values (3);
+
+-- pre-existing rows are backfilled non-null
+select count(*) from t where c is NULL;
+
+-- id=1 and id=2 both predate c, so they share the SAME frozen ALTER-time value (one distinct)
+select count(distinct c) from t where id in (1, 2);
+
+-- the metadata default reports the generator with its precision, not the frozen literal
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'c';
+
+drop database db_${uuid0};
+
+
+-- name: test_add_column_default_current_timestamp_precision_not_null
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+
+insert into t values (1), (2);
+
+-- same stable time function with microsecond precision, NOT NULL: still accepted and backfilled
+alter table t add column c DATETIME NOT NULL DEFAULT current_timestamp(6);
+function: wait_alter_table_finish()
+
+insert into t (id) values (3);
+
+select count(*) from t where c is NULL;
+select count(distinct c) from t where id in (1, 2);
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'c';
+
+drop database db_${uuid0};
