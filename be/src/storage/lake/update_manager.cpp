@@ -64,7 +64,6 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
-    const int64_t update_mem_limit = _update_mem_tracker->limit();
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
@@ -74,9 +73,9 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    _index_cache.set_capacity(update_mem_limit);
-
     _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
+
+    refresh_mem_limits();
 }
 
 UpdateManager::~UpdateManager() {
@@ -2348,6 +2347,12 @@ void UpdateManager::refresh_preload_mem_limit() {
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker->set_limit(preload_mem_limit);
     _compaction_state_mem_tracker->set_limit(preload_mem_limit);
+}
+
+void UpdateManager::refresh_mem_limits() {
+    refresh_preload_mem_limit();
+    _index_cache.set_capacity(_update_mem_tracker->limit());
+    refresh_block_cache_mem_limit();
 }
 
 void UpdateManager::_print_memory_stats() {

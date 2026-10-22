@@ -128,6 +128,34 @@ TEST_F(UpdateConfigActionTest, test_update_lake_pk_index_block_cache_limit_perce
     ASSERT_EQ(update_mem_limit * 5 / 100, update_mgr->block_cache()->cache()->get_capacity());
 }
 
+TEST_F(UpdateConfigActionTest, test_update_memory_limit_percent) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* global_env = GlobalEnv::GetInstance();
+    const int64_t process_mem_limit = global_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_percent = std::to_string(config::update_memory_limit_percent);
+    DeferOp defer([&]() { CHECK_OK(action.update_config("update_memory_limit_percent", saved_percent)); });
+
+    auto* update_mgr = ExecEnv::GetInstance()->lake_update_manager();
+    ASSERT_NE(nullptr, update_mgr);
+    ASSERT_EQ(global_env->update_mem_tracker(), update_mgr->mem_tracker());
+    const int64_t preload_mem_percent = config::lake_pk_preload_memory_limit_percent;
+
+    ASSERT_OK(action.update_config("update_memory_limit_percent", "30"));
+    ASSERT_EQ(process_mem_limit * 30 / 100, global_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100, update_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
+              update_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(action.update_config("update_memory_limit_percent", "50"));
+    ASSERT_EQ(process_mem_limit * 50 / 100, global_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100, update_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
+              update_mgr->compaction_state_mem_tracker()->limit());
+}
+
 TEST_F(UpdateConfigActionTest, test_update_load_sink_close_thread_pool_num_max) {
     UpdateConfigAction action(ExecEnv::GetInstance());
     auto* thread_pool = ExecEnv::GetInstance()->load_sink_close_thread_pool();

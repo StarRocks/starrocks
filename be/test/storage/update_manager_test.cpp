@@ -32,6 +32,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/assert.h"
+#include "testutil/scoped_updater.h"
 #include "util/failpoint/fail_point.h"
 
 using namespace std;
@@ -274,16 +275,28 @@ TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
     ASSERT_EQ(0, _root_mem_tracker->consumption());
 }
 
-TEST_F(UpdateManagerTest, test_update_primary_index_memory_limit) {
+TEST_F(UpdateManagerTest, test_refresh_mem_limits) {
     const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     ASSERT_GT(process_mem_limit, 0);
-    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(30).ok());
-    ASSERT_EQ(process_mem_limit * 30 / 100, _update_manager->index_cache().capacity());
+    SCOPED_UPDATE(int32_t, config::update_memory_limit_percent, 60);
+    MemTracker update_tracker(1000, "update");
+    UpdateManager manager(&update_tracker);
+    ASSERT_EQ(process_mem_limit * 60 / 100, manager.index_cache().capacity());
+
+    config::update_memory_limit_percent = 30;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(process_mem_limit * 30 / 100, manager.index_cache().capacity());
+
     // out-of-range values are clamped to [0, 100]
-    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(200).ok());
-    ASSERT_EQ(process_mem_limit, _update_manager->index_cache().capacity());
-    ASSERT_TRUE(_update_manager->update_primary_index_memory_limit(-1).ok());
-    ASSERT_EQ(0, _update_manager->index_cache().capacity());
+    config::update_memory_limit_percent = 200;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(process_mem_limit, manager.index_cache().capacity());
+    config::update_memory_limit_percent = -1;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(0, manager.index_cache().capacity());
+
+    // the shared-nothing update state tracker has no limit
+    ASSERT_EQ(-1, manager.update_state_mem_tracker()->limit());
 }
 
 } // namespace starrocks
