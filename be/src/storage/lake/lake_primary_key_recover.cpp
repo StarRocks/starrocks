@@ -29,10 +29,25 @@
 namespace starrocks::lake {
 
 Status LakePrimaryKeyRecover::pre_cleanup() {
-    // 1. reset delvec & sst in metadata and clean delvec in builder
-    // TODO reclaim delvec files
+    // 1. reset delvec & sst in metadata and clean delvec in builder.
+    // Nothing refers to the dropped delvec files and sstables any more, hand them to vacuum.
+    for (auto& [version, file] : *_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
+        file.set_version(version);
+        _metadata->mutable_orphan_files()->Add(std::move(file));
+    }
+    for (const auto& sst : _metadata->sstable_meta().sstables()) {
+        FileMetaPB file_meta;
+        file_meta.set_name(sst.filename());
+        file_meta.set_size(sst.filesize());
+        file_meta.set_shared(sst.shared());
+        file_meta.set_version(sst.generation_version());
+        _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+    }
     _metadata->clear_delvec_meta();
     _metadata->clear_sstable_meta();
+    // The builder may still hold delvecs appended before recover, and must not let a segment that the
+    // rebuild finds no deletes for fall back to the base version's delvec.
+    _builder->reset_delvecs_for_recover();
     // 2. reset primary index
     RETURN_ERROR_IF_FALSE(_tablet->update_mgr()->try_remove_primary_index_cache(_tablet->id()));
     DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
@@ -155,11 +170,24 @@ Status LakePrimaryKeyRecover::rowset_iterator(
 
 // generate delvec and save
 Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) {
+    // num_dels must follow the rebuilt delvecs, not the ones recover discarded.
+    std::unordered_map<uint32_t, RowsetMetadataPB*> rssid_to_rowset;
+    for (int i = 0; i < _metadata->rowsets_size(); i++) {
+        auto* rowset = _metadata->mutable_rowsets(i);
+        rowset->set_num_dels(0);
+        for (int j = 0; j < rowset->segment_metas_size(); j++) {
+            rssid_to_rowset[get_rssid(*rowset, j)] = rowset;
+        }
+    }
     for (auto& new_delete : new_deletes) {
         auto delvec_ptr = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
         delvec_ptr->init(_metadata->version(), del_ids.data(), del_ids.size());
         _builder->append_delvec(delvec_ptr, new_delete.first);
+        auto it = rssid_to_rowset.find(new_delete.first);
+        if (it != rssid_to_rowset.end()) {
+            it->second->set_num_dels(it->second->num_dels() + delvec_ptr->cardinality());
+        }
     }
     return Status::OK();
 }
