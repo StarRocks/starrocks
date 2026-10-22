@@ -502,8 +502,8 @@ TEST_F(LakePrimaryKeyRecoverTest, upsert_and_delete_mixed_in_one_load) {
 // A delete load followed by a compaction that takes the delete rowset but not the rowset holding the deleted
 // keys. The parameter decides whether the index has flushed those deletes into sstables before the compaction:
 // if not, the compaction carries the del file over to its output rowset; if so, it drops it, since the
-// sstables already have it. Recover rebuilds from rowsets alone and does not replay either kind of del file, so
-// the deleted keys may come back. That is accepted: recover must not lose a live row or change its value, but a
+// sstables already have it. Recover rebuilds from rowsets alone and does not replay either kind of del file (it
+// drops the carried-over one, so the index rebuild does not replay it either), so the deleted keys may come back. That is accepted: recover must not lose a live row or change its value, but a
 // deleted row may reappear, with the value it had when it was deleted.
 class LakePrimaryKeyRecoverCompactionTest : public LakePrimaryKeyRecoverTest, public testing::WithParamInterface<bool> {
 public:
@@ -512,10 +512,6 @@ public:
 
 TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_rows) {
     const bool flush_index = GetParam();
-    if (!flush_index) {
-        GTEST_SKIP() << "recover skips the del file the compaction output inherited, but the index rebuild replays "
-                        "it, so the index and the delete vectors disagree";
-    }
     Rows expected;
     // The last value each key was ever upserted with, deleted keys included: what a resurrected row may show.
     Rows last_upserted;
@@ -563,11 +559,23 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_ro
     ASSERT_EQ(first_rowset_id, metadata->rowsets(0).id());
     // The del file goes with the compaction output only while the sstables do not cover it yet.
     ASSERT_EQ(flush_index ? 0 : 1, metadata->rowsets(1).del_files_size());
+    const std::string inherited_del = flush_index ? "" : metadata->rowsets(1).del_files(0).name();
 
     const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
     publish(write_rows(later), true);
     apply(&expected, later);
     Rows recovered = read(_version);
+    if (!flush_index) {
+        // Recover dropped the carried-over del file and handed it to vacuum.
+        ASSIGN_OR_ABORT(auto recovered_meta, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+        for (const auto& rowset : recovered_meta->rowsets()) {
+            for (const auto& del : rowset.del_files()) {
+                EXPECT_NE(inherited_del, del.name());
+            }
+        }
+        EXPECT_TRUE(std::any_of(recovered_meta->orphan_files().begin(), recovered_meta->orphan_files().end(),
+                                [&](const FileMetaPB& f) { return f.name() == inherited_del; }));
+    }
     for (const auto& [key, value] : expected) {
         auto it = recovered.find(key);
         ASSERT_TRUE(it != recovered.end()) << "recover lost live key " << key;
