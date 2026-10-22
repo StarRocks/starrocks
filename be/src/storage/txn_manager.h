@@ -102,6 +102,11 @@ public:
     Status commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                       const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery, bool is_shadow);
 
+    // Record bytes only while this tablet/transaction is still being written. The transaction
+    // lock serializes this operation with commit, rollback and clear-transaction cleanup.
+    void add_in_writing_data_size(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                  TTransactionId transaction_id, int64_t delta);
+
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                        int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
                        bool is_double_write = false);

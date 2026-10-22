@@ -426,6 +426,15 @@ size_t TabletUpdates::data_size() const {
     return total_size + _extra_file_size_cache.pindex_size + _extra_file_size_cache.col_size;
 }
 
+size_t TabletUpdates::pending_data_size() const {
+    std::lock_guard rl(_lock);
+    size_t total_size = 0;
+    for (const auto& [version, rowset] : _pending_commits) {
+        total_size += rowset->data_disk_size();
+    }
+    return total_size;
+}
+
 size_t TabletUpdates::num_rows() const {
     string err_rowsets;
     int64_t total_row = 0;
