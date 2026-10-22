@@ -349,23 +349,22 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
-    // MATCH an empty string should always return empty set.
-    if (padded_value.empty()) {
-        *row_bitmap -= *row_bitmap;
-        return Status::OK();
-    }
-    std::string str_v = padded_value.to_string();
-
-    auto query_type_opt = choose_inverted_index_query_type(valid_like, valid_match, expr->op(), str_v);
-    if (!query_type_opt) {
-        // A LIKE pattern containing '_' is not pushed down (see
-        // choose_inverted_index_query_type); fall back to the canonical LIKE engine.
-        return Status::NotSupported("LIKE pattern is not pushed down to the inverted index");
-    }
-    InvertedIndexQueryType query_type = *query_type_opt;
-
     roaring::Roaring roaring;
-    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    // An empty MATCH literal has no postings. Apply negation and NULL handling
+    // below even in that case, so NOT MATCH '' keeps all non-null rows.
+    if (!padded_value.empty()) {
+        std::string str_v = padded_value.to_string();
+
+        auto query_type_opt = choose_inverted_index_query_type(valid_like, valid_match, expr->op(), str_v);
+        if (!query_type_opt) {
+            // A LIKE pattern containing '_' is not pushed down (see
+            // choose_inverted_index_query_type); fall back to the canonical LIKE engine.
+            return Status::NotSupported("LIKE pattern is not pushed down to the inverted index");
+        }
+        InvertedIndexQueryType query_type = *query_type_opt;
+
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    }
     if (with_not) {
         *row_bitmap -= roaring;
         roaring::Roaring null_roaring;

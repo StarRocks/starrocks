@@ -268,6 +268,8 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
 
+-- Empty MATCH matches no rows; its negation keeps only non-null rows.
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "";
 DROP TABLE t_gin_index_multiple_predicate_none;
 
 -- name: test_gin_index_multiple_predicate_english @native
