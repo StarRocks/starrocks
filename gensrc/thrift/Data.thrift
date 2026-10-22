@@ -97,6 +97,7 @@ struct TGlobalDict {
     2: optional list<binary> strings
     3: optional list<i32> ids
     4: optional i64 version
+    5: optional i64 content_identity
 }
 
 // Extension point for TStatisticData. DO NOT MODIFY: do not add fields here,
