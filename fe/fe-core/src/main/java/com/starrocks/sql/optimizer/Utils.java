@@ -106,8 +106,9 @@ public class Utils {
 
     // The bounds of the DATETIME domain, in epoch seconds, used to reject a statistic bound that
     // cannot be converted back into a datetime.
-    private static final double MIN_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MIN_DATETIME);
-    private static final double MAX_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATETIME);
+    public static final double MIN_DATETIME_EPOCH_SECOND = (double) getLongFromDateTime(ConstantOperator.MIN_DATETIME); // NOSONAR
+    public static final double MAX_DATETIME_EPOCH_SECOND = (double) getLongFromDateTime(ConstantOperator.MAX_DATETIME); // NOSONAR
+    public static final double MAX_DATE_EPOCH_SECOND = (double) getLongFromDateTime(ConstantOperator.MAX_DATE); // NOSONAR
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
