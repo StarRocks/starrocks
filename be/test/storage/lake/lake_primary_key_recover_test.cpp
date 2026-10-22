@@ -595,6 +595,60 @@ TEST_P(LakePrimaryKeyRecoverCompactionTest, delete_then_compaction_keeps_live_ro
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyRecoverCompactionTest, LakePrimaryKeyRecoverCompactionTest,
                          testing::Values(false, true));
 
+// A compaction of a delete-only rowset has no output segments; its output rowset exists only to carry the del
+// file over. Recover drops that del file, which leaves the rowset empty, so recover drops the rowset too.
+TEST_F(LakePrimaryKeyRecoverTest, recover_drops_rowset_emptied_of_inherited_del_files) {
+    Rows expected;
+    Rows last_upserted;
+    const std::vector<std::vector<std::vector<Op>>> loads = {{upserts(0, 16, 0, 0)}, {deletes(0, 8)}};
+    for (const auto& load : loads) {
+        publish(write_rows(load), false);
+        apply(&expected, load);
+    }
+    for (const auto& op : upserts(0, 16, 0, 0)) {
+        last_upserted[op.key] = {op.c1, op.c2};
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_EQ(2, rowsets.size());
+    const int64_t compaction_txn_id = next_id();
+    auto context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id(), _version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(context.get(), {rowsets[1]}));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    publish(compaction_txn_id, false);
+    ASSERT_EQ(expected, read(_version));
+    ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(0, metadata->rowsets(1).segment_metas_size());
+    ASSERT_EQ(1, metadata->rowsets(1).del_files_size());
+    const uint32_t carrier_id = metadata->rowsets(1).id();
+
+    const std::vector<std::vector<Op>> later = {upserts(300, 302, 0, 0)};
+    publish(write_rows(later), true);
+    apply(&expected, later);
+    for (const auto& op : later[0]) {
+        last_upserted[op.key] = {op.c1, op.c2};
+    }
+    ASSIGN_OR_ABORT(auto recovered_meta, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
+    for (const auto& rowset : recovered_meta->rowsets()) {
+        EXPECT_NE(carrier_id, rowset.id());
+        EXPECT_TRUE(rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0)
+                << "empty rowset " << rowset.id();
+    }
+    Rows recovered = read(_version);
+    for (const auto& [key, value] : expected) {
+        auto it = recovered.find(key);
+        ASSERT_TRUE(it != recovered.end()) << "recover lost live key " << key;
+        EXPECT_EQ(value, it->second) << "recover changed live key " << key;
+    }
+    for (const auto& [key, value] : recovered) {
+        ASSERT_TRUE(last_upserted.contains(key)) << "recover produced key " << key << " that was never written";
+        EXPECT_EQ(last_upserted.at(key), value) << "key " << key << " has a value it never had";
+    }
+    check_index_agrees(&recovered);
+}
+
 // A conditional upsert keeps the stored row when the incoming one does not win the condition; the losing new
 // row stays in its segment, masked only by that segment's delete vector. Recover must not bring it back.
 // Disabled: recover replays every row as a plain upsert, so the rows that lost the condition win.

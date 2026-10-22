@@ -62,6 +62,16 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
         }
         dels->erase(inherited, dels->end());
     }
+    // A compaction without output segments keeps an output rowset only to carry those del files; with them gone
+    // it holds nothing, and an empty ordinary rowset is not a valid shape, so drop it.
+    auto* rowsets = _metadata->mutable_rowsets();
+    auto emptied = std::stable_partition(rowsets->begin(), rowsets->end(), [](const RowsetMetadataPB& rowset) {
+        return rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0;
+    });
+    for (auto it = emptied; it != rowsets->end(); ++it) {
+        _metadata->mutable_rowset_to_schema()->erase(it->id());
+    }
+    rowsets->erase(emptied, rowsets->end());
     // The builder may still hold delvecs appended before recover, and must not let a segment that the
     // rebuild finds no deletes for fall back to the base version's delvec.
     _builder->reset_delvecs_for_recover();
