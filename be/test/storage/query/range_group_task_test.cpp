@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <limits>
 
 #include "gen_cpp/PlanNodes_types.h"
@@ -279,6 +280,65 @@ TEST(RangeGroupTaskTest, RejectMalformedProtoClipType) {
         if (change == 2) value->mutable_type()->mutable_types(0)->mutable_scalar_type()->set_type(TPrimitiveType::INT);
         EXPECT_FALSE(validate_range_group_schema(task, *schema).ok()) << change;
     }
+}
+
+TEST(RangeGroupTaskTest, WireLiteralByteLimit) {
+    constexpr size_t limit = 16UL * 1024 * 1024;
+    for (bool lower : {false, true}) {
+        auto wire = finite_task();
+        auto& value = (lower ? wire.key_range.lower_bound : wire.key_range.upper_bound).values[2];
+        value.__set_value(std::string(limit - 1, '0') + (lower ? "3" : "6"));
+        EXPECT_TRUE(decode_range_group_task(wire).ok());
+        value.value.insert(0, 1, '0');
+        EXPECT_FALSE(decode_range_group_task(wire).ok());
+    }
+}
+
+TEST(RangeGroupTaskTest, WireTotalByteLimit) {
+    constexpr size_t value_limit = 16UL * 1024 * 1024;
+    const std::array<size_t, 6> sizes{value_limit, value_limit, value_limit, value_limit - 2, 1, 1};
+    auto wire = finite_task();
+    for (int i = 0; i < 6; ++i) {
+        auto& value = (i < 3 ? wire.key_range.lower_bound : wire.key_range.upper_bound).values[i % 3];
+        value.__set_value(std::string(sizes[i], '0'));
+        if (i == 3) value.value.back() = '1';
+    }
+    // The six individually bounded values total exactly 64 MiB and describe [0, 1).
+    EXPECT_TRUE(decode_range_group_task(wire).ok());
+    wire.key_range.upper_bound.values[2].value.push_back('0');
+    EXPECT_FALSE(decode_range_group_task(wire).ok());
+}
+
+TEST(RangeGroupTaskTest, ProtoLiteralByteLimit) {
+    constexpr size_t limit = 16UL * 1024 * 1024;
+    ASSIGN_OR_ABORT(auto decoded, decode_range_group_task(finite_task()));
+    auto schema = TabletSchema::create(schema_pb());
+    for (bool lower : {false, true}) {
+        RangeGroupTask task = *decoded;
+        auto* value = (lower ? task.key_range.mutable_lower_bound() : task.key_range.mutable_upper_bound())
+                              ->mutable_values(2);
+        value->set_value(std::string(limit - 1, '0') + (lower ? "3" : "6"));
+        EXPECT_TRUE(validate_range_group_schema(task, *schema).ok());
+        value->mutable_value()->insert(0, 1, '0');
+        EXPECT_FALSE(validate_range_group_schema(task, *schema).ok());
+    }
+}
+
+TEST(RangeGroupTaskTest, ProtoTotalByteLimit) {
+    constexpr size_t value_limit = 16UL * 1024 * 1024;
+    const std::array<size_t, 6> sizes{value_limit, value_limit, value_limit, value_limit - 2, 1, 1};
+    ASSIGN_OR_ABORT(auto decoded, decode_range_group_task(finite_task()));
+    auto schema = TabletSchema::create(schema_pb());
+    RangeGroupTask task = *decoded;
+    for (int i = 0; i < 6; ++i) {
+        auto* value = (i < 3 ? task.key_range.mutable_lower_bound() : task.key_range.mutable_upper_bound())
+                              ->mutable_values(i % 3);
+        value->set_value(std::string(sizes[i], '0'));
+        if (i == 3) value->mutable_value()->back() = '1';
+    }
+    EXPECT_TRUE(validate_range_group_schema(task, *schema).ok());
+    task.key_range.mutable_upper_bound()->mutable_values(2)->mutable_value()->push_back('0');
+    EXPECT_FALSE(validate_range_group_schema(task, *schema).ok());
 }
 
 } // namespace starrocks

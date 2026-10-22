@@ -22,6 +22,20 @@
 namespace starrocks {
 namespace {
 
+constexpr size_t kMaxTaskValueBytes = 16UL * 1024 * 1024;
+constexpr size_t kMaxTaskTotalBytes = 64UL * 1024 * 1024;
+
+Status validate_value_size(size_t bytes, size_t* total_bytes) {
+    if (bytes > kMaxTaskValueBytes) {
+        return Status::Corruption("grouped range task value bytes exceed cap 16777216");
+    }
+    *total_bytes += bytes;
+    if (*total_bytes > kMaxTaskTotalBytes) {
+        return Status::Corruption("grouped range task total value bytes exceed cap 67108864");
+    }
+    return Status::OK();
+}
+
 Status validate_identity(const RangeGroupTask& task) {
     if (task.group_id < 0) {
         return Status::InvalidArgument("grouped range task requires a nonnegative group ID");
@@ -34,7 +48,8 @@ Status validate_identity(const RangeGroupTask& task) {
 }
 
 Status validate_clip(const TabletRangePB& range) {
-    auto check_bound = [](const TuplePB& bound) -> Status {
+    size_t total_bytes = 0;
+    auto check_bound = [&total_bytes](const TuplePB& bound) -> Status {
         if (bound.values_size() != 3) {
             return Status::InvalidArgument("grouped range task requires three values per finite bound");
         }
@@ -45,6 +60,7 @@ Status validate_clip(const TabletRangePB& range) {
                 value.type().types(0).scalar_type().type() != TPrimitiveType::BIGINT) {
                 return Status::InvalidArgument("grouped range task requires NORMAL BIGINT finite values");
             }
+            RETURN_IF_ERROR(validate_value_size(value.value().size(), &total_bytes));
             // The legacy BIGINT storage parser uses strtol permissively. Query task
             // bounds must instead reject overflow and partially parsed literals.
             int64_t parsed;
@@ -89,7 +105,8 @@ StatusOr<RangeGroupTaskPtr> decode_range_group_task(const TGroupedRangeTask& wir
     RETURN_IF_ERROR(validate_identity(*task));
     // Guard the exact supported thrift type shape before the general decoder, which
     // assumes a well-formed type tree. Optional presence is never inferred from defaults.
-    auto check_bound = [](const TTuple& bound) -> Status {
+    size_t total_bytes = 0;
+    auto check_bound = [&total_bytes](const TTuple& bound) -> Status {
         if (bound.values.size() != 3) {
             return Status::InvalidArgument("grouped range task requires three values per finite bound");
         }
@@ -103,6 +120,7 @@ StatusOr<RangeGroupTaskPtr> decode_range_group_task(const TGroupedRangeTask& wir
                 node.scalar_type.type != TPrimitiveType::BIGINT) {
                 return Status::InvalidArgument("grouped range task supports only BIGINT finite values");
             }
+            RETURN_IF_ERROR(validate_value_size(v.value.size(), &total_bytes));
         }
         return Status::OK();
     };
