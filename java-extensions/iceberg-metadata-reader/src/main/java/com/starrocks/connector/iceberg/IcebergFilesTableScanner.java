@@ -20,6 +20,7 @@ import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.io.CloseableIterator;
@@ -44,9 +45,10 @@ import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
     private final String manifestBean;
     private final boolean loadColumnStats;
-    private ManifestFile manifestFile;
+    protected ManifestFile manifestFile;
     private CloseableIterator<? extends ContentFile<?>> reader;
     private Map<Integer, Type> idToTypeMapping;
+    protected IcebergPartitionValueReader partitionValueReader;
 
     public IcebergFilesTableScanner(int fetchSize, Map<String, String> params) {
         super(fetchSize, params);
@@ -58,6 +60,7 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
     public void doOpen() {
         this.manifestFile = deserializeFromBase64(manifestBean);
         this.idToTypeMapping = getIcebergIdToTypeMapping(table.schema());
+        this.partitionValueReader = new IcebergPartitionValueReader(table);
     }
 
     @Override
@@ -107,7 +110,15 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
         }
     }
 
+<<<<<<< HEAD
     private Object get(String columnName, ContentFile<?> file) {
+=======
+    private static List<String> withColumns(List<String> columns, List<String> extra) {
+        return ImmutableList.<String>builder().addAll(columns).addAll(extra).build();
+    }
+
+    protected Object get(String columnName, ContentFile<?> file) {
+>>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
         switch (columnName) {
             case "content":
                 return file.content().id();
@@ -117,6 +128,8 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
                 return file.format().toString();
             case "spec_id":
                 return file.specId();
+            case "partition":
+                return partitionValueReader.read((PartitionData) file.partition());
             case "record_count":
                 return file.recordCount();
             case "file_size_in_bytes":

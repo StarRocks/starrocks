@@ -23,26 +23,38 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnPosition;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
 import static com.starrocks.connector.iceberg.IcebergTableOperation.ROLLBACK_TO_SNAPSHOT;
@@ -246,5 +258,53 @@ public class IcebergTableOperationTest extends TableTestBase {
                 connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
+    }
+
+    @Test
+    public void testAlterTableAddAndDropNestedField() throws Exception {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "s", Types.StructType.of(
+                        Types.NestedField.optional(3, "a", Types.IntegerType.get()),
+                        Types.NestedField.optional(4, "arr", Types.ListType.ofOptional(5, Types.StructType.of(
+                                Types.NestedField.optional(6, "x", Types.IntegerType.get())))))));
+        org.apache.iceberg.Table table = create(schema, PartitionSpec.unpartitioned(), "nested", 2);
+
+        List<AlterClause> clauses = List.of(
+                new AddFieldClause("s", new StructFieldDesc("b", List.of(),
+                        new TypeDef(IntegerType.BIGINT), ColumnPosition.FIRST), null),
+                new AddFieldClause("S", new StructFieldDesc("y", List.of("ARR", "[*]"),
+                        new TypeDef(VarcharType.VARCHAR), new ColumnPosition("X", NodePosition.ZERO)), null),
+                new DropFieldClause("s", "A", List.of(), null));
+        new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", "nested")), null, NodePosition.ZERO),
+                clauses), table, null, connectContext, HDFS_ENVIRONMENT).execute();
+
+        table.refresh();
+        Types.StructType s = table.schema().findType("s").asStructType();
+        Assertions.assertEquals(List.of("b", "arr"),
+                s.fields().stream().map(Types.NestedField::name).collect(Collectors.toList()));
+        Assertions.assertEquals(Types.LongType.get(), s.field("b").type());
+        Types.StructType element = table.schema().findType("s.arr.element").asStructType();
+        Assertions.assertEquals(List.of("x", "y"),
+                element.fields().stream().map(Types.NestedField::name).collect(Collectors.toList()));
+        Assertions.assertEquals(Types.StringType.get(), element.field("y").type());
+
+        // the only field of a struct cannot be dropped
+        AlterTableStmt dropOnly = new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", "nested")), null, NodePosition.ZERO),
+                List.of(new DropFieldClause("s", "x", List.of("arr", "[*]"), null),
+                        new DropFieldClause("s", "y", List.of("arr", "[*]"), null)));
+        Assertions.assertThrows(DdlException.class, () -> new IcebergAlterTableExecutor(dropOnly, table, null,
+                connectContext, HDFS_ENVIRONMENT).execute());
+        table.refresh();
+        Assertions.assertEquals(2, table.schema().findType("s.arr.element").asStructType().fields().size());
+
+        // the field to drop must exist
+        AlterTableStmt dropMissing = new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", "nested")), null, NodePosition.ZERO),
+                List.of(new DropFieldClause("s", "a", List.of(), null)));
+        Assertions.assertThrows(DdlException.class, () -> new IcebergAlterTableExecutor(dropMissing, table, null,
+                connectContext, HDFS_ENVIRONMENT).execute());
     }
 }

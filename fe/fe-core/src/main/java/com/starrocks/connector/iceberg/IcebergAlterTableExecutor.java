@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.Table;
@@ -64,6 +65,7 @@ import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,7 +82,6 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(IcebergAlterTableExecutor.class);
@@ -238,14 +239,74 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
     @Override
     public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            Types.NestedField parent = findNestedStruct(transaction.table().schema(), clause.getColName(),
+                    clause.getNestedParentFieldNames());
+            String parentName = transaction.table().schema().findColumnName(parent.fieldId());
+            String fieldName = clause.getFieldName();
+            updateSchema.addColumn(parentName, fieldName, toIcebergColumnType(clause.getType()));
+
+            ColumnPosition pos = clause.getFieldPos();
+            if (pos != null) {
+                String fullName = parentName + "." + fieldName;
+                if (pos.isFirst()) {
+                    updateSchema.moveFirst(fullName);
+                } else {
+                    updateSchema.moveAfter(fullName, parentName + "." + findChild(parent, pos.getLastCol()).name());
+                }
+            }
+            updateSchema.commit();
+        });
         return null;
     }
 
     @Override
     public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            Schema schema = transaction.table().schema();
+            Types.NestedField parent = findNestedStruct(schema, clause.getColName(), clause.getNestedParentFieldNames());
+            Types.NestedField field = findChild(parent, clause.getFieldName());
+            // StarRocks has no empty struct type, so the column would become unreadable
+            if (parent.type().asStructType().fields().size() == 1) {
+                throw new StarRocksConnectorException("Cannot drop %s, the only field of %s", field.name(),
+                        parent.name());
+            }
+            transaction.updateSchema().deleteColumn(schema.findColumnName(field.fieldId())).commit();
+        });
         return null;
+    }
+
+    // Walks a column down a nested field path: a name steps into a struct field and [*] into an array element.
+    // Returns the struct the path ends at.
+    private static Types.NestedField findNestedStruct(Schema schema, String columnName, List<String> path) {
+        Types.NestedField field = schema.caseInsensitiveFindField(columnName);
+        if (field == null) {
+            throw new StarRocksConnectorException("Column %s does not exist", columnName);
+        }
+        for (String name : path) {
+            org.apache.iceberg.types.Type type = field.type();
+            if (type.isListType()) {
+                field = type.asListType().fields().get(0);
+            } else if (type.isStructType()) {
+                field = findChild(field, name);
+            } else {
+                throw new StarRocksConnectorException("Field %s of column %s is not a struct or an array", name,
+                        columnName);
+            }
+        }
+        if (!field.type().isStructType()) {
+            throw new StarRocksConnectorException("Field %s is not a struct", field.name());
+        }
+        return field;
+    }
+
+    private static Types.NestedField findChild(Types.NestedField struct, String name) {
+        Types.NestedField child = struct.type().asStructType().caseInsensitiveField(name);
+        if (child == null) {
+            throw new StarRocksConnectorException("Field %s does not exist in %s", name, struct.name());
+        }
+        return child;
     }
 
     @Override

@@ -22,6 +22,11 @@ description: "Iceberg 元数据表提供 Iceberg 表的变更历史、快照和 
 | `manifests`            | 显示与表日志中快照相关联的 Manifest 概览。                   |
 | `partitions`           | 显示表中分区的详细信息。                                     |
 | `files`                | 显示当前快照中数据文件（Data File）和删除文件（Delete File）的详细信息。 |
+| `entries`              | 显示当前快照的 Manifest 条目，包括已删除文件的条目。         |
+| `all_data_files`       | 显示表的所有快照中的数据文件。                               |
+| `all_delete_files`     | 显示表的所有快照中的删除文件。                               |
+| `all_manifests`        | 显示表的所有快照中的 Manifest。                              |
+| `all_entries`          | 显示表的所有快照中的 Manifest 条目。                         |
 | `refs`                 | 显示关于 Iceberg 引用（Reference）的详细信息，包括分支和标签。 |
 | `properties`           | 显示表属性的键值对。                                         |
 
@@ -166,6 +171,7 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | file_path          | 数据文件的位置。                                             |
 | file_format        | 数据文件的格式。                                             |
 | spec_id            | 用于跟踪包含行的文件的 Spec ID。                             |
+| partition          | 文件的分区值，为一个 Struct，包含表的所有分区规范中的分区字段。文件所属分区规范中没有的字段为 `NULL`。如果表从未分区，则没有该字段。`partition` 是保留关键字，查询时需要用反引号括起来。 |
 | record_count       | 数据文件中包含的条目数。                                     |
 | file_size_in_bytes | 数据文件的大小。                                             |
 | column_sizes       | Iceberg 列 ID 与文件中对应大小的映射。                       |
@@ -178,6 +184,59 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | 代表该文件排序顺序的 ID。                                    |
 | equality_ids       | 用于在相等删除文件（Equality Delete File）中进行相等比较的字段 ID 集。 |
 | key_metadata       | 文件加密所使用的密钥元数据（如适用）。                       |
+
+## `entries` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$entries;
+```
+
+输出：
+
+| 字段                 | 描述                                                         |
+| :------------------- | :----------------------------------------------------------- |
+| status               | 条目的状态。有效值：`EXISTING(0)`、`ADDED(1)`、`DELETED(2)`。 |
+| snapshot_id          | 添加或删除该文件的快照 ID。                                  |
+| sequence_number      | 文件的数据序列号。                                           |
+| file_sequence_number | 添加该文件的快照的序列号。                                   |
+| data_file            | 文件信息，为一个 Struct，字段与 `files` 表相同。其中排序顺序 ID 字段名为 `sort_order_id`。 |
+
+## `all_data_files` 表和 `all_delete_files` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_data_files;
+SELECT * FROM [<catalog>.][<database>.]table$all_delete_files;
+```
+
+这两个表的字段与 `files` 表相同。它们列出表的所有快照的 Manifest 中的数据文件或删除文件，因此同一个文件可能出现多次。
+
+## `all_manifests` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_manifests;
+```
+
+该表包含 `manifests` 表的字段以及以下字段。一个 Manifest 在包含它的每个快照中各出现一次。
+
+| 字段                  | 描述                         |
+| :-------------------- | :--------------------------- |
+| reference_snapshot_id | 包含该 Manifest 的快照 ID。  |
+
+## `all_entries` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_entries;
+```
+
+该表的字段与 `entries` 表相同。它列出表的所有快照的 Manifest 中的条目。
 
 ## `refs` 表
 

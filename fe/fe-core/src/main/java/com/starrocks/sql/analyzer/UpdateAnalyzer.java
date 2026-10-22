@@ -88,11 +88,8 @@ public class UpdateAnalyzer {
         if (updateStmt.getWherePredicate() == null) {
             throw new SemanticException("Update must specify where clause to prevent full table update");
         }
-        if (updateStmt.getCommonTableExpressions() != null) {
-            throw new SemanticException("Update for Iceberg table do not support `with` clause");
-        }
         if (updateStmt.getFromRelations() != null) {
-            throw new SemanticException("Update for Iceberg table do not support `from` clause");
+            throw new SemanticException("Update for Iceberg table do not support `from` clause, use MERGE INTO instead");
         }
 
         // Build assignment map
@@ -172,6 +169,9 @@ public class UpdateAnalyzer {
                 null,
                 null
         );
+        if (updateStmt.getCommonTableExpressions() != null) {
+            updateStmt.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
 
         // Create query statement
         QueryStatement queryStatement = new QueryStatement(selectRelation);

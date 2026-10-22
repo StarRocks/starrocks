@@ -137,7 +137,10 @@ You can use the DELETE statement to delete data from Iceberg tables based on spe
 ### Syntax
 
 ```SQL
-DELETE FROM <table_name> WHERE <condition>
+[WITH <with_query> [, ...]]
+DELETE FROM <table_name>
+[USING <relation> [, ...]]
+WHERE <condition>
 ```
 
 ### Parameters
@@ -146,6 +149,10 @@ DELETE FROM <table_name> WHERE <condition>
   - Fully qualified name: `catalog_name.database_name.table_name`
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
+
+- `relation`: The tables or sub-queries that `condition` joins the target table with. A target row that matches several of their rows is deleted once.
+
+- `with_query`: Common table expressions that `condition` can reference.
 
 - `condition`: The condition to identify which rows to delete. It can include:
   - Comparison operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `<>`
@@ -232,6 +239,7 @@ UPDATE is implemented using the Iceberg V2 **Merge-On-Read** model: each UPDATE 
 ### Syntax
 
 ```SQL
+[WITH <with_query> [, ...]]
 UPDATE <table_name>
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
@@ -246,6 +254,8 @@ WHERE <condition>
 
 - `column_name = expression`: The target column and the new value. The expression may reference other columns in the same row and any supported scalar functions.
 
+- `with_query`: Common table expressions that `condition` can reference.
+
 - `condition`: The predicate that identifies which rows to update. The supported operators match those of `DELETE` (comparison, logical, `IN`/`NOT IN`, `BETWEEN`, `LIKE`, `IS NULL`/`IS NOT NULL`, and `IN`/`EXISTS` sub-queries).
 
 ### Usage notes
@@ -254,7 +264,7 @@ WHERE <condition>
 - A `WHERE` clause is **required** to prevent accidental full-table updates.
 - Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition columns.
 - The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
-- `WITH` (CTE) clauses and `FROM` clauses are not allowed in UPDATE on Iceberg tables.
+- `FROM` clauses are not allowed in UPDATE on Iceberg tables.
 - `DEFAULT` values are not supported, because Iceberg V2 has no column-default semantics (initial-default / write-default are V3 features).
 - Only Parquet-formatted Iceberg tables are supported, matching the existing Iceberg sink.
 - Concurrent UPDATEs use **serializable isolation**: at commit time the system re-checks the data files against the read snapshot, and a conflicting concurrent write causes the UPDATE to fail rather than silently overwriting.

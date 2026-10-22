@@ -23,7 +23,12 @@ public enum MetadataTableType {
     MANIFESTS("manifests"),
     FILES("files"),
     PARTITIONS("partitions"),
-    PROPERTIES("properties");
+    PROPERTIES("properties"),
+    ENTRIES("entries"),
+    ALL_DATA_FILES("all_data_files"),
+    ALL_DELETE_FILES("all_delete_files"),
+    ALL_MANIFESTS("all_manifests"),
+    ALL_ENTRIES("all_entries");
 
     public final String typeString;
 

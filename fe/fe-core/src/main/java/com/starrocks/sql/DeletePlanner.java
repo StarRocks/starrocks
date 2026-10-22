@@ -99,8 +99,11 @@ public class DeletePlanner {
         if (table instanceof IcebergTable icebergTable) {
             Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
-            // Extract predicate from logical plan
-            ScalarOperator predicate = extractPredicateFromOptExpression(logicalPlan.getRoot());
+            // Extract predicate from logical plan. The first filter is the predicate on the target only when the
+            // target is the only relation: with USING or WITH it can be a join condition or a filter inside a CTE.
+            boolean singleRelation = deleteStatement.getUsingRelations() == null
+                    && deleteStatement.getCommonTableExpressions() == null;
+            ScalarOperator predicate = singleRelation ? extractPredicateFromOptExpression(logicalPlan.getRoot()) : null;
             if (predicate != null && connectorMetadata.isPresent()) {
                 ConnectorMetadata metadata = connectorMetadata.get();
                 if (metadata.canDeleteUsingMetadata(icebergTable, predicate)) {

@@ -1014,11 +1014,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Add field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Add field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
@@ -1031,11 +1032,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Drop field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Drop field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;

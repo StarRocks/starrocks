@@ -59,6 +59,11 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
+>>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
@@ -159,9 +164,11 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
@@ -213,6 +220,11 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+<<<<<<< HEAD
+=======
+import java.util.function.Function;
+import java.util.stream.Collectors;
+>>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -3247,6 +3259,128 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(metaSpec instanceof IcebergMetaSpec);
         IcebergMetaSpec icebergMetaSpec = metaSpec.cast();
         Assertions.assertFalse(icebergMetaSpec.loadColumnStats());
+    }
+
+    @Test
+    public void testGetMetaSpecForAllSnapshotsTables(@Mocked LocalMetastore localMetastore,
+                                                     @Mocked TemporaryTableMgr temporaryTableMgr) {
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).commit();
+        // rewrites the data manifest, so the first one is reachable only from the older snapshots
+        mockedNativeTableA.newDelete().deleteFile(FILE_A).commit();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableA;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(0, dbName);
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
+                CATALOG_NAME, icebergHiveCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+                return Optional.of(metadata);
+            }
+        };
+
+        Set<String> allManifests = new HashSet<>();
+        Set<String> liveDataManifests = new HashSet<>();
+        Set<String> liveDeleteManifests = new HashSet<>();
+        for (Snapshot snapshot : mockedNativeTableA.snapshots()) {
+            for (ManifestFile manifest : snapshot.allManifests(mockedNativeTableA.io())) {
+                allManifests.add(manifest.path());
+                if (manifest.hasAddedFiles() || manifest.hasExistingFiles()) {
+                    (manifest.content() == ManifestContent.DATA ? liveDataManifests : liveDeleteManifests)
+                            .add(manifest.path());
+                }
+            }
+        }
+        Set<String> currentManifests = mockedNativeTableA.currentSnapshot().allManifests(mockedNativeTableA.io())
+                .stream().map(ManifestFile::path).collect(Collectors.toSet());
+        Assertions.assertTrue(allManifests.size() > currentManifests.size());
+
+        Function<MetadataTableType, Set<String>> splitPaths = type -> {
+            IcebergMetaSpec spec = metadataMgr.getSerializedMetaSpec("catalog", "db", "tg", -1, null, type).cast();
+            List<String> paths = spec.getSplits().stream().map(RemoteMetaSplit::path).collect(Collectors.toList());
+            Set<String> distinct = new HashSet<>(paths);
+            Assertions.assertEquals(distinct.size(), paths.size(), "a manifest is scanned once");
+            return distinct;
+        };
+        // $entries keeps the rewritten data manifest that holds only the DELETED entry of FILE_A
+        Assertions.assertEquals(currentManifests, splitPaths.apply(MetadataTableType.ENTRIES));
+        Assertions.assertTrue(splitPaths.apply(MetadataTableType.FILES).size() < currentManifests.size());
+        Assertions.assertEquals(liveDataManifests, splitPaths.apply(MetadataTableType.ALL_DATA_FILES));
+        Assertions.assertEquals(liveDeleteManifests, splitPaths.apply(MetadataTableType.ALL_DELETE_FILES));
+        Assertions.assertEquals(allManifests, splitPaths.apply(MetadataTableType.ALL_ENTRIES));
+        // the scanner reads the manifest lists itself
+        Assertions.assertEquals(Set.of(IcebergMetaSplit.PLACEHOLDER_FILE_PATH),
+                splitPaths.apply(MetadataTableType.ALL_MANIFESTS));
+    }
+
+    @Test
+    public void testGetMetaSpecForAllSnapshotsTablesWithoutMainSnapshot(@Mocked LocalMetastore localMetastore,
+                                                                         @Mocked TemporaryTableMgr temporaryTableMgr) {
+        // only a branch is written, so main has no snapshot
+        org.apache.iceberg.Table table = create(SCHEMA_A, SPEC_A, "branch_only", 2);
+        table.newAppend().appendFile(FILE_A).toBranch("b1").commit();
+        Assertions.assertNull(table.currentSnapshot());
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return table;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(0, dbName);
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
+                CATALOG_NAME, icebergHiveCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+                return Optional.of(metadata);
+            }
+        };
+
+        Function<MetadataTableType, Integer> splitCount = type -> metadataMgr.getSerializedMetaSpec(
+                "catalog", "db", "branch_only", -1, null, type).<IcebergMetaSpec>cast().getSplits().size();
+        Assertions.assertSame(IcebergMetaSpec.EMPTY, metadataMgr.getSerializedMetaSpec(
+                "catalog", "db", "branch_only", -1, null, MetadataTableType.FILES));
+        Assertions.assertEquals(1, splitCount.apply(MetadataTableType.ALL_DATA_FILES));
+        Assertions.assertEquals(1, splitCount.apply(MetadataTableType.ALL_ENTRIES));
+        Assertions.assertEquals(1, splitCount.apply(MetadataTableType.ALL_MANIFESTS));
+    }
+
+    @Test
+    public void testMetadataTablePartitionFieldsSkipUnsupportedTypes() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "t", Types.TimeType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("t").identity("id").build();
+        org.apache.iceberg.Table table = create(schema, spec, "time_part", 2);
+        // a TIME partition value cannot reach BE, so the partition struct of the metadata tables leaves it out
+        Assertions.assertEquals(List.of("id"), IcebergPartitionUtils.getAllPartitionFields(table).stream()
+                .map(PartitionField::name).collect(Collectors.toList()));
     }
 
     @Test
