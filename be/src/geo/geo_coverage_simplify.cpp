@@ -201,6 +201,18 @@ void query(const Tree& tree, const Box& box, F&& visitor) {
     tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
 }
 
+// Bound a cell scan to four 16-entry R-tree leaves. Dense partitions use the
+// packed tree rather than paying for the entire cluster on each local query.
+constexpr size_t kMaxGridCellEntries = 64;
+
+template <class F>
+void query_ordered(const Tree& tree, const Box& box, std::vector<Item>& candidates, F&& visitor) {
+    candidates.clear();
+    query(tree, box, [&](const Item& item) { candidates.push_back(item); });
+    std::sort(candidates.begin(), candidates.end(), [](const Item& a, const Item& b) { return a.second < b.second; });
+    for (const auto& item : candidates) visitor(item);
+}
+
 size_t grid_cell(double value, double origin, double inverse, size_t count) {
     return size_t(std::clamp((value - origin) * inverse, 0.0, double(count - 1)));
 }
@@ -228,6 +240,7 @@ class EdgeGrid {
         uint32_t edge;
     };
     Tree fallback;
+    std::vector<Item> tree_candidates;
     std::vector<Entry> entries;
     std::vector<Link> links;
     std::vector<size_t> heads;
@@ -315,6 +328,20 @@ public:
                 for (const auto& item : items) {
                     append(item);
                 }
+                for (size_t head : heads) {
+                    size_t count = 0;
+                    for (size_t id = head; id != absent; id = links[id].next) {
+                        if (++count > kMaxGridCellEntries) {
+                            nx = ny = 0;
+                            entries.clear();
+                            links.clear();
+                            heads.clear();
+                            overflow.clear();
+                            fallback = Tree(items.begin(), items.end());
+                            return;
+                        }
+                    }
+                }
                 if (overflow.size() > kMaxLinearOverflowEdges) index_overflow();
                 return;
             }
@@ -356,7 +383,7 @@ public:
     template <class F>
     void visit(const Box& query_box, F&& visitor) {
         if (!nx) {
-            query(fallback, query_box, visitor);
+            query_ordered(fallback, query_box, tree_candidates, visitor);
             return;
         }
         const Entry q = entry(query_box);
@@ -400,6 +427,7 @@ class PointGrid {
         uint32_t id;
     };
     Tree fallback;
+    mutable std::vector<Item> tree_candidates;
     std::vector<Point> points;
     std::vector<size_t> offsets;
     double xmin = 0, ymin = 0, inverse = 0;
@@ -435,6 +463,12 @@ public:
             const double x = bg::get<bg::min_corner, 0>(item.first), y = bg::get<bg::min_corner, 1>(item.first);
             ++offsets[ycell(y) * nx + xcell(x) + 1];
         }
+        if (*std::max_element(offsets.begin(), offsets.end()) > kMaxGridCellEntries) {
+            nx = ny = 0;
+            offsets.clear();
+            fallback = Tree(items.begin(), items.end());
+            return;
+        }
         std::partial_sum(offsets.begin(), offsets.end(), offsets.begin());
         std::vector<size_t> next(offsets);
         points.resize(items.size());
@@ -446,7 +480,7 @@ public:
     template <class F>
     void visit(const Box& box, F&& visitor) const {
         if (!nx) {
-            query(fallback, box, visitor);
+            query_ordered(fallback, box, tree_candidates, visitor);
             return;
         }
         const double x0 = bg::get<bg::min_corner, 0>(box), y0 = bg::get<bg::min_corner, 1>(box);

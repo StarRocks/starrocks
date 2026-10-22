@@ -616,6 +616,62 @@ TEST(GeoCoverageTest, ContiguousOutputFollowsPartitionLifetime) {
     EXPECT_EQ(first.size + second.size, buffer.size);
 }
 
+TEST(GeoCoverageTest, DenseClusterAndRemoteComponentKeepCoverage) {
+    std::vector<std::string> inputs;
+    inputs.reserve(10001);
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto square = [&](double x, double y) {
+        polygon.rings = {{{x, y}, {x, y + 1}, {x + 1, y + 1}, {x + 1, y}, {x, y}}};
+        std::string bytes;
+        EXPECT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+    };
+    for (int y = 0; y < 100; ++y)
+        for (int x = 0; x < 100; ++x) square(x, y);
+    // The remote square widens both grids until all local entries share a cell.
+    square(1e9, 0);
+    for (int form = 0; form < 3; ++form) {
+        SCOPED_TRACE(form);
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < inputs.size(); ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+    }
+}
+
+TEST(GeoCoverageTest, DensePointCellRetainsNodeInsideRemovalTriangle) {
+    // As in PointIndexKeepsNodeInsideRemovalTriangle, the island must prevent
+    // removing the notch. A remote component and dense local grid exercise the
+    // point-tree fallback as well as the edge-tree fallback.
+    std::vector<std::string> inputs{wkb("POLYGON ((0 0,0 10,2 9,4 10,4 0,0 0))"),
+                                    wkb("POLYGON ((1.75 9.5,2 9.75,2.25 9.5,1.75 9.5))")};
+    for (int y = 0; y < 10; ++y)
+        for (int x = 20; x < 30; ++x) {
+            WkbGeometry polygon;
+            polygon.type = WkbGeometryType::POLYGON;
+            polygon.rings = {{{double(x), double(y)},
+                              {double(x), y + 1.0},
+                              {x + 1.0, y + 1.0},
+                              {x + 1.0, double(y)},
+                              {double(x), double(y)}}};
+            std::string bytes;
+            ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+            inputs.push_back(std::move(bytes));
+        }
+    inputs.push_back(wkb("POLYGON ((1e9 0,1e9 1,1000000001 1,1000000001 0,1e9 0))"));
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(2) : c->finish(2, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        // The notched shell and its island are preserved. Other polygons may
+        // simplify at tolerance2, so only these two rows have fixed output.
+        for (size_t i = 0; i < 2; ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+    }
+}
+
 TEST(GeoCoverageTest, LongEdgeOverflowKeepsStripCoverage) {
     // N horizontal strips tile an N x N square. Their N+1 horizontal edges
     // overflow the short-edge grid; cover both sides of the linear-list limit.
