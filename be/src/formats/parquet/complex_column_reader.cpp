@@ -879,4 +879,134 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(const VariantPath& path) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr) return nullptr;
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
+    if (found_node->typed_value_read_type == nullptr) return nullptr;
+    {
+        LogicalType lt = found_node->typed_value_read_type->type;
+        if (lt == TYPE_BINARY || lt == TYPE_VARBINARY) return nullptr;
+    }
+    return found_node->typed_value_reader.get();
+}
+
+ColumnReader* VariantColumnReader::scalar_typed_value_reader_for_path(const VariantPath& path) {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr) return nullptr;
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
+    return found_node->typed_value_reader.get();
+}
+
+const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    return found_node->typed_value_read_type.get();
+}
+
+bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const VariantPath& path,
+                                                                         uint64_t rg_num_rows) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return false;
+    if (found_node->value_reader == nullptr) return true;
+
+    return _column_chunk_all_null_for_num_rows(found_node->value_reader.get(), rg_num_rows);
+}
+
+bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
+        const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool, const uint64_t rg_num_rows,
+        const ColumnReader** leaf_reader, std::vector<const ColumnPredicate*>* rewritten_predicates) const {
+    DCHECK(pool != nullptr);
+    DCHECK(leaf_reader != nullptr);
+    DCHECK(rewritten_predicates != nullptr);
+    *leaf_reader = nullptr;
+
+    if (_source == nullptr) {
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because source reader is unavailable";
+        return false;
+    }
+    *leaf_reader = _source->filterable_typed_value_reader_for_path(_leaf_path);
+    const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
+    if (*leaf_reader == nullptr || leaf_type == nullptr) {
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because leaf reader/type is unavailable";
+        return false;
+    }
+    // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
+    // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
+    // the converted predicate to leaf statistics can incorrectly prune matching rows.
+    if (*leaf_type != _virtual_slot_type) {
+        VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
+                  << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
+                  << ", virtual slot type=" << _virtual_slot_type.debug_string();
+        return false;
+    }
+    // Variant shredding only permits data skipping on typed_value statistics when the paired
+    // fallback `value` column is null for the entire row group. Otherwise min/max/bloom on
+    // typed_value cover only the typed subset, while the engine may still match fallback rows
+    // via implicit variant casts (for example Variant -> STRING), so skipping would be unsafe.
+    if (!_source->fallback_values_all_null_in_row_group_for_path(_leaf_path, rg_num_rows)) {
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because fallback value column may contain non-null rows in this row group";
+        return false;
+    }
+
+    // TODO(variant): remove virtual-slot/leaf duality by materializing rewritten predicates
+    // once during planning instead of per filter invocation.
+    Status st = rewrite_delegate_predicates(predicates, *leaf_type, pool, rewritten_predicates);
+    if (!st.ok()) {
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << ", slot type " << _virtual_slot_type.debug_string() << " cannot delegate to leaf type "
+                  << leaf_type->debug_string() << ": " << st.to_string();
+        return false;
+    }
+    return true;
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
+        return false;
+    }
+    return leaf->row_group_zone_map_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::page_index_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, SparseRange<uint64_t>* row_ranges,
+        CompoundNodeType pred_relation, const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
+        return false;
+    }
+
+    // page_index_zone_map_filter is non-const in the base class; cast is safe because the
+    // underlying object is non-const (it's a reader owned by VariantColumnReader).
+    return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(rewritten_predicates, row_ranges, pred_relation,
+                                                                       rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_bloom_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
+        return false;
+    }
+    return leaf->row_group_bloom_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
+}
+
+>>>>>>> 69f660b ([BugFix] Prevent incorrect Variant pruning for cross-type predicates (#78348))
 } // namespace starrocks::parquet
