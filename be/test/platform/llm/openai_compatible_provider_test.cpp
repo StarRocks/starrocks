@@ -124,7 +124,7 @@ TEST(OpenAICompatibleProviderTest, BuildsTypedImageChatContentAndRejectsEmbeddin
     EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
 }
 
-TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitQwenProtocol) {
+TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitSupport) {
     AIMediaInput video{"video/mp4", std::string("\0\0\0\x18"
                                                 "ftypisom\0\0\0\0isommp42",
                                                 24)};
@@ -134,9 +134,8 @@ TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitQwenProtocol) {
                           .media = &video};
     OpenAICompatibleProvider ordinary;
     EXPECT_TRUE(ordinary.build_request(request).status().is_not_supported());
-    auto qwen = create_ai_provider("qwen_compatible", AICapability::CHAT);
-    ASSERT_TRUE(qwen.ok());
-    auto result = (*qwen)->build_request(request);
+    OpenAICompatibleProvider video_provider(true);
+    auto result = video_provider.build_request(request);
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_NE(
             std::string::npos,

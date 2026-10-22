@@ -63,9 +63,6 @@ enum class AIPromptKind : uint8_t {
 
 namespace {
 
-constexpr std::string_view kSystemConfigId = "__system_chat__";
-constexpr std::string_view kEmbeddingConfigId = "__system_embedding__";
-
 Status invalid_ai_expression() {
     return Status::InvalidArgument("Invalid AI function expression");
 }
@@ -119,16 +116,8 @@ bool is_varchar_type(const TTypeDesc& type) {
 }
 
 bool is_options_type(const TTypeDesc& type) {
-    if (!is_valid_type(type) || type.types.size() < 3 || type.types[0].type != TTypeNodeType::MAP ||
-        type.types[1].type != TTypeNodeType::SCALAR) {
-        return false;
-    }
-    if (type.types[1].scalar_type.type == TPrimitiveType::VARCHAR) {
-        return true;
-    }
-    // FE serializes the unresolved MAP<NULL,NULL> produced by map{} as MAP<BOOLEAN,BOOLEAN>.
-    return type.types.size() == 3 && type.types[1].scalar_type.type == TPrimitiveType::BOOLEAN &&
-           type.types[2].type == TTypeNodeType::SCALAR && type.types[2].scalar_type.type == TPrimitiveType::BOOLEAN;
+    return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
+           type.types[0].scalar_type.type == TPrimitiveType::JSON;
 }
 
 bool matches_argument_type(const TTypeDesc& type, AIArgumentType expected) {
@@ -151,60 +140,16 @@ bool matches_result_type(const TTypeDesc& type, AIFunctionResultKind kind) {
         return type.types.size() == 2 && type.types[0].type == TTypeNodeType::ARRAY &&
                type.types[1].type == TTypeNodeType::SCALAR && type.types[1].scalar_type.type == TPrimitiveType::FLOAT;
     }
-    const auto expected = kind == AIFunctionResultKind::JSON
-                                  ? TPrimitiveType::JSON
-                                  : kind == AIFunctionResultKind::BOOLEAN
-                                            ? TPrimitiveType::BOOLEAN
-                                            : kind == AIFunctionResultKind::SIMILARITY ? TPrimitiveType::FLOAT
-                                                                                       : TPrimitiveType::VARCHAR;
+    const auto expected = kind == AIFunctionResultKind::JSON         ? TPrimitiveType::JSON
+                          : kind == AIFunctionResultKind::BOOLEAN    ? TPrimitiveType::BOOLEAN
+                          : kind == AIFunctionResultKind::SIMILARITY ? TPrimitiveType::FLOAT
+                                                                     : TPrimitiveType::VARCHAR;
     return type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
            type.types[0].scalar_type.type == expected;
 }
 
 bool is_fe_string_type(const TypeDescriptor& type) {
     return type.type == TYPE_CHAR || type.type == TYPE_VARCHAR;
-}
-
-bool matches_safe_map_type(const TypeDescriptor& declared, const TypeDescriptor& child);
-
-bool matches_main_compatible_type(const TypeDescriptor& declared, const TypeDescriptor& child) {
-    if (is_fe_string_type(declared) && is_fe_string_type(child)) {
-        return true;
-    }
-    if (declared.type != child.type || declared.children.size() != child.children.size()) {
-        return false;
-    }
-    if (declared.type == TYPE_MAP) {
-        return matches_safe_map_type(declared, child);
-    }
-    if (!declared.children.empty()) {
-        for (size_t i = 0; i < declared.children.size(); ++i) {
-            if (!matches_main_compatible_type(declared.children[i], child.children[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return declared == child;
-}
-
-bool matches_safe_map_type(const TypeDescriptor& declared, const TypeDescriptor& child) {
-    if (declared.type != TYPE_MAP || declared.children.size() != 2 || child.type != TYPE_MAP ||
-        child.children.size() != 2) {
-        return false;
-    }
-
-    const bool declared_normalized =
-            declared.children[0].type == TYPE_BOOLEAN && declared.children[1].type == TYPE_BOOLEAN;
-    const bool child_normalized = child.children[0].type == TYPE_BOOLEAN && child.children[1].type == TYPE_BOOLEAN;
-    if (declared_normalized || child_normalized) {
-        return declared_normalized && child_normalized;
-    }
-
-    // Every ordinary provider-option map depth requires VARCHAR keys. CHAR is only
-    // compatible in values (including ARRAY/STRUCT leaves), never in map keys.
-    return declared.children[0].type == TYPE_VARCHAR && child.children[0].type == TYPE_VARCHAR &&
-           matches_main_compatible_type(declared.children[1], child.children[1]);
 }
 
 bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDescriptor& child,
@@ -220,7 +165,7 @@ bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDes
                child.children.size() == 1 && declared.children[0].type == TYPE_VARCHAR &&
                is_fe_string_type(child.children[0]);
     }
-    return matches_safe_map_type(declared, child);
+    return declared.type == TYPE_JSON && child.type == TYPE_JSON && child.children.empty();
 }
 
 bool contains_only_ascii_whitespace(const Slice& value) {
@@ -399,7 +344,7 @@ AIFunctionCallExpr::AIFunctionCallExpr(const TExprNode& node, const AIFunctionDe
                                        std::vector<TypeDescriptor> argument_types)
         : Expr(node),
           _descriptor(descriptor),
-          _model_config_id(node.ai_model_config_id),
+          _provider_id(node.ai_provider_id),
           _argument_types(std::move(argument_types)) {
     _fn = TFunction();
 }
@@ -407,17 +352,16 @@ AIFunctionCallExpr::AIFunctionCallExpr(const TExprNode& node, const AIFunctionDe
 AIFunctionCallExpr::AIFunctionCallExpr(const AIFunctionCallExpr& other)
         : Expr(other),
           _descriptor(other._descriptor),
-          _model_config_id(other._model_config_id),
+          _provider_id(other._provider_id),
           _argument_types(other._argument_types) {}
 
 StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const TExprNode& node) {
     if (pool == nullptr ||
         (node.node_type != TExprNodeType::FUNCTION_CALL && node.node_type != TExprNodeType::COMPUTE_FUNCTION_CALL) ||
         !node.__isset.fn || node.fn.binary_type != TFunctionBinaryType::AI ||
-        !is_ai_function_name(node.fn.name.function_name) || !node.fn.__isset.fid || !node.fn.__isset.ai_model_source ||
-        !node.__isset.ai_model_config_id || node.fn.has_var_args || !node.__isset.is_nullable || !node.is_nullable ||
-        node.fn.__isset.hdfs_location || node.fn.__isset.content || node.fn.__isset.cloud_configuration ||
-        node.fn.__isset.service_url) {
+        !is_ai_function_name(node.fn.name.function_name) || !node.fn.__isset.fid || !node.__isset.ai_provider_id ||
+        node.fn.has_var_args || !node.__isset.is_nullable || !node.is_nullable || node.fn.__isset.hdfs_location ||
+        node.fn.__isset.content || node.fn.__isset.cloud_configuration || node.fn.__isset.service_url) {
         return invalid_ai_expression();
     }
 
@@ -428,17 +372,9 @@ StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const
         !matches_result_type(node.fn.ret_type, spec->result_kind)) {
         return invalid_ai_expression();
     }
-    if (node.fn.ai_model_source != spec->model_source) {
-        return invalid_ai_expression();
-    }
-    if (spec->model_source == TAIModelSource::PROVIDER) {
-        const std::string& key = node.ai_model_config_id;
-        if (contains_only_ascii_whitespace(Slice(key)) || key == kSystemConfigId || key == kEmbeddingConfigId ||
-            std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
-            return invalid_ai_expression();
-        }
-    } else if (node.ai_model_config_id !=
-               (spec->capability == AICapability::CHAT ? kSystemConfigId : kEmbeddingConfigId)) {
+    const std::string& key = node.ai_provider_id;
+    if (contains_only_ascii_whitespace(Slice(key)) ||
+        std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
         return invalid_ai_expression();
     }
     for (size_t i = 0; i < spec->argument_count; ++i) {
@@ -463,16 +399,13 @@ AICapability AIFunctionCallExpr::capability() const {
     return _descriptor->capability;
 }
 
-TAIModelSource::type AIFunctionCallExpr::model_source() const {
-    return _descriptor->model_source;
-}
-
 AIFunctionResultKind AIFunctionCallExpr::result_kind() const {
     return _descriptor->result_kind;
 }
 
 bool AIFunctionCallExpr::requires_default_model() const {
-    return _descriptor->model_argument < 0;
+    // Every signature can select the provider default through a NULL or empty model.
+    return true;
 }
 
 Status AIFunctionCallExpr::_validate_children() const {
@@ -567,8 +500,9 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
     }
     if (spec.provider_argument >= 0) {
         const size_t index = spec.provider_argument;
-        if (!_children[index]->is_constant() || !columns[index]->is_constant() || strings[index]->is_null(0) ||
-            contains_only_ascii_whitespace(strings[index]->value(0))) {
+        if (!_children[index]->is_constant() || !columns[index]->is_constant() ||
+            (!strings[index]->is_null(0) && !strings[index]->value(0).empty() &&
+             contains_only_ascii_whitespace(strings[index]->value(0)))) {
             return invalid_ai_expression();
         }
     }
@@ -576,7 +510,8 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
     for (size_t row = 0; row < chunk->num_rows(); ++row) {
         bool is_null = false;
         for (size_t index = 0; index < strings.size(); ++index) {
-            if (!strings[index]) {
+            if (!strings[index] || static_cast<int>(index) == spec.model_argument ||
+                static_cast<int>(index) == spec.provider_argument) {
                 continue;
             }
             if (strings[index]->is_null(row)) {
@@ -595,7 +530,11 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             batch.rows.emplace_back();
             continue;
         }
-        if (spec.model_argument >= 0 && contains_only_ascii_whitespace(strings[spec.model_argument]->value(row))) {
+        const bool use_default_model = spec.model_argument < 0 || strings[spec.model_argument]->is_null(row) ||
+                                       strings[spec.model_argument]->value(row).empty();
+        std::string model =
+                use_default_model ? std::string(default_model) : strings[spec.model_argument]->value(row).to_string();
+        if (contains_only_ascii_whitespace(Slice(model))) {
             batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
             continue;
         }
@@ -644,8 +583,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
         };
         batch.rows.emplace_back(AIFunctionRowInput{
                 .action = AIFunctionRowAction::DISPATCH,
-                .model = spec.model_argument >= 0 ? strings[spec.model_argument]->value(row).to_string()
-                                                  : std::string(default_model),
+                .model = std::move(model),
                 .prompt = build_prompt(spec.prompt_kind, input_value(0), input_value(1), input_value(2)),
                 .media = std::move(media),
         });

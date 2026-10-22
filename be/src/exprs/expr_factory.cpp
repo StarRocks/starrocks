@@ -68,13 +68,10 @@ ExprFactory::ExprCreateHook& non_core_create_post_hook() {
 }
 
 bool has_explicit_ai_marker(const TExprNode& node) {
-    if (node.__isset.ai_model_config_id) {
-        return true;
-    }
     if (!node.__isset.fn) {
         return false;
     }
-    return node.fn.binary_type == TFunctionBinaryType::AI || node.fn.__isset.ai_model_source;
+    return node.fn.binary_type == TFunctionBinaryType::AI;
 }
 
 bool contains_explicit_ai_marker(const TExpr& expression) {

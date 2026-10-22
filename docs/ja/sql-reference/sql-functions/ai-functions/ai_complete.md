@@ -1,100 +1,56 @@
 ---
 displayed_sidebar: docs
-description: "設定済みの SYSTEM OpenAI 互換チャットエンドポイントを呼び出し、生成されたテキストを返します。"
+description: "AI Provider を通じて OpenAI チャットモデルを呼び出します。"
 ---
 
 # ai_complete
 
-関数と Provider の権限要件は [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+AI Provider を通じて OpenAI チャット補完エンドポイントを呼び出し、生成されたテキストを返します。プロンプト、モデル、options、FILE の内容は選択したエンドポイントに送信されます。
 
-プロンプトと省略可能な inline FILE を使って管理者が設定した SYSTEM チャットモデルを呼び出し、モデルが生成したテキストを返します。StarRocks は BE から非ストリーミングの OpenAI 互換チャット補完リクエストを送信します。
-
-:::warning
-この関数は、モデル名、プロンプト、指定した FILE の内容、オプションを設定済みのエンドポイントに送信します。信頼できる HTTPS endpoint のみを使用してください。プロバイダーが受信を許可されていない機密情報や秘密情報は送信しないでください。リクエストが StarRocks クラスターの外部に送信され、プロバイダー料金が発生したり、プロバイダーのデータ処理ポリシーに従って保持されたりする可能性があります。
-:::
+デフォルト Provider を含め、`USAGE ON AI FUNCTION <function_name>` と `USAGE ON AI PROVIDER <provider_name>` の両方が必要です。[AI 関数の権限](ai_functions.mdx#ai-function-privileges)を参照してください。
 
 ## 構文
 
 ```sql
-ai_complete(<prompt>)
-ai_complete(<prompt>, <options>)
-ai_complete(<model>, <prompt>)
-ai_complete(<model>, <prompt>, <options>)
-ai_complete(<prompt>, <file>)
-ai_complete(<prompt>, <file>, <options>)
-ai_complete(<model>, <prompt>, <file>)
-ai_complete(<model>, <prompt>, <file>, <options>)
+ai_complete(prompt)
+ai_complete(prompt, options)
+ai_complete(prompt, file)
+ai_complete(prompt, file, options)
+ai_complete(model, prompt)
+ai_complete(model, prompt, options)
+ai_complete(model, prompt, file)
+ai_complete(model, prompt, file, options)
+ai_complete(provider, model, prompt)
+ai_complete(provider, model, prompt, options)
+ai_complete(provider, model, prompt, file)
+ai_complete(provider, model, prompt, file, options)
 ```
 
 ## パラメータ
 
-- `prompt`：ユーザープロンプトを含む VARCHAR 式。空文字列も有効です。
-- `file`：対応する inline 画像または動画を含む、省略可能な FILE 型の式。[FILE 入力](#file-入力)を参照してください。
-- `model`：この呼び出しで使用するモデルを選択する VARCHAR 式。省略した場合、StarRocks は
-  [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model)
-  を使用します。明示的なモデルは行ごとに変更できますが、定数モデルを空文字列または空白文字だけにすることはできません。
-- `options`：プロバイダーリクエストにフィールドを追加する、省略可能な定数 MAP。型付きの NULL MAP は空の MAP として扱われます。
+`provider` を省略すると、補完とテキスト補助関数は `chat`、埋め込み関数は `embedding` のクラスターデフォルト Provider を使います。`model` を省略すると Provider の必須デフォルトモデルを使います。明示モデルが優先され、行ごとに変更できます。`provider` は空白でない定数文字列である必要があり、定数の明示モデルも空白にはできません。明示 Provider の呼び出しにはクラスターデフォルトの設定は不要です。
+
+テキスト、明示的な model、FILE 入力が NULL の場合、定数でも実行時の列値でもリクエストせず NULL を返します。NULL の options MAP はオプションなしを意味し、NULL の翻訳ソース言語は自動検出を要求します。Provider 名とヘルパー関数の配列には、それぞれの引数検証が適用されます。options 内部のネストした NULL は JSON 互換の値として扱われます。型なし NULL が複数のオーバーロードで異なる引数型に一致する場合は、`CAST(NULL AS VARCHAR)` や `CAST(NULL AS MAP<VARCHAR, JSON>)` のように型を明示してください。
 
 ### Options MAP のルール
 
-- MAP は定数である必要があります。トップレベルとネストされた各 MAP 内のキーは、一意で、NULL でも空でもない VARCHAR 値である必要があります。
-- オプション値は JSON 互換である必要があります。使用できる値は、NULL、BOOLEAN、有限の数値、文字列、JSON、ARRAY、MAP、STRUCT です。ネストされた MAP 値のキーも VARCHAR である必要があります。
-- 大文字と小文字が区別されるトップレベルのキー `model`、`messages`、`stream` は予約済みであり、指定できません。StarRocks がこれらのフィールドを構築し、常に非ストリーミングリクエストを送信します。
-- 2 引数形式の型なし NULL は `ai_complete(<model>, NULL)` として解決されます。NULL を `options` として渡すには、たとえば
-  `CAST(NULL AS MAP<VARCHAR, JSON>)` のように MAP 型へキャストします。
+`options` は省略可能な定数 MAP です。追加オプションがなければ省略するか `map{}` を使います。各階層の MAP キーは一意かつ非 NULL、空でない VARCHAR である必要があります。値は NULL、BOOLEAN、有限数値、文字列、JSON、ARRAY、MAP、STRUCT をサポートします。大文字と小文字を区別するトップレベルキー `model`、`endpoint`、`key`、`api_key`、`protocol`、`provider`、`messages`、`stream` は予約されています。接続設定と認証情報は Provider から取得します。
 
 ### FILE 入力
 
-`file` は URL 文字列ではなく FILE 型の式です。FILE オーバーロードは inline JPEG、PNG、WebP 画像を受け付け、
-prompt と画像を content part として送信します。`qwen_compatible` チャットプロトコルを明示的に設定した場合は
-inline MP4 動画も利用できます。モデル側で入力のモダリティに対応する必要があります。`openai_compatible` は動画を拒否します。
-FILE 型の変更、FILE コンストラクターの追加、URI 参照の取得は行いません。
-FILE と URL や VARCHAR 入力の間の暗黙の変換や、媒体からテキストへのフォールバックはありません。
+FILE オーバーロードは OpenAI チャット用の inline JPEG、PNG、WebP 画像を受け付けます。モデルは画像入力に対応する必要があります。動画、音声、文書はサポートしません。URL や VARCHAR から FILE への暗黙変換や URI の取得は行いません。内容は `inline` のみで渡し、`uri`、`offset`、`size` は NULL にします。MIME はバイトから検出し、指定した `content_type` は検出結果と一致する必要があります。
 
-内容は FILE の `inline` フィールドに格納し、`uri`、`offset`、`size` は NULL にします。
-`content_type` が指定されている場合は検出した形式と一致する必要があります。検出は有限長のコンテナーヘッダーのみを
-確認し、完全なデコードの有効性はプロバイダーが判断します。`checksum` はメタデータとして扱い、検証しません。
-BE パラメーター [ai_function_max_input_file_bytes](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)
-は AI が保持するペイロードのコピーと Base64 エンコードの前に FILE ごとの生バイト数を制限します。デフォルトは 10485760 バイト（10 MiB）です。
-不正または過大な inline 内容と、非対応の媒体・プロトコルの組み合わせは行レベルの失敗として `ai_function_on_error` に従います。
-認可された FILE reader が利用可能になるまで、参照型 FILE は `on_error=ignore` でも `NotSupported` エラーになります。
-NULL FILE はリクエストせず NULL を返します。
-互換性のため、`ai_complete(model, prompt, NULL)` は従来のテキストオーバーロードを選択し、型なし NULL を NULL FILE ではなく options（空の MAP と同じ扱い）として解釈します。FILE 型の列は FILE オーバーロードを選択し、その NULL 値はリクエストせず NULL を返します。
-FILE オーバーロードを使用する前にすべての FE と BE をアップグレードしてください。
-ファイル内容は設定済みモデルエンドポイントに送信されるため、prompt と同じデータ送信の注意事項が適用されます。
+`ai_function_max_input_file_bytes` はコピーと Base64 エンコード前のバイト数を制限し、デフォルトは 10485760 バイト（10 MiB）です。不正または上限超過の inline データは `ai_function_on_error` に従います。参照 FILE は `on_error=ignore` でも `NotSupported` になります。FILE 列の実行時 NULL はリクエストせず NULL を返します。
 
 ## 戻り値
 
-OpenAI 互換レスポンスが成功した場合、`choices[0].message.content` を含む NULL 許容の VARCHAR を返します。
-
-- `prompt` が NULL の場合、プロバイダーリクエストを送信せずに NULL を返します。
-- `model` を明示するオーバーロードでは、`model` が NULL の場合もリクエストを送信せずに NULL を返します。
-- BE 設定
-  [`ai_function_on_error`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)
-  は行単位のエラーを制御します。デフォルトの `ignore` では、失敗した行に NULL を返してクエリを続行します。`fail` ではクエリを中止します。
-- `ignore` は解析エラーや設定エラーを抑止せず、クエリのキャンセル、期限切れ、BE のシャットダウンを NULL に変換しません。
-
-この関数は非決定的です。同じ引数でも、プロバイダーの状態、モデルの動作、実行時の条件によって、異なるテキストが返されたり、異なる方法で失敗したりすることがあります。
-
-AI クエリの最適化については、[AI 入力行数の削減](ai_functions.mdx#reducing-ai-input-rows) を参照してください。
+`choices[0].message.content` を含む NULL 許容 VARCHAR を返します。結果は非決定的です。行エラーは `ai_function_on_error` に従い、デフォルトの `ignore` は NULL、`fail` はクエリ中止になります。解析・設定エラー、キャンセル、期限切れは無視されません。
 
 ## 設定
 
-### FE SYSTEM モデル設定
+`protocol = "openai"` の Provider を作成します。API key の有無にかかわらず HTTP と HTTPS をサポートします。空でない key は `Authorization: Bearer ...` ヘッダーになります。URL 形式、制御文字、DNS、アドレスの検証は引き続き適用されます。信頼できるエンドポイントと送信が許可されたデータを使用してください。
 
-管理者は、次の動的に変更可能な FE パラメータを使用して SYSTEM モデルを設定します。endpoint と provider はすべての呼び出しで必須です。FILE オーバーロードを含め、モデルを明示しないすべてのオーバーロードでデフォルトモデルが必須です。
-
-| パラメータ | デフォルト | 要件 |
-|------------|------------|------|
-| [`ai_default_chat_endpoint`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_endpoint) | 空文字列 | 必須。チャット補完エンドポイントの完全な HTTPS POST URL。 |
-| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | 空文字列 | FILE オーバーロードを含め、モデルを明示しない場合は必須。すべての呼び出しでモデルを指定する場合は省略可能。 |
-| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | 空文字列 | 必須。`openai_compatible` または `qwen_compatible`。 |
-
-各クエリプランは、これらの値のスナップショットを取得します。動的更新は、更新後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、取得済みのスナップショットを保持します。
-
-### BE ローカル認証情報
-
-AI クエリを実行する可能性があるすべての BE のローカルプロセス環境に `AI_FUNCTION_MODEL_API_KEY` を設定します。BE はこの値をローカルで読み取り、Bearer 認証情報として送信します。これは FE 設定項目ではなく、クエリプランにも含まれません。さらに、各 BE の `AI_FUNCTION_MODEL_ENDPOINT` に `ai_default_chat_endpoint` と完全に同一の HTTPS URL を設定します。プラン内の endpoint がこのローカルバインディングと一致しない場合、BE は実行を拒否します。BE はすべての DNS アドレスを検証し、link-local アドレスを拒否して、検証済みの DNS スナップショットをリクエストに固定します。完全一致するローカルバインディングにより、プライベートネットワーク上のモデル endpoint を明示的に許可できます。いずれかの BE ローカル環境変数を変更した場合、その BE を再起動する必要があります。認証情報を SQL テキストや options MAP に記述しないでください。
+`SET <provider_name> AS DEFAULT AI PROVIDER` でデフォルトを設定します。該当するデフォルトが未設定の場合、暗黙 Provider の呼び出しは `EXPLAIN` を含め FE でエラーになります。各実行プランは選択した Provider の設定を固定します。ALTER とデフォルト変更は新たに計画するクエリに反映され、プリペアド文の各 `EXECUTE` も現在のメタデータで再計画します。
 
 ### ランタイム制限とリトライ
 
@@ -130,44 +86,17 @@ AI クエリを実行する可能性があるすべての BE のローカルプ�
 
 ## 例
 
-次の例では `EXPLAIN` を使用します。`EXPLAIN` はステートメントを解析して計画するだけで、関数を実行せず、HTTP リクエストも送信しません。解析時には、有効な SYSTEM 設定が必要です。
-
 ```sql
-EXPLAIN SELECT ai_complete('Summarize this local test prompt.');
+CREATE AI PROVIDER support_chat TYPE chat
+PROPERTIES ("endpoint" = "http://localhost:8000/v1/chat/completions",
+            "model" = "chat-model", "protocol" = "openai");
+SET support_chat AS DEFAULT AI PROVIDER;
 
-EXPLAIN SELECT ai_complete(
-    'Classify this local test prompt.',
-    map{'temperature': 0.0}
-);
-
-EXPLAIN SELECT ai_complete(
-    'local-test-model',
-    'Summarize this local test prompt.'
-);
-
-EXPLAIN SELECT ai_complete(
-    'local-test-model',
-    'Return a JSON object for this local test prompt.',
-    map{'response_format': map{'type': 'json_object'}}
-);
+EXPLAIN SELECT ai_complete('Summarize this text.');
+EXPLAIN SELECT ai_complete('another-model', 'Summarize this text.');
+EXPLAIN SELECT ai_complete('support_chat', 'another-model', 'Summarize this text.', map{});
+EXPLAIN SELECT ai_complete('support_chat', 'vision-model', 'Describe this image.', image_file)
+FROM media_inputs;
+EXPLAIN SELECT ai_complete('support_chat', 'another-model', CAST(NULL AS VARCHAR));
+EXPLAIN SELECT ai_complete('another-model', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
 ```
-
-既存のテーブル `media_inputs` の FILE 型列 `image_file` に inline 画像が格納されている場合は、画像入力に対応するモデルを使用します。
-
-```sql
-EXPLAIN SELECT ai_complete('Describe this image.', image_file) FROM media_inputs;
-```
-
-NULL プロンプトはプロバイダーリクエストを送信しません。
-
-```sql
-SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
-```
-
-## 関連する関数
-
-タスク別のチャット補助関数は [AI テキスト関数](ai_text_functions.md)、テキストまたは画像の埋め込みは [ai_embed](ai_embed.md)、登録済みプロバイダーによる呼び出しは [AI プロバイダー関数](ai_custom_functions.md)を参照してください。既存の `ai_complete` の 4 つのテキスト専用形式と SYSTEM チャットルーティングは変更されません。デフォルト AI プロバイダーを設定しても `ai_complete` のルーティングは変わらず、明示的な `model` 引数はリモートモデル名を選択します。
-
-## キーワード
-
-AI_COMPLETE, AI, LLM

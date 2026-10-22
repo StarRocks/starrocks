@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -66,6 +65,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -93,16 +93,16 @@ public class AIProjectExtractionRuleTest {
 
     @BeforeEach
     public void setUpSystemChat() {
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "default-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "default-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterEach
     public void clearSystemChat() {
-        Config.ai_default_chat_endpoint = "";
-        Config.ai_default_chat_model = "";
-        Config.ai_default_chat_provider = "";
+        AIProviderTestUtil.setChatProperty("endpoint", "");
+        AIProviderTestUtil.setChatProperty("model", "");
+        AIProviderTestUtil.setChatProperty("protocol", "");
     }
 
     @Test
@@ -300,7 +300,7 @@ public class AIProjectExtractionRuleTest {
             Assertions.assertSame(originalRightChild, applyExpression.inputAt(1));
             Assertions.assertSame(originalRightOperand, predicate.getChild(1));
             assertApplyStatePreserved(originalApply, apply);
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()));
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()));
             Assertions.assertTrue(containsOperator(applyExpression.inputAt(0), OperatorType.LOGICAL_AI_PROJECT));
             Assertions.assertFalse(containsOperator(applyExpression.inputAt(1), OperatorType.LOGICAL_AI_PROJECT));
             assertAIOnlyInAIProject(root);
@@ -335,7 +335,7 @@ public class AIProjectExtractionRuleTest {
                         predicate.getChild(predicate.getTupleSize() + index));
             }
             assertApplyStatePreserved(originalApply, apply);
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()));
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()));
             Assertions.assertTrue(containsOperator(applyExpression.inputAt(0), OperatorType.LOGICAL_AI_PROJECT));
             Assertions.assertFalse(containsOperator(applyExpression.inputAt(1), OperatorType.LOGICAL_AI_PROJECT));
             assertAIOnlyInAIProject(root);
@@ -521,7 +521,7 @@ public class AIProjectExtractionRuleTest {
             CallOperator timeCall = new CallOperator(functionName, DateType.DATETIME, List.of());
             CallOperator wrapper = new CallOperator("concat", VarcharType.VARCHAR, List.of(timeCall));
 
-            Assertions.assertTrue(AiFunctionExtractor.containsNonReusableExpression(wrapper), functionName);
+            Assertions.assertTrue(AIFunctionExtractor.containsNonReusableExpression(wrapper), functionName);
         }
     }
 
@@ -616,7 +616,7 @@ public class AIProjectExtractionRuleTest {
         for (int rowIndex = 0; rowIndex < 2; rowIndex++) {
             LogicalProjectOperator rowProject = transformed.inputAt(rowIndex).getOp().cast();
             Assertions.assertTrue(rowProject.getColumnRefMap().values().stream()
-                    .noneMatch(AiFunctionExtractor::containsAI));
+                    .noneMatch(AIFunctionExtractor::containsAI));
             OptExpression rowAIProjectExpression = transformed.inputAt(rowIndex).inputAt(0);
             LogicalAIProjectOperator rowAIProject = rowAIProjectExpression.getOp().cast();
             CallOperator call = aiEntries(rowAIProject).get(0).getValue().cast();
@@ -635,7 +635,7 @@ public class AIProjectExtractionRuleTest {
         LogicalJoinOperator join = findOperators(result.root, OperatorType.LOGICAL_JOIN).get(0).getOp().cast();
 
         Assertions.assertEquals(JoinOperator.INNER_JOIN, join.getJoinType());
-        Assertions.assertFalse(AiFunctionExtractor.containsAI(join.getOnPredicate()));
+        Assertions.assertFalse(AIFunctionExtractor.containsAI(join.getOnPredicate()));
         Assertions.assertNotNull(join.getOnPredicate());
         Assertions.assertEquals(1, logicalAIProjects(result.root).size());
         assertAIOnlyInAIProject(result.root);
@@ -1010,7 +1010,7 @@ public class AIProjectExtractionRuleTest {
     private static List<Map.Entry<ColumnRefOperator, ScalarOperator>> aiEntries(
             LogicalAIProjectOperator project) {
         return project.getColumnRefMap().entrySet().stream()
-                .filter(entry -> AiFunctionExtractor.isAICall(entry.getValue()))
+                .filter(entry -> AIFunctionExtractor.isAICall(entry.getValue()))
                 .collect(Collectors.toList());
     }
 
@@ -1027,11 +1027,11 @@ public class AIProjectExtractionRuleTest {
 
     private static void assertAIProjectMapInvariant(LogicalAIProjectOperator project) {
         project.getColumnRefMap().forEach((output, expression) ->
-                Assertions.assertTrue(output.equals(expression) || AiFunctionExtractor.isAICall(expression),
+                Assertions.assertTrue(output.equals(expression) || AIFunctionExtractor.isAICall(expression),
                         output + " := " + expression));
         project.getCommonSubOperatorMap().values().forEach(expression -> {
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(expression), expression.toString());
-            Assertions.assertFalse(AiFunctionExtractor.containsNonReusableExpression(expression),
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(expression), expression.toString());
+            Assertions.assertFalse(AIFunctionExtractor.containsNonReusableExpression(expression),
                     expression.toString());
         });
     }
@@ -1053,28 +1053,28 @@ public class AIProjectExtractionRuleTest {
                 return;
             }
             Operator operator = expression.getOp();
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(operator.getPredicate()), operator.toString());
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(operator.getPredicate()), operator.toString());
             if (operator instanceof LogicalProjectOperator project) {
                 project.getColumnRefMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
             }
             if (operator.getProjection() != null) {
                 operator.getProjection().getColumnRefMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
                 operator.getProjection().getCommonSubOperatorMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
             }
             if (operator instanceof LogicalJoinOperator join) {
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(join.getOnPredicate()), join.toString());
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(join.getOnPredicate()), join.toString());
             }
             if (operator instanceof LogicalApplyOperator apply) {
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()), apply.toString());
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getCorrelationConjuncts()),
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()), apply.toString());
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getCorrelationConjuncts()),
                         apply.toString());
             }
             if (operator instanceof LogicalValuesOperator values) {
                 values.getRows().forEach(row -> row.forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString())));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString())));
             }
         });
     }

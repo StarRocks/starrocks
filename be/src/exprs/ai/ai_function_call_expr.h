@@ -56,8 +56,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override;
 
-    std::string_view model_config_id() const { return _model_config_id; }
-    TAIModelSource::type model_source() const;
+    std::string_view provider_id() const { return _provider_id; }
     AICapability capability() const;
     AIFunctionResultKind result_kind() const;
     bool requires_default_model() const;
@@ -81,7 +80,7 @@ private:
     Status _validate_children() const;
 
     const AIFunctionDescriptor* const _descriptor;
-    const std::string _model_config_id;
+    const std::string _provider_id;
     const std::vector<TypeDescriptor> _argument_types;
 };
 

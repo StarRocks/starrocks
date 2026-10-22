@@ -29,6 +29,18 @@
 # example round functions: 1               013             0       = 10130
 #                          ^                ^              ^
 #                   {math function} {function group} {sub-function}
+def ai_metadata(capability, prompt_kind, result_kind, *, inputs, null_as_empty=(), blank_as_null=()):
+    # Inputs and NULL policies refer to named_args; fixed roles are inferred by name.
+    return {
+        'capability': capability,
+        'prompt_kind': prompt_kind,
+        'result_kind': result_kind,
+        'inputs': list(inputs),
+        'null_as_empty': list(null_as_empty),
+        'blank_as_null': list(blank_as_null),
+    }
+
+
 vectorized_functions = [
     # 10xxx: math functions
     [10010, "pi", True, False, "DOUBLE", [], "MathFunctions::pi"],
@@ -1761,106 +1773,138 @@ vectorized_functions = [
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
 
     # ai functions
-    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
-]
+    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AIFunctions::ai_query"],
 
-# AI functions are registered as FE metadata independently from ordinary builtins. They are
-# dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
-# BE builtin descriptor table.
-def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1):
-    # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
-    return {
-        'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
-        'capability': capability,
-        'prompt_kind': prompt_kind,
-        'result_kind': result_kind,
-        'input_arguments': list(input_arguments),
-        'model_argument': model_argument,
-        'provider_argument': provider_argument,
-        'file_argument': file_argument,
-        'null_as_empty_arguments': list(null_as_empty_arguments),
-        'blank_as_null_arguments': list(blank_as_null_arguments),
-    }
-
-
-ai_vectorized_functions = [
-    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
-    [200101, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
-    [200102, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
-    [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
-    [200104, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
-    [200105, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
-    [200106, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
-    [200107, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE', 'ANY_MAP'],
-     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
-    [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
-    [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [1], model_argument=0)],
-    [200112, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [0, 1])],
-    [200113, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [1, 2], model_argument=0)],
-    [200114, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [0, 1])],
-    [200115, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [1, 2], model_argument=0)],
-    [200116, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [0])],
-    [200117, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [1], model_argument=0)],
-    [200118, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [0, 1])],
-    [200119, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [1, 2], model_argument=0)],
-    [200120, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [0, 1, 2],
-                                           null_as_empty_arguments=[1], blank_as_null_arguments=[2])],
-    [200121, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [1, 2, 3], model_argument=0,
-                                           null_as_empty_arguments=[2], blank_as_null_arguments=[3])],
-    [200122, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [0, 1])],
-    [200123, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [1, 2], model_argument=0)],
-    [200124, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [0])],
-    [200125, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [1], model_argument=0)],
-    [200126, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [0, 1])],
-    [200127, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [1, 2], model_argument=0)],
-    [200130, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
-    [200131, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
-    [200132, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
-    [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
-    [200134, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
-    [200135, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
-    [200136, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
-    [200137, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
-    [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
-    [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
-    [200142, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
-    [200143, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
+    # AIProject functions share registration metadata with ordinary named-argument builtins.
+    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_complete', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200104, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_complete', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'file'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200130, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_embed', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', inputs=('input',))
+     }],
+    [200134, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_embed', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'NONE', 'EMBEDDING', inputs=())
+     }],
+    [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_sentiment', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', inputs=('input',))
+     }],
+    [200112, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_classify', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'CLASSIFY', 'JSON', inputs=('input', 'categories'))
+     }],
+    [200114, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_extract', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'keys'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'keys'))
+     }],
+    [200116, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_fix_grammar', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', inputs=('input',))
+     }],
+    [200118, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_redact', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'REDACT', 'STRING', inputs=('input', 'categories'))
+     }],
+    [200120, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_translate', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'source_language'},
+             {'name': 'target_language'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'TRANSLATE', 'STRING', inputs=('input', 'source_language', 'target_language'),
+                           null_as_empty=('source_language',),
+                           blank_as_null=('target_language',))
+     }],
+    [200122, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_similarity', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'other'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', inputs=('input', 'other'))
+     }],
+    [200124, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_summarize', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SUMMARIZE', 'STRING', inputs=('input',))
+     }],
+    [200126, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_filter', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'condition'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
+     }],
 ]

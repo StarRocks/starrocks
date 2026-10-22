@@ -27,9 +27,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.thrift.TAIModelConfiguration;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -60,7 +60,7 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboUseDBLock(useDatabaseLock);
         try {
             assertProviderPlan(plan("INSERT INTO tprimary (pk, v1, v2) "
-                    + "SELECT pk1, ai_custom_query('" + PROVIDER_NAME + "', v3), v4 FROM tprimary1"));
+                    + "SELECT pk1, ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3), v4 FROM tprimary1"));
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(original);
         }
@@ -68,20 +68,21 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
 
     @Test
     public void testUpdateAssignmentBindings() {
-        assertProviderPlan(plan("UPDATE tprimary SET v1 = ai_custom_query('" + PROVIDER_NAME
-                + "', v1) WHERE pk = 1"));
+        assertProviderPlan(plan("UPDATE tprimary SET v1 = ai_complete('" + PROVIDER_NAME
+                + "', 'explicit-model', v1) WHERE pk = 1"));
     }
 
     @Test
     public void testDeleteUncorrelatedSubqueryBindings() {
         assertProviderPlan(plan("DELETE FROM tprimary WHERE v1 IN "
-                + "(SELECT ai_custom_query('" + PROVIDER_NAME + "', v3) FROM tprimary1)"));
+                + "(SELECT ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3) FROM tprimary1)"));
     }
 
     @Test
     public void testMergeSourceSubqueryBindings() {
         assertProviderPlan(plan("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                + "USING (SELECT pk1 AS id, ai_custom_query('" + PROVIDER_NAME + "', v3) AS data FROM tprimary1) AS s "
+                + "USING (SELECT pk1 AS id, ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3) AS data "
+                + "FROM tprimary1) AS s "
                 + "ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data"));
     }
 
@@ -103,13 +104,14 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
                 connectContext.setCurrentCatalog(originalCatalog);
             }
             String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                    + "USING (SELECT pk1 AS id, ai_custom_query('" + PROVIDER_NAME
-                    + "', v3) AS data FROM tprimary1) AS s "
+                    + "USING (SELECT pk1 AS id, ai_complete('" + PROVIDER_NAME
+                    + "', 'explicit-model', v3) AS data "
+                    + "FROM tprimary1) AS s "
                     + "ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data";
             ErrorReportException functionDenied = Assertions.assertThrows(ErrorReportException.class,
                     () -> plan(sql, caller));
             Assertions.assertTrue(functionDenied.getMessage().contains("AI FUNCTION"), functionDenied.getMessage());
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
             ErrorReportException providerDenied = Assertions.assertThrows(ErrorReportException.class,
                     () -> plan(sql, caller));
             Assertions.assertTrue(providerDenied.getMessage().contains("AI PROVIDER"), providerDenied.getMessage());
@@ -125,21 +127,21 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
 
     @Test
     public void testConditionalUpdateRemainsUnsupported() {
-        assertRejected("UPDATE tprimary SET v1 = CASE WHEN pk = 1 THEN ai_custom_query('"
-                + PROVIDER_NAME + "', v1) ELSE v1 END WHERE pk > 0", "conditional expression");
+        assertRejected("UPDATE tprimary SET v1 = CASE WHEN pk = 1 THEN ai_complete('"
+                + PROVIDER_NAME + "', 'explicit-model', v1) ELSE v1 END WHERE pk > 0", "conditional expression");
     }
 
     @Test
     public void testCorrelatedDeleteRemainsUnsupported() {
-        assertRejected("DELETE FROM tprimary WHERE v1 IN (SELECT ai_custom_query('" + PROVIDER_NAME
-                + "', v3) FROM tprimary1 WHERE pk1 = tprimary.pk)", "correlated AI function");
+        assertRejected("DELETE FROM tprimary WHERE v1 IN (SELECT ai_complete('" + PROVIDER_NAME
+                + "', 'explicit-model', v3) FROM tprimary1 WHERE pk1 = tprimary.pk)", "correlated AI function");
     }
 
     @Test
     public void testConditionalMergeAssignmentRemainsUnsupported() {
         assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
                 + "USING (SELECT 1 AS id, 'prompt' AS data) AS s ON t.id = s.id "
-                + "WHEN MATCHED THEN UPDATE SET data = ai_custom_query('" + PROVIDER_NAME + "', s.data)",
+                + "WHEN MATCHED THEN UPDATE SET data = ai_complete('" + PROVIDER_NAME + "', 'explicit-model', s.data)",
                 "conditional expression");
     }
 
@@ -147,7 +149,7 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
     public void testMergeJoinConditionRemainsUnsupported() {
         assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
                 + "USING (SELECT 1 AS id, 'prompt' AS data) AS s "
-                + "ON t.data = ai_custom_query('" + PROVIDER_NAME + "', s.data) "
+                + "ON t.data = ai_complete('" + PROVIDER_NAME + "', 'explicit-model', s.data) "
                 + "WHEN MATCHED THEN UPDATE SET data = s.data", "JOIN ON clause");
     }
 
@@ -181,14 +183,13 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
                 .map(node -> node.getAi_project_node()).toList();
         Assertions.assertFalse(aiNodes.isEmpty(), "The DML plan must physically execute its provider call");
         for (TAIProjectNode node : aiNodes) {
-            Assertions.assertEquals(Set.of("provider:0"), node.getAi_model_configs().keySet());
-            TAIModelConfiguration config = node.getAi_model_configs().get("provider:0");
-            Assertions.assertEquals(TAIModelSource.PROVIDER, config.getSource());
-            Assertions.assertEquals("dml-model", config.getChat().getModel());
-            Assertions.assertEquals("test-dml-key", config.getChat().getApi_key());
-            Assertions.assertEquals(1800, config.getChat().getTimeout_ms());
-            Assertions.assertEquals("https://models.example.test/v1/chat/completions", config.getChat().getEndpoint());
-            Assertions.assertEquals("openai_compatible", config.getChat().getProvider());
+            Assertions.assertEquals(1, node.getAi_provider_mapping().size());
+            TAIProvider config = node.getAi_provider_mapping().values().iterator().next();
+            Assertions.assertEquals("dml-model", config.getParams().get("model"));
+            Assertions.assertEquals("test-dml-key", config.getParams().get("api_key"));
+            Assertions.assertEquals("1800", config.getParams().get("timeout_ms"));
+            Assertions.assertEquals("https://models.example.test/v1/chat/completions", config.getParams().get("endpoint"));
+            Assertions.assertEquals(TAIProviderProtocol.OPENAI, config.getProtocol());
         }
     }
 

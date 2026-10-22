@@ -39,7 +39,7 @@
 #include "column/const_column.h"
 #include "column/file_column.h"
 #include "column/fixed_length_column.h"
-#include "column/map_column.h"
+#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
@@ -59,15 +59,18 @@ constexpr int64_t kPromptFid = 200100;
 constexpr int64_t kPromptOptionsFid = 200101;
 constexpr int64_t kModelPromptFid = 200102;
 constexpr int64_t kModelPromptOptionsFid = 200103;
-constexpr std::string_view kSystemConfigId = "__system_chat__";
+constexpr std::string_view kDefaultConfigId = "provider:default_chat";
 
 class CountingColumnExpr final : public Expr {
 public:
-    CountingColumnExpr(TypeDescriptor type, ColumnPtr column) : Expr(std::move(type)), _column(std::move(column)) {}
+    CountingColumnExpr(TypeDescriptor type, ColumnPtr column, bool constant_expression = false)
+            : Expr(std::move(type)), _column(std::move(column)), _constant_expression(constant_expression) {}
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CountingColumnExpr(type(), _column)); }
+    Expr* clone(ObjectPool* pool) const override {
+        return pool->add(new CountingColumnExpr(type(), _column, _constant_expression));
+    }
 
-    bool is_constant() const override { return _column->is_constant(); }
+    bool is_constant() const override { return _constant_expression || _column->is_constant(); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
         ++_evaluation_count;
@@ -78,6 +81,7 @@ public:
 
 private:
     ColumnPtr _column;
+    bool _constant_expression;
     int _evaluation_count = 0;
 };
 
@@ -128,11 +132,7 @@ TypeDescriptor varchar_type() {
 }
 
 TypeDescriptor options_type() {
-    return TypeDescriptor::create_map_type(varchar_type(), TypeDescriptor(TYPE_DOUBLE));
-}
-
-TypeDescriptor wire_normalized_untyped_options_type() {
-    return TypeDescriptor::create_map_type(TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_BOOLEAN));
+    return TypeDescriptor(TYPE_JSON);
 }
 
 std::vector<TypeDescriptor> signature_argument_types(int64_t fid) {
@@ -184,7 +184,6 @@ TExpr make_ai_expression(int64_t fid) {
     function.__set_ret_type(varchar_type().to_thrift());
     function.__set_has_var_args(false);
     function.__set_fid(fid);
-    function.__set_ai_model_source(TAIModelSource::SYSTEM);
 
     TExprNode call;
     call.__set_node_type(TExprNodeType::FUNCTION_CALL);
@@ -192,7 +191,7 @@ TExpr make_ai_expression(int64_t fid) {
     call.__set_type(varchar_type().to_thrift());
     call.__set_is_nullable(true);
     call.__set_fn(function);
-    call.__set_ai_model_config_id(std::string(kSystemConfigId));
+    call.__set_ai_provider_id(std::string(kDefaultConfigId));
 
     TExpr expression;
     expression.nodes.emplace_back(std::move(call));
@@ -241,39 +240,11 @@ TExpr make_string_expression(std::string value) {
     return expression;
 }
 
-TExpr make_ai_expression_with_literal_options() {
-    TExpr expression = make_ai_expression(kPromptOptionsFid);
-    TExprNode call = std::move(expression.nodes.front());
-    expression.nodes.clear();
-    expression.nodes.emplace_back(std::move(call));
-    expression.nodes.emplace_back(make_string_literal_node(varchar_type(), "prompt"));
-
-    TExprNode map;
-    map.__set_node_type(TExprNodeType::MAP_EXPR);
-    map.__set_num_children(2);
-    map.__set_type(options_type().to_thrift());
-    map.__set_is_nullable(false);
-    expression.nodes.emplace_back(std::move(map));
-    expression.nodes.emplace_back(make_string_literal_node(varchar_type(), "temperature"));
-
-    TExprNode value;
-    value.__set_node_type(TExprNodeType::FLOAT_LITERAL);
-    value.__set_num_children(0);
-    value.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
-    value.__set_is_nullable(false);
-    TFloatLiteral float_literal;
-    float_literal.__set_value(0.5);
-    value.__set_float_literal(float_literal);
-    expression.nodes.emplace_back(std::move(value));
-    return expression;
-}
-
 void clear_ai_markers(TExprNode* node) {
     node->fn.binary_type = TFunctionBinaryType::BUILTIN;
     node->fn.name.function_name = "ordinary_function";
-    node->fn.__isset.ai_model_source = false;
     node->fn.__isset.fid = false;
-    node->__isset.ai_model_config_id = false;
+    node->__isset.ai_provider_id = false;
 }
 
 StatusOr<AIFunctionCallExpr*> create_ai_expression(ObjectPool* pool, int64_t fid) {
@@ -299,50 +270,22 @@ ColumnPtr make_varchar_column(std::initializer_list<std::optional<std::string>> 
 }
 
 ColumnPtr make_const_options(size_t rows, bool top_level_null = false) {
-    auto keys = BinaryColumn::create();
-    keys->append("temperature");
-    auto values = DoubleColumn::create();
-    values->append(0.25);
-    auto offsets = UInt32Column::create();
-    offsets->append(0);
-    offsets->append(1);
-    auto map = MapColumn::create(ColumnHelper::cast_to_nullable_column(std::move(keys)),
-                                 ColumnHelper::cast_to_nullable_column(std::move(values)), std::move(offsets));
+    auto json = JsonColumn::create();
+    json->append(JsonValue::parse(R"({"temperature":0.25})").value());
     if (!top_level_null) {
-        return ConstColumn::create(std::move(map), rows);
+        return ConstColumn::create(std::move(json), rows);
     }
 
     auto nulls = NullColumn::create();
     nulls->append(1);
-    auto nullable = NullableColumn::create(std::move(map), std::move(nulls));
+    auto nullable = NullableColumn::create(std::move(json), std::move(nulls));
     return ConstColumn::create(std::move(nullable), rows);
 }
 
 ColumnPtr make_non_const_options() {
-    auto keys = BinaryColumn::create();
-    keys->append("temperature");
-    auto values = DoubleColumn::create();
-    values->append(0.25);
-    auto offsets = UInt32Column::create();
-    offsets->append(0);
-    offsets->append(1);
-    return MapColumn::create(ColumnHelper::cast_to_nullable_column(std::move(keys)),
-                             ColumnHelper::cast_to_nullable_column(std::move(values)), std::move(offsets));
-}
-
-ColumnPtr make_const_wire_normalized_untyped_options(size_t rows, bool empty) {
-    auto keys = BooleanColumn::create();
-    auto values = BooleanColumn::create();
-    if (!empty) {
-        keys->append(true);
-        values->append(false);
-    }
-    auto offsets = UInt32Column::create();
-    offsets->append(0);
-    offsets->append(empty ? 0 : 1);
-    auto map = MapColumn::create(ColumnHelper::cast_to_nullable_column(std::move(keys)),
-                                 ColumnHelper::cast_to_nullable_column(std::move(values)), std::move(offsets));
-    return ConstColumn::create(std::move(map), rows);
+    auto json = JsonColumn::create();
+    json->append(JsonValue::parse(R"({"temperature":0.25})").value());
+    return json;
 }
 
 ChunkPtr make_chunk(size_t rows) {
@@ -417,7 +360,7 @@ TEST_F(AIFunctionCallExprTest, FactoryDispatchesAIBeforeThePostHook) {
             auto* ai = dynamic_cast<AIFunctionCallExpr*>(root);
             ASSERT_NE(nullptr, ai);
             EXPECT_TRUE(ai->requires_default_model());
-            EXPECT_EQ(kSystemConfigId, ai->model_config_id());
+            EXPECT_EQ(kDefaultConfigId, ai->provider_id());
         }
     }
 }
@@ -430,12 +373,9 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsMalformedAIThriftWithoutDelegatingT
             {"wrong name", [](TExprNode& node) { node.fn.name.function_name = "sensitive-ai-function-name"; }},
             {"missing fid", [](TExprNode& node) { node.fn.__isset.fid = false; }},
             {"unknown fid", [](TExprNode& node) { node.fn.fid = 299999; }},
-            {"missing source", [](TExprNode& node) { node.fn.__isset.ai_model_source = false; }},
-            {"invalid source",
-             [](TExprNode& node) { node.fn.ai_model_source = static_cast<TAIModelSource::type>(127); }},
             {"varargs", [](TExprNode& node) { node.fn.has_var_args = true; }},
-            {"missing config", [](TExprNode& node) { node.__isset.ai_model_config_id = false; }},
-            {"wrong config", [](TExprNode& node) { node.ai_model_config_id = "sensitive-ai-config"; }},
+            {"missing config", [](TExprNode& node) { node.__isset.ai_provider_id = false; }},
+            {"wrong config", [](TExprNode& node) { node.ai_provider_id = "invalid\nconfig"; }},
             {"missing nullable", [](TExprNode& node) { node.__isset.is_nullable = false; }},
             {"non-nullable", [](TExprNode& node) { node.__set_is_nullable(false); }},
             {"wrong node return", [](TExprNode& node) { node.type = TypeDescriptor(TYPE_INT).to_thrift(); }},
@@ -486,7 +426,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRedactsMalformedNestedAIThrift) {
                                                           "nested-sensitive-literal-prompt"};
     TExpr expression = wrap_in_builtin_call(make_ai_expression(kPromptFid));
     TExprNode& ai_call = expression.nodes[1];
-    ai_call.ai_model_config_id = "invalid-config";
+    ai_call.ai_provider_id = "invalid-config";
     ai_call.fn.__set_content(sensitive_sentinels[0]);
     ai_call.fn.__set_service_url(sensitive_sentinels[1]);
     expression.nodes[2].__isset.slot_ref = false;
@@ -541,8 +481,7 @@ TEST_F(AIFunctionCallExprTest, FactoryUsesExplicitAIMarkersToRedactMalformedTree
     };
     const std::vector<TestCase> test_cases = {
             {"binary type", [](TExprNode& node) { node.fn.binary_type = TFunctionBinaryType::AI; }},
-            {"config id", [](TExprNode& node) { node.__set_ai_model_config_id(std::string(kSystemConfigId)); }},
-            {"model source", [](TExprNode& node) { node.fn.__set_ai_model_source(TAIModelSource::SYSTEM); }},
+            {"config id", [](TExprNode& node) { node.__set_ai_provider_id(std::string(kDefaultConfigId)); }},
     };
 
     for (const auto& test_case : test_cases) {
@@ -552,9 +491,8 @@ TEST_F(AIFunctionCallExprTest, FactoryUsesExplicitAIMarkersToRedactMalformedTree
         TExprNode& node = expression.nodes.front();
         node.fn.binary_type = TFunctionBinaryType::BUILTIN;
         node.fn.name.function_name = "ordinary_function";
-        node.fn.__isset.ai_model_source = false;
         node.fn.__isset.fid = false;
-        node.__isset.ai_model_config_id = false;
+        node.__isset.ai_provider_id = false;
         test_case.set_marker(node);
         expression.nodes[1].__isset.slot_ref = false;
         expression.nodes[1].__set_node_type(TExprNodeType::STRING_LITERAL);
@@ -609,7 +547,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsAIMarkersOnRootAndNestedNonFunction
         if (nested) {
             expression = wrap_in_builtin_call(std::move(expression));
         }
-        expression.nodes[nested ? 1 : 0].__set_ai_model_config_id(std::string(kSystemConfigId));
+        expression.nodes[nested ? 1 : 0].__set_ai_provider_id(std::string(kDefaultConfigId));
 
         CapturingLogSink log_sink;
         ObjectPool pool;
@@ -694,20 +632,6 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsNonVarcharOptionKeys) {
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(nullptr, root);
     EXPECT_NE(std::string::npos, std::string(status.message()).find("Invalid AI function expression"));
-}
-
-TEST_F(AIFunctionCallExprTest, FactoryAcceptsOnlyTheWireNormalizedUntypedOptionsShape) {
-    TExpr expression = make_ai_expression(kPromptOptionsFid);
-    const auto normalized_type = wire_normalized_untyped_options_type().to_thrift();
-    expression.nodes.front().fn.arg_types[1] = normalized_type;
-    expression.nodes[2].type = normalized_type;
-
-    ObjectPool pool;
-    Expr* root = nullptr;
-    Status status = ExprFactory::create_expr_tree(&pool, expression, &root, nullptr);
-
-    ASSERT_TRUE(status.ok()) << status.message();
-    ASSERT_NE(nullptr, dynamic_cast<AIFunctionCallExpr*>(root));
 }
 
 TEST_F(AIFunctionCallExprTest, FactoryRejectsArgumentTypesThatDoNotMatchEachFid) {
@@ -817,87 +741,7 @@ TEST_F(AIFunctionCallExprTest, PrepareRejectsConcreteOptionTypesThatDisagreeWith
     EXPECT_EQ("Invalid AI function expression", prepare_status.message());
 }
 
-TEST_F(AIFunctionCallExprTest, OptionCompatibilityIgnoresSafeStringLengthsButNeverWidensTheKeyType) {
-    {
-        TExpr expression = make_ai_expression(kPromptOptionsFid);
-        expression.nodes.front().fn.arg_types[1] =
-                TypeDescriptor::create_map_type(varchar_type(), varchar_type()).to_thrift();
-        expression.nodes[2].type = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(12),
-                                                                   TypeDescriptor::create_char_type(24))
-                                           .to_thrift();
 
-        ObjectPool pool;
-        Expr* root = nullptr;
-        ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, expression, &root, nullptr).ok());
-        RuntimeState state;
-        ExprContext context(root);
-        Status status = context.prepare(&state);
-        EXPECT_TRUE(status.ok()) << status.message();
-    }
-
-    {
-        TExpr expression = make_ai_expression(kPromptOptionsFid);
-        expression.nodes[2].type =
-                TypeDescriptor::create_map_type(TypeDescriptor::create_char_type(12), TypeDescriptor(TYPE_DOUBLE))
-                        .to_thrift();
-
-        ObjectPool pool;
-        Expr* root = nullptr;
-        ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, expression, &root, nullptr).ok());
-        RuntimeState state;
-        ExprContext context(root);
-        Status status = context.prepare(&state);
-        EXPECT_FALSE(status.ok());
-        EXPECT_EQ("Invalid AI function expression", status.message());
-    }
-}
-
-TEST_F(AIFunctionCallExprTest, PrepareRejectsUnsafeKeysAtEveryNestedMapDepth) {
-    struct TestCase {
-        std::string name;
-        TypeDescriptor nested_type;
-    };
-    const std::vector<TestCase> unsafe_nested_types = {
-            {"char key in an empty nested map",
-             TypeDescriptor::create_map_type(TypeDescriptor::create_char_type(12), TypeDescriptor(TYPE_INT))},
-            {"boolean key hidden by a nested SQL NULL",
-             TypeDescriptor::create_map_type(TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_INT))},
-    };
-
-    for (const auto& test_case : unsafe_nested_types) {
-        SCOPED_TRACE(test_case.name);
-        const auto options_type = TypeDescriptor::create_map_type(varchar_type(), test_case.nested_type);
-        TExpr expression = make_ai_expression(kPromptOptionsFid);
-        expression.nodes.front().fn.arg_types[1] = options_type.to_thrift();
-        expression.nodes[2].type = options_type.to_thrift();
-
-        ObjectPool pool;
-        Expr* root = nullptr;
-        ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, expression, &root, nullptr).ok());
-        RuntimeState state;
-        ExprContext context(root);
-        Status status = context.prepare(&state);
-        EXPECT_FALSE(status.ok());
-        EXPECT_EQ("Invalid AI function expression", status.message());
-    }
-}
-
-TEST_F(AIFunctionCallExprTest, PrepareAcceptsExactNestedWireNormalizedEmptyMapType) {
-    const auto normalized_empty =
-            TypeDescriptor::create_map_type(TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_BOOLEAN));
-    const auto options_type = TypeDescriptor::create_map_type(varchar_type(), normalized_empty);
-    TExpr expression = make_ai_expression(kPromptOptionsFid);
-    expression.nodes.front().fn.arg_types[1] = options_type.to_thrift();
-    expression.nodes[2].type = options_type.to_thrift();
-
-    ObjectPool pool;
-    Expr* root = nullptr;
-    ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, expression, &root, nullptr).ok());
-    RuntimeState state;
-    ExprContext context(root);
-    Status status = context.prepare(&state);
-    EXPECT_TRUE(status.ok()) << status.message();
-}
 
 TEST_F(AIFunctionCallExprTest, CloneRetainsOnlyValidatedIdentityAndNeverBecomesConstant) {
     const std::vector<std::pair<int64_t, bool>> signatures = {
@@ -921,7 +765,7 @@ TEST_F(AIFunctionCallExprTest, CloneRetainsOnlyValidatedIdentityAndNeverBecomesC
         ASSERT_NE(nullptr, expression);
 
         EXPECT_EQ(requires_default_model, expression->requires_default_model());
-        EXPECT_EQ(kSystemConfigId, expression->model_config_id());
+        EXPECT_EQ(kDefaultConfigId, expression->provider_id());
         EXPECT_FALSE(expression->is_constant());
         EXPECT_FALSE(expression->has_fn_ctx());
         EXPECT_TRUE(expression->fn().name.function_name.empty());
@@ -937,7 +781,7 @@ TEST_F(AIFunctionCallExprTest, CloneRetainsOnlyValidatedIdentityAndNeverBecomesC
         auto* clone = dynamic_cast<AIFunctionCallExpr*>(Expr::copy(&clone_pool, expression));
         ASSERT_NE(nullptr, clone);
         EXPECT_EQ(requires_default_model, clone->requires_default_model());
-        EXPECT_EQ(kSystemConfigId, clone->model_config_id());
+        EXPECT_EQ(kDefaultConfigId, clone->provider_id());
         EXPECT_EQ(expression->get_num_children(), clone->get_num_children());
         EXPECT_FALSE(clone->is_constant());
         EXPECT_FALSE(clone->has_fn_ctx());
@@ -1086,45 +930,99 @@ TEST_F(AIFunctionCallExprTest, PromptOptionsAreConstantPreparedOnceAndSharedByTh
     }
 }
 
-TEST_F(AIFunctionCallExprTest, SemanticConstantMapExprIsPreparedOnceEvenWhenItsColumnIsNotConst) {
-    ObjectPool pool;
-    TExpr thrift_expression = make_ai_expression_with_literal_options();
-    Expr* root = nullptr;
-    ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, thrift_expression, &root, nullptr).ok());
-    auto* expression = dynamic_cast<AIFunctionCallExpr*>(root);
-    ASSERT_NE(nullptr, expression);
-    ASSERT_EQ(2, expression->get_num_children());
-    Expr* options_expression = expression->get_child(1);
-    ASSERT_TRUE(options_expression->is_constant());
+TEST_F(AIFunctionCallExprTest, FactoryRejectsNonJsonOptions) {
+    for (const auto& type : {varchar_type(), TypeDescriptor::create_map_type(varchar_type(), varchar_type())}) {
+        ObjectPool pool;
+        auto wire = make_ai_expression(kPromptFid);
+        wire.nodes.front().__set_num_children(4);
+        wire.nodes.front().fn.__set_arg_types(
+                {varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(), type.to_thrift()});
+        auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        EXPECT_FALSE(created.ok());
+    }
+}
 
+TEST_F(AIFunctionCallExprTest, ConstantJsonExpressionIsPreparedOnceForTheBatch) {
+    ObjectPool pool;
+    auto wire = make_ai_expression(kPromptFid);
+    wire.nodes.front().__set_num_children(4);
+    wire.nodes.front().fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                           varchar_type().to_thrift(), options_type().to_thrift()});
+    auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+    ASSERT_TRUE(created.ok()) << created.status();
+    auto* expression = created.value();
+    replace_children(&pool, expression,
+                     {{varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("prompt", 3)},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 3)},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 3)}});
+    auto json = JsonColumn::create();
+    auto value = JsonValue::parse(R"({"guardrails":true,"temperature":0.5})");
+    ASSERT_TRUE(value.ok());
+    for (int i = 0; i < 3; ++i) {
+        json->append(value.value());
+    }
+    // Constant SQL expressions need not evaluate to a ConstColumn.
+    auto* options = pool.add(new CountingColumnExpr(options_type(), std::move(json), true));
+    expression->add_child(options);
     RuntimeState state;
     ExprContext context(expression);
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(3);
-    auto evaluated_options = context.evaluate(options_expression, chunk.get());
-    ASSERT_TRUE(evaluated_options.ok()) << evaluated_options.status().message();
-    EXPECT_FALSE(evaluated_options.value()->is_constant());
-    EXPECT_EQ(chunk->num_rows(), evaluated_options.value()->size());
-
-    auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
-
-    ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
-    ASSERT_NE(nullptr, batch_result->options);
-    ASSERT_EQ(3, batch_result->rows.size());
-    for (const auto& row : batch_result->rows) {
-        EXPECT_EQ(AIFunctionRowAction::DISPATCH, row.action);
-        EXPECT_NE(std::string::npos, request_body(*batch_result, row).find(R"("temperature":0.5)"));
+    auto batch = expression->build_input_batch(&context, chunk.get(), "default-model");
+    ASSERT_TRUE(batch.ok()) << batch.status();
+    EXPECT_EQ(1, options->evaluation_count());
+    ASSERT_EQ(3, batch->rows.size());
+    ASSERT_NE(nullptr, batch->options);
+    for (const auto& row : batch->rows) {
+        auto body = request_body(*batch, row);
+        EXPECT_NE(std::string::npos, body.find(R"("guardrails":true)"));
+        EXPECT_NE(std::string::npos, body.find(R"("temperature":0.5)"));
     }
 }
 
-TEST_F(AIFunctionCallExprTest, NullTopLevelOptionsMeanAnEmptySharedOptionSet) {
+TEST_F(AIFunctionCallExprTest, ProviderPrecedesModelInCanonicalArguments) {
+    for (const std::string model : {"chosen-model", ""}) {
+        ObjectPool pool;
+        TExpr wire = make_ai_expression(kPromptFid);
+        wire.nodes.front().__set_num_children(4);
+        wire.nodes.front().fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                               varchar_type().to_thrift(), options_type().to_thrift()});
+        auto expression_result = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        ASSERT_TRUE(expression_result.ok()) << expression_result.status();
+        auto* expression = expression_result.value();
+        replace_children(&pool, expression,
+                         {{varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("hello", 1)},
+                          {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("provider-name", 1)},
+                          {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>(model, 1)},
+                          {options_type(), make_const_options(1)}});
+        RuntimeState state;
+        ExprContext context(expression);
+        ASSERT_TRUE(context.prepare(&state).ok());
+        ASSERT_TRUE(context.open(&state).ok());
+        auto chunk = make_chunk(1);
+        auto batch = expression->build_input_batch(&context, chunk.get(), "provider-default-model");
+        ASSERT_TRUE(batch.ok()) << batch.status();
+        ASSERT_EQ(1, batch->rows.size());
+        EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
+        EXPECT_EQ("hello", batch->rows[0].prompt);
+        EXPECT_EQ(model.empty() ? "provider-default-model" : model, batch->rows[0].model);
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, NullSelectorsAndOptionsUseDefaults) {
     ObjectPool pool;
-    auto expression_result = create_ai_expression(&pool, kPromptOptionsFid);
+    TExpr wire = make_ai_expression(kPromptFid);
+    wire.nodes.front().__set_num_children(4);
+    wire.nodes.front().fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                           varchar_type().to_thrift(), options_type().to_thrift()});
+    auto expression_result = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(expression_result.ok()) << expression_result.status().message();
     auto* expression = expression_result.value();
     replace_children(&pool, expression,
                      {{varchar_type(), make_varchar_column({std::string("prompt")})},
+                      {varchar_type(), ColumnHelper::create_const_null_column(1)},
+                      {varchar_type(), ColumnHelper::create_const_null_column(1)},
                       {options_type(), make_const_options(1, true)}});
 
     RuntimeState state;
@@ -1135,46 +1033,12 @@ TEST_F(AIFunctionCallExprTest, NullTopLevelOptionsMeanAnEmptySharedOptionSet) {
     auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
 
     ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
-    ASSERT_NE(nullptr, batch_result->options);
     ASSERT_EQ(1, batch_result->rows.size());
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch_result->rows[0].action);
-    EXPECT_EQ(std::string::npos, request_body(*batch_result, batch_result->rows[0]).find("temperature"));
-}
-
-TEST_F(AIFunctionCallExprTest, WireNormalizedUntypedOptionsRequireAnActuallyEmptyMap) {
-    for (bool empty : {true, false}) {
-        SCOPED_TRACE(empty ? "empty" : "non-empty");
-        ObjectPool pool;
-        TExpr thrift_expression = make_ai_expression(kPromptOptionsFid);
-        const auto normalized_type = wire_normalized_untyped_options_type().to_thrift();
-        thrift_expression.nodes.front().fn.arg_types[1] = normalized_type;
-        thrift_expression.nodes[2].type = normalized_type;
-
-        Expr* root = nullptr;
-        ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, thrift_expression, &root, nullptr).ok());
-        auto* expression = dynamic_cast<AIFunctionCallExpr*>(root);
-        ASSERT_NE(nullptr, expression);
-        replace_children(
-                &pool, expression,
-                {{varchar_type(), make_varchar_column({std::string("prompt")})},
-                 {wire_normalized_untyped_options_type(), make_const_wire_normalized_untyped_options(1, empty)}});
-
-        RuntimeState state;
-        ExprContext context(expression);
-        ASSERT_TRUE(context.prepare(&state).ok());
-        ASSERT_TRUE(context.open(&state).ok());
-        auto chunk = make_chunk(1);
-        auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
-
-        if (empty) {
-            ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
-            ASSERT_NE(nullptr, batch_result->options);
-            EXPECT_EQ(std::string::npos, request_body(*batch_result, batch_result->rows[0]).find("temperature"));
-        } else {
-            ASSERT_FALSE(batch_result.ok());
-            EXPECT_EQ("AI provider options are invalid", batch_result.status().message());
-        }
-    }
+    EXPECT_EQ("prompt", batch_result->rows[0].prompt);
+    EXPECT_EQ("default-model", batch_result->rows[0].model);
+    ASSERT_NE(nullptr, batch_result->options);
+    EXPECT_TRUE(batch_result->options->members().empty());
 }
 
 TEST_F(AIFunctionCallExprTest, NonConstantOptionsAreRejectedAfterEachChildIsEvaluatedOnce) {
@@ -1268,10 +1132,9 @@ TExpr make_extended_ai_expression(int64_t fid, const std::string& name, const Ty
         call.fn.arg_types.push_back(argument.to_thrift());
     }
     call.__set_num_children(arguments.size());
-    call.fn.__set_ai_model_source(provider ? TAIModelSource::PROVIDER : TAIModelSource::SYSTEM);
-    call.__set_ai_model_config_id(provider ? "provider:00000000-0000-0000-0000-000000000102"
-                                           : result_type.type == TYPE_ARRAY ? "__system_embedding__"
-                                                                            : "__system_chat__");
+    call.__set_ai_provider_id(provider                         ? "provider:00000000-0000-0000-0000-000000000102"
+                                  : result_type.type == TYPE_ARRAY ? "provider:default_embedding"
+                                                                   : "provider:default_chat");
     expression.nodes.resize(1);
     for (size_t i = 0; i < arguments.size(); ++i) {
         expression.nodes.push_back(make_slot_ref(arguments[i], i + 1));
@@ -1334,16 +1197,29 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200135, "ai_embed", embedding, {file, options}, Result::EMBEDDING},
             {200136, "ai_embed", embedding, {text, file}, Result::EMBEDDING, 0},
             {200137, "ai_embed", embedding, {text, file, options}, Result::EMBEDDING, 0},
-            {200140, "ai_custom_query", text, {text, text}, Result::STRING, -1, 0},
-            {200141, "ai_custom_query", text, {text, text, options}, Result::STRING, -1, 0},
-            {200142, "ai_custom_embedding", embedding, {text, text}, Result::EMBEDDING, -1, 0},
-            {200143, "ai_custom_embedding", embedding, {text, text, options}, Result::EMBEDDING, -1, 0},
+            {200150, "ai_complete", text, {text, text, text}, Result::STRING, 1, 0},
+            {200151, "ai_complete", text, {text, text, text, options}, Result::STRING, 1, 0},
+            {200152, "ai_complete", text, {text, text, text, file}, Result::STRING, 1, 0},
+            {200153, "ai_complete", text, {text, text, text, file, options}, Result::STRING, 1, 0},
+            {200154, "ai_sentiment", text, {text, text, text}, Result::SENTIMENT, 1, 0},
+            {200155, "ai_classify", json, {text, text, text, strings}, Result::JSON, 1, 0},
+            {200156, "ai_extract", json, {text, text, text, strings}, Result::JSON, 1, 0},
+            {200157, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 1, 0},
+            {200158, "ai_redact", text, {text, text, text, strings}, Result::STRING, 1, 0},
+            {200159, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 1, 0},
+            {200160, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 1, 0},
+            {200161, "ai_summarize", text, {text, text, text}, Result::STRING, 1, 0},
+            {200162, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 1, 0},
+            {200163, "ai_embed", embedding, {text, text, text}, Result::EMBEDDING, 1, 0},
+            {200164, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 1, 0},
+            {200165, "ai_embed", embedding, {text, text, file}, Result::EMBEDDING, 1, 0},
+            {200166, "ai_embed", embedding, {text, text, file, options}, Result::EMBEDDING, 1, 0},
     };
 }
 
 TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsWhenCloned) {
     const auto cases = ai_overload_cases();
-    ASSERT_EQ(38, cases.size());
+    ASSERT_EQ(51, cases.size());
     for (const auto& test : cases) {
         SCOPED_TRACE(test.fid);
         TExpr wire = make_extended_ai_expression(test.fid, test.name, test.result, test.arguments,
@@ -1358,7 +1234,7 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
             EXPECT_EQ(test.result_kind == AIFunctionResultKind::EMBEDDING ? AICapability::TEXT_EMBEDDING
                                                                           : AICapability::CHAT,
                       expression->capability());
-            EXPECT_EQ(wire.nodes.front().ai_model_config_id, expression->model_config_id());
+            EXPECT_EQ(wire.nodes.front().ai_provider_id, expression->provider_id());
             EXPECT_FALSE(expression->is_constant());
             EXPECT_TRUE(expression->fn().name.function_name.empty());
         }
@@ -1371,12 +1247,9 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
         invalid = wire.nodes.front();
         invalid.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
-        invalid = wire.nodes.front();
-        invalid.fn.__set_ai_model_source(test.provider_argument >= 0 ? TAIModelSource::SYSTEM
-                                                                     : TAIModelSource::PROVIDER);
-        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
     }
-    for (int64_t fid : {200000, 200108, 200109, 200128, 200129, 200138, 200139, 200144}) {
+    for (int64_t fid :
+         {200000, 200108, 200109, 200128, 200129, 200138, 200139, 200140, 200141, 200142, 200143, 200144}) {
         EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_id(fid)) << fid;
     }
     EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_name("ai_query"));
@@ -1550,8 +1423,8 @@ TEST_F(AIFunctionCallExprTest, TranslationAutoDetectsNullSourceAndPreservesPerRo
     replace_children(&pool, expression,
                      {{varchar_type(), make_varchar_column({"m1", "m2", "m3"})},
                       {varchar_type(), make_varchar_column({"hello", "bonjour", "null target"})},
-                      {varchar_type(), make_varchar_column({std::nullopt, "French", "English"})},
-                      {varchar_type(), make_varchar_column({"Chinese", "English", std::nullopt})}});
+                      {varchar_type(), make_varchar_column({std::nullopt, "fr", "en"})},
+                      {varchar_type(), make_varchar_column({"zh", "en", std::nullopt})}});
     RuntimeState state;
     ExprContext context(expression);
     ASSERT_TRUE(context.prepare(&state).ok());
@@ -1561,19 +1434,24 @@ TEST_F(AIFunctionCallExprTest, TranslationAutoDetectsNullSourceAndPreservesPerRo
     ASSERT_TRUE(batch.ok()) << batch.status();
     EXPECT_EQ("m1", batch->rows[0].model);
     EXPECT_NE(std::string::npos, batch->rows[0].prompt.find("Auto-detect"));
-    EXPECT_NE(std::string::npos, batch->rows[1].prompt.find("from French into English"));
+    EXPECT_NE(std::string::npos, batch->rows[1].prompt.find("from fr into en"));
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[2].action);
 }
 
-TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtBothDeclaredInputOffsets) {
-    for (const auto& [fid, explicit_model] : std::vector<std::pair<int64_t, bool>>{{200120, false}, {200121, true}}) {
+TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtEveryDeclaredInputOffset) {
+    for (const auto& [fid, prefix] : std::vector<std::pair<int64_t, size_t>>{{200120, 0}, {200121, 1}, {200159, 2}}) {
         SCOPED_TRACE(fid);
         ObjectPool pool;
-        std::vector<TypeDescriptor> arguments(explicit_model ? 4 : 3, varchar_type());
-        auto wire = make_extended_ai_expression(fid, "ai_translate", varchar_type(), arguments);
+        const bool explicit_model = prefix > 0;
+        std::vector<TypeDescriptor> arguments(prefix + 3, varchar_type());
+        auto wire = make_extended_ai_expression(fid, "ai_translate", varchar_type(), arguments, prefix == 2);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
         auto* expression = created.value();
+        if (prefix == 2) {
+            expression->add_child(pool.add(new CountingColumnExpr(
+                    varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("test_provider", 6))));
+        }
         if (explicit_model) {
             expression->add_child(pool.add(new CountingColumnExpr(
                     varchar_type(), make_varchar_column({"model", "model", "model", "model", "", " \t"}))));
@@ -1593,9 +1471,9 @@ TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtBothDeclare
         ASSERT_TRUE(batch.ok()) << batch.status();
         ASSERT_EQ(6, batch->rows.size());
         EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
-        EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[1].action);
         EXPECT_NE(std::string::npos, batch->rows[0].prompt.find("Auto-detect"));
-        EXPECT_EQ(batch->rows[0].prompt, batch->rows[1].prompt);
+        EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[1].action);
+        EXPECT_NE(std::string::npos, batch->rows[1].prompt.find("Auto-detect"));
         EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[2].action);
         EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[3].action);
         EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[4].action);
@@ -1606,14 +1484,16 @@ TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtBothDeclare
 
 TEST_F(AIFunctionCallExprTest, ProviderSelectorIsConstantBindingNotTheProviderModel) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200140, "ai_custom_query", varchar_type(), {varchar_type(), varchar_type()},
-                                            true);
+    auto wire = make_extended_ai_expression(200150, "ai_complete", varchar_type(),
+                                            {varchar_type(), varchar_type(), varchar_type()}, true);
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
     auto* selector = pool.add(new CountingColumnExpr(
             varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("text_provider", 2)));
     expression->add_child(selector);
+    expression->add_child(
+            pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({"row-model", "other-model"}))));
     expression->add_child(
             pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({"hello", std::nullopt}))));
     RuntimeState state;
@@ -1623,7 +1503,7 @@ TEST_F(AIFunctionCallExprTest, ProviderSelectorIsConstantBindingNotTheProviderMo
     auto chunk = make_chunk(2);
     auto batch = expression->build_input_batch(&context, chunk.get(), "snapshot-model");
     ASSERT_TRUE(batch.ok()) << batch.status();
-    EXPECT_EQ("snapshot-model", batch->rows[0].model);
+    EXPECT_EQ("row-model", batch->rows[0].model);
     EXPECT_EQ("hello", batch->rows[0].prompt);
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[1].action);
 }
@@ -1955,24 +1835,20 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
 
 TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200131, "ai_embed",
+    auto wire = make_extended_ai_expression(200130, "ai_embed",
                                             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
-                                            {varchar_type(), options_type()});
+                                            {varchar_type(), varchar_type(), varchar_type(), options_type()});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
-    auto keys = BinaryColumn::create();
-    keys->append("input");
-    auto values = DoubleColumn::create();
-    values->append(123);
-    auto offsets = UInt32Column::create();
-    offsets->append(0);
-    offsets->append(1);
-    auto options = ConstColumn::create(
-            MapColumn::create(ColumnHelper::cast_to_nullable_column(std::move(keys)),
-                              ColumnHelper::cast_to_nullable_column(std::move(values)), std::move(offsets)),
-            1);
-    replace_children(&pool, expression, {{varchar_type(), make_varchar_column({"text"})}, {options_type(), options}});
+    auto json = JsonColumn::create();
+    json->append(JsonValue::parse(R"({"input":123})").value());
+    auto options = ConstColumn::create(std::move(json), 1);
+    replace_children(&pool, expression,
+                     {{varchar_type(), make_varchar_column({"text"})},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1)},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1)},
+                      {options_type(), options}});
     RuntimeState state;
     ExprContext context(expression);
     ASSERT_TRUE(context.prepare(&state).ok());
@@ -1981,7 +1857,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     EXPECT_FALSE(expression->build_input_batch(&context, chunk.get(), "embedding-model").ok());
 }
 
-TEST_F(AIFunctionCallExprTest, CapabilityAndModelSourceCannotBeSpoofed) {
+TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
     const auto embedding_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
     auto embedding = make_extended_ai_expression(200130, "ai_embed", embedding_type, {varchar_type()});
@@ -1993,18 +1869,7 @@ TEST_F(AIFunctionCallExprTest, CapabilityAndModelSourceCannotBeSpoofed) {
     auto* clone = down_cast<AIFunctionCallExpr*>(created.value()->clone(&pool));
     EXPECT_EQ(created.value()->capability(), clone->capability());
     EXPECT_EQ(created.value()->result_kind(), clone->result_kind());
-    EXPECT_EQ(created.value()->model_config_id(), clone->model_config_id());
-    embedding.nodes.front().__set_ai_model_config_id("__system_chat__");
-    EXPECT_FALSE(AIFunctionCallExpr::create(&pool, embedding.nodes.front()).ok());
-
-    auto provider = make_extended_ai_expression(200142, "ai_custom_embedding", embedding_type,
-                                                {varchar_type(), varchar_type()}, true);
-    provider.nodes.front().fn.__set_ai_model_source(TAIModelSource::SYSTEM);
-    EXPECT_FALSE(AIFunctionCallExpr::create(&pool, provider.nodes.front()).ok());
-    provider.nodes.front().fn.__set_ai_model_source(TAIModelSource::PROVIDER);
-    provider.nodes.front().__set_ai_model_config_id("__system_embedding__");
-    EXPECT_FALSE(AIFunctionCallExpr::create(&pool, provider.nodes.front()).ok());
-
+    EXPECT_EQ(created.value()->provider_id(), clone->provider_id());
     auto translate = make_extended_ai_expression(200121, "ai_translate", varchar_type(),
                                                  {varchar_type(), varchar_type(), varchar_type(), varchar_type()});
     created = AIFunctionCallExpr::create(&pool, translate.nodes.front());
@@ -2016,14 +1881,16 @@ TEST_F(AIFunctionCallExprTest, CapabilityAndModelSourceCannotBeSpoofed) {
 TEST_F(AIFunctionCallExprTest, AIProviderBindingRejectsNonconstantOrBlankSelector) {
     for (bool constant : {false, true}) {
         ObjectPool pool;
-        auto wire = make_extended_ai_expression(200140, "ai_custom_query", varchar_type(),
-                                                {varchar_type(), varchar_type()}, true);
+        auto wire = make_extended_ai_expression(200150, "ai_complete", varchar_type(),
+                                                {varchar_type(), varchar_type(), varchar_type()}, true);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok());
         ColumnPtr selector = constant ? ColumnHelper::create_const_column<TYPE_VARCHAR>(" \t", 1)
                                       : make_varchar_column({"text_provider"});
         replace_children(&pool, created.value(),
-                         {{varchar_type(), selector}, {varchar_type(), make_varchar_column({"hello"})}});
+                         {{varchar_type(), selector},
+                          {varchar_type(), make_varchar_column({"model"})},
+                          {varchar_type(), make_varchar_column({"hello"})}});
         RuntimeState state;
         ExprContext context(created.value());
         ASSERT_TRUE(context.prepare(&state).ok());
@@ -2033,23 +1900,16 @@ TEST_F(AIFunctionCallExprTest, AIProviderBindingRejectsNonconstantOrBlankSelecto
     }
 }
 
-TEST_F(AIFunctionCallExprTest, ProviderSourceAndCorrelationKeyAreExplicit) {
+TEST_F(AIFunctionCallExprTest, ProviderCorrelationKeyIsExplicit) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200140, "ai_custom_query", varchar_type(), {varchar_type(), varchar_type()},
-                                            true);
+    auto wire = make_extended_ai_expression(200150, "ai_complete", varchar_type(),
+                                            {varchar_type(), varchar_type(), varchar_type()}, true);
     auto& node = wire.nodes.front();
-    node.__set_ai_model_config_id("opaque-correlation-key");
+    node.__set_ai_provider_id("opaque-correlation-key");
     auto created = AIFunctionCallExpr::create(&pool, node);
     ASSERT_TRUE(created.ok()) << created.status();
-    EXPECT_EQ(TAIModelSource::PROVIDER, created.value()->model_source());
-    for (const auto source :
-         {TAIModelSource::SYSTEM, static_cast<TAIModelSource::type>(2), static_cast<TAIModelSource::type>(99)}) {
-        node.fn.__set_ai_model_source(source);
-        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, node).ok());
-    }
-    node.fn.__set_ai_model_source(TAIModelSource::PROVIDER);
-    for (const auto key : {"", " \t", "key\n", "__system_chat__", "__system_embedding__"}) {
-        node.__set_ai_model_config_id(key);
+    for (const auto key : {"", " \t", "key\n"}) {
+        node.__set_ai_provider_id(key);
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, node).ok()) << key;
     }
 }
