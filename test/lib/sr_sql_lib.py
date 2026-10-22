@@ -24,6 +24,7 @@ sr api lib in this module
 """
 import base64
 import bz2
+import contextlib
 import copy
 import datetime
 import json
@@ -938,7 +939,8 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            with conn.cursor() as cursor:
+            # trino's dbapi cursor is not a context manager
+            with contextlib.closing(conn.cursor()) as cursor:
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)

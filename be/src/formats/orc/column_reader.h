@@ -75,9 +75,9 @@ public:
     static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
                                                              bool nullable, const OrcMappingPtr& orc_mapping,
                                                              OrcChunkReader* reader);
-    static StatusOr<std::unique_ptr<ORCColumnReader>> create_default_column_reader(const TypeDescriptor& type,
-                                                                                   bool nullable,
-                                                                                   OrcChunkReader* reader);
+    static StatusOr<std::unique_ptr<ORCColumnReader>> create_default_column_reader(
+            const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+            const std::optional<std::string>& initial_default = std::nullopt);
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:
@@ -109,10 +109,19 @@ protected:
 
 class DefaultColumnReader final : public ORCColumnReader {
 public:
-    DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader)
-            : ORCColumnReader(type, nullptr, nullable, reader) {}
+    DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+                        ColumnPtr default_column = nullptr)
+            : ORCColumnReader(type, nullptr, nullable, reader), _default_column(std::move(default_column)) {}
     ~DefaultColumnReader() override = default;
+<<<<<<< HEAD
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+=======
+    Status get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) override;
+
+private:
+    // one row holding an Iceberg initial-default; nullptr reads NULL
+    ColumnPtr _default_column;
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
 };
 
 class PrimitiveColumnReader : public ORCColumnReader {

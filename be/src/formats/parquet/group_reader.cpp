@@ -325,11 +325,84 @@ Status GroupReader::_create_column_readers() {
         }
     }
 
+<<<<<<< HEAD
     // create for not existed column
     if (_param.not_existed_slots != nullptr) {
         for (size_t i = 0; i < _param.not_existed_slots->size(); i++) {
             const auto* slot = (*_param.not_existed_slots)[i];
             _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
+=======
+    // create for not existed column: it reads its Iceberg initial-default, if any, so predicates on it (e.g. the
+    // zone-map row group filter) must see that value rather than NULL.
+    const auto& default_values = _param.scan_ctx->materialize_slot_default_values;
+    for (const auto* slot : _param.scan_ctx->not_existed_slots) {
+        Datum value = kNullDatum;
+        if (auto it = default_values.find(slot->id()); it != default_values.end()) {
+            ASSIGN_OR_RETURN(auto column,
+                             FormatScanContext::create_initial_default_column(slot->type(), true, it->second));
+            value = column->get(0);
+            _not_existed_default_columns.emplace_back(std::move(column));
+        }
+        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(value));
+    }
+
+    const auto& reserved_slots = _param.scan_ctx->reserved_field_slots;
+    if (!reserved_slots.empty()) {
+        bool use_legacy_lookup_row_id =
+                std::any_of(reserved_slots.begin(), reserved_slots.end(), [](const SlotDescriptor* slot) {
+                    return slot->col_name() == formats::kRowSourceIdColumnName ||
+                           slot->col_name() == formats::kScanRangeIdColumnName;
+                });
+        for (const auto* slot : reserved_slots) {
+            if (slot->col_name() == formats::kIcebergRowIdColumnName) {
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
+                std::optional<int64_t> first_row_id = std::nullopt;
+                if (_param.scan_ctx->first_row_id.has_value()) {
+                    // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
+                    // index (it already includes the row-group start), so the base must be the
+                    // file-level first_row_id. A row-group-level base double-counts the row-group
+                    // start and shifts the emitted _row_id for every row group after the first,
+                    // diverging from the physical _row_id column of compacted files. The file-level
+                    // base also keeps the reader's zone-map filters (base + rg_first_row) correct.
+                    first_row_id = _param.scan_ctx->first_row_id;
+                } else if (use_legacy_lookup_row_id) {
+                    // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
+                    first_row_id = std::optional<int64_t>(0);
+                }
+                ColumnReaderPtr row_id_reader =
+                        reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
+                                          : std::make_unique<IcebergRowIdReader>(first_row_id);
+                _column_readers.emplace(slot->id(), std::move(row_id_reader));
+            } else if (slot->col_name() == formats::kIcebergLastUpdatedSequenceNumberColumnName) {
+                ASSIGN_OR_RETURN(auto reader, _create_reserved_iceberg_column_reader(
+                                                      slot, formats::kIcebergLastUpdatedSequenceNumberColumnId));
+                Datum sequence_number = kNullDatum;
+                bool can_use_fallback = false;
+                auto sequence_number_or = _get_extended_bigint_value(slot->id());
+                if (sequence_number_or.ok()) {
+                    sequence_number = sequence_number_or.value();
+                    can_use_fallback = true;
+                } else if (!sequence_number_or.status().is_not_found()) {
+                    return sequence_number_or.status();
+                }
+                ColumnReaderPtr seq_reader =
+                        reader != nullptr ? std::make_unique<IcebergLastUpdatedSequenceNumberReader>(
+                                                    std::move(reader), can_use_fallback, sequence_number)
+                                          : std::make_unique<IcebergLastUpdatedSequenceNumberReader>(sequence_number);
+                _column_readers.emplace(slot->id(), std::move(seq_reader));
+            } else if (slot->col_name() == formats::kRowSourceIdColumnName) {
+                if (auto opt = get_backend_id(); opt.has_value()) {
+                    _column_readers.emplace(slot->id(), std::make_unique<RowSourceReader>(opt.value()));
+                } else {
+                    return Status::InternalError("get_backend_id failed");
+                }
+            } else if (slot->col_name() == formats::kScanRangeIdColumnName) {
+                _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
+            } else if (slot->col_name() == formats::kIcebergRowPositionColumnName) {
+                _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>());
+            }
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
         }
     }
     return Status::OK();

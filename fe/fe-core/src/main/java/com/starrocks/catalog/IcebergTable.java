@@ -451,7 +451,25 @@ public class IcebergTable extends Table {
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
+<<<<<<< HEAD
             tColumns.add(column.toThrift());
+=======
+            TColumn tc = column.toThrift();
+            // Per Iceberg spec, the read path should ONLY use initial-default to backfill
+            // missing columns in historical files. write-default is irrelevant for reads.
+            Types.NestedField field = iceSchema.findField(column.getName());
+            if (field != null) {
+                String initialDefault = IcebergApiConverter.toReadInitialDefaultValueString(field);
+                if (initialDefault != null) {
+                    tc.setDefault_value(initialDefault);
+                } else {
+                    // initial-default not set: per spec, missing columns should be null.
+                    // Clear any write-default that Column.toThrift() may have set.
+                    tc.unsetDefault_value();
+                }
+            }
+            tColumns.add(tc);
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
         }
         tIcebergTable.setColumns(tColumns);
 

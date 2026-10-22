@@ -125,9 +125,25 @@ private:
 
 class StructColumnReader final : public ColumnReader {
 public:
+<<<<<<< HEAD
     explicit StructColumnReader(const ParquetField* parquet_field,
                                 std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers)
             : ColumnReader(parquet_field), _child_readers(std::move(child_readers)) {}
+=======
+    // default_columns: one-row columns with the initial-default of subfields the file lacks (absent = NULL).
+    // level_source_reader: when no used subfield is in the file, a reader of an unused stored subfield of type
+    // level_source_type (which the reader points to), read only for the struct's levels.
+    explicit StructColumnReader(const ParquetField* parquet_field,
+                                std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers,
+                                std::map<std::string, ColumnPtr>&& default_columns = {},
+                                ColumnReaderPtr level_source_reader = nullptr,
+                                std::unique_ptr<TypeDescriptor> level_source_type = nullptr)
+            : ColumnReader(parquet_field),
+              _child_readers(std::move(child_readers)),
+              _default_columns(std::move(default_columns)),
+              _level_source_type(std::move(level_source_type)),
+              _level_source_reader(std::move(level_source_reader)) {}
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
     ~StructColumnReader() override = default;
 
     Status prepare() override {
@@ -140,6 +156,9 @@ public:
                 RETURN_IF_ERROR(child.second->prepare());
             }
         }
+        if (_level_source_reader != nullptr) {
+            RETURN_IF_ERROR(_level_source_reader->prepare());
+        }
 
         for (const auto& pair : _child_readers) {
             if (pair.second != nullptr) {
@@ -147,6 +166,15 @@ public:
                 return Status::OK();
             }
         }
+<<<<<<< HEAD
+=======
+        if (_def_rep_level_child_reader == nullptr && _level_source_reader != nullptr) {
+            _def_rep_level_child_reader = &_level_source_reader;
+        }
+        if (_def_rep_level_child_reader != nullptr) {
+            return Status::OK();
+        }
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
 
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
@@ -180,6 +208,9 @@ public:
                 pair.second->set_need_parse_levels(need_parse_levels);
             }
         }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->set_need_parse_levels(need_parse_levels);
+        }
     }
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
@@ -204,6 +235,9 @@ public:
                 pair.second->collect_column_io_range(ranges, end_offset, types, active);
             }
         }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->collect_column_io_range(ranges, end_offset, types, active);
+        }
     }
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
@@ -211,6 +245,9 @@ public:
             if (pair.second != nullptr) {
                 pair.second->select_offset_index(range, rg_first_row);
             }
+        }
+        if (_level_source_reader != nullptr) {
+            _level_source_reader->select_offset_index(range, rg_first_row);
         }
     }
 
@@ -242,7 +279,15 @@ private:
 
     // _children_readers order is the same as TypeDescriptor children order.
     std::map<std::string, ColumnReaderPtr> _child_readers;
+<<<<<<< HEAD
     // First non-nullptr child ColumnReader, used to get def & rep levels
+=======
+    std::map<std::string, ColumnPtr> _default_columns;
+    // _level_source_reader keeps a pointer to _level_source_type, so the type is declared first.
+    std::unique_ptr<TypeDescriptor> _level_source_type;
+    ColumnReaderPtr _level_source_reader;
+    // Child ColumnReader whose levels give this struct's def & rep levels, picked in prepare().
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 

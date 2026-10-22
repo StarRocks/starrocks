@@ -35,6 +35,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -76,6 +77,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+<<<<<<< HEAD
+=======
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -322,6 +329,184 @@ public class IcebergApiConverter {
         return fullSchema;
     }
 
+<<<<<<< HEAD
+=======
+    public static String toInitialDefaultValueString(Types.NestedField field) {
+        return toDefaultValueString(field, false);
+    }
+
+    private static final DateTimeFormatter READ_DEFAULT_DATETIME_FORMATTER =
+            // uuuu is the proleptic year: yyyy (year of era) would print year 0 as 0001.
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSS");
+
+    // The initial-default sent to BE to fill a column or subfield missing from a data file. BE reads a
+    // TIMESTAMPTZ value from a file in the session time zone, so its default is formatted in that zone too.
+    // Call it only when the plan is built, not for a cached schema.
+    public static String toReadInitialDefaultValueString(Types.NestedField field) {
+        if (field.type() instanceof Types.TimestampType timestampType && timestampType.shouldAdjustToUTC() &&
+                field.initialDefault() != null) {
+            long micros = ((Number) field.initialDefault()).longValue();
+            return DateTimeUtil.timestamptzFromMicros(micros)
+                    .atZoneSameInstant(TimeUtils.getTimeZone().toZoneId())
+                    .format(READ_DEFAULT_DATETIME_FORMATTER);
+        }
+        return toInitialDefaultValueString(field);
+    }
+
+
+    public static String toWriteDefaultValueString(Types.NestedField field) {
+        return toDefaultValueString(field, true);
+    }
+
+    public static String getWriteDefaultValue(Schema schema, String columnName) {
+        Types.NestedField field = schema.findField(columnName);
+        if (field == null) {
+            field = schema.columns().stream()
+                    .filter(col -> col.name().equalsIgnoreCase(columnName))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (field == null) {
+            return null;
+        }
+        return toWriteDefaultValueString(field);
+    }
+
+    public static Literal<?> toIcebergDefaultLiteral(Column column, org.apache.iceberg.types.Type icebergType) {
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.NULL) {
+            return null;
+        }
+        if (defaultValueType == Column.DefaultValueType.VARY) {
+            throw new StarRocksConnectorException(
+                    "Unsupported iceberg default expression for column %s: %s",
+                    column.getName(),
+                    column.getDefaultExpr().toSql());
+        }
+
+        String defaultValue = column.calculatedDefaultValue();
+        if (defaultValue == null && column.getDefaultExpr() != null && !column.getDefaultExpr().hasExprObject()) {
+            defaultValue = column.getDefaultExpr().getExpr();
+        }
+        if (defaultValue == null) {
+            throw new StarRocksConnectorException("Unsupported iceberg default value for column %s", column.getName());
+        }
+
+        try {
+            PrimitiveType primitiveType = column.getType().getPrimitiveType();
+            Literal<?> literal;
+            switch (primitiveType) {
+                case BOOLEAN:
+                    if ("1".equals(defaultValue) || "true".equalsIgnoreCase(defaultValue)) {
+                        literal = Literal.of(true).to(icebergType);
+                    } else if ("0".equals(defaultValue) || "false".equalsIgnoreCase(defaultValue)) {
+                        literal = Literal.of(false).to(icebergType);
+                    } else {
+                        throw new StarRocksConnectorException("Invalid boolean default value '%s' for column %s",
+                                defaultValue, column.getName());
+                    }
+                    break;
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                    literal = Literal.of(Integer.parseInt(defaultValue)).to(icebergType);
+                    break;
+                case BIGINT:
+                    literal = Literal.of(Long.parseLong(defaultValue)).to(icebergType);
+                    break;
+                case FLOAT:
+                    literal = Literal.of(Float.parseFloat(defaultValue)).to(icebergType);
+                    break;
+                case DOUBLE:
+                    literal = Literal.of(Double.parseDouble(defaultValue)).to(icebergType);
+                    break;
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                case DECIMAL256:
+                    literal = Literal.of(new BigDecimal(defaultValue)).to(icebergType);
+                    break;
+                case CHAR:
+                case VARCHAR:
+                    literal = Literal.of(defaultValue).to(icebergType);
+                    break;
+                case DATE:
+                case TIME:
+                    literal = Literal.of(defaultValue).to(icebergType);
+                    break;
+                case DATETIME:
+                    String timestampValue = defaultValue.contains("T") ? defaultValue : defaultValue.replace(' ', 'T');
+                    literal = Literal.of(timestampValue).to(icebergType);
+                    break;
+                default:
+                    throw new StarRocksConnectorException("Unsupported iceberg default type %s for column %s",
+                            primitiveType, column.getName());
+            }
+            if (literal == null) {
+                throw new StarRocksConnectorException(
+                        "Unsupported iceberg default value '%s' for column %s", defaultValue, column.getName());
+            }
+            return literal;
+        } catch (RuntimeException e) {
+            throw new StarRocksConnectorException(
+                    String.format("Failed to convert default value '%s' for column %s", defaultValue, column.getName()), e);
+        }
+    }
+
+    private static String toDefaultValueString(Types.NestedField field, boolean useWriteDefault) {
+        Object defaultValue;
+        if (useWriteDefault) {
+            if (field.writeDefaultLiteral() == null) {
+                return null;
+            }
+            defaultValue = field.writeDefault();
+        } else {
+            if (field.initialDefaultLiteral() == null) {
+                return null;
+            }
+            defaultValue = field.initialDefault();
+        }
+        if (defaultValue == null) {
+            return null;
+        }
+        try {
+            switch (field.type().typeId()) {
+                case BOOLEAN:
+                    return Boolean.TRUE.equals(defaultValue) ? "1" : "0";
+                case INTEGER:
+                case LONG:
+                case FLOAT:
+                case DOUBLE:
+                case DECIMAL:
+                case STRING:
+                case UUID:
+                    return defaultValue.toString();
+                case BINARY:
+                    // BE parses a VARBINARY default from the raw bytes of the thrift string, which only
+                    // round-trips through a Java String when the bytes are valid UTF-8.
+                    return StandardCharsets.UTF_8.newDecoder()
+                            .decode(((ByteBuffer) defaultValue).duplicate()).toString();
+                case DATE:
+                    return DateTimeUtil.daysToIsoDate(((Number) defaultValue).intValue());
+                case TIME:
+                    return DateTimeUtil.microsToIsoTime(((Number) defaultValue).longValue());
+                case TIMESTAMP:
+                    Types.TimestampType timestampType = (Types.TimestampType) field.type();
+                    long micros = ((Number) defaultValue).longValue();
+                    return (timestampType.shouldAdjustToUTC()
+                            ? DateTimeUtil.timestamptzFromMicros(micros).toLocalDateTime()
+                            : DateTimeUtil.timestampFromMicros(micros)).toString().replace('T', ' ');
+                default:
+                    return null;
+            }
+        } catch (RuntimeException | CharacterCodingException e) {
+            LOG.warn("Failed to convert {} default value for iceberg field {}",
+                    useWriteDefault ? "write" : "initial", field.name(), e);
+            return null;
+        }
+    }
+
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
     public static Map<String, String> toIcebergProps(Optional<Map<String, String>> properties, String nativeCatalogType) {
         AtomicReference<Map<String, String>> options = new AtomicReference<>();
         properties.ifPresentOrElse(value -> {
@@ -359,6 +544,27 @@ public class IcebergApiConverter {
         TIcebergSchemaField tIcebergSchemaField = new TIcebergSchemaField();
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
+<<<<<<< HEAD
+=======
+        tIcebergSchemaField.setIs_optional(nestedField.isOptional());
+        String initialDefault = toReadInitialDefaultValueString(nestedField);
+        if (initialDefault != null) {
+            tIcebergSchemaField.setInitial_default(initialDefault);
+        }
+        // Preserve external semantics independently of SQL type conversion.
+        // Do not infer these parameters from WKB or map these fields to VARBINARY.
+        if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
+            Types.GeographyType geography = (Types.GeographyType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOGRAPHY).setCrs(geography.crs() == null ? "OGC:CRS84" : geography.crs())
+                    .setEdge_algorithm(geography.algorithm() == null ? "SPHERICAL" : geography.algorithm().name()));
+        } else if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOMETRY) {
+            Types.GeometryType geometry = (Types.GeometryType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOMETRY).setCrs(geometry.crs() == null ? "OGC:CRS84" : geometry.crs())
+                    .setEdge_algorithm("PLANAR"));
+        }
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
         if (nestedField.type().isNestedType()) {
             List<TIcebergSchemaField> children = new ArrayList<>(nestedField.type().asNestedType().fields().size());
             for (Types.NestedField child : nestedField.type().asNestedType().fields()) {
@@ -631,7 +837,9 @@ public class IcebergApiConverter {
             return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
-        throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+        // An unknown transform is shown as is (SHOW CREATE TABLE, ALTER TABLE lookups). Reads skip it
+        // (readSchemaPartitionFields) and writes reject it (checkPartitionTransformsWritable).
+        return prefix + format("%s(%s)", transform, escapedName);
     }
 
     public static List<StructField> getPartitionColumns(List<PartitionField> fields, Schema schema) {
