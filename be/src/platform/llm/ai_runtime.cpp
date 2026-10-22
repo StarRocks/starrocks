@@ -87,6 +87,9 @@ Status AIRuntimeConfig::validate() const {
     if (max_response_bytes <= 0) {
         return Status::InvalidArgument("ai_function_max_response_bytes must be positive");
     }
+    if (max_input_file_bytes <= 0) {
+        return Status::InvalidArgument("ai_function_max_input_file_bytes must be positive");
+    }
     if (worker_thread_num <= 0) {
         return Status::InvalidArgument("ai_function_worker_thread_num must be positive");
     }

@@ -31,11 +31,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -239,15 +241,15 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 List<Column> refBTPartitionColumns = entry.getValue();
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
-                BaseToMVPartitionMapping mapping =
-                        MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
-                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT));
+                BaseToMVPartitionMapping mapping = MvUtils.readBaseTableUnderLock(mv, refBT, readsBaseTablesUnlocked(),
+                        () -> MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT)));
                 if (mapping.cells() == null) {
                     return null;
                 }
                 refBaseTablePartitionMap.put(refBT, mapping);
             }
-        } catch (StarRocksException | SemanticException e) {
+        } catch (StarRocksException | SemanticException | LockTimeoutException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
         }

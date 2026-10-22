@@ -33,6 +33,13 @@
 
 2. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
 
+   StarRocks supports two destinations for Ranger audit logs, and you can use only one of them at a time:
+
+   - Solr: Use the `xasecure.audit.solr.*` properties that the template uses. Configuring Solr with `xasecure.audit.destination.solr` is not supported.
+   - Local file: Set `xasecure.audit.destination.file` to `true` and `xasecure.audit.destination.file.dir` to the directory of the audit files.
+
+   Once any `xasecure.audit.destination.*` property is enabled, Ranger ignores all the `xasecure.audit.<destination>.*` properties, including the Solr ones. This also applies to `ranger-hive-audit.xml`.
+
 3. Add the configuration `access_control = ranger` to all FE configuration files.
 
    ```SQL
@@ -78,3 +85,26 @@ For External Catalog, you can reuse external services (such as Hive Service) for
        ```
 
 ​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.
+
+4. (Optional) Prefix the database name with the catalog name. This applies to every External Catalog that sets `ranger.plugin.hive.service.name`, such as Hive, Iceberg, and Hudi catalogs.
+
+   The Ranger Hive Service only knows `database`, `table`, and `column`. It has no catalog level, so when several External Catalogs share one Hive Service (for example, several AWS Glue catalogs), a database that exists in more than one catalog matches the same policies. Set the property `"ranger.plugin.hive.catalog_prefix.enabled"` to `"true"` on such a catalog, and StarRocks sends `<catalog_name>_<database_name>` as the `database` resource to Ranger instead of the bare database name. For example, a query against `glue_prod.sales.orders` is checked against a Ranger policy whose database is `glue_prod_sales`.
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- Or on an existing catalog. The new value takes effect when the statement returns.
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - Valid values are `true` and `false`. Any other value makes CREATE or ALTER CATALOG fail.
+   - When the property is not set, the catalog follows the FE configuration item `ranger_hive_catalog_prefix_enabled` (default `false`). Catalogs that do not set `ranger.plugin.hive.service.name` ignore this property.
+   - The separator between the catalog name and the database name is the FE configuration item `ranger_hive_catalog_prefix_separator` (default `_`). It is global because every catalog that shares one Ranger Service must use the same separator.

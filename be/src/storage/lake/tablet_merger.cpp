@@ -42,10 +42,10 @@
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
@@ -3417,13 +3417,14 @@ void record_merge_sstable_meta_result(const MergeSstableMetaResult& result) {
 
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata) {
-    auto* update_manager = tablet_manager->update_mgr();
+    auto* primary_key_manager = tablet_manager->primary_key_mgr();
     for (auto& context : merge_contexts) {
         bool skip_source_flush = false;
         FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
         if (skip_source_flush) continue;
         TEST_SYNC_POINT_CALLBACK("merge_sstables:source_pk_flush", nullptr);
-        ASSIGN_OR_RETURN(auto flushed, update_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
+        ASSIGN_OR_RETURN(auto flushed,
+                         primary_key_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
         context.set_metadata(std::move(flushed));
     }
 

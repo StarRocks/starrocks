@@ -113,7 +113,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         remove_test_dir_or_die();
     }
 
@@ -260,7 +260,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 
     SyncPoint::GetInstance()->ClearAllCallBacks();
     SyncPoint::GetInstance()->DisableProcessing();

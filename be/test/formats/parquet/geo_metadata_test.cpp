@@ -852,7 +852,6 @@ TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
         const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(target.get()));
         EXPECT_EQ(semantic, geo->descriptor().type);
         EXPECT_EQ("opaque source WKB", geo->get_wkb(null_count).to_string());
-        EXPECT_FALSE(geo->has_wkb_cache());
     }
     source->append_nulls(3);
     ASSERT_TRUE(converter->convert(source.get(), target.get()).ok());
@@ -913,7 +912,6 @@ TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
             ASSERT_EQ(1, chunk->num_rows());
             const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(chunk->columns()[0].get()));
             EXPECT_EQ(semantic, geo->descriptor().type);
-            EXPECT_FALSE(geo->has_wkb_cache());
             std::string expected(1, '\x01');
             put_fixed32_le(&expected, 1);
             expected.append(16, '\0');

@@ -28,6 +28,7 @@ set(EXEC_FILES
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
+        ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
@@ -134,6 +135,7 @@ set(EXEC_FILES
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/update_config_action_redaction_test.cpp
         ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/s3_output_stream_test.cpp
@@ -159,6 +161,7 @@ set(EXEC_FILES
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
+        ./base/auth/auth_info_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         )
@@ -288,6 +291,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
+    ./storage/lake/lake_primary_key_recover_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp

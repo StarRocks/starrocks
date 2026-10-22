@@ -40,7 +40,10 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -53,6 +56,7 @@ public class TabletCommitInfo implements Writable {
     private List<ColumnId> invalidDictCacheColumns = Lists.newArrayList();
     private List<ColumnId> validDictCacheColumns = Lists.newArrayList();
     private List<Long> validDictCollectedVersions = Lists.newArrayList();
+    private List<Long> dictContentIdentities = Collections.emptyList();
 
     public TabletCommitInfo() {
     }
@@ -92,6 +96,20 @@ public class TabletCommitInfo implements Writable {
         return validDictCollectedVersions;
     }
 
+    public void mergeDictContentIdentities(Map<ColumnId, Long> identities, Set<ColumnId> invalidColumns) {
+        if (dictContentIdentities.size() != validDictCacheColumns.size()) {
+            return;
+        }
+        for (int i = 0; i < validDictCacheColumns.size(); i++) {
+            ColumnId column = validDictCacheColumns.get(i);
+            Long identity = dictContentIdentities.get(i);
+            Long previous = identities.putIfAbsent(column, identity);
+            if (previous != null && !previous.equals(identity)) {
+                invalidColumns.add(column);
+            }
+        }
+    }
+
     public void setTabletId(long tabletId) {
         this.tabletId = tabletId;
     }
@@ -108,7 +126,7 @@ public class TabletCommitInfo implements Writable {
         }
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
             if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
-                commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
+                TabletCommitInfo info = new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId(),
                         tTabletCommitInfo.getInvalid_dict_cache_columns()
                                 .stream()
@@ -118,8 +136,11 @@ public class TabletCommitInfo implements Writable {
                                 .stream()
                                 .map(ColumnId::create)
                                 .collect(Collectors.toList()),
-                        tTabletCommitInfo.getValid_dict_collected_versions()
-                ));
+                        tTabletCommitInfo.getValid_dict_collected_versions());
+                if (tTabletCommitInfo.isSetValid_dict_content_identities()) {
+                    info.dictContentIdentities = tTabletCommitInfo.getValid_dict_content_identities();
+                }
+                commitInfos.add(info);
             } else {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId()));

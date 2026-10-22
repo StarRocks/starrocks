@@ -470,6 +470,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
     public static final String ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION = "enable_gather_fragment_locality_optimization";
+    public static final String ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY = "enable_gather_fragment_child_affinity";
 
     public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
 
@@ -550,6 +551,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
+    public static final String BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR =
+            "broadcast_mem_exceeded_penalty_factor";
+    public static final double MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR = 1_000_000.0;
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
@@ -693,6 +697,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
     public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
+    public static final String ENABLE_EXCHANGE_SINK_BUFFER_FLUSH =
+            "enable_exchange_sink_buffer_flush";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -1399,6 +1405,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
     private boolean enableGatherFragmentLocalityOptimization = false;
 
+    /**
+     * When enabled, the gather fragment (UNPARTITIONED, single instance) is assigned to a worker
+     * already used by one of its child fragments, rather than via global round-robin.
+     * Child fragment workers are label-constrained through data locality, so this keeps the
+     * gather fragment within the same label boundary. Disable to revert to legacy behavior.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY)
+    private boolean enableGatherFragmentChildAffinity = false;
+
     @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
     private boolean skipLocalDiskCache = false;
 
@@ -2011,6 +2026,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
 
+    // Cost penalty for estimated broadcast inputs above the memory threshold.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)
+    private double broadcastMemExceededPenaltyFactor = 1000.0;
+
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
 
@@ -2170,6 +2189,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
+
+    // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling; the
+    // threshold is the BE config exchange_sink_buffer_flush_threshold_bytes.
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_SINK_BUFFER_FLUSH)
+    private boolean enableExchangeSinkBufferFlush = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePerf = false;
@@ -4074,6 +4098,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableGatherFragmentLocalityOptimization;
     }
 
+    public boolean isEnableGatherFragmentChildAffinity() {
+        return enableGatherFragmentChildAffinity;
+    }
+
     public boolean isSkipLocalDiskCache() {
         return skipLocalDiskCache;
     }
@@ -4283,6 +4311,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLakeMultiNodeWriteBytesPerNode(long lakeMultiNodeWriteBytesPerNode) {
         this.lakeMultiNodeWriteBytesPerNode = lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public long getQueryMemLimit() {
+        return queryMemLimit;
     }
 
     public int getQueryTimeoutS() {
@@ -4874,6 +4906,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.cboMaxReorderNodeUseExhaustive;
     }
 
+    public double getBroadcastMemExceededPenaltyFactor() {
+        return broadcastMemExceededPenaltyFactor;
+    }
+
+    public void setBroadcastMemExceededPenaltyFactor(double multiplier) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        this.broadcastMemExceededPenaltyFactor = checkBroadcastMemExceededPenaltyFactor(multiplier);
+    }
+
+    public static double checkBroadcastMemExceededPenaltyFactor(double multiplier) {
+        if (!Double.isFinite(multiplier) || multiplier < 1.0 || multiplier > MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, multiplier,
+                    "a finite number in [1.0, " + MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR + "]");
+        }
+        return multiplier;
+    }
+
     public long getBroadcastRowCountLimit() {
         return broadcastRowCountLimit;
     }
@@ -5375,6 +5425,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableExchangePassThrough() {
         return enableExchangePassThrough;
+    }
+
+    public boolean isEnableExchangeSinkBufferFlush() {
+        return enableExchangeSinkBufferFlush;
+    }
+
+    public void setEnableExchangeSinkBufferFlush(boolean enable) {
+        this.enableExchangeSinkBufferFlush = enable;
     }
 
     public boolean isEnableExchangePerf() {
@@ -7008,6 +7066,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setK_factor(kFactor);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_exchange_sink_buffer_flush(enableExchangeSinkBufferFlush);
         tResult.setExchange_hash_function_version(exchangeHashFunctionVersion);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         tResult.setJit_level(jitLevel);

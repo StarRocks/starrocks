@@ -21,25 +21,6 @@ Any `NULL` argument gives `NULL`. Array elements are unique valid cell indexes, 
 
 `H3_PolygonToCells` selects cells using H3's standard center-fill (`flags = 0`), rather than exact spherical `ST_Contains`/`ST_Covers`. A nonempty polygon may return `[]`; the result is neither conservative coverage nor a safe replacement for exact spatial predicates. H3's longitude/latitude fill model has limitations near the antimeridian, poles, and for large polygons. A center on a boundary follows H3 4.5.0 rules. The array can be used as an approximate index, followed by the appropriate exact predicate when correctness needs it.
 
-H3 4.5.0 does not expose cancellation inside a single `polygonToCells` call. StarRocks checks cancellation around that call and between rows; the admission limits below bound work but do not guarantee a fixed cancellation latency.
-
-The `WITH_H3` BE build option is enabled by default. A BE built with `WITH_H3=OFF` returns a controlled unsupported error for these functions.
-
-The `WITH_H3` BE build option is enabled by default. A BE built with `WITH_H3=OFF` returns a controlled unsupported error for these functions.
-
-## Resource limits
-
-These mutable BE settings are checked per row before H3 allocation/fill. Exceeding a limit raises an error; results are never truncated. Query and column memory limits still apply.
-
-| BE setting | Default | Unit and meaning |
-| --- | ---: | --- |
-| `h3_max_cells_per_row` | 100000 | Output cells and summed expansion slots before deduplication. |
-| `h3_max_grid_disk_k` | 128 | Largest allowed grid distance. |
-| `h3_max_polygon_vertices` | 10000 | Coordinate positions across all rings/components, including closing positions. |
-| `h3_max_polygon_components` | 256 | Polygons in a row, including empty components. |
-| `h3_max_working_bytes` | 67108864 | Bytes of worker preparation and temporary buffers (64 MiB). |
-| `h3_max_estimated_work_per_row` | 10000000 | Sum of `U Г— (V + 1)`, where `U` is H3's estimated fill slots and `V` is component coordinate positions. This is an admission heuristic, not a CPU time bound. |
-
 ## Examples
 
 ```sql

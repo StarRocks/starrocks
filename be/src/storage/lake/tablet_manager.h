@@ -16,6 +16,7 @@
 
 #include <bthread/types.h>
 
+#include <functional>
 #include <set>
 #include <shared_mutex>
 #include <utility>
@@ -39,6 +40,7 @@
 
 namespace starrocks {
 struct FileInfo;
+struct OlapReaderStatistics;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -49,7 +51,7 @@ namespace starrocks::lake {
 
 template <typename T>
 class MetadataIterator;
-class UpdateManager;
+class PrimaryKeyManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
@@ -69,7 +71,7 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
                            int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
 
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
@@ -250,6 +252,15 @@ public:
     static StatusOr<std::string> read_bundle_metadata_file_with_meter(FileSystem* fs, const std::string& path,
                                                                       bool skip_fill_local_cache);
 
+    // Parses the footer of the bundle file |content| read from |path| and hands both to |consume|. When
+    // either fails with Corruption, drops the local cache copy of |path| and does both once more on a
+    // fresh read: the same version can be rewritten with the same length but different bytes, and the
+    // local cache, keyed by path only, can then return blocks of two writes while the remote object is
+    // intact. With lake_clear_corrupted_cache_meta off, returns the first Corruption instead.
+    static Status parse_bundle_metadata_with_reread(
+            FileSystem* fs, const std::string& path, bool skip_fill_local_cache, std::string content,
+            const std::function<Status(const std::string& content, const BundleTabletMetadataPtr& footer)>& consume);
+
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
@@ -330,7 +341,7 @@ public:
     // own the tablet. See StarOSWorker::borrow_shard_info.
     void borrow_shard_info(const std::string& serialized);
 
-    Status drop_local_cache(const std::string& path);
+    static Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
     // TODO: remove this method
@@ -388,7 +399,7 @@ public:
 
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
-    UpdateManager* update_mgr();
+    PrimaryKeyManager* primary_key_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
@@ -417,12 +428,14 @@ public:
     // meantime is not charged with this segment's memory cost.
     void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
+    // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                      TabletSchemaPtr tablet_schema);
+                                      TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats = nullptr);
     // for load segment parallel
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
-                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema);
+                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema,
+                                      OlapReaderStatistics* stats = nullptr);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
@@ -474,13 +487,27 @@ private:
     static Status parse_shard_properties(int64_t tablet_id,
                                          const std::unordered_map<std::string, std::string>& properties,
                                          int64_t* table_id, int64_t* partition_id, int64_t* index_id);
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Resolve (table_id, partition_id, index_id) of |tablet_id| from its StarOS shard info. NotFound when
+    // the shard does not exist, so a dropped tablet's version 1 reads as missing like any other version.
+    // Exposed for unit tests.
+    static Status resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                           int64_t* index_id);
+#endif // USE_STAROS
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
-    Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
+    static Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
     // Same contract as corrupted_tablet_meta_handler(), for txn log files (single, combined, vlog and
     // slog): OK means the corrupted local cache copy was dropped and the caller may re-read once, any
     // other status is the original error to propagate.
     Status corrupted_txn_log_handler(const Status& s, const std::string& txn_log_location);
+    // Verifies and parses the page of |tablet_id| in the bundle file |content| whose parsed footer is
+    // |footer|. Corruption when the page lies outside the file, fails its checksum or does not parse;
+    // NotFound when the bundle has no page for |tablet_id|.
+    static StatusOr<MutableTabletMetadataPtr> parse_bundle_tablet_page(const std::string& path,
+                                                                       const std::string& content,
+                                                                       const BundleTabletMetadataPB& footer,
+                                                                       int64_t tablet_id);
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,
@@ -493,7 +520,7 @@ private:
     const StorePathRegistry* _store_path_registry = nullptr;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
-    UpdateManager* _update_mgr = nullptr;
+    PrimaryKeyManager* _primary_key_mgr = nullptr;
     std::unique_ptr<TableSchemaService> _table_schema_service;
 
     std::shared_mutex _meta_lock;

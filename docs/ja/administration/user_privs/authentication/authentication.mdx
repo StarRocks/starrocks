@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # 認証
 
+StarRocks は公開しているすべてのエントリポイントでクライアントを認証します: MySQL プロトコル、HTTP API（SQL API、Stream Load、FE Web UI）、Arrow Flight SQL、そして BE が FE に転送する Stream Load RPC。ユーザーの定義方法は 2 つあります: `CREATE USER` でローカルに作成する（ネイティブ認証。外部プラグインを指定することもできます）か、[セキュリティインテグレーション](./security_integration.md)でユーザーディレクトリ全体を外部システムに委ねるかです。
+
+## 各認証方式が使えるエントリポイント
+
+| ユーザーの定義方法 | MySQL プロトコル | HTTP API | Arrow Flight SQL |
+| --- | --- | --- | --- |
+| `CREATE USER ... IDENTIFIED BY '<password>'`<br />（ネイティブパスワード） | パスワード | Basic | ユーザー名とパスワード |
+| `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple`<br />（ローカルユーザー、LDAP bind） | パスワード<br />（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
+| `CREATE USER ... IDENTIFIED WITH authentication_jwt`<br />（ローカルユーザー、JWT） | JWT<br />（`authentication_openid_connect_client` で送信） | 非対応 | 非対応 |
+| `CREATE USER ... IDENTIFIED WITH authentication_oauth2`<br />（ローカルユーザー、OAuth 2.0） | ブラウザフロー | 非対応 | 非対応 |
+| セキュリティインテグレーション、`authentication_ldap_simple` | パスワード<br />（`mysql_clear_password` で送信） | Basic | ユーザー名とパスワード |
+| セキュリティインテグレーション、`authentication_jwt` | JWT<br />（`authentication_openid_connect_client` で送信） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+| セキュリティインテグレーション、`authentication_oauth2` | ブラウザフロー | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+
+次の点に注意してください:
+
+- **Bearer トークンにはセキュリティインテグレーションが必要です。** トークンはユーザー名をリクエストではなく自身のクレームに持つため、StarRocks にはローカルユーザーを引くための手がかりがありません。JWT または OAuth 2.0 プラグインを指定したローカルユーザーは、ハンドシェイクがユーザー名を運ぶ MySQL プロトコルでのみ利用できます。ほかのエントリポイントでトークンを使うには、JWT または OAuth 2.0 のセキュリティインテグレーションを作成してください。
+- **同じ名前が 2 つの identity を指すことがあります。** トークンがセキュリティインテグレーション経由で受理されると、そのユーザーは ephemeral です。権限は [Group Provider](../group_provider.md) と `GRANT ... TO EXTERNAL GROUP` から来て、同名のローカルユーザーは参照されません。したがって同じ人物が MySQL プロトコルと HTTP で異なる権限を持つことがあります。
+- **MySQL プロトコルは一度に 1 種類のトークンプラグインしか提示しません。** `authentication_chain` で最初に現れる JWT または OAuth 2.0 セキュリティインテグレーションのものです。HTTP と Arrow Flight のエントリポイントにはこの制限はありません。トークンが issuer と audience でルーティングされるためです。
+- **Bearer 認証は無効化できます。** FE の設定項目 `enable_rest_bearer_authentication`（デフォルト `true`）が HTTP と Arrow Flight エントリポイントの Bearer 認証を無効にします。MySQL プロトコルには影響しません。
+- **Stream Load は commit 時にもう一度認証されます。** トークンの残り有効期間より長くかかるロードは commit で失敗します。長時間のロードには十分な有効期間のトークン、または Basic 認証を使ってください。
+- BE に直接認証する場合（Stream Load を BE の HTTP ポートに送る場合）は、BE の設定項目 `enable_http_auth = true` が必要です。
+- HTTP 認証の失敗はすべて `401` を返し、`WWW-Authenticate` に `Basic` と `Bearer` の両方のチャレンジを含み、どの方式がなぜ拒否したかは示しません。原因の調査には FE のメトリクス `authentication_failure_total` と `authentication_failure_reason_total` を使ってください。
+
 import DocCardList from '@theme/DocCardList';
 
 <DocCardList />

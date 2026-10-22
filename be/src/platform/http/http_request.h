@@ -20,8 +20,10 @@
 #include <glog/logging.h>
 
 #include <boost/algorithm/string.hpp>
+#include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 
 #include "base/string/string_util.h"
 #include "platform/http/http_headers.h"
@@ -72,8 +74,12 @@ public:
 
     // For logging. The values of the credential headers Authorization, Proxy-Authorization and Cookie are
     // printed as kCredentialMask. The URI and params are printed as is, so do not rely on this to hide a
-    // credential passed in the query string.
+    // credential passed in the query string; use the overload below for that.
     std::string debug_string() const;
+
+    // Same as debug_string(), and the value of every param for which is_sensitive_param returns true is also
+    // printed as kCredentialMask, both in params and in the query string of the uri.
+    std::string debug_string(const std::function<bool(std::string_view)>& is_sensitive_param) const;
 
     void set_handler(HttpHandler* handler) { _handler = handler; }
     HttpHandler* handler() const { return _handler; }

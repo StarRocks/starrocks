@@ -56,9 +56,9 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -76,8 +76,9 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_directory);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
 
         _load_channel_mgr =
                 std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
@@ -268,7 +269,7 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<RuntimeProfile> _root_profile;
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::TabletManager> _tablet_manager;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -1511,8 +1512,8 @@ TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_eos_hands_over_one_shard_inf
     EXPECT_EQ((std::set<int64_t>{10, 11}), partitions);
 }
 
-TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_handoff_disabled) {
-    SCOPED_UPDATE(bool, config::lake_enable_tablet_location_handoff, false);
+TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_shard_info_cache_disabled) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto response = write_and_finish();
     ASSERT_EQ(TStatusCode::OK, response.status().status_code());
     ASSERT_EQ(4, response.lake_tablet_data().txn_logs_size());

@@ -611,9 +611,18 @@ Status GroupReader::_create_column_readers() {
         _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
     }
 
-    // create for not existed column
+    // create for not existed column: it reads its Iceberg initial-default, if any, so predicates on it (e.g. the
+    // zone-map row group filter) must see that value rather than NULL.
+    const auto& default_values = _param.scan_ctx->materialize_slot_default_values;
     for (const auto* slot : _param.scan_ctx->not_existed_slots) {
-        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
+        Datum value = kNullDatum;
+        if (auto it = default_values.find(slot->id()); it != default_values.end()) {
+            ASSIGN_OR_RETURN(auto column,
+                             FormatScanContext::create_initial_default_column(slot->type(), true, it->second));
+            value = column->get(0);
+            _not_existed_default_columns.emplace_back(std::move(column));
+        }
+        _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(value));
     }
 
     const auto& reserved_slots = _param.scan_ctx->reserved_field_slots;

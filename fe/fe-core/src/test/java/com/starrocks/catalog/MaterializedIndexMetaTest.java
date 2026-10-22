@@ -36,11 +36,14 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonObject;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -73,6 +76,68 @@ public class MaterializedIndexMetaTest {
         columnNameToDefineExpr.put("upper", new StringLiteral());
         meta.setColumnsDefineExpr(columnNameToDefineExpr);
         Assertions.assertNotNull(column.getDefineExpr());
+    }
+
+    @Test
+    public void testRestoreAuthoritativeDefinitionAfterGson() {
+        List<Column> schema = Lists.newArrayList(new Column("k", IntegerType.INT),
+                new Column("mv_count_v", IntegerType.BIGINT));
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(12, schema, 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
+        JsonObject json = GsonUtils.GSON.toJsonTree(meta).getAsJsonObject();
+        JsonObject definition = new JsonObject();
+        JsonObject expressions = new JsonObject();
+        expressions.addProperty("mv_count_v", "CASE WHEN k IS NULL THEN CAST(0 AS BIGINT) ELSE CAST(1 AS BIGINT) END");
+        definition.add("columnExprSql", expressions);
+        definition.add("sourceColumnNames", GsonUtils.GSON.toJsonTree(Lists.newArrayList("k")));
+        definition.addProperty("whereClauseSql", "k > 10");
+        json.add("syncMvDefinition", definition);
+
+        MaterializedIndexMeta restored = GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class);
+        Assertions.assertNotNull(restored.getSchema().get(1).getDefineExpr());
+        Assertions.assertNotNull(restored.getWhereClause());
+    }
+
+    @Test
+    public void testRejectIncompleteAndAmbiguousDefinitions() {
+        String[] invalidDefinitions = {
+                "{\"columnExprSql\":{},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":\"k+1\",\"extra\":\"k\"},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":\"k+1\"},\"sourceColumnNames\":[\"k\",\"K\"]}",
+                "{\"columnExprSql\":{\"v\":\"k+1\",\"V\":\"k+2\"},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":\"k+1\"},\"sourceColumnNames\":[\"k\",\"v\"]}",
+                "{\"columnExprSql\":{\"v\":\" \"},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":\"k +\"},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":null},\"sourceColumnNames\":[\"k\"]}",
+                "{\"columnExprSql\":{\"v\":\"k+1\"},\"sourceColumnNames\":[\"k\"],\"whereClauseSql\":\" \"}"
+        };
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(12,
+                Lists.newArrayList(new Column("k", IntegerType.INT), new Column("v", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        for (String invalid : invalidDefinitions) {
+            JsonObject json = GsonUtils.GSON.toJsonTree(meta).getAsJsonObject();
+            json.add("syncMvDefinition", GsonUtils.GSON.fromJson(invalid, JsonObject.class));
+            Assertions.assertThrows(com.starrocks.sql.analyzer.SemanticException.class,
+                    () -> GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class), invalid);
+        }
+    }
+
+    @Test
+    public void testLegacyRecordDefaultsAndInvalidWatermark() {
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(12,
+                Lists.newArrayList(new Column("k", IntegerType.INT)), 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+        JsonObject json = GsonUtils.GSON.toJsonTree(meta).getAsJsonObject();
+        json.remove("syncMvDefinition");
+        json.remove("syncMvRequiredTxnId");
+        MaterializedIndexMeta legacy = GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class);
+        Assertions.assertNull(legacy.getSyncMvDefinition());
+        Assertions.assertEquals(0, legacy.getSyncMvRequiredTxnId());
+        Assertions.assertNull(legacy.getSchema().get(0).getDefineExpr());
+        Assertions.assertThrows(com.starrocks.sql.analyzer.SemanticException.class, () -> meta.setSyncMvRequiredTxnId(-1));
+        json.addProperty("syncMvRequiredTxnId", -1);
+        Assertions.assertThrows(com.starrocks.sql.analyzer.SemanticException.class,
+                () -> GsonUtils.GSON.fromJson(json, MaterializedIndexMeta.class));
     }
 
     /**

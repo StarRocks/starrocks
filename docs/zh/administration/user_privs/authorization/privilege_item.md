@@ -22,6 +22,15 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 <PrivCreateWarehouse />
 
+### AI FUNCTION / AI PROVIDER
+
+| 权限 | 说明 |
+| --- | --- |
+| USAGE | 使用指定的公开 AI 函数族或 Provider。`ON ALL AI FUNCTIONS` 和 `ON ALL AI PROVIDERS` 分别授予对应类型全部对象的使用权限，包括未来的对象。函数和 Provider 权限相互独立。 |
+
+SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CREATE、ALTER、DROP、SET DEFAULT、SHOW 和 DESC 仍要求 SYSTEM OPERATE，USAGE 不授予这些管理操作权限。
+
+
 ### 资源组权限 (RESOURCE GROUP)
 
 | 权限  | 用途                                                         |
@@ -96,6 +105,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限   | 用途                         |
 | ------ | ---------------------------- |
 | SELECT | 查询视图 (view) 中的数据。   |
+| EXPORT | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER  | 修改一个视图的定义。         |
 | DROP   | 删除一个逻辑视图。           |
 | ALL    | 拥有对该视图的上述所有权限。 |
@@ -105,6 +115,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
 | SELECT  | 查询时引用该物化视图 (materialized view) 的数据，以加速查询。 |
+| EXPORT  | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER   | 更改物化视图。                                               |
 | REFRESH | 刷新物化视图。                                               |
 | DROP    | 删除物化视图。                                               |

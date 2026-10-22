@@ -81,8 +81,10 @@ Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _scanner_param.thread_id = tnode.schema_scan_node.thread_id;
     }
 
-    // only for no predicate and limit parameter is set
-    if (tnode.conjuncts.empty() && tnode.limit > 0) {
+    // No predicate + limit only, and only for the internal catalog: the nameless describe reads the local metastore.
+    const bool internal_catalog =
+            !tnode.schema_scan_node.__isset.catalog_name || tnode.schema_scan_node.catalog_name == "default_catalog";
+    if (internal_catalog && tnode.conjuncts.empty() && tnode.limit > 0) {
         _scanner_param.without_db_table = true;
         _scanner_param.limit = tnode.limit;
     }

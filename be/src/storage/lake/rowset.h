@@ -291,7 +291,9 @@ public:
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
+    // If |stats| is not null, the segment footers this call reads are added to it.
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
+                                                             OlapReaderStatistics* stats = nullptr);
 
     // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() does not
     // keep its result index-aligned with segment_metas -- segment-range start and partial-compaction
@@ -310,10 +312,12 @@ public:
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
     Status load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size = -1);
 
+    // |open_stats|, if not null, receives the segment footer reads. It is separate from seg_options.stats, which
+    // belongs to the iterators later built on these segments.
     [[nodiscard]] Status load_segments(
             std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
             std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
-            const std::unordered_set<int>* skip_segment_idxs = nullptr);
+            const std::unordered_set<int>* skip_segment_idxs = nullptr, OlapReaderStatistics* open_stats = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 

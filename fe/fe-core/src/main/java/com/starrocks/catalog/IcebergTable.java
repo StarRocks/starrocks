@@ -31,6 +31,7 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.connector.iceberg.procedure.AddEqualityDeleteFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
@@ -108,6 +109,8 @@ public class IcebergTable extends Table {
     private static final String PARQUET_FORMAT = "parquet";
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
+    // spec id plus partition values of the file a row comes from; NULL for a file of an unpartitioned spec
+    public static final String PARTITION_KEY = "$partition_key";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
     public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
@@ -509,6 +512,7 @@ public class IcebergTable extends Table {
         Schema schema = getReadSchema();
         return getReadSpec().fields().stream()
                 .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .filter(IcebergApiConverter::isKnownPartitionTransform)
                 .collect(Collectors.toList());
     }
 
@@ -556,7 +560,7 @@ public class IcebergTable extends Table {
             // missing columns in historical files. write-default is irrelevant for reads.
             Types.NestedField field = iceSchema.findField(column.getName());
             if (field != null) {
-                String initialDefault = IcebergApiConverter.toInitialDefaultValueString(field);
+                String initialDefault = IcebergApiConverter.toReadInitialDefaultValueString(field);
                 if (initialDefault != null) {
                     tc.setDefault_value(initialDefault);
                 } else {
@@ -783,6 +787,7 @@ public class IcebergTable extends Table {
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
+            case ADD_EQUALITY_DELETE_FILES -> AddEqualityDeleteFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };
     }

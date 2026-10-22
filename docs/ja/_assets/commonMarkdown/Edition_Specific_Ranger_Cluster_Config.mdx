@@ -33,6 +33,13 @@
 
 2. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
 
+   StarRocks は Ranger の監査ログの送信先として次の 2 つをサポートしますが、同時に使用できるのはどちらか一方のみです。
+
+   - Solr: テンプレートで使用されている `xasecure.audit.solr.*` プロパティを使用します。`xasecure.audit.destination.solr` による Solr の設定はサポートされていません。
+   - ローカルファイル: `xasecure.audit.destination.file` を `true` に、`xasecure.audit.destination.file.dir` を監査ファイルのディレクトリに設定します。
+
+   `xasecure.audit.destination.*` プロパティのいずれかが有効になると、Ranger は Solr のものを含め、すべての `xasecure.audit.<destination>.*` プロパティを無視します。`ranger-hive-audit.xml` も同様です。
+
 3. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
 
    ```SQL
@@ -78,3 +85,26 @@ External Catalog については、外部サービス (Hive Service など) を�
        ```
 
 ​    この操作により、既存の Catalog の認証方法が Ranger ベースの認証に変更されます。
+
+4. (オプション) データベース名の前に Catalog 名を付ける。`ranger.plugin.hive.service.name` を設定した External Catalog (Hive、Iceberg、Hudi Catalog など) であれば、本節が適用されます。
+
+   Ranger の Hive Service が認識するのは `database`、`table`、`column` の 3 階層だけで、Catalog の階層はありません。そのため、複数の External Catalog が 1 つの Hive Service を共有している場合 (たとえば複数の AWS Glue Catalog)、複数の Catalog に同名のデータベースがあると同じポリシーにマッチしてしまいます。そのような Catalog にプロパティ `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` を設定すると、StarRocks は Ranger に送る `database` リソースとして、素のデータベース名ではなく `<catalog_name>_<database_name>` を使用します。たとえば `glue_prod.sales.orders` へのクエリは、database が `glue_prod_sales` である Ranger ポリシーに対して権限チェックされます。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 既存の Catalog にも設定できます。新しい値はステートメントが返った時点で有効になります。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 有効な値は `true` と `false` のみです。それ以外の値を指定すると CREATE または ALTER CATALOG が失敗します。
+   - このプロパティを設定しない場合、Catalog は FE 設定項目 `ranger_hive_catalog_prefix_enabled` (デフォルト `false`) に従います。`ranger.plugin.hive.service.name` を設定していない Catalog ではこのプロパティは無視されます。
+   - Catalog 名とデータベース名の間の区切り文字は FE 設定項目 `ranger_hive_catalog_prefix_separator` (デフォルト `_`) で決まります。1 つの Ranger Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。

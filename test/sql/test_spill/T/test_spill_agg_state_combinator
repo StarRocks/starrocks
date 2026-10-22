@@ -1,0 +1,29 @@
+-- name: test_spill_agg_state_combinator
+-- Restoring a spilled aggregation runs sorted streaming aggregation, which creates and destroys the states of a
+-- whole chunk at once. A combinator (_merge/_union) must destroy the wrapped function's state there, or each group
+-- leaks it.
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=1;
+-- spill every chunk the sink receives, so the source restores through sorted streaming aggregation
+set enable_agg_spill_preaggregation=false;
+set spill_operator_min_bytes=0;
+
+CREATE TABLE t0 (
+    k INT,
+    g INT,
+    s percentile_approx(double, double)
+)
+AGGREGATE KEY(k, g)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t0
+    select generate_series, generate_series % 4096, percentile_approx_state(cast(generate_series as double), 0.5)
+    from table(generate_series(1, 40960));
+
+select count(*), min(p), max(p), sum(p) from (select g, percentile_approx_merge(s) p from t0 group by g) x;
+select count(*), min(p), max(p), sum(p) from (
+    select g, percentile_approx_merge(u) p from (select g, percentile_approx_union(s) u from t0 group by g) y group by g
+) x;
+select g, percentile_approx_merge(s) from t0 group by g order by g limit 3;

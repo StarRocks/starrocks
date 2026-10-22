@@ -20,6 +20,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -29,6 +30,16 @@ import java.util.Map;
 
 public interface AccessController {
     default void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
@@ -188,6 +199,16 @@ public interface AccessController {
 
     default Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         return null;
+    }
+
+    /**
+     * Whether a row access or column masking policy may apply to {@code tableName}, answered without asking the
+     * catalog. The planner resolves an external table before the meta lock is taken when this says yes, so that the
+     * tables its policies read can be locked; a controller that serves policies must not say no for a table it may
+     * have one for. The default matches the default lookups above, which have none.
+     */
+    default boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return false;
     }
 
     /**

@@ -35,10 +35,10 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log_applier.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_rewriter.h"
@@ -381,7 +381,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     _auto_increment_partial_update_states[segment_id].write_column = column->clone_empty();
 
     // use upserts to get rowids in this segment
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
@@ -428,9 +428,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
         }
     }
 
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, column_id, new_rows > 0, rowids_by_rssid,
-                                                                   &read_column, &_column_to_expr_value,
-                                                                   &_auto_increment_partial_update_states[segment_id]));
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
+            params, column_id, new_rows > 0, rowids_by_rssid, &read_column, &_column_to_expr_value,
+            &_auto_increment_partial_update_states[segment_id]));
 
     TRY_CATCH_BAD_ALLOC(_auto_increment_partial_update_states[segment_id].write_column->append_selective(
             *read_column[0], idxes.data(), 0, idxes.size()));
@@ -498,7 +498,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
 
     // use upsert to get rowids for this segment
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
     // A cross-published child receives its siblings' rows too. Those are not its rows to merge, and
     // resolving one can name a rowset the split pruned away, so leave them at the "no old row"
@@ -512,7 +512,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     plan_read_by_rssid(src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     size_t total_rows = src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
             params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         TRY_CATCH_BAD_ALLOC(_partial_update_states[segment_id].write_columns[col_idx]->append_selective(
@@ -800,7 +800,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
 
     // use upserts to get rowids in this segment
     std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->standalone_pk_column()->size());
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &new_rss_rowids, false));
 
@@ -868,7 +868,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+        RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
                 params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
@@ -956,7 +956,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         MutableColumns auto_increment_read_column;
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+        RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
                 params, column_id, new_rows > 0, rowids_by_rssid, &auto_increment_read_column, &_column_to_expr_value,
                 &_auto_increment_partial_update_states[segment_id]));
 

@@ -204,6 +204,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_INSTALL_PLUGIN, PluginInfo.class)
             .put(OperationType.OP_UNINSTALL_PLUGIN, UninstallPluginLog.class)
             .put(OperationType.OP_REMOVE_ALTER_JOB_V2, RemoveAlterJobV2OperationLog.class)
+            .put(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, ReleaseAlterJobHistorySchemaLog.class)
             .put(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, AlterRoutineLoadJobOperationLog.class)
             .put(OperationType.OP_ALTER_LOAD_JOB, AlterLoadJobOperationLog.class)
             .put(OperationType.OP_SWAP_TABLE, SwapTableOperationLog.class)

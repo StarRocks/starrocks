@@ -210,6 +210,7 @@ Status TransactionMgr::rollback_transaction(const HttpRequest* req, std::string*
             *resp = _build_reply(label, TXN_ROLLBACK, st);
             return st;
         }
+        _refresh_auth(req, ctx);
         ctx->status = Status::Aborted(fmt::format("transaction is aborted by user."));
         st = _rollback_transaction(ctx);
     }
@@ -259,6 +260,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
+        _refresh_auth(req, ctx);
 
         if (prepare) {
             ctx->prepared_timeout_second = prepared_timeout_second;
@@ -274,6 +276,18 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
         *resp = _build_reply(TXN_COMMIT, ctx);
         ctx->lock.unlock();
         return st;
+    }
+}
+
+// The FE authenticates every transaction RPC with the credential the BE forwards, and until now that
+// was always the one captured at begin. A token has an expiry, so a transaction that outlives it could
+// neither be committed nor rolled back and its label stayed taken until the transaction timed out.
+// When the commit or rollback request carries its own credential, forward that one instead; a request
+// without one keeps the credential from begin, as before.
+void TransactionMgr::_refresh_auth(const HttpRequest* req, StreamLoadContext* ctx) {
+    AuthInfo fresh;
+    if (parse_auth(*req, &fresh)) {
+        ctx->auth = fresh;
     }
 }
 
@@ -307,9 +321,9 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
         ctx->idle_timeout_sec = timeout_second;
     }
 
-    if (!parse_basic_auth(*req, &ctx->auth)) {
-        LOG(WARNING) << "parse basic authorization failed." << ctx->brief();
-        return Status::InternalError("no valid Basic authorization");
+    if (!parse_auth(*req, &ctx->auth)) {
+        LOG(WARNING) << "parse authorization failed." << ctx->brief();
+        return Status::InternalError("no valid authorization");
     }
 
     // 2. begin transaction
