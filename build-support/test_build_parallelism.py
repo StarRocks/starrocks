@@ -1067,6 +1067,335 @@ esac
                 "modern",
             )
 
+    def test_detect_linker_type_forwards_cached_compiler_args(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lld_dir = os.path.join(tmpdir, "lld-bin")
+            bfd_dir = os.path.join(tmpdir, "bfd-bin")
+            os.makedirs(lld_dir, exist_ok=True)
+            os.makedirs(bfd_dir, exist_ok=True)
+
+            lld_ld = os.path.join(lld_dir, "ld")
+            with open(lld_ld, "w") as f:
+                f.write("#!/bin/sh\necho 'LLD 17.0.6'\n")
+            os.chmod(lld_ld, 0o755)
+
+            bfd_ld = os.path.join(bfd_dir, "ld.bfd")
+            with open(bfd_ld, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU ld (GNU Binutils) 2.40'\n")
+            os.chmod(bfd_ld, 0o755)
+
+            # Mock clang++ that defaults to LLD unless -B / --ld-path / -fuse-ld=bfd overrides it
+            mock_clangxx = os.path.join(tmpdir, "clang++")
+            with open(mock_clangxx, "w") as f:
+                f.write(f"""#!/bin/sh
+search_dir=""
+prev_b=0
+for arg in "$@"; do
+    if [ "$prev_b" -eq 1 ]; then
+        search_dir="$arg"
+        prev_b=0
+        continue
+    fi
+    case "$arg" in
+        -B) prev_b=1 ;;
+        -B*) search_dir="${{arg#-B}}" ;;
+        --prefix=*) search_dir="${{arg#--prefix=}}" ;;
+    esac
+done
+case "$*" in
+    *-dumpfullversion*|*-dumpversion*)
+        echo "12.1.0"
+        ;;
+    *-Wl,--version*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            "$search_dir/ld" --version
+        else
+            "{lld_ld}" --version
+        fi
+        ;;
+    *-print-prog-name=ld*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            echo "$search_dir/ld"
+        else
+            echo "{lld_ld}"
+        fi
+        ;;
+    *)
+        echo "12.1.0"
+        ;;
+esac
+""")
+            os.chmod(mock_clangxx, 0o755)
+
+            # Mock g++ that defaults to GNU BFD unless -B<lld_dir> is passed
+            mock_gxx_bfd = os.path.join(tmpdir, "g++")
+            with open(mock_gxx_bfd, "w") as f:
+                f.write(f"""#!/bin/sh
+search_dir=""
+prev_b=0
+for arg in "$@"; do
+    if [ "$prev_b" -eq 1 ]; then
+        search_dir="$arg"
+        prev_b=0
+        continue
+    fi
+    case "$arg" in
+        -B) prev_b=1 ;;
+        -B*) search_dir="${{arg#-B}}" ;;
+        --prefix=*) search_dir="${{arg#--prefix=}}" ;;
+    esac
+done
+case "$*" in
+    *-dumpfullversion*|*-dumpversion*)
+        echo "12.1.0"
+        ;;
+    *-Wl,--version*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            "$search_dir/ld" --version
+        else
+            "{bfd_ld}" --version
+        fi
+        ;;
+    *-print-prog-name=ld*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            echo "$search_dir/ld"
+        else
+            echo "{bfd_ld}"
+        fi
+        ;;
+    *)
+        echo "12.1.0"
+        ;;
+esac
+""")
+            os.chmod(mock_gxx_bfd, 0o755)
+
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+            cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.38"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+
+            # 1. CMAKE_CXX_COMPILER_ARG1 with --ld-path= pointing to BFD overrides compiler default LLD
+            with open(cache_file, "w") as f:
+                f.write(
+                    f"CMAKE_CXX_COMPILER:FILEPATH={mock_clangxx}\n"
+                    f"CMAKE_CXX_COMPILER_ARG1:STRING= --ld-path={bfd_ld}\n"
+                )
+            self.assertEqual(self.run_bash(cmd), "legacy")
+
+            # 2. CMAKE_CXX_COMPILER_ARG1 with -B<lld_dir> forwarded to compiler linker probes
+            with open(cache_file, "w") as f:
+                f.write(
+                    f"CMAKE_CXX_COMPILER:FILEPATH={mock_gxx_bfd}\n"
+                    f"CMAKE_CXX_COMPILER_ARG1:STRING= -B{lld_dir}\n"
+                )
+            self.assertEqual(self.run_bash(cmd), "modern")
+
+            # 3. Semicolon-separated CMake list in CMAKE_CXX_COMPILER
+            with open(cache_file, "w") as f:
+                f.write(
+                    f"CMAKE_CXX_COMPILER:STRING={mock_clangxx};--ld-path={bfd_ld}\n"
+                )
+            self.assertEqual(self.run_bash(cmd), "legacy")
+
+            # 4. Later linker flag in STARROCKS_CXX_LINKER_FLAGS overrides -fuse-ld= in CMAKE_CXX_COMPILER_ARG1
+            with open(cache_file, "w") as f:
+                f.write(
+                    f"CMAKE_CXX_COMPILER:FILEPATH={mock_gxx_bfd}\n"
+                    "CMAKE_CXX_COMPILER_ARG1:STRING= -fuse-ld=bfd\n"
+                )
+            self.assertEqual(
+                self.run_bash(cmd, {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"}),
+                "modern",
+            )
+
+            # 5. Compiler and CMAKE_CXX_COMPILER_ARG1 persisted in CMakeFiles/*/CMakeCXXCompiler.cmake
+            os.remove(cache_file)
+            cmake_files_dir = os.path.join(build_dir, "CMakeFiles", "3.28.3")
+            os.makedirs(cmake_files_dir, exist_ok=True)
+            with open(
+                os.path.join(cmake_files_dir, "CMakeCXXCompiler.cmake"), "w"
+            ) as f:
+                f.write(
+                    f'set(CMAKE_CXX_COMPILER "{mock_clangxx}")\n'
+                    f'set(CMAKE_CXX_COMPILER_ARG1 " --ld-path={bfd_ld}")\n'
+                )
+            self.assertEqual(self.run_bash(cmd), "legacy")
+
+            # 6. Multi-token CXX environment variable (with paired CC) without CMake build dir
+            cmd_no_cache = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.35"; }
+            ld() { echo "GNU ld (GNU Binutils) 2.38"; }
+            starrocks_detect_linker_type
+            """
+            self.assertEqual(
+                self.run_bash(
+                    cmd_no_cache,
+                    {
+                        "CC": "clang",
+                        "CXX": f"{mock_clangxx} --ld-path={bfd_ld}",
+                    },
+                ),
+                "legacy",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd_no_cache,
+                    {
+                        "CC": "gcc",
+                        "CXX": f"{mock_gxx_bfd} -B{lld_dir}",
+                    },
+                ),
+                "modern",
+            )
+
+    def test_detect_linker_type_inspects_binary_before_path_and_ignores_dir_names(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lld_named_dir = os.path.join(tmpdir, "lld-tools", "bin")
+            gold_named_dir = os.path.join(tmpdir, "gold-toolchain", "bin")
+            bfd_named_dir = os.path.join(tmpdir, "bfd-wrapper", "bin")
+            os.makedirs(lld_named_dir, exist_ok=True)
+            os.makedirs(gold_named_dir, exist_ok=True)
+            os.makedirs(bfd_named_dir, exist_ok=True)
+
+            # GNU BFD binary inside a directory containing 'lld'
+            bfd_in_lld_dir = os.path.join(lld_named_dir, "ld.bfd")
+            with open(bfd_in_lld_dir, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU ld (GNU Binutils) 2.40'\n")
+            os.chmod(bfd_in_lld_dir, 0o755)
+
+            # GNU BFD binary with generic name inside a directory containing 'gold'
+            custom_bfd_in_gold_dir = os.path.join(gold_named_dir, "custom-linker")
+            with open(custom_bfd_in_gold_dir, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU ld (GNU Binutils) 2.40'\n")
+            os.chmod(custom_bfd_in_gold_dir, 0o755)
+
+            # Binary named 'ld.lld' that is actually a wrapper around GNU BFD ld
+            bfd_wrapper_named_lld = os.path.join(bfd_named_dir, "ld.lld")
+            with open(bfd_wrapper_named_lld, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU ld (GNU Binutils) 2.40'\n")
+            os.chmod(bfd_wrapper_named_lld, 0o755)
+
+            # Binary named 'custom-ld' inside 'bfd-wrapper' dir that is actually LLD
+            lld_in_bfd_dir = os.path.join(bfd_named_dir, "custom-ld")
+            with open(lld_in_bfd_dir, "w") as f:
+                f.write("#!/bin/sh\necho 'LLD 17.0.6'\n")
+            os.chmod(lld_in_bfd_dir, 0o755)
+
+            mock_clangxx_18 = os.path.join(tmpdir, "clang++")
+            with open(mock_clangxx_18, "w") as f:
+                f.write("#!/bin/sh\necho '18.1.0'\n")
+            os.chmod(mock_clangxx_18, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            g++() { echo "12.1.0"; }
+            ldd() { echo "ldd (GNU libc) 2.35"; }
+            ld() { echo "LLD 17.0.6"; }
+            starrocks_detect_linker_type
+            """
+
+            # 1. --ld-path=/.../lld-tools/bin/ld.bfd -> legacy
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": f"--ld-path={bfd_in_lld_dir}"},
+                ),
+                "legacy",
+            )
+            # 2. STARROCKS_LINKER=/.../lld-tools/bin/ld.bfd -> legacy
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_LINKER": bfd_in_lld_dir},
+                ),
+                "legacy",
+            )
+            # 3. --ld-path=/.../gold-toolchain/bin/custom-linker (GNU BFD) -> legacy
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "STARROCKS_CXX_LINKER_FLAGS": f"--ld-path={custom_bfd_in_gold_dir}"
+                    },
+                ),
+                "legacy",
+            )
+            # 4. Binary inspection takes priority over filename when executable exists
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "STARROCKS_CXX_LINKER_FLAGS": f"--ld-path={bfd_wrapper_named_lld}"
+                    },
+                ),
+                "legacy",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {"STARROCKS_CXX_LINKER_FLAGS": f"--ld-path={lld_in_bfd_dir}"},
+                ),
+                "modern",
+            )
+            # 5. Non-existent path fallback classifies strictly by basename, ignoring directory names
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "STARROCKS_CXX_LINKER_FLAGS": "--ld-path=/nonexistent/lld-tools/ld.bfd"
+                    },
+                ),
+                "legacy",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "STARROCKS_CXX_LINKER_FLAGS": "--ld-path=/nonexistent/mold-tools/custom-ld"
+                    },
+                ),
+                "legacy",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "STARROCKS_CXX_LINKER_FLAGS": "--ld-path=/nonexistent/bfd-tools/ld.lld"
+                    },
+                ),
+                "modern",
+            )
+            # 6. On Clang with glibc < 2.29 and compiler > 14.0.0, --ld-path= takes precedence over auto -fuse-ld=gold
+            cmd_old_glibc = """
+            starrocks_is_darwin() { return 1; }
+            uname() { echo "x86_64"; }
+            ldd() { echo "ldd (GNU libc) 2.17"; }
+            ld() { echo "LLD 17.0.6"; }
+            starrocks_detect_linker_type
+            """
+            self.assertEqual(
+                self.run_bash(
+                    cmd_old_glibc,
+                    {
+                        "CC": "clang",
+                        "CXX": mock_clangxx_18,
+                        "STARROCKS_CXX_LINKER_FLAGS": f"--ld-path={bfd_in_lld_dir}",
+                    },
+                ),
+                "legacy",
+            )
+
     def test_detect_linker_type_aarch64_honors_compiler_and_flags(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_dir = os.path.join(tmpdir, "bin")

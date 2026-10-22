@@ -257,105 +257,249 @@ starrocks_detect_total_ram_gb() {
     echo 0
 }
 
+starrocks_classify_linker_banner() {
+    local banner_text="${1:-}"
+    local strip_wl_echo="${2:-0}"
+    if [[ "${strip_wl_echo}" -eq 1 && -n "${banner_text}" ]]; then
+        # Strip collect2's echoed linker invocation command line (which contains --version
+        # and full directory paths that could otherwise false-match directory names).
+        local filtered_banner=""
+        filtered_banner="$(printf '%s\n' "${banner_text}" | grep -v -- '--version' || true)"
+        if [[ -n "${filtered_banner}" ]]; then
+            banner_text="${filtered_banner}"
+        fi
+    fi
+    case "${banner_text}" in
+        *LLD*|*mold*|*GNU\ gold*)
+            echo "modern"
+            return 0
+            ;;
+        *GNU\ ld*)
+            echo "legacy"
+            return 0
+            ;;
+        *lld*|*gold*)
+            echo "modern"
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+starrocks_classify_linker_spec() {
+    local spec="${1:-}"
+    local cxx_compiler_bin="${2:-}"
+    shift 2 || true
+    local driver_flags=("$@")
+
+    local ld_bin=""
+    if [[ "${spec}" == */* ]]; then
+        if command -v "${spec}" >/dev/null 2>&1; then
+            ld_bin="${spec}"
+        fi
+    elif [[ -n "${spec}" ]]; then
+        local compiler_ld=""
+        if [[ -n "${cxx_compiler_bin}" ]]; then
+            compiler_ld="$("${cxx_compiler_bin}" "${driver_flags[@]+"${driver_flags[@]}"}" -print-prog-name="ld.${spec}" 2>/dev/null || true)"
+            if [[ -z "${compiler_ld}" || "${compiler_ld}" == "ld.${spec}" ]] && [[ "${#driver_flags[@]}" -gt 0 ]]; then
+                compiler_ld="$("${cxx_compiler_bin}" -print-prog-name="ld.${spec}" 2>/dev/null || true)"
+            fi
+            if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld.${spec}" && "${compiler_ld##*/}" == "ld.${spec}" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
+                ld_bin="${compiler_ld}"
+            else
+                compiler_ld="$("${cxx_compiler_bin}" "${driver_flags[@]+"${driver_flags[@]}"}" -print-prog-name="${spec}" 2>/dev/null || true)"
+                if [[ -z "${compiler_ld}" || "${compiler_ld}" == "${spec}" ]] && [[ "${#driver_flags[@]}" -gt 0 ]]; then
+                    compiler_ld="$("${cxx_compiler_bin}" -print-prog-name="${spec}" 2>/dev/null || true)"
+                fi
+                if [[ -n "${compiler_ld}" && "${compiler_ld}" != "${spec}" && "${compiler_ld##*/}" == "${spec}" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
+                    ld_bin="${compiler_ld}"
+                fi
+            fi
+        fi
+        if [[ -z "${ld_bin}" ]]; then
+            if command -v "ld.${spec}" >/dev/null 2>&1; then
+                ld_bin="ld.${spec}"
+            elif command -v "${spec}" >/dev/null 2>&1; then
+                ld_bin="${spec}"
+            fi
+        fi
+    fi
+
+    if [[ -n "${ld_bin}" ]]; then
+        local ld_ver=""
+        ld_ver="$("${ld_bin}" -v 2>&1 || "${ld_bin}" --version 2>&1 || true)"
+        local classified=""
+        if classified="$(starrocks_classify_linker_banner "${ld_ver}" 0)"; then
+            echo "${classified}"
+            return 0
+        fi
+    fi
+
+    local spec_base="${spec##*/}"
+    case "${spec_base}" in
+        *bfd*)
+            echo "legacy"
+            return 0
+            ;;
+        *lld*|*mold*|*gold*)
+            echo "modern"
+            return 0
+            ;;
+    esac
+    echo "legacy"
+    return 0
+}
+
 starrocks_detect_linker_type() {
     local build_dir="${1:-${CMAKE_BUILD_DIR:-}}"
     local explicit_linker="${STARROCKS_LINKER:-}"
-    if [[ -n "${explicit_linker}" ]]; then
-        case "${explicit_linker}" in
-            *lld*|*mold*|*gold*) echo "modern" ; return 0 ;;
-            *bfd*)               echo "legacy" ; return 0 ;;
-        esac
-        local explicit_ld_bin=""
-        if command -v "${explicit_linker}" >/dev/null 2>&1; then
-            explicit_ld_bin="${explicit_linker}"
-        elif command -v "ld.${explicit_linker}" >/dev/null 2>&1; then
-            explicit_ld_bin="ld.${explicit_linker}"
-        fi
-        if [[ -n "${explicit_ld_bin}" ]]; then
-            local explicit_ld_ver=""
-            explicit_ld_ver="$("${explicit_ld_bin}" -v 2>&1 || "${explicit_ld_bin}" --version 2>&1 || true)"
-            case "${explicit_ld_ver}" in
-                *LLD*|*lld*|*mold*|*GNU\ gold*)
-                    echo "modern"
-                    return 0
-                    ;;
-            esac
-        fi
-        echo "legacy"
-        return 0
-    fi
 
-    if starrocks_is_darwin; then
+    if [[ -z "${explicit_linker}" ]] && starrocks_is_darwin; then
         echo "modern"
         return 0
     fi
 
-    local cxx_compiler=""
+    # Stage 1: Resolve active C++ compiler binary and mandatory compiler arguments
+    # from CMakeCache.txt, CMakeFiles/*/CMake{C,CXX}Compiler.cmake, paired CC+CXX,
+    # STARROCKS_GCC_HOME, STARROCKS_LLVM_HOME, or default g++.
     local cached_c=""
     local cached_cxx=""
+    local cached_cxx_arg1=""
     local cached_build_type=""
     local cached_config_cxx_flags=""
+    local cached_cxx_link_flags=""
     local cached_exe_linker_flags=""
     local cached_config_exe_linker_flags=""
     local has_cached_exe_linker_flags=0
     local has_cmake_compiler_override=0
-    if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
-        cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        cached_build_type="$(sed -n -E 's/^CMAKE_BUILD_TYPE(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        if grep -q -E '^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=' "${build_dir}/CMakeCache.txt" 2>/dev/null; then
-            has_cached_exe_linker_flags=1
-            cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        fi
-        local active_config=""
-        if [[ -n "${cached_build_type}" ]]; then
-            active_config="${cached_build_type}"
-        elif [[ -n "${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}" ]]; then
-            active_config="${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}"
-        elif [[ "${build_dir%/}" =~ (^|/|_)build_([A-Za-z0-9_]+)$ ]]; then
-            active_config="${BASH_REMATCH[2]}"
-        else
-            active_config="ASAN"
-        fi
-        active_config="$(printf '%s' "${active_config}" | tr '[:lower:]' '[:upper:]')"
-        if [[ "${active_config}" =~ ^[A-Z0-9_]+$ ]]; then
-            if grep -q -E "^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
-                cached_config_cxx_flags="$(sed -n -E "s/^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+    if [[ -n "${build_dir}" ]]; then
+        if [[ -r "${build_dir}/CMakeCache.txt" ]]; then
+            cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_cxx_arg1="$(sed -n -E 's/^CMAKE_CXX_COMPILER_ARG1(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_build_type="$(sed -n -E 's/^CMAKE_BUILD_TYPE(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_cxx_link_flags="$(sed -n -E 's/^CMAKE_CXX_LINK_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            if grep -q -E '^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=' "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+                has_cached_exe_linker_flags=1
+                cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             fi
-            if grep -q -E "^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
-                cached_config_exe_linker_flags="$(sed -n -E "s/^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            local active_config=""
+            if [[ -n "${cached_build_type}" ]]; then
+                active_config="${cached_build_type}"
+            elif [[ -n "${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}" ]]; then
+                active_config="${CMAKE_BUILD_TYPE:-${BUILD_TYPE:-}}"
+            elif [[ "${build_dir%/}" =~ (^|/|_)build_([A-Za-z0-9_]+)$ ]]; then
+                active_config="${BASH_REMATCH[2]}"
+            else
+                active_config="ASAN"
+            fi
+            active_config="$(printf '%s' "${active_config}" | tr '[:lower:]' '[:upper:]')"
+            if [[ "${active_config}" =~ ^[A-Z0-9_]+$ ]]; then
+                if grep -q -E "^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+                    cached_config_cxx_flags="$(sed -n -E "s/^CMAKE_CXX_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+                fi
+                if grep -q -E "^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=" "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+                    cached_config_exe_linker_flags="$(sed -n -E "s/^CMAKE_EXE_LINKER_FLAGS_${active_config}(:[^=]*)?=(.*)$/\2/p" "${build_dir}/CMakeCache.txt" | tail -n 1)"
+                fi
             fi
         fi
+        local cmake_compiler_file=""
+        for cmake_compiler_file in "${build_dir}"/CMakeFiles/*/CMakeCCompiler.cmake; do
+            if [[ -r "${cmake_compiler_file}" ]]; then
+                if [[ -z "${cached_c}" ]]; then
+                    cached_c="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_C_COMPILER[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_compiler_file}" | tail -n 1)"
+                fi
+                break
+            fi
+        done
+        for cmake_compiler_file in "${build_dir}"/CMakeFiles/*/CMakeCXXCompiler.cmake; do
+            if [[ -r "${cmake_compiler_file}" ]]; then
+                if [[ -z "${cached_cxx}" ]]; then
+                    cached_cxx="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_CXX_COMPILER[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_compiler_file}" | tail -n 1)"
+                fi
+                if [[ -z "${cached_cxx_arg1}" ]]; then
+                    cached_cxx_arg1="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_CXX_COMPILER_ARG1[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_compiler_file}" | tail -n 1)"
+                fi
+                break
+            fi
+        done
         if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
             has_cmake_compiler_override=1
         fi
     fi
 
-    # Mirrors be/CMakeLists.txt: cached CMake compiler overrides ENV{CC}/ENV{CXX},
-    # ENV{STARROCKS_GCC_HOME}, and ENV{STARROCKS_LLVM_HOME}; CXX is honored only together with CC.
+    local raw_cxx_compiler=""
+    local raw_cxx_arg1=""
     if [[ "${has_cmake_compiler_override}" -eq 1 ]]; then
-        cxx_compiler="${cached_cxx:-${CXX:-g++}}"
+        raw_cxx_compiler="${cached_cxx:-${CXX:-g++}}"
+        raw_cxx_arg1="${cached_cxx_arg1}"
     elif [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
-        cxx_compiler="${CXX}"
+        raw_cxx_compiler="${CXX}"
     elif [[ -n "${STARROCKS_GCC_HOME:-}" ]]; then
         if [[ -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
-            cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
+            raw_cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
         else
-            cxx_compiler="g++"
+            raw_cxx_compiler="g++"
         fi
     elif [[ -n "${STARROCKS_LLVM_HOME:-}" ]]; then
         if [[ -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
-            cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+            raw_cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
         else
-            cxx_compiler="g++"
+            raw_cxx_compiler="g++"
         fi
     else
-        cxx_compiler="g++"
+        raw_cxx_compiler="g++"
     fi
 
-    if [[ "$(uname -m)" != "aarch64" ]]; then
+    local cxx_compiler=""
+    local cxx_compiler_args=()
+    if [[ "${raw_cxx_compiler}" != *";"* ]] && command -v "${raw_cxx_compiler}" >/dev/null 2>&1; then
+        cxx_compiler="${raw_cxx_compiler}"
+    else
+        local semi_parts=()
+        IFS=';' read -r -a semi_parts <<< "${raw_cxx_compiler}"
+        local part_idx=0
+        local part=""
+        for part in "${semi_parts[@]+"${semi_parts[@]}"}"; do
+            [[ -z "${part}" ]] && continue
+            if [[ "${part_idx}" -eq 0 ]]; then
+                if command -v "${part}" >/dev/null 2>&1; then
+                    cxx_compiler="${part}"
+                else
+                    local ws_tokens=()
+                    read -r -a ws_tokens <<< "${part}"
+                    if [[ "${#ws_tokens[@]}" -gt 0 ]]; then
+                        cxx_compiler="${ws_tokens[0]}"
+                        if [[ "${#ws_tokens[@]}" -gt 1 ]]; then
+                            cxx_compiler_args+=("${ws_tokens[@]:1}")
+                        fi
+                    fi
+                fi
+            else
+                local extra_tokens=()
+                read -r -a extra_tokens <<< "${part}"
+                if [[ "${#extra_tokens[@]}" -gt 0 ]]; then
+                    cxx_compiler_args+=("${extra_tokens[@]}")
+                fi
+            fi
+            part_idx=$((part_idx + 1))
+        done
+    fi
+    cxx_compiler="${cxx_compiler:-g++}"
+    if [[ -n "${raw_cxx_arg1}" ]]; then
+        local arg1_tokens=()
+        read -r -a arg1_tokens <<< "${raw_cxx_arg1}"
+        if [[ "${#arg1_tokens[@]}" -gt 0 ]]; then
+            cxx_compiler_args+=("${arg1_tokens[@]}")
+        fi
+    fi
+    local cxx_compiler_spec="${cxx_compiler} ${cxx_compiler_args[*]+"${cxx_compiler_args[*]}"}"
+
+    # Stage 2: Determine effective STARROCKS_LINKER (explicit or non-aarch64 glibc<2.29 + compiler>14.0.0 gold fallback)
+    local effective_starrocks_linker="${explicit_linker}"
+    if [[ -z "${effective_starrocks_linker}" && "$(uname -m)" != "aarch64" ]]; then
         local cxx_version=""
-        cxx_version="$("${cxx_compiler}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" -dumpversion 2>/dev/null || true)"
+        cxx_version="$("${cxx_compiler}" "${cxx_compiler_args[@]+"${cxx_compiler_args[@]}"}" -dumpfullversion -dumpversion 2>/dev/null || "${cxx_compiler}" "${cxx_compiler_args[@]+"${cxx_compiler_args[@]}"}" -dumpversion 2>/dev/null || true)"
         if [[ -z "${cxx_version}" && "${has_cmake_compiler_override}" -eq 1 ]]; then
             local cmake_cxx_file=""
             for cmake_cxx_file in "${build_dir}"/CMakeFiles/*/CMakeCXXCompiler.cmake; do
@@ -382,21 +526,14 @@ starrocks_detect_linker_type() {
                 local minor="${glibc_version#*.}"
                 minor="${minor%%.*}"
                 if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 29 ]]; then
-                    echo "modern"
-                    return 0
+                    effective_starrocks_linker="gold"
                 fi
             fi
         fi
     fi
 
-    # Inspect explicit compiler-driver linker flags (-fuse-ld=* / --ld-path=*) that survive into
-    # be/CMakeLists.txt's UT executable link command in CMake's CMAKE_CXX_LINK_EXECUTABLE order:
-    # - <FLAGS>: be/CMakeLists.txt:481-498 overwrites base CMAKE_CXX_FLAGS with ${CXX_COMMON_FLAGS}
-    #   ${CXX_FLAGS_<BUILD_TYPE>} (including ENV{STARROCKS_CXX_COMMON_FLAGS}, while ignoring ENV{CXXFLAGS}
-    #   and cached base CMAKE_CXX_FLAGS), followed by CMake's configuration-specific CMAKE_CXX_FLAGS_<CONFIG>.
-    # - <LINK_FLAGS>: base CMAKE_EXE_LINKER_FLAGS (seeded from cached CMAKE_EXE_LINKER_FLAGS if present in
-    #   CMakeCache.txt, otherwise from ENV{LDFLAGS}) + ENV{STARROCKS_CXX_LINKER_FLAGS} (appended by
-    #   be/CMakeLists.txt:291), followed by CMake's configuration-specific CMAKE_EXE_LINKER_FLAGS_<CONFIG>.
+    # Stage 3: Assemble surviving driver and linker flags in CMake's exact
+    # <CMAKE_CXX_COMPILER> <CMAKE_CXX_COMPILER_ARG1> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> order.
     local base_exe_linker_flags=""
     if [[ "${has_cached_exe_linker_flags}" -eq 1 ]]; then
         base_exe_linker_flags="${cached_exe_linker_flags}"
@@ -404,164 +541,116 @@ starrocks_detect_linker_type() {
         base_exe_linker_flags="${LDFLAGS:-}"
     fi
     local gcc_toolchain_flag=""
-    if [[ "${cxx_compiler}" == *clang* && -n "${STARROCKS_GCC_HOME:-}" ]]; then
+    if [[ "${cxx_compiler_spec}" == *clang* && -n "${STARROCKS_GCC_HOME:-}" ]]; then
         gcc_toolchain_flag="--gcc-toolchain=${STARROCKS_GCC_HOME}"
     fi
-    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${gcc_toolchain_flag} ${cached_config_cxx_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
-    local flag_tokens=()
-    read -r -a flag_tokens <<< "${combined_flags}"
-    local flag_linker=""
+    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${gcc_toolchain_flag} ${cached_config_cxx_flags} ${cached_cxx_link_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
+    local extra_flag_tokens=()
+    read -r -a extra_flag_tokens <<< "${combined_flags}"
+    local all_driver_tokens=()
+    if [[ "${#cxx_compiler_args[@]}" -gt 0 ]]; then
+        all_driver_tokens+=("${cxx_compiler_args[@]}")
+    fi
+    if [[ "${#extra_flag_tokens[@]}" -gt 0 ]]; then
+        all_driver_tokens+=("${extra_flag_tokens[@]}")
+    fi
+
+    local last_ld_path=""
+    local last_selector_val=""
     local flag_token=""
-    for flag_token in "${flag_tokens[@]+"${flag_tokens[@]}"}"; do
+    for flag_token in "${all_driver_tokens[@]+"${all_driver_tokens[@]}"}"; do
         case "${flag_token}" in
             -fuse-ld=*)
-                flag_linker="${flag_token#-fuse-ld=}"
+                last_selector_val="${flag_token#-fuse-ld=}"
                 ;;
             --ld-path=*)
-                flag_linker="${flag_token#--ld-path=}"
+                last_ld_path="${flag_token#--ld-path=}"
+                last_selector_val="${flag_token#--ld-path=}"
                 ;;
         esac
     done
-    if [[ -n "${flag_linker}" ]]; then
-        case "${flag_linker}" in
-            *lld*|*mold*|*gold*)
-                echo "modern"
-                return 0
-                ;;
-            *bfd*)
-                echo "legacy"
-                return 0
-                ;;
-        esac
-        local flag_ld_bin=""
-        if [[ "${flag_linker}" == */* ]] && command -v "${flag_linker}" >/dev/null 2>&1; then
-            flag_ld_bin="${flag_linker}"
-        else
-            local compiler_flag_ld=""
-            compiler_flag_ld="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
-            if [[ -z "${compiler_flag_ld}" || "${compiler_flag_ld}" == "ld.${flag_linker}" ]] && [[ "${#flag_tokens[@]}" -gt 0 ]]; then
-                compiler_flag_ld="$("${cxx_compiler}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
-            fi
-            if [[ -n "${compiler_flag_ld}" && "${compiler_flag_ld}" != "ld.${flag_linker}" ]] && command -v "${compiler_flag_ld}" >/dev/null 2>&1; then
-                flag_ld_bin="${compiler_flag_ld}"
-            elif command -v "${flag_linker}" >/dev/null 2>&1; then
-                flag_ld_bin="${flag_linker}"
-            elif command -v "ld.${flag_linker}" >/dev/null 2>&1; then
-                flag_ld_bin="ld.${flag_linker}"
-            fi
-        fi
-        if [[ -n "${flag_ld_bin}" ]]; then
-            local flag_ld_version=""
-            flag_ld_version="$("${flag_ld_bin}" -v 2>&1 || "${flag_ld_bin}" --version 2>&1 || true)"
-            case "${flag_ld_version}" in
-                *LLD*|*mold*|*GNU\ gold*)
-                    echo "modern"
-                    return 0
-                    ;;
-                *GNU\ ld*)
-                    echo "legacy"
-                    return 0
-                    ;;
-                *lld*)
-                    echo "modern"
-                    return 0
-                    ;;
-            esac
-        fi
-        echo "legacy"
+    if [[ -n "${effective_starrocks_linker}" ]]; then
+        last_selector_val="${effective_starrocks_linker}"
+    fi
+    local selected_linker=""
+    if [[ "${cxx_compiler_spec}" == *clang* && -n "${last_ld_path}" ]]; then
+        selected_linker="${last_ld_path}"
+    else
+        selected_linker="${last_selector_val}"
+    fi
+    if [[ -n "${selected_linker}" ]]; then
+        starrocks_classify_linker_spec "${selected_linker}" "${cxx_compiler}" "${all_driver_tokens[@]+"${all_driver_tokens[@]}"}"
         return 0
     fi
 
-    # Inspect the active compiler's resolved linker (-Wl,--version or -print-prog-name=ld),
-    # forwarding surviving driver flags (e.g., -B<dir>, -B <dir>, --prefix=<dir>, --gcc-toolchain=<dir>),
-    # then fall back to bare compiler probes and finally system ld on PATH.
-    if ! ( declare -F ld >/dev/null 2>&1 && [[ "${cxx_compiler}" == "g++" ]] && ! declare -F g++ >/dev/null 2>&1 ); then
+    # Stage 4: Probe the active compiler's resolved linker (-Wl,--version and -print-prog-name=ld),
+    # forwarding all surviving driver flags (including CMAKE_CXX_COMPILER_ARG1, -B<dir>, -B <dir>,
+    # --prefix=<dir>, --gcc-toolchain=<dir>), then fall back to compiler+args, bare compiler, and system ld.
+    if ! ( declare -F ld >/dev/null 2>&1 && [[ "${cxx_compiler}" == "g++" && "${#all_driver_tokens[@]}" -eq 0 ]] && ! declare -F g++ >/dev/null 2>&1 ); then
         local compiler_wl_version=""
-        compiler_wl_version="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -Wl,--version 2>&1 || true)"
-        case "${compiler_wl_version}" in
-            *LLD*|*mold*|*GNU\ gold*)
-                echo "modern"
-                return 0
-                ;;
-            *GNU\ ld*)
-                echo "legacy"
-                return 0
-                ;;
-            *lld*)
-                echo "modern"
-                return 0
-                ;;
-        esac
+        local classified=""
+        compiler_wl_version="$("${cxx_compiler}" "${all_driver_tokens[@]+"${all_driver_tokens[@]}"}" -Wl,--version 2>&1 || true)"
+        if classified="$(starrocks_classify_linker_banner "${compiler_wl_version}" 1)"; then
+            echo "${classified}"
+            return 0
+        fi
 
         local compiler_ld=""
-        compiler_ld="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -print-prog-name=ld 2>/dev/null || true)"
+        compiler_ld="$("${cxx_compiler}" "${all_driver_tokens[@]+"${all_driver_tokens[@]}"}" -print-prog-name=ld 2>/dev/null || true)"
         if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
             local compiler_ld_version=""
             compiler_ld_version="$("${compiler_ld}" -v 2>&1 || "${compiler_ld}" --version 2>&1 || true)"
-            case "${compiler_ld_version}" in
-                *LLD*|*mold*|*GNU\ gold*)
-                    echo "modern"
-                    return 0
-                    ;;
-                *GNU\ ld*)
-                    echo "legacy"
-                    return 0
-                    ;;
-                *lld*)
-                    echo "modern"
-                    return 0
-                    ;;
-            esac
+            if classified="$(starrocks_classify_linker_banner "${compiler_ld_version}" 0)"; then
+                echo "${classified}"
+                return 0
+            fi
         fi
 
-        if [[ "${#flag_tokens[@]}" -gt 0 ]]; then
+        if [[ "${#cxx_compiler_args[@]}" -gt 0 && "${#extra_flag_tokens[@]}" -gt 0 ]]; then
+            compiler_wl_version="$("${cxx_compiler}" "${cxx_compiler_args[@]}" -Wl,--version 2>&1 || true)"
+            if classified="$(starrocks_classify_linker_banner "${compiler_wl_version}" 1)"; then
+                echo "${classified}"
+                return 0
+            fi
+
+            compiler_ld="$("${cxx_compiler}" "${cxx_compiler_args[@]}" -print-prog-name=ld 2>/dev/null || true)"
+            if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
+                local args_compiler_ld_version=""
+                args_compiler_ld_version="$("${compiler_ld}" -v 2>&1 || "${compiler_ld}" --version 2>&1 || true)"
+                if classified="$(starrocks_classify_linker_banner "${args_compiler_ld_version}" 0)"; then
+                    echo "${classified}"
+                    return 0
+                fi
+            fi
+        fi
+
+        if [[ "${#all_driver_tokens[@]}" -gt 0 ]]; then
             compiler_wl_version="$("${cxx_compiler}" -Wl,--version 2>&1 || true)"
-            case "${compiler_wl_version}" in
-                *LLD*|*mold*|*GNU\ gold*)
-                    echo "modern"
-                    return 0
-                    ;;
-                *GNU\ ld*)
-                    echo "legacy"
-                    return 0
-                    ;;
-                *lld*)
-                    echo "modern"
-                    return 0
-                    ;;
-            esac
+            if classified="$(starrocks_classify_linker_banner "${compiler_wl_version}" 1)"; then
+                echo "${classified}"
+                return 0
+            fi
 
             compiler_ld="$("${cxx_compiler}" -print-prog-name=ld 2>/dev/null || true)"
             if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
                 local bare_compiler_ld_version=""
                 bare_compiler_ld_version="$("${compiler_ld}" -v 2>&1 || "${compiler_ld}" --version 2>&1 || true)"
-                case "${bare_compiler_ld_version}" in
-                    *LLD*|*mold*|*GNU\ gold*)
-                        echo "modern"
-                        return 0
-                        ;;
-                    *GNU\ ld*)
-                        echo "legacy"
-                        return 0
-                        ;;
-                    *lld*)
-                        echo "modern"
-                        return 0
-                        ;;
-                esac
+                if classified="$(starrocks_classify_linker_banner "${bare_compiler_ld_version}" 0)"; then
+                    echo "${classified}"
+                    return 0
+                fi
             fi
         fi
     fi
 
     local ld_version_output=""
+    local classified_ld=""
     if command -v ld >/dev/null 2>&1; then
         ld_version_output="$(ld -v 2>&1 || true)"
-        case "${ld_version_output}" in
-            *LLD*|*lld*|*mold*|*GNU\ gold*)
-                echo "modern"
-                return 0
-                ;;
-        esac
+        if classified_ld="$(starrocks_classify_linker_banner "${ld_version_output}" 0)"; then
+            echo "${classified_ld}"
+            return 0
+        fi
     fi
 
     echo "legacy"
