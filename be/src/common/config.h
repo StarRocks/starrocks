@@ -989,7 +989,8 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 // Metadata cache limit for shared-nothing mode. Not working for PK table now.
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%

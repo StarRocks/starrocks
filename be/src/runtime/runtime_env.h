@@ -101,6 +101,10 @@ public:
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+    static int64_t calc_max_update_memory(int64_t process_mem_limit);
+
+    // Re-apply update_memory_limit_percent to the update mem tracker.
+    void refresh_update_mem_limit() const;
 
     int64_t process_mem_limit() const;
 

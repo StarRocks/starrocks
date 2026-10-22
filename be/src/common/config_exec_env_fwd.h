@@ -145,7 +145,8 @@ CONF_String(consistency_max_memory_limit, "10G");
 
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // The max client cache number per each host.
 // There are variety of client cache in BE, but currently we use the

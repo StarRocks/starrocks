@@ -117,7 +117,8 @@ CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
 // Default: false (conservative, validates all conditions even within same transaction)
 CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // If enable_retry_apply is set to true, the system will attempt retries when apply fails.
 // Retry scenarios for apply operations include the following cases:

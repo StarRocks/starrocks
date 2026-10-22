@@ -168,6 +168,34 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percen
     ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_percent = std::to_string(config::update_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", saved_percent));
+    });
+
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    ASSERT_EQ(_runtime_env->update_mem_tracker(), primary_key_mgr->mem_tracker());
+    const int64_t preload_mem_percent = config::lake_pk_preload_memory_limit_percent;
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "30"));
+    ASSERT_EQ(process_mem_limit * 30 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "50"));
+    ASSERT_EQ(process_mem_limit * 50 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
     auto* registry = ConfigUpdateRegistry::instance();
     auto* thread_pool = _runtime_env->load_sink_close_thread_pool();

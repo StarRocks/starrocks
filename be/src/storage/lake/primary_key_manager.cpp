@@ -87,7 +87,6 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
-    const int64_t primary_key_mem_limit = _primary_key_mem_tracker->limit();
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
@@ -97,9 +96,9 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    _index_cache.set_capacity(primary_key_mem_limit);
-
     _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
+
+    refresh_mem_limits();
 }
 
 PrimaryKeyManager::~PrimaryKeyManager() {
@@ -2350,11 +2349,10 @@ void PrimaryKeyManager::refresh_preload_mem_limit() {
     _compaction_state_mem_tracker->set_limit(preload_mem_limit);
 }
 
-Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
-    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
-    return Status::OK();
+void PrimaryKeyManager::refresh_mem_limits() {
+    refresh_preload_mem_limit();
+    _index_cache.set_capacity(_primary_key_mem_tracker->limit());
+    refresh_block_cache_mem_limit();
 }
 
 void PrimaryKeyManager::_print_memory_stats() {
