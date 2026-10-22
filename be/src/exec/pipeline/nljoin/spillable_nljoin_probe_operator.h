@@ -66,11 +66,13 @@ private:
     // The chunk either consists two conditions:
     // 1. Multiple probe rows and multiple build single-chunk
     // 2. One probe rows and one build chunk
-    void _permute_chunk(RuntimeState* state, const ChunkPtr& build_chunk, const ChunkPtr& output);
+    Status _permute_chunk(RuntimeState* state, const ChunkPtr& build_chunk, const ChunkPtr& output);
 
     ChunkPtr _permute_by_one_chunk(RuntimeState* state, const ChunkPtr& build_chunk);
 
     void _permute_probe_row(Chunk* dst, const ChunkPtr& build_chunk);
+    // Estimate whether permuting the current probe row would push an output binary column past its uint32 range.
+    bool _permute_probe_row_exceeds_binary_limit(const Chunk* dst, const ChunkPtr& build_chunk) const;
 
 private:
     //
