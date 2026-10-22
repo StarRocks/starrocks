@@ -67,11 +67,6 @@ public class FetchNode extends PlanNode {
         rowPosDescs.forEach((tupleId, rowPosDescs) -> {
             msg.fetch_node.row_pos_descs.put(tupleId.asInt(), rowPosDescs.toThrift());
         });
-<<<<<<< HEAD
-        msg.fetch_node.nodes_info = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
-=======
-        // TODO: only send necessary info to BE, such as host and port, and remove unnecessary info such as node id and node name
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, clusterInfo);
         if (!RunMode.isSharedDataMode()) {
@@ -85,7 +80,6 @@ public class FetchNode extends PlanNode {
             }
         }
         msg.fetch_node.nodes_info = nodesInfo;
->>>>>>> e64478a ([BugFix] Let global late materialization lookups reach compute nodes in shared-nothing mode (#81359))
     }
 
     @Override
