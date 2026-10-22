@@ -142,7 +142,6 @@ public:
     // release(unuse) an object get/get_or_create'ed earlier
     void release(Entry* entry) {
         std::lock_guard<Lock> lg(_lock);
-<<<<<<< HEAD:be/src/util/dynamic_cache.h
         // CHECK _ref > 1
         entry->_ref--;
         if (entry->_ref > 0) {
@@ -155,29 +154,6 @@ public:
             _object_size--;
             _size -= entry->_size;
             if (_mem_tracker) _mem_tracker->release(entry->_size);
-=======
-        _release(entry);
-    }
-
-    // Release the caller's pin and restore the capacity limit when this makes
-    // the entry evictable. Victims are destroyed after releasing _lock so their
-    // destructors may safely re-enter the cache.
-    bool release_with_expire_time_evict_if_over_capacity(Entry* entry, int64_t expire_ms) {
-        std::vector<Entry*> victims;
-        {
-            std::lock_guard<Lock> lg(_lock);
-            entry->_expire_ms = expire_ms;
-            const bool last_external_pin = entry->_ref.load(std::memory_order_relaxed) == 2;
-            _release(entry);
-            const size_t capacity = _capacity.load(std::memory_order_relaxed);
-            if (last_external_pin && _size > capacity) {
-                _evict(capacity, &victims);
-            }
-        }
-
-        const bool evicted = !victims.empty();
-        for (Entry* entry : victims) {
->>>>>>> 4967199 ([BugFix] Make DynamicCache::_capacity a relaxed atomic (#81308)):be/src/cache/dynamic_cache.h
             delete entry;
         }
     }
@@ -253,27 +229,11 @@ public:
     // track size changes and evict objects accordingly
     // return false if actual memory usage is larger than capacity
     bool update_object_size(Entry* entry, size_t new_size) {
-<<<<<<< HEAD:be/src/util/dynamic_cache.h
         std::lock_guard<Lock> lg(_lock);
         _size += new_size - entry->_size;
         if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
         entry->_size = new_size;
         return _evict();
-=======
-        std::vector<Entry*> entry_list;
-        bool ret;
-        {
-            std::lock_guard<Lock> lg(_lock);
-            _size += new_size - entry->_size;
-            _tracker_consume(new_size - entry->_size);
-            entry->_size = new_size;
-            ret = _evict(_capacity.load(std::memory_order_relaxed), &entry_list);
-        }
-        for (Entry* e : entry_list) {
-            delete e;
-        }
-        return ret;
->>>>>>> 4967199 ([BugFix] Make DynamicCache::_capacity a relaxed atomic (#81308)):be/src/cache/dynamic_cache.h
     }
 
     // clear all unused *and* expired objects
@@ -338,23 +298,9 @@ public:
     // adjust capacity
     // return false if actual memory usage is larger than capacity
     bool set_capacity(size_t capacity) {
-<<<<<<< HEAD:be/src/util/dynamic_cache.h
         std::lock_guard<Lock> lg(_lock);
-        _capacity = capacity;
+        _capacity.store(capacity, std::memory_order_relaxed);
         return _evict();
-=======
-        std::vector<Entry*> entry_list;
-        bool ret;
-        {
-            std::lock_guard<Lock> lg(_lock);
-            _capacity.store(capacity, std::memory_order_relaxed);
-            ret = _evict(capacity, &entry_list);
-        }
-        for (Entry* e : entry_list) {
-            delete e;
-        }
-        return ret;
->>>>>>> 4967199 ([BugFix] Make DynamicCache::_capacity a relaxed atomic (#81308)):be/src/cache/dynamic_cache.h
     }
 
     std::vector<std::pair<Key, size_t>> get_entry_sizes() const {
