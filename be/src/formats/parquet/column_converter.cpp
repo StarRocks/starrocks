@@ -17,9 +17,11 @@
 #include <cctz/time_zone.h>
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -29,6 +31,7 @@
 #include "base/bit/bit_util.h"
 #include "base/decimal_types.h"
 #include "base/time/timezone_utils.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -103,6 +106,9 @@ private:
     int _offset = 0;
     cctz::time_zone _ctz;
     bool _as_timestamp_ntz = false;
+    TzOffsetCache _offset_cache;
+    std::vector<int64_t> _seconds;
+    std::vector<int64_t> _offsets;
 };
 
 class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
@@ -120,13 +126,20 @@ public:
 
     Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
     Status convert(const Column* src, Column* dst) override;
+    Status convert_min_max(const Column* min_src, const Column* max_src, Column* min_dst, Column* max_dst) override;
 
 private:
     bool _is_adjusted_to_utc = false;
     int _offset = 0;
     cctz::time_zone _ctz;
     int64_t _second_mask = 0;
+<<<<<<< HEAD
     int64_t _scale_to_nano_factor = 0;
+=======
+    TzOffsetCache _offset_cache;
+    std::vector<int64_t> _seconds;
+    std::vector<int64_t> _offsets;
+>>>>>>> af09b1ee3ce... [Enhancement][RB-513] Share time zone offset tables across timestamp readers and functions (#66439)
 };
 
 template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
@@ -839,32 +852,54 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
 
     size_t size = dst_null_data.size();
 
+    // The offset of a value is the one in force at 00:00 UTC of its day.
+    auto day_seconds = [](Timestamp timestamp) -> int64_t {
+        return (static_cast<int64_t>(timestamp::to_julian(timestamp)) - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
+    };
+    auto to_timestamp = [&](size_t i) -> Timestamp {
+        return (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+    };
+    int64_t fixed_offset = _offset;
+    const int64_t* offsets = nullptr;
     auto fill_dst_fn = [&]<bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
             if (!src_null_data[i]) {
-                Timestamp timestamp =
-                        (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                Timestamp timestamp = to_timestamp(i);
                 if (_as_timestamp_ntz) {
                     // Paimon TIMESTAMP (NTZ): the INT96 stores the wall clock, so keep it as-is
                     // instead of shifting by the session timezone the way Hive/Spark INT96 needs.
                     dst_data[i].set_timestamp(timestamp);
                     continue;
                 }
-                int offset = _offset;
-                if constexpr (!FAST_TZ) {
-                    offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
-                }
+                int64_t offset = FAST_TZ ? fixed_offset : offsets[i];
                 dst_data[i].set_timestamp(timestamp::add<TimeUnit::SECOND>(timestamp, offset));
             }
         }
     };
     // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
-    // or when it's UTC timezone.
-    if (config::parquet_fast_timezone_conversion || _offset == 0) {
+    if (config::parquet_fast_timezone_conversion || _as_timestamp_ntz) {
         fill_dst_fn.operator()<true>();
     } else {
-        fill_dst_fn.operator()<false>();
+        // One offset for the whole batch when its days lie within one offset window, else one per value.
+        int64_t lo = std::numeric_limits<int64_t>::max();
+        int64_t hi = std::numeric_limits<int64_t>::min();
+        _seconds.resize(size);
+        for (size_t i = 0; i < size; i++) {
+            if (!src_null_data[i]) {
+                _seconds[i] = day_seconds(to_timestamp(i));
+                lo = std::min(lo, _seconds[i]);
+                hi = std::max(hi, _seconds[i]);
+            }
+        }
+        if (lo > hi || _offset_cache.uniform_offset_for_unix(lo, hi, _ctz, &fixed_offset)) {
+            fill_dst_fn.operator()<true>();
+        } else {
+            _offsets.resize(size);
+            _offset_cache.offsets_for_unix(_seconds.data(), src_null_data.data(), size, _ctz, _offsets.data());
+            offsets = _offsets.data();
+            fill_dst_fn.operator()<false>();
+        }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -929,6 +964,53 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
     return Status::OK();
 }
 
+Status Int64ToDateTimeConverter::convert_min_max(const Column* min_src, const Column* max_src, Column* min_dst,
+                                                 Column* max_dst) {
+    RETURN_IF_ERROR(convert(min_src, min_dst));
+    RETURN_IF_ERROR(convert(max_src, max_dst));
+    // A fixed offset (or none) keeps the order; offsets at each instant do not across a backward shift, so widen
+    // each pair by the least and greatest offsets in force between its bounds.
+    if (!_is_adjusted_to_utc || config::parquet_fast_timezone_conversion) {
+        return Status::OK();
+    }
+    const auto* min_nullable = ColumnHelper::as_raw_column<NullableColumn>(min_src);
+    const auto* max_nullable = ColumnHelper::as_raw_column<NullableColumn>(max_src);
+    const auto& min_ticks =
+            ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(min_nullable->data_column())->get_data();
+    const auto& max_ticks =
+            ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(max_nullable->data_column())->get_data();
+    auto& min_values =
+            ColumnHelper::as_raw_column<TimestampColumn>(down_cast<NullableColumn*>(min_dst)->data_column_raw_ptr())
+                    ->get_data();
+    auto& max_values =
+            ColumnHelper::as_raw_column<TimestampColumn>(down_cast<NullableColumn*>(max_dst)->data_column_raw_ptr())
+                    ->get_data();
+    // Seconds (floored) and nanoseconds of a tick, as convert() splits it.
+    auto split = [&](int64_t ticks, int64_t* seconds, int64_t* nanoseconds) {
+        *seconds = ticks / _second_mask;
+        *nanoseconds = (ticks % _second_mask) * (NANOSECS_PER_SEC / _second_mask);
+        if (*nanoseconds < 0) {
+            *seconds -= 1;
+            *nanoseconds += NANOSECS_PER_SEC;
+        }
+    };
+    for (size_t i = 0; i < min_ticks.size(); i++) {
+        if (min_nullable->is_null(i) || max_nullable->is_null(i)) {
+            continue;
+        }
+        int64_t lo, lo_nanos, hi, hi_nanos;
+        split(min_ticks[i], &lo, &lo_nanos);
+        split(max_ticks[i], &hi, &hi_nanos);
+        int64_t min_offset, max_offset;
+        if (!_offset_cache.offset_range_for_unix(lo, hi, _ctz, &min_offset, &max_offset)) {
+            return Status::NotSupported("no time zone offset bounds for the min/max statistics");
+        }
+        min_values[i].set_timestamp(timestamp::of_epoch_second(lo + min_offset, lo_nanos));
+        max_values[i].set_timestamp(timestamp::of_epoch_second(hi + max_offset, hi_nanos));
+    }
+    return Status::OK();
+}
+
 Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
@@ -945,6 +1027,7 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
     size_t size = dst_null_data.size();
+<<<<<<< HEAD
     auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
@@ -958,8 +1041,28 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
                 if (nanoseconds < 0) {
                     seconds -= 1;
                     nanoseconds += NANOSECS_PER_SEC;
+=======
+    memcpy(dst_null_data.data(), src_null_data.data(), size);
+    int64_t fixed_offset = _offset;
+    const int64_t* offsets = nullptr;
+    // SECOND_MASK is the tick count per second (1e3 / 1e6 / 1e9), known from the schema; as a template
+    // argument the division and modulo below compile to multiplications instead of idiv.
+    auto fill_dst_fn = [&]<int64_t SECOND_MASK, bool UTC_TO_TZ, bool FAST_TZ>() {
+        constexpr int64_t kScaleToNano = NANOSECS_PER_SEC / SECOND_MASK;
+        for (size_t i = 0; i < size; i++) {
+            // With a fixed offset every row costs the same, so null rows are converted too, from tick 0 since
+            // they hold arbitrary bytes (the value is unused), and the loop has no branch; a null row has no
+            // per-row offset.
+            int64_t ticks;
+            if constexpr (FAST_TZ) {
+                ticks = src_null_data[i] ? 0 : src_data[i];
+            } else {
+                if (src_null_data[i]) {
+                    continue;
+>>>>>>> af09b1ee3ce... [Enhancement][RB-513] Share time zone offset tables across timestamp readers and functions (#66439)
                 }
 
+<<<<<<< HEAD
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;
                     if constexpr (!FAST_TZ) {
@@ -967,6 +1070,11 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
                     }
                     seconds += offset;
                 }
+=======
+            if constexpr (UTC_TO_TZ) {
+                seconds += FAST_TZ ? fixed_offset : offsets[i];
+            }
+>>>>>>> af09b1ee3ce... [Enhancement][RB-513] Share time zone offset tables across timestamp readers and functions (#66439)
 
                 dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
             }
@@ -975,11 +1083,44 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
 
     if (_is_adjusted_to_utc) {
         // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+<<<<<<< HEAD
         // or when it's UTC timezone.
         if (config::parquet_fast_timezone_conversion || _offset == 0) {
             fill_dst_fn.operator()<true, true>();
         } else {
             fill_dst_fn.operator()<true, false>();
+=======
+        if (config::parquet_fast_timezone_conversion) {
+            fill_dst_by_unit.operator()<true, true>();
+        } else {
+            // One offset for the whole batch when it lies within one offset window (always for a zone without
+            // daylight saving time), else one per value. Floor division keeps the order, so the seconds of the
+            // min and max ticks bound the seconds of every value.
+            auto floor_seconds = [&](int64_t ticks) {
+                return ticks / _second_mask - (ticks % _second_mask < 0 ? 1 : 0);
+            };
+            int64_t lo = std::numeric_limits<int64_t>::max();
+            int64_t hi = std::numeric_limits<int64_t>::min();
+            for (size_t i = 0; i < size; i++) {
+                if (!src_null_data[i]) {
+                    lo = std::min(lo, src_data[i]);
+                    hi = std::max(hi, src_data[i]);
+                }
+            }
+            if (lo > hi ||
+                _offset_cache.uniform_offset_for_unix(floor_seconds(lo), floor_seconds(hi), _ctz, &fixed_offset)) {
+                fill_dst_by_unit.operator()<true, true>();
+            } else {
+                _seconds.resize(size);
+                for (size_t i = 0; i < size; i++) {
+                    _seconds[i] = src_null_data[i] ? 0 : floor_seconds(src_data[i]);
+                }
+                _offsets.resize(size);
+                _offset_cache.offsets_for_unix(_seconds.data(), src_null_data.data(), size, _ctz, _offsets.data());
+                offsets = _offsets.data();
+                fill_dst_by_unit.operator()<true, false>();
+            }
+>>>>>>> af09b1ee3ce... [Enhancement][RB-513] Share time zone offset tables across timestamp readers and functions (#66439)
         }
     } else {
         fill_dst_fn.operator()<false, true>();
