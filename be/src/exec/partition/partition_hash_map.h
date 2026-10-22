@@ -441,7 +441,7 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, fal
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
-                    uint8_t* pos = mem_pool->allocate(key.size);
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     return Slice{pos, key.size};
                 },
@@ -470,7 +470,7 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<tr
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
-                    uint8_t* pos = mem_pool->allocate(key.size);
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     return Slice{pos, key.size};
                 },
@@ -496,7 +496,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
     PartitionHashMapWithSerializedKey(int32_t chunk_size)
             : PartitionHashMapBase(chunk_size),
               inner_mem_pool(std::make_unique<MemPool>()),
-              buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
+              buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)) {}
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
@@ -528,7 +528,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
                     return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
                 },
                 [&](const KeyType& key) {
-                    uint8_t* pos = mem_pool->allocate(key.size);
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     strings::memcpy_inlined(pos, key.data, key.size);
                     return Slice{pos, key.size};
                 },

@@ -62,7 +62,7 @@ Status FragmentDictState::_build_global_dict(MemPool* mem_pool, const GlobalDict
         int dict_sz = global_dict.ids.size();
         for (int i = 0; i < dict_sz; ++i) {
             const std::string& dict_key = global_dict.strings[i];
-            auto* data = mem_pool->allocate(dict_key.size());
+            auto* data = mem_pool->allocate_with_reserve(dict_key.size(), SLICE_MEMEQUAL_OVERFLOW_PADDING);
             RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
             memcpy(data, dict_key.data(), dict_key.size());
             Slice slice(data, dict_key.size());
