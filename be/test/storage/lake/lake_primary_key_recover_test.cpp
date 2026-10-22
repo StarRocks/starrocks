@@ -638,7 +638,7 @@ TEST_F(LakePrimaryKeyRecoverTest, recover_hands_dropped_sstables_to_vacuum) {
         apply(&expected, load);
     }
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id(), _version));
-    ASSIGN_OR_ABORT(auto flushed, _primary_key_mgr->flush_pk_memtable(metadata, _version + 1));
+    ASSIGN_OR_ABORT(auto flushed, _update_mgr->flush_pk_memtable(metadata, _version + 1));
     auto next = std::make_shared<TabletMetadata>(*flushed);
     next->set_version(_version + 1);
     ASSERT_GT(next->sstable_meta().sstables_size(), 0);
