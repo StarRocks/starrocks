@@ -1,0 +1,85 @@
+-- name: test_iceberg_v3_rewrite_fully_deleted_file
+-- rewrite_data_files on a format-version 3 table drops a data file whose deletion vector deletes every row, together
+-- with that DV, even when the file is the only one of its task group and the rewrite writes no row for it. Also
+-- checks the v3 columns of $files (first_row_id and the DV location) and the content column of $manifests.
+
+create external catalog iceberg_v3_rw_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_v3_rw_${uuid0}.db_${uuid0};
+set catalog iceberg_v3_rw_${uuid0};
+use db_${uuid0};
+
+-- 1. partitioned: p=1 holds one data file, and a DV deletes all of its rows
+create table part_t(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/part_t");
+
+insert into part_t select x, concat('a', x), x % 2 from table(generate_series(1, 20)) s(x);
+-- the predicate on v cannot be answered from file bounds, so it writes a DV instead of dropping the file
+delete from part_t where v like 'a%' and p = 1;
+delete from part_t where id = 2;
+
+-- expected: two data files: first_row_id 0 and 10 in some order; two DVs, each naming a data file
+select content, record_count, first_row_id is not null, referenced_data_file is not null, content_offset is not null,
+    content_size_in_bytes is not null from part_t$files order by content, record_count;
+-- every DV names a data file of the table
+select count(*) from part_t$files d join part_t$files f on d.referenced_data_file = f.file_path
+where d.content = 1 and f.content = 0;
+-- expected: one data manifest (content 0) and delete manifests (content 1)
+select content, sum(added_data_files_count) from part_t$manifests group by content order by content;
+
+-- expected: 9 108
+select count(*), sum(id) from part_t;
+
+[UC]alter table part_t execute rewrite_data_files("rewrite_all" = "true");
+
+-- expected: only the p=0 data file is left, with no delete file
+select content, record_count from part_t$files order by content, record_count;
+select count(*), sum(id) from part_t;
+
+-- 2. unpartitioned: the only data file is fully deleted, so the rewrite writes no data file at all
+create table one_t(
+    id int,
+    v string
+) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/one_t");
+
+insert into one_t select x, concat('a', x) from table(generate_series(1, 10)) s(x);
+delete from one_t where v like 'a%';
+select content, record_count from one_t$files order by content;
+
+[UC]alter table one_t execute rewrite_data_files("rewrite_all" = "true");
+
+-- expected: no file left, no row
+select count(*) from one_t$files;
+select count(*) from one_t;
+
+-- the table is still writable
+insert into one_t values (100, 'b');
+select * from one_t;
+
+-- 3. _row_id under distributed planning: the data files planned on BE carry their first_row_id back to FE
+create table rid_t(id int) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/rid_t");
+insert into rid_t values (1), (2), (3);
+insert into rid_t values (4), (5);
+-- expected: 0..4 for both plan modes
+set plan_mode = 'distributed';
+select id, _row_id from rid_t order by id;
+set plan_mode = 'local';
+select id, _row_id from rid_t order by id;
+
+drop table part_t force;
+drop table one_t force;
+drop table rid_t force;
+drop database db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_v3_rw_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/v3_rw_${uuid0} >/dev/null || echo "exit 0" >/dev/null

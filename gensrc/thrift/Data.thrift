@@ -175,10 +175,13 @@ struct TIcebergMetadata {
     14: optional binary key_metadata;
     // format v3: the row id of the data file's first row
     15: optional i64 first_row_id;
+<<<<<<< HEAD
     // format v3 deletion vector: the data file it applies to and its blob range in the Puffin file
     16: optional string referenced_data_file;
     17: optional i64 content_offset;
     18: optional i64 content_size_in_bytes;
+=======
+>>>>>>> 7213f8306be... [Enhancement][RB-225] Close Iceberg v3 gaps in rewrite, metadata tables and distributed planning (#66531)
 }
 
 // Metadata data for metadata table

@@ -154,6 +154,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
@@ -3334,7 +3335,7 @@ public class IcebergMetadataTest extends TableTestBase {
         collectJob.init(starRocksAssert.getCtx().getSessionVariable());
         String expectedSql = "SELECT content, file_path, file_format, spec_id, partition_data, record_count," +
                 " file_size_in_bytes, split_offsets, sort_id, equality_ids, file_sequence_number," +
-                " data_sequence_number , column_stats , key_metadata FROM" +
+                " data_sequence_number , column_stats , key_metadata , first_row_id FROM" +
                 " `iceberg_catalog`.`db`.`table$logical_iceberg_metadata` FOR VERSION AS OF 1 WHERE 1=1'";
         Assertions.assertEquals(expectedSql, collectJob.getSql());
         Assertions.assertNotNull(collectJob.getContext());
@@ -4171,6 +4172,51 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertNotNull(newSnapshot, "rewrite commit must produce a snapshot");
         Assertions.assertNotEquals(snapshotBeforeRewrite, newSnapshot.snapshotId(),
                 "rewrite commit must advance the snapshot id past the pre-rewrite state");
+    }
+
+    @Test
+    public void testCommitRewriteWithoutOutputRemovesScannedFiles() throws Exception {
+        // Every row of FILE_A is deleted, so the rewrite writes no data file at all. It must still
+        // commit to remove FILE_A instead of taking the empty-commit shortcut.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotBeforeRewrite = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // A non-rewrite statement with scanned files (a DELETE that wrote nothing) still skips the commit.
+        IcebergMetadata.IcebergSinkExtra deleteExtra = new IcebergMetadata.IcebergSinkExtra();
+        deleteExtra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null, deleteExtra);
+        mockedNativeTableA.refresh();
+        Assertions.assertEquals(snapshotBeforeRewrite, mockedNativeTableA.currentSnapshot().snapshotId(),
+                "an empty non-rewrite commit must not create a snapshot");
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setRewrite(true);
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        extra.setBaseSnapshotId(snapshotBeforeRewrite);
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotEquals(snapshotBeforeRewrite, newSnapshot.snapshotId(),
+                "a rewrite that writes nothing must still commit");
+        Assertions.assertEquals(DataOperations.REPLACE, newSnapshot.operation());
+        try (CloseableIterable<FileScanTask> tasks = mockedNativeTableA.newScan().planFiles()) {
+            Assertions.assertFalse(tasks.iterator().hasNext(), "the scanned data file must be removed");
+        }
     }
 
     private long mergeCounterValue(String name, String labelKey, String labelValue) {

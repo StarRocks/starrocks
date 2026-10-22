@@ -14,9 +14,11 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
@@ -42,6 +44,11 @@ import static org.apache.iceberg.util.ByteBuffers.toByteArray;
 import static org.apache.iceberg.util.SerializationUtil.deserializeFromBase64;
 
 public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
+    // Format v3 fields $files shows on top of the columns the planning scanner reads.
+    private static final List<String> DATA_V3_COLUMNS = ImmutableList.of("first_row_id");
+    private static final List<String> DELETE_V3_COLUMNS =
+            ImmutableList.of("referenced_data_file", "content_offset", "content_size_in_bytes");
+
     private final String manifestBean;
     private final boolean loadColumnStats;
     private ManifestFile manifestFile;
@@ -93,18 +100,23 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
         Map<Integer, PartitionSpec> specs = table.specs();
         List<String> scanColumns;
         if (manifestFile.content() == ManifestContent.DATA) {
-            scanColumns = loadColumnStats ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS;
+            scanColumns = withColumns(loadColumnStats ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS, DATA_V3_COLUMNS);
             reader = ManifestFiles.read(manifestFile, fileIO, specs)
                     .select(scanColumns)
                     .caseSensitive(false)
                     .iterator();
         } else {
-            scanColumns = loadColumnStats ? DELETE_SCAN_WITH_STATS_COLUMNS : DELETE_SCAN_COLUMNS;
+            scanColumns = withColumns(loadColumnStats ? DELETE_SCAN_WITH_STATS_COLUMNS : DELETE_SCAN_COLUMNS,
+                    DELETE_V3_COLUMNS);
             reader = ManifestFiles.readDeleteManifest(manifestFile, fileIO, specs)
                     .select(scanColumns)
                     .caseSensitive(false)
                     .iterator();
         }
+    }
+
+    private static List<String> withColumns(List<String> columns, List<String> extra) {
+        return ImmutableList.<String>builder().addAll(columns).addAll(extra).build();
     }
 
     private Object get(String columnName, ContentFile<?> file) {
@@ -141,6 +153,14 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
                 return file.equalityFieldIds() != null ? file.equalityFieldIds() : null;
             case "key_metadata":
                 return file.keyMetadata() == null ? null : toByteArray(file.keyMetadata());
+            case "first_row_id":
+                return file.firstRowId();
+            case "referenced_data_file":
+                return file instanceof DeleteFile deleteFile ? deleteFile.referencedDataFile() : null;
+            case "content_offset":
+                return file instanceof DeleteFile deleteFile ? deleteFile.contentOffset() : null;
+            case "content_size_in_bytes":
+                return file instanceof DeleteFile deleteFile ? deleteFile.contentSizeInBytes() : null;
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }

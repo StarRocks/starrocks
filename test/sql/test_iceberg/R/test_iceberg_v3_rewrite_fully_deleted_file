@@ -1,0 +1,153 @@
+-- name: test_iceberg_v3_rewrite_fully_deleted_file
+create external catalog iceberg_v3_rw_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_v3_rw_${uuid0}.db_${uuid0};
+-- result:
+-- !result
+set catalog iceberg_v3_rw_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table part_t(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/part_t");
+-- result:
+-- !result
+insert into part_t select x, concat('a', x), x % 2 from table(generate_series(1, 20)) s(x);
+-- result:
+-- !result
+delete from part_t where v like 'a%' and p = 1;
+-- result:
+-- !result
+delete from part_t where id = 2;
+-- result:
+-- !result
+select content, record_count, first_row_id is not null, referenced_data_file is not null, content_offset is not null,
+    content_size_in_bytes is not null from part_t$files order by content, record_count;
+-- result:
+0	10	1	0	0	0
+0	10	1	0	0	0
+1	1	0	1	1	1
+1	10	0	1	1	1
+-- !result
+select count(*) from part_t$files d join part_t$files f on d.referenced_data_file = f.file_path
+where d.content = 1 and f.content = 0;
+-- result:
+2
+-- !result
+select content, sum(added_data_files_count) from part_t$manifests group by content order by content;
+-- result:
+0	2
+1	2
+-- !result
+select count(*), sum(id) from part_t;
+-- result:
+9	108
+-- !result
+[UC]alter table part_t execute rewrite_data_files("rewrite_all" = "true");
+select content, record_count from part_t$files order by content, record_count;
+-- result:
+0	9
+-- !result
+select count(*), sum(id) from part_t;
+-- result:
+9	108
+-- !result
+create table one_t(
+    id int,
+    v string
+) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/one_t");
+-- result:
+-- !result
+insert into one_t select x, concat('a', x) from table(generate_series(1, 10)) s(x);
+-- result:
+-- !result
+delete from one_t where v like 'a%';
+-- result:
+-- !result
+select content, record_count from one_t$files order by content;
+-- result:
+0	10
+1	10
+-- !result
+[UC]alter table one_t execute rewrite_data_files("rewrite_all" = "true");
+select count(*) from one_t$files;
+-- result:
+0
+-- !result
+select count(*) from one_t;
+-- result:
+0
+-- !result
+insert into one_t values (100, 'b');
+-- result:
+-- !result
+select * from one_t;
+-- result:
+100	b
+-- !result
+create table rid_t(id int) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/v3_rw_${uuid0}/rid_t");
+-- result:
+-- !result
+insert into rid_t values (1), (2), (3);
+-- result:
+-- !result
+insert into rid_t values (4), (5);
+-- result:
+-- !result
+set plan_mode = 'distributed';
+-- result:
+-- !result
+select id, _row_id from rid_t order by id;
+-- result:
+1	0
+2	1
+3	2
+4	3
+5	4
+-- !result
+set plan_mode = 'local';
+-- result:
+-- !result
+select id, _row_id from rid_t order by id;
+-- result:
+1	0
+2	1
+3	2
+4	3
+5	4
+-- !result
+drop table part_t force;
+-- result:
+-- !result
+drop table one_t force;
+-- result:
+-- !result
+drop table rid_t force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_v3_rw_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/v3_rw_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

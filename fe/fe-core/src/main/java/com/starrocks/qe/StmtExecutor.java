@@ -3438,6 +3438,7 @@ public class StmtExecutor {
             if (extra == null) {
                 extra = new IcebergMetadata.IcebergSinkExtra();
             }
+            extra.setRewrite(true);
             // A rewrite removes the data files it scanned, so a delete file may only be removed along with them
             // when it is provably dangling afterwards. Removing one that still applies to an untouched data file
             // would resurrect the rows it deletes.
@@ -3765,7 +3766,10 @@ public class StmtExecutor {
                 insertError = true;
                 return;
             }
-            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+            // An Iceberg rewrite writes no row when every row of its files is deleted; it still has to commit
+            // to drop those files.
+            if (loadedRows == 0 && filteredRows == 0 && !(stmt instanceof IcebergRewriteStmt)
+                    && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
