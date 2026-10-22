@@ -603,6 +603,18 @@ public class TaskManager implements MemoryTrackable {
      * NOTE: this method will write edit log.
      */
     public void suspendTask(Task task, boolean isReplay) {
+        suspendTask(task, isReplay, true);
+    }
+
+    /**
+     * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
+     * which killing them takes, and must not wait for it again.
+     */
+    public void suspendTaskLeavingRuns(Task task) {
+        suspendTask(task, false, false);
+    }
+
+    private void suspendTask(Task task, boolean isReplay, boolean killTaskRuns) {
         if (task == null) {
             return;
         }
@@ -612,13 +624,13 @@ public class TaskManager implements MemoryTrackable {
                     wal -> task.setState(Constants.TaskState.PAUSE)
             );
         }
-        suspendTaskInternal(task);
+        suspendTaskInternal(task, killTaskRuns);
     }
 
     /**
      * Internal method to suspend a task without writing edit log.
      */
-    private void suspendTaskInternal(Task task) {
+    private void suspendTaskInternal(Task task, boolean killTaskRuns) {
         if (task == null) {
             return;
         }
@@ -636,7 +648,7 @@ public class TaskManager implements MemoryTrackable {
             }
 
             // kill running task run
-            if (!killTask(task.getName(), true)) {
+            if (killTaskRuns && !killTask(task.getName(), true)) {
                 LOG.warn("kill task failed: {}", task.getName());
             }
             // remove task from scheduler
@@ -1088,26 +1100,53 @@ public class TaskManager implements MemoryTrackable {
         writer.close();
     }
 
+    /**
+     * Collect the matched task runs from every source a run may live in: the pending queue, the
+     * running map, the in-memory history and the archived history table.
+     *
+     * Migrations between those sources are not atomic with respect to this method -- pending and
+     * running are snapshotted before the history is looked up, and the in-memory history before the
+     * archived table -- so a run migrating while the sources are walked is collected twice, from the
+     * one it left and the one it entered, and every per-run aggregation over
+     * information_schema.task_runs then counts it twice.
+     *
+     * Collapse by query id, which identifies a run across all four sources, keeping the record from
+     * the last source it was found in: a run only migrates forward, so the later source carries the
+     * more advanced state (SUCCESS from the history, not RUNNING from the running map).
+     */
     public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
-        List<TaskRunStatus> taskRunList = Lists.newArrayList();
+        // Re-putting a key keeps the position of its first occurrence and takes the latest value,
+        // which is exactly the precedence above.
+        Map<String, TaskRunStatus> matchedByQueryId = Maps.newLinkedHashMap();
+        Consumer<TaskRunStatus> collector = status -> {
+            // null and "" both mean "no query id" and must share one key, not take one each.
+            String queryId = Strings.nullToEmpty(status.getQueryId());
+            if (queryId.isEmpty()) {
+                // Unreachable for a run this version creates: initStatus, the only place a status is
+                // built, always gets a uuid. Only a record restored from persisted state could lack one.
+                LOG.warn("task run has no query id and cannot be told apart from another one: {}", status);
+            }
+            matchedByQueryId.put(queryId, status);
+        };
+
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+                .forEach(collector);
 
         // running task runs
         Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         runningTaskRuns.stream()
                 .map(TaskRun::getStatus)
                 .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+                .forEach(collector);
 
         // history task runs
-        taskRunList.addAll(taskRunManager.getTaskRunHistory().lookupHistory(params));
+        taskRunManager.getTaskRunHistory().lookupHistory(params).forEach(collector);
 
-        return taskRunList;
+        return Lists.newArrayList(matchedByQueryId.values());
     }
 
     /**

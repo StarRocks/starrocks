@@ -16,6 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -82,6 +84,26 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testStructFieldIsSubjectToGroupBy() {
+        // A field of a struct-valued expression is constant within a group exactly when the struct is. The check
+        // used to reject every such field access, even when the struct was built from aggregates.
+        analyzeSuccess("select named_struct('a', sum(v1), 'b', max(v2)).a from t0");
+        analyzeSuccess("select v1, named_struct('a', sum(v2)).a from t0 group by v1");
+        analyzeSuccess("select any_value(vs).a from ttypes");
+        analyzeSuccess("select v1 from t0 group by v1 having named_struct('a', sum(v2)).a > 1");
+        analyzeSuccess("select v1 from t0 group by v1 order by named_struct('a', sum(v2)).a");
+        analyzeSuccess("select named_struct('a', v2).a from t0 group by named_struct('a', v2)");
+
+        // A bare column inside the struct still has to be grouped.
+        analyzeFail("select named_struct('a', v2).a from t0 group by v1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select named_struct('a', sum(v1), 'b', v2).a from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select v1 from t0 group by v1 having named_struct('a', v2).a > 1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
     public void testCollectionSubscriptIsSubjectToGroupBy() {
         // The subscript of a collection element is an ordinary expression: a bare column there is no more
         // legal than anywhere else. It used to slip past this check and blow up later in the optimizer
@@ -99,6 +121,20 @@ public class AnalyzeAggregateTest {
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select map_agg(v1, v2)[v3] from t0 order by map_agg(v1, v2)[v3]",
                 "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
+    public void testMapAggDecimalKeyKeepsPrecision() {
+        // map_agg declares its decimal keys as wildcards; the result must carry the input's precision and scale,
+        // not the wildcard's -1, which the BE cannot build a column for.
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select map_agg(tj, tc), map_agg(4.4, tc) from tall")).getQueryRelation();
+        ScalarType columnKey = (ScalarType) ((MapType) query.getOutputExpression().get(0).getType()).getKeyType();
+        Assertions.assertEquals(9, columnKey.getScalarPrecision());
+        Assertions.assertEquals(3, columnKey.getScalarScale());
+        ScalarType literalKey = (ScalarType) ((MapType) query.getOutputExpression().get(1).getType()).getKeyType();
+        Assertions.assertEquals(2, literalKey.getScalarPrecision());
+        Assertions.assertEquals(1, literalKey.getScalarScale());
     }
 
     @Test
@@ -582,5 +618,20 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select grouping(v1), sum(v2) from t0 group by all");
         analyzeSuccess("select grouping(v1) from t0 group by all");
         analyzeSuccess("select *, sum(v1) from t0 group by all");
+    }
+
+    @Test
+    public void testDistinctOverPercentile() {
+        // count(distinct <PERCENTILE>) has no meaning and no rewrite (unlike count(distinct bitmap)
+        // / count(distinct hll), which the optimizer rewrites to bitmap_union_count / hll
+        // cardinality), so it used to reach the BE as a raw distinct aggregate and crash when the
+        // PercentileColumn was down_cast to a BinaryColumn. It must be rejected up front.
+        analyzeFail("select count(distinct percentile_hash(cast(1 as double)))",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        analyzeFail("select count(distinct p1) from test_object",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        // count(distinct bitmap) / count(distinct hll) stay supported -- only PERCENTILE is rejected.
+        analyzeSuccess("select count(distinct b1) from test_object");
+        analyzeSuccess("select count(distinct h1) from test_object");
     }
 }

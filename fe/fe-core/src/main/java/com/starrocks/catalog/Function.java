@@ -45,12 +45,14 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -74,7 +76,6 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
-    private static final String MASKED_LOCATION = "***";
 
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
@@ -138,6 +139,9 @@ public class Function implements Writable {
 
     @SerializedName(value = "binaryType")
     private TFunctionBinaryType binaryType;
+
+    @SerializedName(value = "aiModelSource")
+    private TAIModelSource aiModelSource;
 
     // Absolute path in HDFS for the binary that contains this function.
     // e.g. /udfs/udfs.jar
@@ -246,6 +250,7 @@ public class Function implements Writable {
         userVisible = other.userVisible;
         location = other.location;
         binaryType = other.binaryType;
+        aiModelSource = other.aiModelSource;
         checksum = other.checksum;
         functionId = other.functionId;
         isPolymorphic = other.isPolymorphic;
@@ -319,6 +324,18 @@ public class Function implements Writable {
 
     public void setBinaryType(TFunctionBinaryType type) {
         binaryType = type;
+    }
+
+    public boolean isAi() {
+        return binaryType == TFunctionBinaryType.AI;
+    }
+
+    public TAIModelSource getAiModelSource() {
+        return aiModelSource;
+    }
+
+    public void setAiModelSource(TAIModelSource aiModelSource) {
+        this.aiModelSource = aiModelSource;
     }
 
     public void setArgNames(List<String> names) {
@@ -808,6 +825,9 @@ public class Function implements Writable {
             fn.setInput_type(inputType);
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
+        if (aiModelSource != null) {
+            fn.setAi_model_source(aiModelSource);
+        }
         return fn;
     }
 
@@ -965,10 +985,10 @@ public class Function implements Writable {
         try {
             JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
             if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
-                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, MASKED_LOCATION);
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, CredentialMask.SHORT);
             }
             if (propertyObject.has("object_file")) {
-                propertyObject.addProperty("object_file", MASKED_LOCATION);
+                propertyObject.addProperty("object_file", CredentialMask.SHORT);
             }
             return new Gson().toJson(propertyObject);
         } catch (RuntimeException e) {

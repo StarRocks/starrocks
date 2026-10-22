@@ -65,6 +65,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -80,10 +81,15 @@ public class EsScanNode extends ScanNode {
     private List<ComputeNode> nodeList;
     private List<TScanRangeLocations> shardScanRanges = Lists.newArrayList();
     private EsTable table;
+    // The index metadata the query was planned with; see LogicalEsScanOperator. Taken as an argument rather than
+    // off the table, which by now may hold a later sync than the shard routing the plan was pruned on.
+    private final EsTable.MetaSnapshot metaSnapshot;
 
-    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
+    public EsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource,
+                      EsTable.MetaSnapshot metaSnapshot) {
         super(id, desc, planNodeName);
         this.table = (EsTable) (desc.getTable());
+        this.metaSnapshot = metaSnapshot;
         this.computeResource = computeResource;
     }
 
@@ -146,12 +152,15 @@ public class EsScanNode extends ScanNode {
         }
         TEsScanNode esScanNode = new TEsScanNode(desc.getId().asInt());
         esScanNode.setProperties(properties);
+        // Copied: the snapshot's maps are immutable, and the thrift object is not ours once handed over.
+        Map<String, String> docValueContext = metaSnapshot.getDocValueContext();
+        Map<String, String> fieldsContext = metaSnapshot.getFieldsContext();
         if (table.isDocValueScanEnable()) {
-            esScanNode.setDocvalue_context(table.docValueContext());
-            properties.put(EsTable.KEY_DOC_VALUES_MODE, String.valueOf(useDocValueScan(desc, table.docValueContext())));
+            esScanNode.setDocvalue_context(new HashMap<>(docValueContext));
+            properties.put(EsTable.KEY_DOC_VALUES_MODE, String.valueOf(useDocValueScan(desc, docValueContext)));
         }
-        if (table.isKeywordSniffEnable() && table.fieldsContext().size() > 0) {
-            esScanNode.setFields_context(table.fieldsContext());
+        if (table.isKeywordSniffEnable() && fieldsContext.size() > 0) {
+            esScanNode.setFields_context(new HashMap<>(fieldsContext));
         }
         msg.es_scan_node = esScanNode;
 

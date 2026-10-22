@@ -21,7 +21,9 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
+#include "common/config_staros_worker_fwd.h"
 #include "compute_env/staros/starlet_filesystem.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
@@ -65,6 +67,8 @@ TEST_F(StarletLocationProviderTest, test_location) {
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {
+    // Ask starmgr every time, so the re-mocked path below is the one resolved.
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto tablet_id = next_id();
     auto shard_info = staros::starlet::ShardInfo{};
     auto root_path = std::string{"/root/path/for/test"};
@@ -92,5 +96,18 @@ TEST_F(StarletLocationProviderTest, test_get_real_location) {
 
     EXPECT_EQ("/root/path/for/test/abc", _provider->real_location(fmt::format("staros://{}/abc", tablet_id)).value());
 }
+
+// `shutdown_staros_worker()` can retire the global worker while a lake operation is still
+// resolving a path. The lookup must report a status instead of dereferencing it. See issue #78883.
+TEST_F(StarletLocationProviderTest, test_real_location_after_worker_release) {
+    auto backup_worker = get_staros_worker();
+    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(nullptr);
+
+    auto real_or = _provider->real_location(build_starlet_uri(12345, "/abc"));
+    ASSERT_FALSE(real_or.ok());
+    EXPECT_TRUE(real_or.status().is_service_unavailable()) << real_or.status();
+}
+
 } // namespace starrocks::lake
 #endif // USE_STAROS

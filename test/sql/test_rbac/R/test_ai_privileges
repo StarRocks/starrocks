@@ -1,0 +1,185 @@
+-- name: test_ai_privileges @no_arrow_flight_sql
+-- EXPLAIN checks authorization without making external AI requests.
+-- Keep the fixture suffix available to CLEANUP even if an assertion fails.
+fixture_suffix=SELECT '${uuid0}';
+-- result:
+[REGEX]^[0-9a-f]{32}$
+-- !result
+CREATE USER ai_user_${uuid0};
+-- result:
+-- !result
+GRANT IMPERSONATE ON USER root TO ai_user_${uuid0};
+-- result:
+-- !result
+CREATE AI PROVIDER ai_provider_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions', 'model' = 'test-model');
+-- result:
+-- !result
+
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON AI FUNCTION ai_custom_query TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+-- Named and wildcard grants both take effect, and both can be revoked.
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+REVOKE USAGE ON AI FUNCTION ai_custom_query FROM ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON ALL AI FUNCTIONS TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+REVOKE USAGE ON AI PROVIDER ai_provider_${uuid0} FROM ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON ALL AI PROVIDERS TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+REVOKE USAGE ON ALL AI FUNCTIONS FROM ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON AI FUNCTION ai_custom_query TO ai_user_${uuid0};
+-- result:
+-- !result
+REVOKE USAGE ON ALL AI PROVIDERS FROM ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+-- result:
+None
+-- !result
+
+-- A named grant belongs to the provider identity, not a reused name.
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+DROP AI PROVIDER ai_provider_${uuid0};
+-- result:
+-- !result
+CREATE AI PROVIDER ai_provider_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions', 'model' = 'test-model');
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+-- result:
+None
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+CLEANUP {
+    EXECUTE AS root WITH NO REVERT;
+    DROP USER IF EXISTS ai_user_${fixture_suffix};
+    DROP AI PROVIDER IF EXISTS ai_provider_${fixture_suffix};
+} END CLEANUP

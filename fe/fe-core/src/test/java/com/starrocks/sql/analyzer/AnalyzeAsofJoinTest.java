@@ -55,9 +55,53 @@ public class AnalyzeAsofJoinTest {
     }
 
     @Test
+    public void testTemporalConditionMustCompareBothSides() {
+        // Both operands come from the left side: there is no temporal condition between the two
+        // sides of the join, so the BE would be asked for a build-side column that the build chunk
+        // never contains.
+        analyzeFail("SELECT t0.v1 FROM t0 ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t0.v3",
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side");
+        // Both operands come from the right side.
+        analyzeFail("SELECT t0.v1 FROM t0 ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t1.v5 >= t1.v6",
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side");
+        // An operand that reads neither child cannot stand in for a side of the match. The push-down
+        // rule bails out on it too, so before this check the query failed inside the planner.
+        analyzeFail("SELECT t0.v1 FROM t0 ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= CAST(1 AS BIGINT)",
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side");
+        // Chained ASOF joins where the last one compares against a column of an earlier right
+        // relation instead of its own build side.
+        analyzeFail("SELECT t0.v1 FROM t0 " +
+                        "ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t1.v5 " +
+                        "ASOF LEFT JOIN t2 ON t0.v1 = t2.v7 AND t0.v2 >= t1.v5",
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side");
+    }
+
+    @Test
+    public void testTemporalConditionSideDetectionIsScopeLocal() {
+        // The right relation shares its name with a relation of the enclosing query. Deciding which side
+        // an operand reads must look only at this join's own two scopes, never walk up into the outer one.
+        analyzeSuccess("SELECT v4 FROM t1 WHERE EXISTS " +
+                "(SELECT 1 FROM t0 ASOF JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t1.v5)");
+        // Same, but the ASOF join's left child is itself a join, whose scope does have a parent -- the
+        // shape where an outer-scope lookup can actually happen.
+        analyzeSuccess("SELECT v7 FROM t2 WHERE EXISTS " +
+                "(SELECT 1 FROM t0 JOIN t1 ON t0.v1 = t1.v4 " +
+                "ASOF JOIN t2 ON t0.v1 = t2.v7 AND t0.v2 >= t2.v8)");
+    }
+
+    @Test
     public void testValidAsofJoin() {
         analyzeSuccess("SELECT t0.v1 FROM t0 ASOF JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 <= t1.v5");
         analyzeSuccess("SELECT t0.v1 FROM t0 ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t1.v5");
+        // Chained ASOF joins: the left side of the second join spans two relations, and each join
+        // still compares its own two sides.
+        analyzeSuccess("SELECT t0.v1 FROM t0 " +
+                "ASOF LEFT JOIN t1 ON t0.v1 = t1.v4 AND t0.v2 >= t1.v5 " +
+                "ASOF LEFT JOIN t2 ON t0.v1 = t2.v7 AND t1.v6 >= t2.v8");
     }
 
     @Test

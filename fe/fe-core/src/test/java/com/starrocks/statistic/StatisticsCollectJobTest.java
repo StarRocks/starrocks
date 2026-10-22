@@ -31,6 +31,7 @@ import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -41,6 +42,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -59,8 +61,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -70,16 +72,16 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testHistogramFormatSamplePercent() {
         // Sub-1% ratios on large tables previously truncated to "0", producing the illegal SAMPLE('percent'='0').
         // They must now be rendered as their true percent value.
-        Assertions.assertEquals("0.5", HistogramStatisticsCollectJob.formatSamplePercent(0.005));
-        Assertions.assertEquals("0.1", HistogramStatisticsCollectJob.formatSamplePercent(0.001));
+        Assertions.assertEquals("0.5", HistogramStatisticsUtils.formatSamplePercent(0.005));
+        Assertions.assertEquals("0.1", HistogramStatisticsUtils.formatSamplePercent(0.001));
         // 10M / 2B = 0.005 -> 0.5%
         Assertions.assertEquals("0.5",
-                HistogramStatisticsCollectJob.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
+                HistogramStatisticsUtils.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
         // Integral percents stay clean, no trailing zeros, no scientific notation.
-        Assertions.assertEquals("50", HistogramStatisticsCollectJob.formatSamplePercent(0.5));
-        Assertions.assertEquals("1", HistogramStatisticsCollectJob.formatSamplePercent(0.01));
+        Assertions.assertEquals("50", HistogramStatisticsUtils.formatSamplePercent(0.5));
+        Assertions.assertEquals("1", HistogramStatisticsUtils.formatSamplePercent(0.01));
         // Very small ratios must remain a positive decimal, never "0".
-        String tiny = HistogramStatisticsCollectJob.formatSamplePercent(0.0000001);
+        String tiny = HistogramStatisticsUtils.formatSamplePercent(0.0000001);
         Assertions.assertNotEquals("0", tiny);
         Assertions.assertFalse(tiny.contains("E"));
         Assertions.assertFalse(tiny.contains("e"));
@@ -456,110 +458,102 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
+        // The builders return the bare bucket/MCV SELECT; the buffered INSERT ... VALUES around them is
+        // HistogramCollector's job, so none of the expected SQL below carries an INSERT prefix.
+        NativeHistogramTraits nativeTraits = new NativeHistogramTraits(
+                histogramStatisticsCollectJob, new HistogramCollectParams(properties));
 
         Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
-        String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
-                        "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                        "NULL, NOW() FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
+        String sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v2', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
                         "WHERE  rand() <= 0.100000 and `v2` is not null    ORDER BY `v2` LIMIT 10000000) t",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v2", IntegerType.BIGINT, false);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                "'test" +
-                ".t0_stats'," +
-                " " +
-                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
-                "FROM (   SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v2` is not " +
-                "null " +
-                " and `v2` " +
-                "not in (1,2) ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v2", IntegerType.BIGINT, false);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v2', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "FROM (   SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 " +
+                        "and `v2` is not null  and `v2` not in (1,2) ORDER BY `v2` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v4", DateType.DATE, false);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                                "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
-                                "'test" +
-                                ".t0_stats', " +
-                                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                                "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
-                                "( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v4` is not " +
-                                "null  " +
-                                "and `v4` " +
-                                "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId,
-                        dbid)),
-                normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v4", DateType.DATE, false);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v4', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "FROM ( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 " +
+                        "and `v4` is not null  and `v4` not in (\"0000-01-01\",\"1991-01-01\") " +
+                        "ORDER BY `v4` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
-                        "'test.t0_stats', " +
-                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
-                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v5` is not " +
-                        "null  and " +
-                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v5', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "FROM ( SELECT `v5` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 " +
+                        "and `v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
+                        "ORDER BY `v5` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
         Config.enable_use_table_sample_collect_statistics = true;
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
-                        "'test.t0_stats', " +
-                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
-                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
-                        "`v5` is not null  and " +
-                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v5', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "FROM ( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') " +
+                        "where true and `v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
+                        "ORDER BY `v5` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
-                        "'test.t0_stats', " +
-                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'DUJ1'),  " +
-                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
-                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
-                        "`v5` is not null  and " +
-                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v5', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'DUJ1') " +
+                        "FROM ( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') " +
+                        "where true and `v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
+                        "ORDER BY `v5` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
         Config.statistics_sample_ndv_estimator = "LINEAR";
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
-                        "'test.t0_stats', " +
-                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'LINEAR'),  " +
-                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
-                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
-                        "`v5` is not null  and " +
-                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHistogramQuery(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v5', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'LINEAR') " +
+                        "FROM ( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') " +
+                        "where true and `v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
+                        "ORDER BY `v5` LIMIT 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                db, olapTable, 100L, "v2", 0.1);
+        // buildMcvQuery reads the top-N size and the sample clause straight off the collect params.
+        sql = nativeTraits.buildMcvQuery("v2");
         Assertions.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
                 "BIGINT), " +
                 "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
@@ -571,77 +565,137 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectBucketsWithoutNdv",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
-        Assertions.assertEquals(normalize.apply("select cast(2 as int) as version, cast(10009 as bigint), " +
-                        "cast(10060 as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+        sql = nativeTraits.buildBucketBoundariesQuery(
+                0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "select cast(2 as int) as version, cast(%d as bigint), " +
+                        "cast(%d as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
                         "from " +
                         "(select `v6` as column_key from `test`.`t0_stats` where rand() <= 0.1 and `v6` is not null and " +
-                        "`v6` not in (1,2) order by `v6` limit 10000000) t"),
-                normalize.apply(sql));
+                        "`v6` not in (1,2) order by `v6` limit 10000000) t",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
-                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v6', %d, " +
-                        "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
-                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
-                t0StatsTableId, dbid)), normalize.apply(sql));
+        sql = nativeTraits.buildHllNdvQuery("[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
+        Assertions.assertEquals(normalize.apply(String.format(
+                        "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v6', " +
+                        "histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]') " +
+                        "FROM `test`.`t0_stats`;",
+                dbid, t0StatsTableId)), normalize.apply(sql));
 
-        // buildCollectDefaultBucket produces a placeholder-bucket SQL (no histogram() aggregate, no sort): the
-        // bucket carries count(non-null, non-MCV rows) scaled to full-table, so getTotalRows() reflects the real
-        // cardinality. This is the SQL collect() substitutes for char-family columns (see the
-        // testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode end-to-end test).
-        Map<String, String> stringMcv = new HashMap<>();
-        stringMcv.put("1", "10");
-        stringMcv.put("2", "20");
-        String defaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectDefaultBucket",
-                db, olapTable, 0.1, stringMcv, "v2");
-        String defaultBucketNormalized = normalize.apply(defaultBucketSql);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                        "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
-                        "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
-                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` SAMPLE('percent'='10')",
-                t0StatsTableId, dbid)), defaultBucketNormalized);
-        Assertions.assertFalse(defaultBucketNormalized.contains("histogram_hll_ndv"));
-        Assertions.assertFalse(defaultBucketNormalized.contains("histogram("));
-        Assertions.assertFalse(defaultBucketNormalized.contains("order by"));
-        Assertions.assertFalse(defaultBucketNormalized.contains("is not null"));
+        // The placeholder-bucket SQL that replaces the histogram() aggregate for char-family columns is
+        // asserted end-to-end in testHistogramCollectEmitsDefaultBucketSqlForStringColumns, which drives
+        // collect() rather than a private builder.
 
-        // When enable_use_table_sample_collect_statistics is off, buildCollectDefaultBucket must fall back to a
-        // row-level rand() bernoulli filter instead of the SAMPLE clause, matching buildCollectHistogram.
-        boolean originalSampleForDefaultBucket = Config.enable_use_table_sample_collect_statistics;
-        try {
-            Config.enable_use_table_sample_collect_statistics = false;
-            String randDefaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob,
-                    "buildCollectDefaultBucket", db, olapTable, 0.1, stringMcv, "v2");
-            String randDefaultBucketNormalized = normalize.apply(randDefaultBucketSql);
-            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                            "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
-                            "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
-                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` WHERE rand() <= 0.1",
-                    t0StatsTableId, dbid)), randDefaultBucketNormalized);
-            Assertions.assertFalse(randDefaultBucketNormalized.contains("sample("));
-        } finally {
-            Config.enable_use_table_sample_collect_statistics = originalSampleForDefaultBucket;
-        }
-
-        // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
-        // so it emits histogram() even for a char-family column.
+        // buildHistogramQuery always builds the full bucket SQL - the skip decision lives in
+        // buildBucketsQuery, not here, so it emits histogram() even for a char-family column.
         boolean originalSample = Config.enable_use_table_sample_collect_statistics;
         try {
             Config.enable_use_table_sample_collect_statistics = false;
-            sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, olapTable, 0.1, 64L, stringMcv, "v2", VarcharType.VARCHAR, false);
-            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                            "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
-                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM (   SELECT `v2` as column_key FROM " +
+            sql = nativeTraits.buildHistogramQuery(
+                    0.1, 64L, mostCommonValues, "v2", VarcharType.VARCHAR, false);
+            Assertions.assertEquals(normalize.apply(String.format(
+                            "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v2', " +
+                            "histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                            "FROM (   SELECT `v2` as column_key FROM " +
                             "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null  and `v2` " +
-                            "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
-                    normalize.apply(sql));
+                            "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t",
+                    dbid, t0StatsTableId)), normalize.apply(sql));
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalSample;
+        }
+    }
+
+    @Test
+    public void testHistogramCollectEmitsDefaultBucketSqlForStringColumns() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        // 0.5 keeps the MCV scale-up exact: the mocked counts 5 and 10 become 10 and 20, so the bucket
+        // subtracts 30. A ratio of 0.1 would divide lossily (2 / 0.1 -> 19.999... -> 19).
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.5");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, properties);
+
+        // Both the MCV query and the bucket query now go through executeStatisticDQL; only the MCV one
+        // groups by the column.
+        List<String> statisticsQueries = new ArrayList<>();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
+                statisticsQueries.add(sql);
+                if (sql.toLowerCase().contains("group by")) {
+                    TStatisticData first = new TStatisticData();
+                    first.columnName = "1";
+                    first.histogram = "5";
+                    TStatisticData second = new TStatisticData();
+                    second.columnName = "2";
+                    second.histogram = "10";
+                    return Lists.newArrayList(first, second);
+                }
+                TStatisticData buckets = new TStatisticData();
+                buckets.histogram = "[[\"Infinity\",\"Infinity\",\"70\",\"0\"]]";
+                return Lists.newArrayList(buckets);
+            }
+        };
+
+        List<String> collectedSql = new ArrayList<>();
+        new MockUp<HistogramStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(Supplier<StatementBase> statementSupplier, ConnectContext ctx,
+                                             AnalyzeStatus status) {
+                collectedSql.add(statementSupplier.get().getOrigStmt().getOrigStmt());
+            }
+        };
+
+        Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
+        // The placeholder bucket now travels in the bucket query, since the row itself is written by a
+        // buffered INSERT ... VALUES.
+        String expectedBucketQueryPrefix = String.format(
+                "SELECT cast(2 as INT), cast(%d as BIGINT), cast(%d as BIGINT), 'v2', " +
+                        "concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
+                        "cast(0.5 as double) - 30) as bigint) as varchar), ',0]]') FROM `test`.`t0_stats`",
+                db.getId(), olapTable.getId());
+        String expectedInsert = String.format(
+                "INSERT INTO _statistics_.histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) VALUES " +
+                        "(%d, 'v2', %d, 'test.t0_stats', '[[\"Infinity\",\"Infinity\",\"70\",\"0\"]]', " +
+                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW());",
+                olapTable.getId(), db.getId());
+
+        boolean originalSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = true;
+            job.collect(connectContext, new NativeAnalyzeStatus());
+
+            Assertions.assertEquals(2, statisticsQueries.size(), "one MCV query and one bucket query");
+            String sampledSql = normalize.apply(statisticsQueries.get(1));
+            Assertions.assertEquals(normalize.apply(expectedBucketQueryPrefix + " SAMPLE('percent'='50')"), sampledSql);
+            // A placeholder bucket instead of the histogram() aggregate: no bucket aggregate, no sort.
+            Assertions.assertFalse(sampledSql.contains("histogram("));
+            Assertions.assertFalse(sampledSql.contains("histogram_hll_ndv"));
+            Assertions.assertFalse(sampledSql.contains("order by"));
+            Assertions.assertFalse(sampledSql.contains("is not null"));
+            Assertions.assertEquals(1, collectedSql.size());
+            Assertions.assertEquals(normalize.apply(expectedInsert), normalize.apply(collectedSql.get(0)));
+
+            // With the table-sample switch off it falls back to a row-level rand() bernoulli filter.
+            Config.enable_use_table_sample_collect_statistics = false;
+            statisticsQueries.clear();
+            collectedSql.clear();
+            job.collect(connectContext, new NativeAnalyzeStatus());
+
+            Assertions.assertEquals(2, statisticsQueries.size(), "one MCV query and one bucket query");
+            String randFilteredSql = normalize.apply(statisticsQueries.get(1));
+            Assertions.assertEquals(normalize.apply(expectedBucketQueryPrefix + " WHERE rand() <= 0.5"), randFilteredSql);
+            Assertions.assertFalse(randFilteredSql.contains("sample("));
+            Assertions.assertEquals(1, collectedSql.size());
+            Assertions.assertEquals(normalize.apply(expectedInsert), normalize.apply(collectedSql.get(0)));
         } finally {
             Config.enable_use_table_sample_collect_statistics = originalSample;
         }
@@ -662,21 +716,18 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(VarcharType.VARCHAR),
                 StatsConstants.ScheduleType.ONCE, properties);
 
-        AtomicInteger bucketQueryCalls = new AtomicInteger(0);
+        List<String> statisticsQueries = new ArrayList<>();
         new MockUp<StatisticExecutor>() {
             @Mock
-            public List<TStatisticData> queryMCV(ConnectContext ctx, String sql) {
-                TStatisticData data = new TStatisticData();
-                data.columnName = "a";
-                data.histogram = "10";
-                return Lists.newArrayList(data);
-            }
-
-            @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                bucketQueryCalls.incrementAndGet();
+                statisticsQueries.add(sql);
                 TStatisticData data = new TStatisticData();
-                data.histogram = "[]";
+                if (sql.toLowerCase().contains("group by")) {
+                    data.columnName = "a";
+                    data.histogram = "10";
+                } else {
+                    data.histogram = "[]";
+                }
                 return Lists.newArrayList(data);
             }
         };
@@ -684,13 +735,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         List<String> collectedSql = new ArrayList<>();
         new MockUp<HistogramStatisticsCollectJob>() {
             @Mock
-            public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
-                collectedSql.add(sql);
+            public void collectStatisticSync(Supplier<StatementBase> statementSupplier, ConnectContext ctx,
+                                             AnalyzeStatus status) {
+                collectedSql.add(statementSupplier.get().getOrigStmt().getOrigStmt());
             }
         };
 
+        // Only the HLL path derives bucket boundaries first, and that query is the one carrying the
+        // histogram() aggregate over `column_key`.
         job.collect(connectContext, new NativeAnalyzeStatus());
-        Assertions.assertEquals(0, bucketQueryCalls.get());
+        Assertions.assertEquals(0L,
+                statisticsQueries.stream().filter(sql -> sql.contains("histogram(`column_key`")).count());
+        Assertions.assertEquals(0L,
+                statisticsQueries.stream().filter(sql -> sql.contains("histogram_hll_ndv")).count());
+        Assertions.assertEquals(2, statisticsQueries.size(), "one MCV query and one placeholder-bucket query");
         Assertions.assertEquals(1, collectedSql.size());
         String skipSql = collectedSql.get(0).toLowerCase();
         Assertions.assertFalse(skipSql.contains("histogram_hll_ndv"));
@@ -700,11 +758,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
         collectedSql.clear();
-        bucketQueryCalls.set(0);
+        statisticsQueries.clear();
         intJob.collect(connectContext, new NativeAnalyzeStatus());
-        Assertions.assertEquals(1, bucketQueryCalls.get());
+        Assertions.assertEquals(1L,
+                statisticsQueries.stream().filter(sql -> sql.contains("histogram(`column_key`")).count());
+        Assertions.assertEquals(1L,
+                statisticsQueries.stream().filter(sql -> sql.contains("histogram_hll_ndv")).count());
+        Assertions.assertEquals(3, statisticsQueries.size(),
+                "one MCV query, one bucket-boundaries query and one histogram_hll_ndv query");
         Assertions.assertEquals(1, collectedSql.size());
-        Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
     }
 
     @Test
@@ -843,6 +905,164 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, externalAnalyzeJob.getStatus());
         Assertions.assertEquals("mock exception", externalAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobContinuesAfterFailedTable() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        String failedTable = jobs.get(0).getTable().getName();
+        List<String> collectedTables = mockCollectFailingOn(failedTable);
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+        Assertions.assertEquals("collect failed on " + failedTable, analyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobContinuesAfterFailedTable() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db", null, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        String failedTable = jobs.get(0).getTable().getName();
+        List<String> collectedTables = mockCollectFailingOn(failedTable);
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+        Assertions.assertEquals("collect failed on " + failedTable, analyzeJob.getReason());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobStopsAfterKillAnalyze() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = mockCollectKilledByUser();
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(List.of(jobs.get(0).getTable().getName()), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobStopsAfterKillAnalyze() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db", null, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = mockCollectKilledByUser();
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(List.of(jobs.get(0).getTable().getName()), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeJob.getStatus());
+    }
+
+    @Test
+    public void testNativeAnalyzeJobIgnoresKillAfterTableFinished() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
+            }
+
+            @Mock
+            public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+            }
+        };
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> jobs = analyzeJob.instantiateJobs();
+        Assertions.assertTrue(jobs.size() > 1);
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus) {
+                StatisticsCollectJob statsJob = invocation.getInvokedInstance();
+                collectedTables.add(statsJob.getTable().getName());
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().killConnection(analyzeStatus.getId());
+            }
+        };
+
+        analyzeJob.run(StatisticUtils.buildConnectContext(), new StatisticExecutor(), jobs);
+
+        Assertions.assertEquals(jobs.stream().map(j -> j.getTable().getName()).toList(), collectedTables);
+        Assertions.assertEquals(StatsConstants.ScheduleStatus.FINISH, analyzeJob.getStatus());
+    }
+
+    private static List<String> mockCollectKilledByUser() {
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<HyperStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                killAnalyzeDuringCollect(invocation.getInvokedInstance(), analyzeStatus, collectedTables);
+            }
+        };
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(Invocation invocation, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                killAnalyzeDuringCollect(invocation.getInvokedInstance(), analyzeStatus, collectedTables);
+            }
+        };
+        return collectedTables;
+    }
+
+    private static void killAnalyzeDuringCollect(StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus,
+                                                 List<String> collectedTables) throws DdlException {
+        collectedTables.add(statsJob.getTable().getName());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().killConnection(analyzeStatus.getId());
+        throw new DdlException("USER_CANCEL: kill analyze");
+    }
+
+    private static List<String> mockCollectFailingOn(String failedTable) {
+        List<String> collectedTables = new ArrayList<>();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx, StatisticsCollectJob statsJob,
+                                                   AnalyzeStatus analyzeStatus, boolean refreshAsync,
+                                                   boolean resetWarehouse) {
+                String tableName = statsJob.getTable().getName();
+                collectedTables.add(tableName);
+                if (tableName.equals(failedTable)) {
+                    analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                    analyzeStatus.setReason("collect failed on " + tableName);
+                } else {
+                    analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+                }
+                return analyzeStatus;
+            }
+        };
+        return collectedTables;
     }
 
     @Test
@@ -1224,16 +1444,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap());
         // Columns are split into groups of max(2, parallelism), each group a self-contained single-scan CTE
         // query, per partition. 4 columns / 2-per-scan = 2 groups x 3 partitions = 6 queries.
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         Assertions.assertEquals(6, collectSqlList.size());
         // A large parallelism puts all 4 columns in one scan -> 1 group x 3 partitions = 3 queries.
         Assertions.assertEquals(3, collectJob.buildCollectSQLList(128).size());
         // parallelism 3 -> ceil(4/3)=2 groups x 3 partitions = 6 queries.
         Assertions.assertEquals(6, collectJob.buildCollectSQLList(3).size());
-        for (List<String> group : collectSqlList) {
-            Assertions.assertEquals(1, group.size());
-            assertContains(group.get(0), "WITH base_cte_table AS");
-            assertContains(group.get(0), "FROM base_cte_table");
+        for (ExternalFullStatisticsCollectJob.CollectTask task : collectSqlList) {
+            assertContains(task.getSql(), "WITH base_cte_table AS");
+            assertContains(task.getSql(), "FROM base_cte_table");
         }
         // All columns and all three partition predicates appear across the query list.
         assertContains(collectSqlList.toString(), "c1", "c2", "c3", "par_col");
@@ -1350,7 +1569,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2019-01-01 00:00:00' and `ts` < '2020-01-01 00:00:00'");
 
@@ -1500,7 +1719,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         // First partition is ts_bucket=0 in mock metadata; spec uses bucket(ts, 10)
         assertContains(collectSqlList.get(0).toString(),
                 "__iceberg_transform_bucket(`ts`, 10) = 0");
@@ -1525,7 +1744,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(),
                 "__iceberg_transform_truncate(`data`, 5) = 'aaaaa'");
     }
@@ -1547,7 +1766,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList =  collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList =  collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(), "date` = '2020-01-01'");
     }
 
@@ -1569,7 +1788,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap());
         // Columns split into groups of max(2, parallelism) per partition: 3 cols / 2-per-scan = 2 groups
         // x 10 partitions = 20 queries.
-        List<List<String>> lists = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> lists = collectJob.buildCollectSQLList(1);
         Assertions.assertEquals(20, lists.size());
 
         //test partition is null
@@ -1654,6 +1873,71 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(1, allJobs.size());
         Assertions.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assertions.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
+    }
+
+    @Test
+    public void testScopedJobsSkipTableWithStatisticAutoCollectDisabled() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t0_stats_partition");
+        NativeAnalyzeJob defaultJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Map.of(StatisticAutoCollector.DEFAULT_JOB_FLAG, "true"), StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        NativeAnalyzeJob dbJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID,
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        NativeAnalyzeJob tableJob = new NativeAnalyzeJob(db.getId(), table.getId(),
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        Assertions.assertTrue(collectsTable(defaultJob, "t0_stats_partition"));
+
+        try {
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t0_stats_partition SET ('enable_statistic_auto_collect' = 'false')");
+            Assertions.assertFalse(collectsTable(defaultJob, "t0_stats_partition"));
+            Assertions.assertFalse(collectsTable(dbJob, "t0_stats_partition"));
+            Assertions.assertTrue(collectsTable(defaultJob, "t1_stats"));
+            Assertions.assertTrue(collectsTable(tableJob, "t0_stats_partition"));
+        } finally {
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t0_stats_partition SET ('enable_statistic_auto_collect' = 'true')");
+        }
+        Assertions.assertTrue(collectsTable(defaultJob, "t0_stats_partition"));
+    }
+
+    @Test
+    public void testStatisticAutoCollectTableProperty() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_auto_collect_off (k1 bigint, v1 bigint) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1', 'enable_statistic_auto_collect' = 'false')");
+        try {
+            OlapTable table = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                    .getDb("test").getTable("t_auto_collect_off");
+            Assertions.assertFalse(table.enableStatisticAutoCollect());
+            assertContains(starRocksAssert.showCreateTable("SHOW CREATE TABLE test.t_auto_collect_off"),
+                    "\"enable_statistic_auto_collect\" = \"false\"");
+
+            Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t_auto_collect_off SET ('enable_statistic_auto_collect' = 'off')"));
+            Assertions.assertFalse(table.enableStatisticAutoCollect());
+
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t_auto_collect_off SET ('enable_statistic_auto_collect' = 'true')");
+            Assertions.assertTrue(table.enableStatisticAutoCollect());
+            Assertions.assertFalse(starRocksAssert.showCreateTable("SHOW CREATE TABLE test.t_auto_collect_off")
+                    .contains("enable_statistic_auto_collect"));
+        } finally {
+            starRocksAssert.dropTable("test.t_auto_collect_off");
+        }
+
+        Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
+                "CREATE TABLE test.t_auto_collect_bad (k1 bigint) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                        "PROPERTIES ('replication_num' = '1', 'enable_statistic_auto_collect' = 'off')"));
+    }
+
+    private static boolean collectsTable(NativeAnalyzeJob job, String tableName) {
+        return StatisticsCollectJobFactory.buildStatisticsCollectJob(job).stream()
+                .anyMatch(j -> j.getTable().getName().equals(tableName));
     }
 
     @Test

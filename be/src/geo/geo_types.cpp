@@ -34,12 +34,19 @@
 
 #include "geo/geo_types.h"
 
+#include <s2/mutable_s2shape_index.h>
+#include <s2/s1chord_angle.h>
 #include <s2/s2cap.h>
 #include <s2/s2cell.h>
 #include <s2/s2earth.h>
+#include <s2/s2edge_distances.h>
+#include <s2/s2error.h>
 #include <s2/s2latlng.h>
+#include <s2/s2lax_loop_shape.h>
+#include <s2/s2pointutil.h>
 #include <s2/s2polygon.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_visit_crossing_edge_pairs.h>
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
 
@@ -59,13 +66,9 @@ void print_s2point(std::ostream& os, const S2Point& point) {
     os << std::setprecision(12) << coord.lng().degrees() << " " << coord.lat().degrees();
 }
 
-static inline bool is_valid_lng_lat(double lng, double lat) {
-    return std::abs(lng) <= 180 && std::abs(lat) <= 90;
-}
-
 // Return GEO_PARSE_OK, if and only if this can be converted to a valid S2Point
 static inline GeoParseStatus to_s2point(double lng, double lat, S2Point* point) {
-    if (!is_valid_lng_lat(lng, lat)) {
+    if (!is_valid_crs84_coordinate(lng, lat)) {
         return GEO_PARSE_COORD_INVALID;
     }
     S2LatLng ll = S2LatLng::FromDegrees(lat, lng);
@@ -103,7 +106,7 @@ static void remove_duplicate_points(std::vector<S2Point>* points) {
     points->resize(lhs + 1);
 }
 
-static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+static GeoParseStatus to_s2loop_points(const GeoCoordinateList& coords, std::vector<S2Point>* output) {
     // 1. covnert all coordinates to points
     std::vector<S2Point> points(coords.list.size());
     for (int i = 0; i < coords.list.size(); ++i) {
@@ -124,6 +127,14 @@ static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr
     if (points.size() < 3) {
         return GEO_PARSE_LOOP_LACK_VERTICES;
     }
+    *output = std::move(points);
+    return GEO_PARSE_OK;
+}
+
+static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+    std::vector<S2Point> points;
+    const auto status = to_s2loop_points(coords, &points);
+    if (status != GEO_PARSE_OK) return status;
     *loop = std::make_unique<S2Loop>(points);
     if (!(*loop)->IsValid()) {
         return GEO_PARSE_LOOP_INVALID;
@@ -287,8 +298,69 @@ std::string GeoPoint::as_wkt() const {
 GeoLine::GeoLine() = default;
 GeoLine::~GeoLine() = default;
 
+class GeoSphericalLine::Impl {
+public:
+    std::vector<std::vector<S2Point>> components;
+};
+
+GeoSphericalLine::GeoSphericalLine() : _impl(std::make_unique<Impl>()) {}
+GeoSphericalLine::~GeoSphericalLine() = default;
+GeoSphericalLine::GeoSphericalLine(GeoSphericalLine&&) noexcept = default;
+GeoSphericalLine& GeoSphericalLine::operator=(GeoSphericalLine&&) noexcept = default;
+
+GeoParseStatus GeoSphericalLine::add_component(const GeoCoordinateList& coordinates) {
+    constexpr double kAntipodalToleranceRadians = 1e-15;
+    const double pi = std::acos(-1.0);
+    std::vector<S2Point> vertices(coordinates.list.size());
+    for (size_t i = 0; i < coordinates.list.size(); ++i) {
+        const auto status = to_s2point(coordinates.list[i], &vertices[i]);
+        if (status != GEO_PARSE_OK) return status;
+    }
+    for (size_t i = 1; i < vertices.size(); ++i) {
+        if (pi - vertices[i - 1].Angle(vertices[i]) <= kAntipodalToleranceRadians) {
+            return GEO_PARSE_POLYLINE_INVALID;
+        }
+    }
+    _impl->components.emplace_back(std::move(vertices));
+    return GEO_PARSE_OK;
+}
+
+bool GeoSphericalLine::distance(const GeoPoint& point, double* meters) const {
+    S1ChordAngle minimum = S1ChordAngle::Infinity();
+    for (const auto& component : _impl->components) {
+        for (size_t i = 1; i < component.size(); ++i) {
+            S2::UpdateMinDistance(*point.point(), component[i - 1], component[i], &minimum);
+        }
+    }
+    if (minimum.is_infinity()) return false;
+    *meters = S2Earth::ToMeters(minimum);
+    return true;
+}
+
+bool GeoSphericalLine::dwithin(const GeoPoint& point, double meters) const {
+    S1ChordAngle minimum = S1ChordAngle::Infinity();
+    for (const auto& component : _impl->components) {
+        for (size_t i = 1; i < component.size(); ++i) {
+            if (S2::UpdateMinDistance(*point.point(), component[i - 1], component[i], &minimum) &&
+                S2Earth::ToMeters(minimum) <= meters) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 GeoParseStatus GeoLine::from_coords(const GeoCoordinateList& list) {
     return to_s2polyline(list, &_polyline);
+}
+
+double GeoLine::length_meters() const {
+    return S2Earth::ToMeters(_polyline->GetLength());
+}
+
+GeoCartesianCentroid GeoLine::centroid_vector() const {
+    const S2Point centroid = _polyline->GetCentroid();
+    return {centroid.x(), centroid.y(), centroid.z()};
 }
 
 void GeoLine::encode(std::string* buf) {
@@ -305,6 +377,26 @@ bool GeoLine::decode(const void* data, size_t size) {
 
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
+
+bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
+    std::vector<S2Point> points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+
+    // Match S2Loop::FindValidationErrorNoIndex before using its robust crossing
+    // validator. The original loop construction normalizes only after validity
+    // succeeds; this predicate does not construct or normalize a polygon.
+    for (const auto& point : points) {
+        if (!S2::IsUnitLength(point)) return false;
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        const auto& next = points[(i + 1) % points.size()];
+        if (points[i] == next || points[i] == -next) return false;
+    }
+    MutableS2ShapeIndex index;
+    index.Add(std::make_unique<S2LaxLoopShape>(points));
+    S2Error error;
+    return !s2shapeutil::FindSelfIntersection(index, &error);
+}
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
     return to_s2polygon(list, &_polygon);
@@ -411,6 +503,63 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     default:
         return false;
     }
+}
+
+bool GeoPolygon::intersects_inclusive(const GeoPolygon& rhs) const {
+    if (_polygon->Intersects(rhs.polygon())) return true;
+
+    // S2Polygon::Intersects follows S2's semi-open boundary model, so polygons
+    // that only touch at an edge or vertex need an explicit boundary check.
+    constexpr double kBoundaryToleranceRadians = 1e-15;
+    for (int i = 0; i < _polygon->num_loops(); ++i) {
+        const auto* loop = _polygon->loop(i);
+        for (int j = 0; j < loop->num_vertices(); ++j) {
+            if (rhs.polygon()->GetDistanceToBoundary(loop->vertex(j)).radians() <= kBoundaryToleranceRadians) {
+                return true;
+            }
+        }
+    }
+    for (int i = 0; i < rhs.polygon()->num_loops(); ++i) {
+        const auto* loop = rhs.polygon()->loop(i);
+        for (int j = 0; j < loop->num_vertices(); ++j) {
+            if (_polygon->GetDistanceToBoundary(loop->vertex(j)).radians() <= kBoundaryToleranceRadians) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+GeoPointPolygonRelation GeoPolygon::point_relation(const GeoPoint& point) const {
+    constexpr double kBoundaryToleranceRadians = 1e-15;
+    if (_polygon->GetDistanceToBoundary(*point.point()).radians() <= kBoundaryToleranceRadians) {
+        return GeoPointPolygonRelation::BOUNDARY;
+    }
+    return _polygon->Contains(*point.point()) ? GeoPointPolygonRelation::INSIDE : GeoPointPolygonRelation::OUTSIDE;
+}
+
+bool GeoPolygon::intersects_interior(const GeoPolygon& rhs) const {
+    return _polygon->Intersects(rhs.polygon());
+}
+
+double GeoPolygon::area_square_meters() const {
+    return S2Earth::SteradiansToSquareMeters(_polygon->GetArea());
+}
+
+double GeoPolygon::perimeter_meters() const {
+    double radians = 0;
+    for (int loop_index = 0; loop_index < _polygon->num_loops(); ++loop_index) {
+        const auto* loop = _polygon->loop(loop_index);
+        for (int vertex = 0; vertex < loop->num_vertices(); ++vertex) {
+            radians += loop->vertex(vertex).Angle(loop->vertex((vertex + 1) % loop->num_vertices()));
+        }
+    }
+    return S2Earth::RadiansToMeters(radians);
+}
+
+GeoCartesianCentroid GeoPolygon::centroid_vector() const {
+    const S2Point centroid = _polygon->GetCentroid();
+    return {centroid.x(), centroid.y(), centroid.z()};
 }
 
 GeoCircle::GeoCircle() = default;

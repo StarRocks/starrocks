@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
+#include <iterator>
 #include <memory>
+#include <string>
 
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
@@ -26,10 +30,15 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/configbase.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
@@ -42,11 +51,26 @@
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
+
+#ifdef USE_STAROS
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
+#endif
+
+namespace brpc {
+DECLARE_int32(max_connection_pool_size);
+} // namespace brpc
 
 namespace starrocks {
 
@@ -108,6 +132,96 @@ TEST_F(ConfigUpdateHooksTest, test_update_pindex_load_thread_pool_num_max) {
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_preload_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(
+                ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "10"));
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
+    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    const int64_t primary_key_mem_limit = primary_key_mgr->mem_tracker()->limit();
+    const std::string saved_percent = std::to_string(config::lake_pk_index_block_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent",
+                                                                 saved_percent));
+    });
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "20"));
+    ASSERT_EQ(primary_key_mem_limit * 20 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
+    ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_percent = std::to_string(config::update_memory_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", saved_percent));
+    });
+
+    auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+    ASSERT_NE(nullptr, primary_key_mgr);
+    ASSERT_EQ(_runtime_env->update_mem_tracker(), primary_key_mgr->mem_tracker());
+    const int64_t preload_mem_percent = config::lake_pk_preload_memory_limit_percent;
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "30"));
+    ASSERT_EQ(process_mem_limit * 30 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "50"));
+    ASSERT_EQ(process_mem_limit * 50 / 100, _runtime_env->update_mem_tracker()->limit());
+    ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100, primary_key_mgr->index_cache().capacity());
+    ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
+              primary_key_mgr->compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    auto* thread_pool = _runtime_env->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(registry->update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, _runtime_env->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(registry->update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     auto* executor =
             static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
@@ -122,7 +236,10 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     {
         auto st = ConfigUpdateRegistry::instance()->update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
@@ -130,6 +247,28 @@ TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_cou
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, _runtime_env->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_brpc_max_connection_pool_size) {
+    const int32_t orig_config = config::brpc_max_connection_pool_size;
+    const int32_t orig_flag = brpc::FLAGS_max_connection_pool_size;
+    DeferOp restore([&]() {
+        WARN_IF_ERROR(config::set_config("brpc_max_connection_pool_size", std::to_string(orig_config)),
+                      "failed to restore brpc_max_connection_pool_size");
+        brpc::FLAGS_max_connection_pool_size = orig_flag;
+    });
+
+    // The gflag assertion is the load-bearing one: update_config() still reports OK and still sets the
+    // StarRocks config when no callback is registered under the given name, so only the gflag reveals a
+    // callback registered under a misspelled key or one that never reached brpc.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("brpc_max_connection_pool_size", "37"));
+    ASSERT_EQ(37, config::brpc_max_connection_pool_size);
+    ASSERT_EQ(37, brpc::FLAGS_max_connection_pool_size);
+
+    // Update a second time to prove the callback runs on every change, not just the first one.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("brpc_max_connection_pool_size", "512"));
+    ASSERT_EQ(512, config::brpc_max_connection_pool_size);
+    ASSERT_EQ(512, brpc::FLAGS_max_connection_pool_size);
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {
@@ -223,6 +362,46 @@ TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
     ASSERT_EQ(4, storage_cleanup_pool->max_threads());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_reset_pk_index_execution_threads_to_auto) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    for (int cores : {8, 1, 0}) {
+        SCOPED_TRACE(cores);
+        SCOPED_UPDATE(int, CpuInfo::num_cores_, cores);
+        for (int automatic_value : {0, -1}) {
+            SCOPED_TRACE(automatic_value);
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+            EXPECT_EQ(7, thread_pool->max_threads());
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads",
+                                              std::to_string(automatic_value)));
+            EXPECT_EQ(std::max(1, cores), thread_pool->max_threads());
+            EXPECT_EQ(automatic_value, config::pk_index_parallel_execution_threadpool_max_threads);
+        }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, test_invalid_pk_index_execution_threads_preserve_pool) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+    EXPECT_TRUE(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "invalid")
+                        .is_invalid_argument());
+    EXPECT_EQ(7, thread_pool->max_threads());
+    EXPECT_EQ(7, config::pk_index_parallel_execution_threadpool_max_threads);
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     auto* thread_pool = _runtime_env->lake_metadata_fetch_thread_pool();
     ASSERT_NE(nullptr, thread_pool);
@@ -272,5 +451,119 @@ TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cac
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", saved));
 }
 #endif
+
+#ifdef USE_STAROS
+
+namespace {
+
+struct StarletUploadThresholdMapping {
+    const char* be_config;
+    int64_t* flag;
+    int64_t* config_value;
+    int64_t valid_value;
+};
+
+// Distinct valid_value per row, so deleting one UPDATE_STARLET_CONFIG line or swapping two fails.
+const StarletUploadThresholdMapping kStarletUploadThresholdMappings[] = {
+        {"starlet_fslib_s3_max_single_part_size", &FLAGS_fslib_s3_max_single_part_size,
+         &config::starlet_fslib_s3_max_single_part_size, 21000000},
+        {"starlet_fslib_s3_min_upload_part_size", &FLAGS_fslib_s3_min_upload_part_size,
+         &config::starlet_fslib_s3_min_upload_part_size, 22000000},
+        {"starlet_fslib_gcs_max_single_part_size", &FLAGS_fslib_gs_max_single_part_size,
+         &config::starlet_fslib_gcs_max_single_part_size, 23000000},
+        {"starlet_fslib_azure_storage_max_single_part_size", &FLAGS_fslib_azure_storage_max_single_part_size,
+         &config::starlet_fslib_azure_storage_max_single_part_size, 24000000},
+        {"starlet_fslib_azure_storage_min_upload_part_size", &FLAGS_fslib_azure_storage_min_upload_part_size,
+         &config::starlet_fslib_azure_storage_min_upload_part_size, 25000000},
+};
+
+constexpr size_t kStarletUploadThresholdMappingCount = std::size(kStarletUploadThresholdMappings);
+
+// Saves the BE configs and every starlet gflag on construction and puts them back on destruction.
+// Restores through config::set_config, never by assigning the config global directly:
+// Field::set_value maintains the _current_set_val/_last_set_val pair that Field::rollback() reads,
+// so a raw assignment would leave that metadata pointing at this test's value and a later rejected
+// update in another test could roll back to it.
+class ScopedStarletUploadThresholdConfigs {
+public:
+    ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            _saved[i] = *kStarletUploadThresholdMappings[i].config_value;
+        }
+    }
+
+    ~ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            auto st = config::set_config(kStarletUploadThresholdMappings[i].be_config, std::to_string(_saved[i]));
+            EXPECT_TRUE(st.ok()) << kStarletUploadThresholdMappings[i].be_config << ": " << st;
+        }
+    }
+
+private:
+    int64_t _saved[kStarletUploadThresholdMappingCount];
+    // Restores every gflag it saw at construction. The destructor body above always completes before
+    // any member is destroyed, so the config restore runs first and this undoes the gflag side after.
+    gflags::FlagSaver _flag_saver;
+};
+
+} // namespace
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        // ASSERT_OK is a do/while macro and cannot take a trailing `<< message`, so capture the
+        // status and use a streamable native assertion instead.
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        EXPECT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+    }
+}
+
+// starlet's validator rejects non-positive values; the registry must roll the BE config back.
+// Covers all five mappings, with both 0 and a negative value.
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non_positive) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        ASSERT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+
+        for (const char* bad_value : {"0", "-1"}) {
+            EXPECT_FALSE(registry->update_config(mapping.be_config, bad_value).ok())
+                    << mapping.be_config << " should reject " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.flag)
+                    << mapping.be_config << " flag changed on rejected " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.config_value)
+                    << mapping.be_config << " config not rolled back on rejected " << bad_value;
+        }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
+    const bool saved = config::s3_multipart_equal_part_size;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("s3_multipart_equal_part_size", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        FLAGS_fslib_s3_multipart_equal_part_size = !value;
+        auto st = registry->update_config("s3_multipart_equal_part_size", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::s3_multipart_equal_part_size);
+        EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+#endif // USE_STAROS
 
 } // namespace starrocks

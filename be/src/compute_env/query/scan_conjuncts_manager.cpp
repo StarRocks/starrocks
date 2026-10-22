@@ -924,8 +924,9 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             if (rf->has_null()) {
                 normalized_rf_with_null<SlotType, MappingType, Decoder>(rf, &slot, std::forward<Args>(args)...);
             } else {
+                // No offset: this path normalizes a slot-ref probe, whose key IS the column value.
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<RangeType, SlotType, MappingType, Decoder>(
-                        *range, rf, _opts.obj_pool, std::forward<Args>(args)...);
+                        *range, rf, _opts.obj_pool, {}, std::forward<Args>(args)...);
             }
         }
 
@@ -1103,7 +1104,7 @@ struct ColumnRangeBuilder {
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
-                      lt_is_float<ltype> || lt_is_binary<ltype>) {
+                      ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY || lt_is_float<ltype> || lt_is_binary<ltype>) {
             return Status::OK();
         } else {
             // Treat tinyint and boolean as int

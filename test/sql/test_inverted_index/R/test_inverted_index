@@ -144,6 +144,114 @@ SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result
+-- name: test_gin_var @sequential @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_var VALUES (1, "abc bcd");
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+SET enable_gin_filter = false;
+-- result:
+-- !result
+function: assert_query_error_contains('SELECT * FROM t_gin_var WHERE v1 MATCH "abc"', 'Match can only used as a pushdown predicate on column with GIN in a single query')
+-- result:
+None
+-- !result
+SET enable_gin_filter = true;
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+} END CLEANUP
+
 
 -- name: test_gin_view @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
@@ -447,5 +555,77 @@ set enable_prune_column_after_index_filter = true;
 -- result:
 -- !result
 DROP TABLE t_gin_prune_pk_${uuid0};
+-- result:
+-- !result
+-- name: test_gin_prune_on_table_with_delete @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_del_prune_${uuid0}` (
+  `id` bigint NOT NULL,
+  `k`  bigint NOT NULL,
+  `v`  varchar(255) NOT NULL,
+  INDEX gin_v (`v`) USING GIN ("parser" = "none")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+-- result:
+-- !result
+insert into t_gin_del_prune_${uuid0} values (1, 7, "redx"), (2, 8, "redy"), (3, 7, "blue"), (4, 9, "redz"), (5, 7, "redx");
+-- result:
+-- !result
+delete from t_gin_del_prune_${uuid0} where k = 7;
+-- result:
+-- !result
+set enable_filter_unused_columns_in_scan_stage = true;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+-- result:
+2
+-- !result
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2
+4
+-- !result
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2	8
+4	9
+-- !result
+select count(*) from t_gin_del_prune_${uuid0};
+-- result:
+2
+-- !result
+set enable_filter_unused_columns_in_scan_stage = false;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+-- result:
+2
+-- !result
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2
+4
+-- !result
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2	8
+4	9
+-- !result
+select count(*) from t_gin_del_prune_${uuid0};
+-- result:
+2
+-- !result
+DROP TABLE t_gin_del_prune_${uuid0};
 -- result:
 -- !result

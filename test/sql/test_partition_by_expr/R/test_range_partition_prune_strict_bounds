@@ -1,0 +1,73 @@
+-- name: test_range_partition_prune_strict_bounds
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+CREATE TABLE t_guard_ms (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime_ms(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_guard_ms values (1609430400000,1),(1609689600000,4),(1609689600500,5),(1609776000000,6);
+-- result:
+-- !result
+select dt, id from t_guard_ms where dt > 1609689600500 order by id;
+-- result:
+1609776000000	6
+-- !result
+function: assert_explain_contains('select dt from t_guard_ms where dt > 1609689600500', 'PREDICATES: 1: dt > 1609689600500')
+-- result:
+None
+-- !result
+select dt, id from t_guard_ms where not (dt > 1609689600500) order by id;
+-- result:
+1609430400000	1
+1609689600000	4
+1609689600500	5
+-- !result
+select dt, id from t_guard_ms where dt <= 1609689600500 order by id;
+-- result:
+1609430400000	1
+1609689600000	4
+1609689600500	5
+-- !result
+select dt, id from t_guard_ms where dt = 1609689600000;
+-- result:
+1609689600000	4
+-- !result
+CREATE TABLE t_guard_s2d (
+        b varchar(32) NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(b, id)
+PARTITION BY RANGE(str2date(b, '%Y%m%d'))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_guard_s2d values ('20210101',1),('20210104',4),('20210105',5);
+-- result:
+-- !result
+select b, id from t_guard_s2d where b < '20210104' order by id;
+-- result:
+20210101	1
+-- !result
+function: assert_explain_contains("select b from t_guard_s2d where b < '20210104'", "partitions=1/9")
+-- result:
+None
+-- !result
+select b, id from t_guard_s2d where b >= '20210104' order by id;
+-- result:
+20210104	4
+20210105	5
+-- !result
+select b, id from t_guard_s2d where b = '20210104';
+-- result:
+20210104	4
+-- !result

@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <future>
 #include <limits>
@@ -38,7 +39,7 @@ JavaEnv::JavaEnv() = default;
 
 JavaEnv::~JavaEnv() = default;
 
-Status JavaEnv::init(MetricRegistry* metrics, bool enable_jvm_metrics) {
+Status JavaEnv::init(MetricRegistry* metrics, bool enable_jvm_metrics, MemTracker* jvm_mem_tracker) {
     if (_jvm_call_pool == nullptr) {
         _jvm_call_pool = std::make_unique<PriorityThreadPool>(
                 "jvm", std::max<int32_t>(1, config::jvm_call_thread_pool_size), std::numeric_limits<uint32_t>::max());
@@ -47,7 +48,7 @@ Status JavaEnv::init(MetricRegistry* metrics, bool enable_jvm_metrics) {
         _udf_call_pool =
                 std::make_unique<PriorityThreadPool>("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     }
-    return _init_jvm_metrics(metrics, enable_jvm_metrics);
+    return _init_jvm_metrics(metrics, enable_jvm_metrics, jvm_mem_tracker);
 }
 
 void JavaEnv::shutdown() {
@@ -62,10 +63,14 @@ void JavaEnv::shutdown() {
 void JavaEnv::destroy() {
     _jvm_call_pool.reset();
     _udf_call_pool.reset();
+    if (_jvm_metrics_registry != nullptr) {
+        // The tracker is owned by RuntimeEnv and released after this; stop the hook from using it.
+        JVMMetrics::instance()->set_mem_tracker(nullptr);
+    }
     _jvm_metrics_registry = nullptr;
 }
 
-Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics) {
+Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics, MemTracker* jvm_mem_tracker) {
 #ifndef __APPLE__
     if (!enable_jvm_metrics || metrics == nullptr || _jvm_metrics_registry == metrics) {
         return Status::OK();
@@ -75,13 +80,15 @@ Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metri
         return Status::OK();
     }
 
-    auto* jvm_metrics = JVMMetrics::instance();
-    auto status = jvm_metrics->init();
-    if (!status.ok()) {
-        LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        LOG(INFO) << "JAVA_HOME is not set, skip installing jvm metrics";
         return Status::OK();
     }
-    jvm_metrics->install(metrics);
+
+    // Only registers the gauges and the collect hook. The JNI side is initialized lazily by the
+    // hook once a JVM exists, so enabling jvm metrics does not start a JVM on its own.
+    JVMMetrics::instance()->set_mem_tracker(jvm_mem_tracker);
+    JVMMetrics::instance()->install(metrics);
     _jvm_metrics_registry = metrics;
 #endif
     return Status::OK();

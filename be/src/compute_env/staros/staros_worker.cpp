@@ -15,11 +15,13 @@
 #ifdef USE_STAROS
 #include "compute_env/staros/staros_worker.h"
 
+#include <google/protobuf/util/message_differencer.h>
 #include <starlet.h>
 
 #include "base/concurrency/await.h"
 #include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/logging.h"
@@ -35,10 +37,33 @@ namespace starrocks {
 
 namespace fslib = staros::starlet::fslib;
 
+static std::string borrowed_cache_key(StarOSWorker::ShardId id) {
+    return std::to_string(id);
+}
+
+// Turning the TTL to 0 also stops using what was kept before, not only keeping more.
+static bool shard_info_cache_enabled() {
+    return config::lake_shard_info_cache_ttl_sec > 0;
+}
+
+// A borrowed shard info is |fetched| from starmgr by this worker, or handed over by the owner otherwise.
+// Each kind has its own metrics.
+static void count_borrowed_hit(bool fetched) {
+    auto* metrics = StarOSWorkerMetrics::instance();
+    (fetched ? metrics->staros_shard_info_fallback_cache_hits_total : metrics->lake_tablet_location_handoff_hits_total)
+            .increment(1);
+}
+
+static IntGauge& borrowed_entries_gauge(bool fetched) {
+    auto* metrics = StarOSWorkerMetrics::instance();
+    return fetched ? metrics->staros_shard_info_fallback_cache_entries : metrics->lake_tablet_location_handoff_entries;
+}
+
 StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
         : _mtx(),
           _cache_mtx(),
           _shards(),
+          _borrowed_cache(new_lru_cache(kBorrowedShardInfoCacheCapacity)),
           _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
           _table_metrics_mgr(table_metrics_mgr) {}
 
@@ -75,6 +100,11 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
     StarOSWorkerMetrics::instance()->staros_shard_count.set_value(_shards.size());
     l.unlock();
+    {
+        // The owner's copy supersedes any borrowed one.
+        std::lock_guard bl(_borrowed_mtx);
+        _borrowed_cache->erase(CacheKey(borrowed_cache_key(shard.id)));
+    }
     if (ret.second) {
         if (_table_metrics_mgr != nullptr) {
             if (auto table_id = get_table_id(shard); table_id.has_value()) {
@@ -133,9 +163,209 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId 
 absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::retrieve_shard_info(ShardId id) {
     auto st = get_shard_info(id);
     if (absl::IsNotFound(st.status())) {
-        return _fetch_shard_info_from_remote(id);
+        if (auto borrowed = get_borrowed_shard_info(id); borrowed.has_value()) {
+            count_borrowed_hit(borrowed->fetched);
+            return std::move(borrowed->shard_info);
+        }
+        auto info_or = _fetch_shard_info_from_remote(id);
+        if (info_or.ok()) {
+            keep_fetched_shard_info(*info_or, nullptr);
+        }
+        return info_or;
     }
     return st;
+}
+
+// The parts of a shard info a filesystem is built from, see `build_filesystem_from_shard_info`.
+static bool same_storage(const staros::starlet::ShardInfo& a, const staros::starlet::ShardInfo& b) {
+    using google::protobuf::util::MessageDifferencer;
+    return MessageDifferencer::Equals(a.path_info, b.path_info) &&
+           MessageDifferencer::Equals(a.cache_info, b.cache_info);
+}
+
+absl::StatusOr<std::string> StarOSWorker::export_shard_info(ShardId id) const {
+    staros::AddShardInfo pb;
+    {
+        std::shared_lock l(_mtx);
+        auto it = _shards.find(id);
+        if (it == _shards.end()) {
+            return absl::NotFoundError(fmt::format("shard {} is not owned by this worker", id));
+        }
+        // The inverse of `ShardInfo::from_pb`.
+        const auto& info = it->second.shard_info;
+        pb.set_shard_id(info.id);
+        *pb.mutable_file_path_info() = info.path_info;
+        *pb.mutable_file_cache_info() = info.cache_info;
+        pb.mutable_shard_properties()->insert(info.properties.begin(), info.properties.end());
+        pb.set_hash_code(info.hash_code);
+        for (const auto& replica : info.replicas) {
+            *pb.add_replica_info() = replica;
+        }
+    }
+    return pb.SerializeAsString();
+}
+
+void StarOSWorker::borrowed_value_deleter(const CacheKey& /*key*/, void* value) {
+    auto* borrowed = static_cast<BorrowedShardInfo*>(value);
+    borrowed_entries_gauge(borrowed->fetched).increment(-1);
+    delete borrowed;
+}
+
+void StarOSWorker::insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value) {
+    const auto& info = value->shard_info;
+    size_t charge = sizeof(BorrowedShardInfo) + info.path_info.ByteSizeLong() + info.cache_info.ByteSizeLong();
+    // Properties and replicas are also retained by the handoff, including when a filesystem
+    // replaces the cached value. Account for their containers as well as their dynamic contents.
+    charge += info.properties.bucket_count() * sizeof(void*);
+    for (const auto& property : info.properties) {
+        charge += sizeof(property) + property.first.capacity() + 1 + property.second.capacity() + 1;
+    }
+    charge += info.replicas.capacity() * sizeof(staros::ReplicaInfoLite);
+    for (const auto& replica : info.replicas) {
+        charge += replica.SpaceUsedLong() - sizeof(replica);
+    }
+    const auto key = borrowed_cache_key(id);
+    // LRU insertion evicts before replacing a same-key value. Remove the old charge first
+    // so a refresh or filesystem replacement does not evict other entries that still fit.
+    _borrowed_cache->erase(CacheKey(key));
+    borrowed_entries_gauge(value->fetched).increment(1);
+    // The LRU saves this charge in its handle and uses the saved value on eviction/release.
+    _borrowed_cache->release(_borrowed_cache->insert(CacheKey(key), value, charge, borrowed_value_deleter));
+}
+
+absl::Status StarOSWorker::borrow_shard_info(std::string_view serialized) {
+    const int64_t ttl_sec = config::lake_shard_info_cache_ttl_sec;
+    if (ttl_sec <= 0) {
+        return absl::OkStatus();
+    }
+    staros::AddShardInfo pb;
+    if (!pb.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()))) {
+        return absl::InvalidArgumentError("malformed shard info");
+    }
+    auto value = std::make_unique<BorrowedShardInfo>();
+    if (auto st = value->shard_info.from_pb(pb); !st.ok()) {
+        return st;
+    }
+    value->expire_at_sec = MonotonicSeconds() + ttl_sec;
+    keep_borrowed_shard_info(std::move(value));
+    return absl::OkStatus();
+}
+
+void StarOSWorker::keep_fetched_shard_info(const ShardInfo& info, std::shared_ptr<std::string> fs_cache_key) {
+    const int64_t ttl_sec = config::lake_shard_info_cache_ttl_sec;
+    if (ttl_sec <= 0) {
+        return;
+    }
+    auto value = std::make_unique<BorrowedShardInfo>();
+    value->shard_info = info;
+    value->fs_cache_key = std::move(fs_cache_key);
+    value->expire_at_sec = MonotonicSeconds() + ttl_sec;
+    value->fetched = true;
+    keep_borrowed_shard_info(std::move(value));
+}
+
+void StarOSWorker::keep_borrowed_shard_info(std::unique_ptr<BorrowedShardInfo> value) {
+    const ShardId id = value->shard_info.id;
+    // Held across the ownership check and the insertion, so an `add_shard` racing with this is either
+    // seen by the check or drops the entry once it is in: a shard this worker owns never stays borrowed.
+    // `add_shard` releases `_mtx` before it takes `_borrowed_mtx`, so taking `_mtx` inside cannot deadlock.
+    std::lock_guard bl(_borrowed_mtx);
+    {
+        std::shared_lock l(_mtx);
+        if (_shards.count(id) > 0) {
+            return;
+        }
+    }
+    TEST_SYNC_POINT("StarOSWorker::borrow_shard_info:ownership_checked");
+    if (auto* handle = _borrowed_cache->lookup(CacheKey(borrowed_cache_key(id))); handle != nullptr) {
+        DeferOp release([&] { _borrowed_cache->release(handle); });
+        const auto* old = static_cast<const BorrowedShardInfo*>(_borrowed_cache->value(handle));
+        // A lower version is a copy from an owner that has not seen a storage update yet.
+        if (old->shard_info.path_info.fs_info().version() > value->shard_info.path_info.fs_info().version()) {
+            return;
+        }
+        // The same storage keeps the filesystem built for it; a changed one gets a new one.
+        if (value->fs_cache_key == nullptr && same_storage(old->shard_info, value->shard_info)) {
+            value->fs_cache_key = old->fs_cache_key;
+        }
+    }
+    insert_borrowed_shard_info_locked(id, value.release());
+}
+
+bool StarOSWorker::has_borrowed_shard_info(ShardId id) const {
+    return get_borrowed_shard_info(id).has_value();
+}
+
+std::optional<StarOSWorker::BorrowedShardInfo> StarOSWorker::get_borrowed_shard_info(ShardId id) const {
+    if (!shard_info_cache_enabled()) {
+        return std::nullopt;
+    }
+    auto* handle = _borrowed_cache->lookup(CacheKey(borrowed_cache_key(id)));
+    if (handle == nullptr) {
+        return std::nullopt;
+    }
+    DeferOp release([&] { _borrowed_cache->release(handle); });
+    const auto* value = static_cast<const BorrowedShardInfo*>(_borrowed_cache->value(handle));
+    if (value->expire_at_sec <= MonotonicSeconds()) {
+        return std::nullopt;
+    }
+    return *value;
+}
+
+std::optional<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::get_borrowed_shard_filesystem(
+        ShardId id, const Configuration& conf) {
+    if (!shard_info_cache_enabled()) {
+        return std::nullopt;
+    }
+    ShardInfo info;
+    bool fetched = false;
+    {
+        auto* handle = _borrowed_cache->lookup(CacheKey(borrowed_cache_key(id)));
+        if (handle == nullptr) {
+            return std::nullopt;
+        }
+        DeferOp release([&] { _borrowed_cache->release(handle); });
+        const auto* value = static_cast<const BorrowedShardInfo*>(_borrowed_cache->value(handle));
+        if (value->expire_at_sec <= MonotonicSeconds()) {
+            return std::nullopt;
+        }
+        fetched = value->fetched;
+        // The kept filesystem is built with the default configuration. One asked for with extra
+        // configuration (`new_fs_starlet`'s raw-path mode) is built from the kept shard info instead.
+        if (auto fs = conf.empty() ? lookup_fs_cache(value->fs_cache_key) : nullptr; fs != nullptr) {
+            count_borrowed_hit(fetched);
+            return fs;
+        }
+        info = value->shard_info;
+    }
+    // Build under no lock, like `get_shard_filesystem` does for an owned shard.
+    auto fs_or = build_filesystem_from_shard_info(info, conf);
+    if (!fs_or.ok()) {
+        // Let the caller fall back to starmgr, which is what it did before the handoff existed.
+        LOG(WARNING) << "failed to build filesystem from borrowed shard info " << id << ": " << fs_or.status();
+        return std::nullopt;
+    }
+    if (conf.empty()) {
+        // Keep the filesystem for the next load. A value is never changed, so a copy that holds it
+        // replaces the entry, unless a handoff changed the storage meanwhile.
+        std::lock_guard bl(_borrowed_mtx);
+        if (auto* handle = _borrowed_cache->lookup(CacheKey(borrowed_cache_key(id))); handle != nullptr) {
+            const auto* current = static_cast<const BorrowedShardInfo*>(_borrowed_cache->value(handle));
+            BorrowedShardInfo* copy = nullptr;
+            // By identity: once the filesystem cache replaced or expired the entry of the kept key, a
+            // lookup by its string can find the entry just built and would keep the stale key forever.
+            if (same_storage(current->shard_info, info) && !is_live_fs_cache_key(current->fs_cache_key)) {
+                copy = new BorrowedShardInfo{current->shard_info, fs_or->first, current->expire_at_sec,
+                                             current->fetched};
+            }
+            _borrowed_cache->release(handle);
+            if (copy != nullptr) {
+                insert_borrowed_shard_info_locked(id, copy);
+            }
+        }
+    }
+    count_borrowed_hit(fetched);
+    return std::move(fs_or->second);
 }
 
 std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() const {
@@ -191,6 +421,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         if (it == _shards.end()) {
             // unlock the lock and try best to build the filesystem with remote rpc call
             l.unlock();
+            if (auto handle = get_borrowed_shard_filesystem(id, conf); handle.has_value()) {
+                return std::move(handle).value();
+            }
             return build_filesystem_on_demand(id, conf);
         }
 
@@ -235,10 +468,21 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-    auto cond = []() { return get_starlet()->is_ready(); };
+    // A null starlet means the runtime was already released by `shutdown_staros_worker()`. Treat
+    // that as "stop waiting" so a late call fails immediately instead of burning the full timeout.
+    auto cond = []() {
+        auto starlet = get_starlet();
+        return starlet == nullptr || starlet->is_ready();
+    };
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
+    }
+    // Hold the runtime for the rest of the call: shutdown can release the global at any point, and
+    // `get_shard_info()` below blocks on a starmgr RPC that outlives any point-in-time check.
+    auto starlet = get_starlet();
+    if (starlet == nullptr) {
+        return absl::UnavailableError("starlet is not available");
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
@@ -246,7 +490,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
     StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = get_starlet()->get_shard_info(id);
+    auto info_or = starlet->get_shard_info(id);
     if (!info_or.ok()) {
         StarOSWorkerMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }
@@ -265,6 +509,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     }
 
     // Do not return the cache key shared_ptr, so if it not held by anyone else, the fs instance will be removed from the fs cache immediately.
+    // Unless the shard info is kept below: it then holds the key while it is kept, so the next lookup of
+    // the shard reuses the fs. Only for the default configuration, see `get_borrowed_shard_filesystem`.
+    keep_fetched_shard_info(info_or.value(), conf.empty() ? std::move(fs_or->first) : nullptr);
     return fs_or->second;
 }
 
@@ -373,7 +620,7 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
     std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
         auto worker = get_staros_worker();
         if (worker) {
-            worker->erase_fs_cache(*key);
+            worker->release_fs_cache(*key);
         }
         delete key;
     });
@@ -393,6 +640,31 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 void StarOSWorker::erase_fs_cache(const std::string& key) {
     CacheKey cache_key(key);
     _fs_cache->erase(key);
+}
+
+void StarOSWorker::release_fs_cache(const std::string& key) {
+    // Under `_cache_mtx`, like the insertion in `new_shared_filesystem`, so no entry can be inserted
+    // between the check and the erase.
+    std::unique_lock l(_cache_mtx);
+    auto* handle = _fs_cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return;
+    }
+    // The key being released no longer has any holder, so an entry that is still its own has an expired
+    // `key`. A live one belongs to a later key, whose holders still use it.
+    const bool orphaned = static_cast<CacheValue*>(_fs_cache->value(handle))->key.expired();
+    _fs_cache->release(handle);
+    if (orphaned) {
+        _fs_cache->erase(CacheKey(key));
+    }
+}
+
+bool StarOSWorker::is_live_fs_cache_key(const std::shared_ptr<std::string>& key) {
+    if (key == nullptr) {
+        return false;
+    }
+    auto value_or = find_fs_cache(*key);
+    return value_or.ok() && value_or->first == key;
 }
 
 std::shared_ptr<fslib::FileSystem> StarOSWorker::lookup_fs_cache(const std::shared_ptr<std::string>& key) {

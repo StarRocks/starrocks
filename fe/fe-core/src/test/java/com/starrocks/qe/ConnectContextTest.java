@@ -36,6 +36,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
@@ -132,12 +134,12 @@ public class ConnectContextTest {
 
         // Current db
         Assertions.assertEquals("", ctx.getDatabase());
-        ctx.setDatabase("testCluster:testDb");
-        Assertions.assertEquals("testCluster:testDb", ctx.getDatabase());
+        ctx.setDatabase("testDb");
+        Assertions.assertEquals("testDb", ctx.getDatabase());
 
         // User
-        ctx.setQualifiedUser("testCluster:testUser");
-        Assertions.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
+        ctx.setQualifiedUser("testUser");
+        Assertions.assertEquals("testUser", ctx.getQualifiedUser());
 
         // Serializer
         Assertions.assertNotNull(ctx.getSerializer());
@@ -232,6 +234,40 @@ public class ConnectContextTest {
 
         // clean up
         ctx.cleanup();
+    }
+
+    /**
+     * The handshake of an OAuth2 user on an ordinary MySQL client is answered at once; the login
+     * completes when the browser callback deposits the token. Until then the connection can do
+     * nothing, and it must not be kept for the whole wait_timeout either: the integration's
+     * connect_wait_timeout closes it, the same bound the plugin-aware client's handshake waits for.
+     */
+    @Test
+    public void testAnOAuth2LoginThatNeverCompletesIsClosedAfterConnectWaitTimeout() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_SLEEP);
+        OAuth2Context oauth2 = new OAuth2Context("http://as", "http://ts", "http://rd", "cid", "secret",
+                "jwks.json", "sub", new String[0], new String[0], 7L);
+        ctx.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+
+        long now = ctx.getConnectionStartTime() + 7 * 1000 - 1;
+        ctx.checkTimeout(now);
+        Assertions.assertFalse(ctx.isKilled(), "still inside connect_wait_timeout");
+
+        now = ctx.getConnectionStartTime() + 7 * 1000 + 1;
+        ctx.checkTimeout(now);
+        Assertions.assertTrue(ctx.isKilled(), "the token never arrived");
+
+        // A connection whose token did arrive is logged in and lives by wait_timeout alone.
+        ConnectContext loggedIn = new ConnectContext(connection);
+        loggedIn.setCommand(MysqlCommand.COM_SLEEP);
+        loggedIn.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+        loggedIn.setAuthToken("id-token");
+        loggedIn.setStartTime();
+        loggedIn.checkTimeout(loggedIn.getConnectionStartTime() + 7 * 1000 + 1);
+        Assertions.assertFalse(loggedIn.isKilled());
+        ctx.cleanup();
+        loggedIn.cleanup();
     }
 
     @Test

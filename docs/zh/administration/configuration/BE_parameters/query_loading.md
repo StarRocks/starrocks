@@ -37,6 +37,126 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
+### ai_function_request_timeout_ms
+
+- 默认值：600000
+- 类型：Int
+- 单位：毫秒
+- 有效值：非负整数
+- 是否动态：是
+- 描述：单个 AI task 的最长独立生命周期，覆盖准入、首次 HTTP attempt、所有重试与 backoff，以及 completion 分类。这些阶段共用一个绝对 request deadline，不会在每次 attempt 时重新计时。在每个异步边界，实际 deadline 取该不可变 request deadline 与 Query 当前 deadline 中较早者；Query 取消和 deadline 更新在 task 的整个生命周期内始终实时生效。`0` 表示禁用独立的 request 限制，仅使用实时 Query 生命周期。需要更快终止慢模型调用时可调小该值。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_connect_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：毫秒
+- 有效值：非负整数
+- 是否动态：是
+- 描述：AI HTTP attempt 建立连接所允许的最长时间。启用独立 request deadline 时，transport 还会以剩余 request 生命周期限制连接建立时间，且不会延长该 deadline。`0` 表示禁用独立的连接限制。如果两个独立限制都为 `0`，transport 不设置静态 connection 或 request timeout，但仍会实时检查 Query 取消和 deadline。调小可更快发现无法访问的模型 endpoint；连接建立较慢的网络可适当调大。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_response_bytes
+
+- 默认值：8388608
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_input_file_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：传入 `ai_complete` 或 `ai_embed` 的每个 inline FILE 的原始字节数上限，在 AI 自身复制载荷和进行 Base64 编码前检查。默认值为 10 MiB。仅在所选提供商和模型支持更大输入时调高。该参数不控制扫描或 Chunk 物化；这些内存分配与 AI 载荷仍受查询内存跟踪约束。无效或超限的 inline 输入遵循 `ai_function_on_error`。新打开的 AI fragment/operator 将该值捕获到不可变运行时快照中；已打开的 fragment 继续使用原快照。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_worker_thread_num
+
+- 默认值：16
+- 类型：Int
+- 单位：线程
+- 有效值：正整数
+- 是否动态：是
+- 描述：处理 AI HTTP completion 和响应分类的 worker 数量。completion 处理出现积压时可调大；需要限制 CPU 和内存开销时可调小。该参数不会改变 BE 启动时确定的 AI completion queue 固定容量。运行时修改会实时调整 worker pool，无需重启 BE。
+- 引入版本：-
+
+### ai_function_sub_chunk_size
+
+- 默认值：64
+- 类型：Int
+- 单位：行
+- 有效值：正整数
+- 是否动态：是
+- 描述：AI 执行 sub-chunk 中分组的最大行数。较小的值提供更细的调度和取消粒度，但会增加调度开销；较大的值可减少调度开销，但每个任务会保留更多行。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_retries
+
+- 默认值：3
+- 类型：Int
+- 单位：次
+- 有效值：非负整数
+- 是否动态：是
+- 描述：当最近一次失败为可重试的传输或 Provider 错误时，允许的最大共享 retry ordinal，不包含首次 HTTP attempt。普通重试与 throttle 重试消耗同一个 retry ordinal；该上限不会与 throttle 上限相加。设置为 `0` 可禁用普通可重试错误后的重试。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_retries_on_throttle
+
+- 默认值：5
+- 类型：Int
+- 单位：次
+- 有效值：非负整数
+- 是否动态：是
+- 描述：当最近一次失败为 Provider 限流（例如 HTTP 429）时，允许的最大共享 retry ordinal，不包含首次 HTTP attempt。普通重试与 throttle 重试消耗同一个 retry ordinal，因此该参数是当前失败类型使用的不同上限，不是独立重试预算。设置为 `0` 可禁用限流后的重试。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_on_error
+
+- 默认值：ignore
+- 类型：String
+- 单位：-
+- 有效值：`ignore`、`fail`
+- 是否动态：是
+- 描述：控制 AI 函数的行级错误处理。`ignore` 对失败行返回 NULL 并继续查询；`fail` 会终止查询。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_rate_limit_qps_chat
+
+- 默认值：128
+- 类型：Int
+- 单位：请求/秒
+- 有效值：正整数
+- 是否动态：是
+- 描述：每个 BE 中按 endpoint、credential 和 capability 分桶的 chat/text AI HTTP attempt 请求准入速率。为遵守 Provider 配额或降低出站负载可调小；仅在 Provider 与 BE 均有足够容量时调大。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE。
+- 引入版本：-
+
+### ai_function_rate_limit_qps_embedding
+
+- 默认值：128
+- 类型：Int（32 位）
+- 单位：请求/秒
+- 有效值：正整数
+- 是否动态：是
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_inflight
+
+- 默认值：512
+- 类型：Int
+- 单位：请求
+- 有效值：正整数
+- 是否动态：是
+- 描述：进程级可同时持有 in-flight 准入许可的 AI HTTP attempt 上限。调小可限制 HTTP 与 response memory 压力。该参数是全局准入限制，不是每 Query 配额。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE；BE 启动时确定的 completion queue 固定容量不会改变。
+- 引入版本：-
+
 ### agg_hash_map_prefetch_dist
 
 - 默认值：16
@@ -104,6 +224,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
 
+### enable_default_value_column_zonemap_filter
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 取值范围：`true`、`false`
+- 是否动态：是
+- 描述：是否通过常量折叠对 segment 中物理缺失的列进行数据裁剪。通过 fast schema evolution（`ALTER TABLE ... ADD COLUMN`）新增的列不会写入已有的 segment，因此该列的每一行都是列默认值（或 `NULL`）。取值为 `true` 时，针对该列的谓词会直接对这个常量求值，若不可能命中则整个 segment 被跳过。取值为 `false` 时，这些 segment 会被完整读取，且每个批次都会重新按删除条件检查，即该选项引入之前的行为。如果新增过列的表出现查询结果异常，可将其设为 `false` 回滚。该选项与 `enable_index_page_level_zonemap_filter` 相互独立，后者无法覆盖 runtime filter 路径。
+- 引入版本：-
+
 ### enable_json_flat
 
 - 默认值：false
@@ -156,6 +286,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
+- 引入版本：-
+
+### exchange_sink_buffer_flush_threshold_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange Sink 中每个 Driver 在 Shuffle 时用于缓存待发送数据的最大内存。Shuffle 时，Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，Chunk 填满后才会发送。当这些 Chunk 的总大小超过该阈值时，会立即全部发送并清空；如果清空后仍占用超过阈值一半的内存，则会依次释放这些 Chunk，直到占用降至阈值的一半以下。设置为 `0` 或更小的值表示不限制。
 - 引入版本：-
 
 ### exchg_node_buffer_size_bytes
@@ -392,13 +531,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：对象存储 Socket 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
 - 引入版本：v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否为 AWS SDK 使用 Poco HTTP 客户端。`true` 表示使用 Poco 替换 AWS SDK 默认的 curl HTTP 客户端；`false` 表示使用默认的 curl 客户端。
+- 引入版本：-
+
 ### object_storage_request_timeout_ms
 
-- 默认值：-1
+- 默认值：10000
 - 类型：Int
 - 单位：毫秒
-- 是否动态：否
-- 描述：对象存储 HTTP 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
+- 是否动态：是
+- 描述：一次对象存储请求停滞多久后客户端放弃并重试。它不是请求的总时限：对 curl 客户端是低速时间，即传输速率低于 1 字节/秒可以持续的时长；对 Poco 客户端是 socket 的收发超时。只要传输仍在推进就不会被中断，无论持续多久。`0` 表示关闭该检查；负值表示沿用客户端自身的默认值，在 Poco 路径上是 60 秒。
 - 引入版本：v3.0.9
 
 ### parquet_late_materialization_enable
@@ -536,6 +684,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
 
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）或 VARIANT 时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
+- 引入版本：-
+
 ### enable_lock_free_scan_task_queue
 
 - 默认值：true
@@ -644,6 +801,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：限制 ConnectorScanNode 可同时运行的远端扫描器（HDFS/对象存储等）数量上限。启动时会用此值裁剪估算并发，运行时调度 pending scanner 也会受其限制，用于控制线程、内存和文件句柄压力。
 - 引入版本：v3.2.0
 
+### spill_max_dir_bytes_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：落盘目录（`spill_local_storage_dir`）与存储路径（`storage_root_path`）位于同一块磁盘时，中间结果落盘最多可占用的磁盘容量比例。默认值 `0.5` 表示落盘最多使用该磁盘容量的 50%。落盘目录位于独立磁盘时不受此限制。该参数仅在 BE 启动时读取，修改后需重启 BE 才能生效。
+- 引入版本：v3.2.0
+
 ### string_prefix_zonemap_prefix_len
 
 - 默认值：16
@@ -676,8 +842,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：60
 - 类型：Int
 - 单位：Percent
-- 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 是否动态：是
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。运行时修改该值后，会重新计算更新 `MemTracker` 的上限、primary index cache 的容量，以及由其派生的 update state、compaction state 和 primary index block cache 的上限。调小该值时，未被使用的 primary index cache 条目会被立即淘汰，但正在使用的内存要等正在执行的导入和 compaction 结束后才会释放。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
 ### enable_vector_index_block_cache
@@ -941,6 +1107,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：导入数据信息保留的时长。
 - 引入版本：-
 
+### load_sink_close_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
+- 引入版本：-
+
 ### enable_rejected_record_sync
 
 - 默认值：false
@@ -1183,6 +1358,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
 - 引入版本：v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：该 BE 是否在导入的 tablet sink RPC（把数据按分桶路由到目标 tablet 所在 BE 的那一跳）上参与全 NULL 列的紧凑编码。开启后，接收端 BE 会在 tablet writer 的 open 响应中声明支持该编码；发送端 BE 看到声明后，对于整列都是 NULL 的列，只发送一个行数，而不再逐行发送 NULL 标记和偏移量。列数多、且大部分列没有数据的宽表收益最明显，这一跳的传输字节数和两端的序列化开销都会下降。只有收发两端都认可该编码时才会启用，因此混合版本集群和版本回退都会自动回落到原有格式。把发送端或接收端任意一侧的该配置设为 `false`，即可关闭经过该节点的导入的这项编码。该配置不支持动态修改：接收端要用它同时决定对外声明的能力和是否按发送端声明的方式解析数据，运行期改动会让这两个判断不一致。
+- 引入版本：v4.2.0
 
 ### load_channel_rpc_thread_pool_num
 

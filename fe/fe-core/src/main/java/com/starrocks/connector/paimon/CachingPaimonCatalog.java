@@ -27,27 +27,38 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.Table;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
- * Paimon's caching catalog plus the bookkeeping background refresh needs to prune its work:
- * per-table last access time, and the snapshot / schema revision each table was last refreshed at.
- * Mirrors CachingIcebergCatalog.
+ * Paimon's caching catalog plus the bookkeeping refresh needs to prune its work: per-table last
+ * access time, and the snapshot / schema revision each table was last refreshed at. An access also
+ * queues a refresh of that table once the interval has elapsed, the way Caffeine's
+ * refreshAfterWrite does for iceberg. Mirrors CachingIcebergCatalog.
  */
 public class CachingPaimonCatalog extends CachingCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingPaimonCatalog.class);
 
     private final String catalogName;
+    private final ExecutorService refreshExecutor;
+    private final long refreshIntervalSec;
     private final Map<Identifier, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<Identifier, TableRevision> lastRefreshedRevision = new ConcurrentHashMap<>();
+    private final Map<Identifier, Long> lastRefreshTime = new ConcurrentHashMap<>();
+    private final Set<Identifier> refreshInFlight = ConcurrentHashMap.newKeySet();
 
     /** What the lake looked like when a table was last refreshed. */
     private record TableRevision(long snapshotId, long schemaId) {
     }
 
-    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options) {
+    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options, ExecutorService refreshExecutor,
+                                long refreshIntervalSec) {
         super(wrapped, options);
         this.catalogName = catalogName;
+        this.refreshExecutor = refreshExecutor;
+        this.refreshIntervalSec = refreshIntervalSec;
     }
 
     @Override
@@ -56,6 +67,7 @@ public class CachingPaimonCatalog extends CachingCatalog {
         // a system table has no snapshot of its own, a branch/tag pins a fixed version: neither goes stale
         if (!id.isSystemTable() && id.getBranchName() == null) {
             tableLatestAccessTime.put(id, System.currentTimeMillis());
+            maybeRefreshAsync(id);
         }
         return table;
     }
@@ -65,9 +77,42 @@ public class CachingPaimonCatalog extends CachingCatalog {
         super.invalidateTable(id);
         // the revision described the evicted entry, not the next one
         lastRefreshedRevision.remove(id);
+        lastRefreshTime.remove(id);
     }
 
-    /** Refresh one table if the lake moved. Background daemon only. */
+    /**
+     * Queue a refresh for a table that has not been looked at for a while. Only the interval check
+     * runs on the caller's thread; reading the lake and comparing revisions happens on the pool, so
+     * an access never waits and never adds an RPC of its own.
+     */
+    @VisibleForTesting
+    void maybeRefreshAsync(Identifier id) {
+        // zero or less turns this off, as a non-positive interval turns off Caffeine's refreshAfterWrite for iceberg
+        if (refreshIntervalSec <= 0) {
+            return;
+        }
+        Long refreshedAt = lastRefreshTime.get(id);
+        if (refreshedAt != null && System.currentTimeMillis() - refreshedAt < refreshIntervalSec * 1000) {
+            return;
+        }
+        if (!refreshInFlight.add(id)) {
+            return;
+        }
+        try {
+            refreshExecutor.submit(() -> {
+                try {
+                    refreshTable(id);
+                } finally {
+                    refreshInFlight.remove(id);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            refreshInFlight.remove(id);
+            LOG.debug("Dropped queued refresh of paimon table {} of catalog {}", id.getFullName(), catalogName);
+        }
+    }
+
+    /** Refresh one table if the lake moved. Background daemon and query-triggered refresh only. */
     public void refreshTable(Identifier id) {
         try {
             // via super: probing must not count as an access
@@ -83,6 +128,9 @@ public class CachingPaimonCatalog extends CachingCatalog {
             // a schema-only ALTER TABLE bumps the schema id without creating a snapshot
             long latestSchemaId = dataTable.schemaManager().latest().map(TableSchema::id).orElse(-1L);
             TableRevision latest = new TableRevision(latestSnapshotId, latestSchemaId);
+            // stamped even when nothing moved, and by the daemon too: it means "the lake was just probed",
+            // which is what the query-triggered interval should be measured from
+            lastRefreshTime.put(id, System.currentTimeMillis());
             if (latest.equals(lastRefreshedRevision.get(id))) {
                 return;
             }
@@ -111,7 +159,9 @@ public class CachingPaimonCatalog extends CachingCatalog {
                 tableLatestAccessTime.remove(entry.getKey());
                 continue;
             }
-            refreshTable(entry.getKey());
+            if (!refreshInFlight.contains(entry.getKey())) {
+                refreshTable(entry.getKey());
+            }
         }
     }
 

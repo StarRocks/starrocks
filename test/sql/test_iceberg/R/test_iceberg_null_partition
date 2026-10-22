@@ -40,6 +40,33 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} whe
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} (k1, k2) partition by (k2) as select 1, cast(null as string);
+-- result:
+-- !result
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0};
+-- result:
+k1	INT	No	false	None		None
+k2	VARCHAR(1073741824)	Yes	false	None	partition key	None
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} select 2, "null";
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} order by k1;
+-- result:
+1	None
+2	null
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} where k2 is null;
+-- result:
+1	None
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} where k2 = "null";
+-- result:
+2	null
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} force;
+-- result:
+-- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result

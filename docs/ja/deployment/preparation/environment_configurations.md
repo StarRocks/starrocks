@@ -114,6 +114,7 @@ StarRocks の Java コンポーネントは JDK 上で動作します。Java コ
 - FE のコンパイルターゲットは v3.5.0 で Java 11 から Java 17 に引き上げられました。このため、v3.5 以降では実行時に JDK 17 以降が必要です。
 - v3.5.0 以降、StarRocks は特定の JDK バージョン向けの JVM プリセットを提供しなくなり、すべての JDK バージョンで単一の `JAVA_OPTS` を共有します。v3.4 以前から v3.5 以降にアップグレードする際は、**fe.conf** 内の JDK 17 と互換性のない `JAVA_OPTS` オプション（例: CMS 関連のオプション）を削除し、v3.5 以降に同梱されるデフォルトの `JAVA_OPTS` を使用してください。
 - v4.2 以降では JDK 21 が推奨されます。実行時の最小バージョンは JDK 17 のままです（FE のコンパイルターゲットは Java 17）。JDK 21 は JDK 17 の実行時ターゲットと後方互換性があります。
+- 最小 JDK と推奨 JDK は Java LTS カレンダーに従います。次回の変更は 2027 年 10 月以降に最初にリリースされるマイナーバージョンで予定されており、最小 JDK は JDK 21、推奨 JDK は JDK 25 になります。詳細は [JDK Support Policy](../../developers/versions.md#jdk-support-policy) を参照してください。
 
 :::note
 StarRocks は JRE をサポートしていません。完全な JDK をインストールする必要があります。
@@ -341,8 +342,8 @@ cat >> /etc/security/limits.conf << EOF
 * hard nproc 65535
 * soft nofile 655350
 * hard nofile 655350
-* soft stack unlimited
-* hard stack unlimited
+* soft stack 8192
+* hard stack 8192
 * hard memlock unlimited
 * soft memlock unlimited
 EOF
@@ -352,6 +353,12 @@ cat >> /etc/security/limits.d/20-nproc.conf << EOF
 root       soft    nproc     65535
 EOF
 ```
+
+:::note
+
+スタックのソフトリミットとハードリミットを両方とも `8192` KiB（8 MiB）に設定してください。glibc/NPTL では、スレッドのスタックサイズを明示的に指定しない限り、プロセス起動時のスタックのソフトリミットが新しいスレッドのデフォルトスタックサイズを決定します。ソフトリミットを `unlimited` にすると、代わりにアーキテクチャ固有のデフォルト値（x86-64 では 2 MiB）が使用され、スタックオーバーフローのリスクが高まる可能性があります。詳細は [pthread_create(3)](https://man7.org/linux/man-pages/man3/pthread_create.3.html) を参照してください。
+
+:::
 
 ## ファイルシステム設定
 

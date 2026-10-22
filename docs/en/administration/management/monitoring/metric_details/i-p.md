@@ -204,6 +204,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the INT8 column pool.
 
+## `jwks_fetch_latency_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Latency of each JWKS (JSON Web Key Set) fetch from the identity provider, whatever triggered it: the first load of a `jwks_url`, a background refresh ahead of the cache TTL, a refresh forced by a token with an unknown `kid`, or a retry. Failed fetches are timed as well. A JWT verification itself is a stable CPU cost; when Bearer authentication gets slow, this fetch is where the time goes.
+- Introduced in: v4.2
+
+## `jwks_refresh_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of JWKS fetches from the identity provider, labeled by `result` (`success` or `failure`). One increment per HTTP fetch, counted at the fetch itself, so a background refresh counts once and a fetch that failed but was answered from cached keys (see `jwks_cache_outage_ttl_seconds`) counts as a failure. A rising `failure` rate means the identity provider's JWKS endpoint is unhealthy; authentication keeps working from the cached keys until the outage window runs out.
+- Introduced in: v4.2
+
 ## `jemalloc_active_bytes`
 
 - Unit: Bytes
@@ -254,6 +268,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_compaction_held_segment_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Segment metadata currently pinned by running lake compaction tasks that hold their input segments (`lake_compaction_hold_input_segments`). Unlike the metadata cache, this memory is not managed by an LRU and is released when the holding task ends, so a persistently high value indicates long-running compactions rather than a cache that needs resizing.
+
 ## `lake_compaction_failed`
 
 - Unit: Count
@@ -284,6 +304,60 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
+
+## `lake_pk_index_cache_delvec_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the delete vectors attached to the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. Only SST files ingested together with a delete vector, such as compaction output, carry one. This memory is not charged to the Primary Key index cache, so `INDEX_MEM` in `information_schema.be_tablets` does not include it.
+
+## `lake_pk_index_cache_filter_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the Bloom filters of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_index_block_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table found the tablet's Primary Key index already loaded in the Primary Key index cache. Together with `lake_pk_index_load_total`, the hit ratio of the cache is `hit / (hit + load)`.
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the index blocks of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_load_duration_us`
+
+- Unit: us
+- Type: Cumulative
+- Description: Shared-data only. Total time spent on the Primary Key index loads counted by `lake_pk_index_load_total`. Divide it by `lake_pk_index_load_total` to get the average time to load the index of one tablet.
+
+## `lake_pk_index_load_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
+
+## `lake_tablet_location_handoff_entries`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_shard_info_cache_ttl_sec`). They are kept in an LRU cache of 16 MiB, shared with the locations counted in `staros_shard_info_fallback_cache_entries`: an entry is used for `lake_shard_info_cache_ttl_sec` after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+
+## `lake_tablet_location_handoff_hits_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times this BE resolved the storage location of a tablet it does not own from a location handed over by the tablet's owner instead of requesting it from StarMgr. Each increment is one StarMgr GetShard RPC avoided. It rises on the nodes that coordinate loads into tables with `file_bundling` enabled. Together with `staros_shard_info_fallback_total`, the share answered by the handoff is `hits / (hits + fallback)`.
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
@@ -321,6 +395,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The current size of the RPC thread pool, which is used for handling Routine Load and loading via table functions. The default value is 10, with a maximum value of 1000. This value is dynamically adjusted based on the usage of the thread pool.
+
+## `load_sink_close_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes that are running in the load sink close thread pool. In a shared-data cluster, each close writes the combined transaction log of a load to object storage.
+
+## `load_sink_close_execute_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total execution time of completed load sink close tasks, including waits and object-storage writes performed during close. Updated when each task finishes.
+
+## `load_sink_close_executed_tasks_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of load sink close tasks completed by the thread pool, including closes that return an error.
+
+## `load_sink_close_pending_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total time completed load sink close tasks spent waiting in the thread pool queue. Updated when each task finishes; currently queued tasks are not yet included.
+
+## `load_sink_close_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes waiting in the queue of the load sink close thread pool. A value that keeps growing means object-storage writes are slower than loads finish.
+
+## `load_sink_close_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the load sink close thread pool.
+
+## `load_sink_close_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
 
 ## `local_column_pool_bytes (Deprecated)`
 
@@ -455,6 +571,12 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
 
+## `meta_replay_lag_second`
+
+- Unit: Seconds
+- Type: Gauge
+- Description: How far the metadata replayed by this FE lags behind the Leader's clock. The Leader FE writes a timestamp into the journal every 10 seconds, and this metric is the age of the most recent timestamp that this node has replayed. Unlike `max_journal_replay_lag`, which only the Leader reports, this metric is reported by the lagging node itself, and it keeps growing while a single journal entry is stuck in replay. The Leader FE always reports `0`, because it writes the timestamps instead of replaying them. Once this value exceeds `meta_delay_toleration_second`, the node stops serving reads from its own metadata and forwards its queries to the Leader. Two cases are exempt: reads continue while `ignore_meta_check` is `true`, and a node that has replayed nothing since the previous check keeps whatever read availability it already had, unless it has also lost contact with the Leader, because falling behind a Leader that is writing nothing says nothing about this node. This second case only stops a node from being taken out of service; it never returns one that has already stopped serving.
+
 ## `meta_request_duration`
 
 - Unit: us
@@ -540,10 +662,27 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Cumulative number of driver scheduling times for pipeline executors in the BE.
 
+## `pipe_drivers`
+
+- Unit: Count
+- Description: Current logical driver capacity reserved by BE admission control. Includes reservations held while a fragment instantiates drivers and operators, as well as reservations retained after instantiation until they are released. The value follows logical DOP accounting, including colocate execution groups, and is not a count of instantiated driver objects or running threads. Releasing a reservation, including on preparation failure or fragment completion, decreases the value.
+
 ## `pipe_poller_block_queue_len`
 
 - Unit: Count
 - Description: Current length of the block queue of PipelineDriverPoller in the pipeline engine.
+
+## `pipe_poller_max_driver_check`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by the slowest single driver check in one pass of PipelineDriverPoller. A large value means that checking one blocked driver held up the whole pass.
+
+## `pipe_poller_pass`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by one pass of PipelineDriverPoller over its blocked drivers. Each executor set has a single poller thread, so a long pass delays every driver that waits on it. The maximum in the recent window is exposed as `pipe_poller_pass_max_latency`.
 
 ## `pipe_prepare_pool_queue_len`
 

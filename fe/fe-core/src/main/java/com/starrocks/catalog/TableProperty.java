@@ -69,10 +69,13 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -310,6 +313,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "hasForbitGlobalDict")
     private boolean hasForbiddenGlobalDict = false;
 
+    // Column-level global-dictionary forbid list: names of low-cardinality string columns whose global
+    // dictionary should not be collected (e.g. "rolling low-cardinality" columns whose dictionary keeps
+    // getting invalidated). Persisted so the decision survives FE restart / leader failover. This is a
+    // pure optimization hint: forbidding a column only skips dict encoding, never affects correctness.
+    @SerializedName(value = "noDictColumns")
+    private Set<String> noDictColumns = new HashSet<>();
+
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
@@ -346,6 +356,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
     private boolean enableStatisticCollectOnFirstLoadSet = false;
+
+    private boolean enableStatisticAutoCollect = true;
 
     // table level query timeout in seconds
     // default value -1 means use cluster query_timeout
@@ -410,6 +422,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.baseCompactionForbiddenTimeRanges = other.baseCompactionForbiddenTimeRanges;
         this.hasDelete = other.hasDelete;
         this.hasForbiddenGlobalDict = other.hasForbiddenGlobalDict;
+        this.noDictColumns = other.noDictColumns == null ? new HashSet<>() : new HashSet<>(other.noDictColumns);
         if (other.storageInfo != null) {
             this.storageInfo = new StorageInfo(other.storageInfo.getFilePathInfo(), other.storageInfo.getCacheInfo());
         }
@@ -427,6 +440,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
         this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
         this.enableStatisticCollectOnFirstLoadSet = other.enableStatisticCollectOnFirstLoadSet;
+        this.enableStatisticAutoCollect = other.enableStatisticAutoCollect;
         this.tableQueryTimeout = other.tableQueryTimeout;
         this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
     }
@@ -513,6 +527,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildLocation();
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
+                buildEnableStatisticAutoCollect();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
                 buildLightWeightTabletCreation();
@@ -1303,6 +1318,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableStatisticCollectOnFirstLoad;
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return enableStatisticAutoCollect;
+    }
+
     public boolean isSetEnableStatisticCollectOnFirstLoad() {
         // Older versions persisted "false" only when the user explicitly disabled this table property,
         // but also wrote the default "true" on table creation. Preserve explicit false while avoiding
@@ -1368,6 +1387,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
         this.hasForbiddenGlobalDict = hasForbiddenGlobalDict;
+    }
+
+    public Set<String> getNoDictColumns() {
+        return noDictColumns == null ? Collections.emptySet() : noDictColumns;
+    }
+
+    public boolean isNoDictColumn(String columnName) {
+        return noDictColumns != null && noDictColumns.contains(columnName);
+    }
+
+    public void setNoDictColumns(Set<String> noDictColumns) {
+        this.noDictColumns = noDictColumns == null ? new HashSet<>() : new HashSet<>(noDictColumns);
     }
 
     public void setStorageInfo(StorageInfo storageInfo) {
@@ -1437,6 +1468,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildEnableStatisticCollectOnFirstLoad() {
         enableStatisticCollectOnFirstLoad = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true"));
+        return this;
+    }
+
+    public TableProperty buildEnableStatisticAutoCollect() {
+        enableStatisticAutoCollect = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "true"));
         return this;
     }
 
@@ -1523,6 +1560,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildLoadInitialOpenPartitionNumber();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps
+        // the map entry but drops unknown fields, which would silently re-enable collection on roll-forward.
+        buildEnableStatisticAutoCollect();
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
@@ -90,6 +91,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(InPredicateOperator.class, (op, childOps) -> {
                     InPredicateOperator inPredicate = (InPredicateOperator) op;
                     return new InPredicateOperator(inPredicate.isNotIn(), childOps); })
+                .put(LargeInPredicateOperator.class, (op, childOps) -> {
+                    LargeInPredicateOperator largeIn = (LargeInPredicateOperator) op;
+                    return new LargeInPredicateOperator(
+                            largeIn.getRawText(), largeIn.getRawConstantList(), largeIn.getConstantCount(),
+                            largeIn.isNotIn(), largeIn.getConstantType(), childOps); })
                 .put(IsNullPredicateOperator.class, (op, childOps) -> {
                     IsNullPredicateOperator isNullPredicate = (IsNullPredicateOperator) op;
                     return new IsNullPredicateOperator(isNullPredicate.isNotNull(), childOps.get(0)); })
@@ -127,6 +133,14 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                     LambdaFunctionOperator lambda = (LambdaFunctionOperator) op;
                     return new LambdaFunctionOperator(lambda.getRefColumns(), childOps.get(0), lambda.getType()); })
                 .put(CloneOperator.class, (op, childOps) -> new CloneOperator(childOps.get(0)))
+                .put(DictQueryOperator.class, (op, childOps) -> {
+                    DictQueryOperator dictQuery = (DictQueryOperator) op;
+                    return new DictQueryOperator(childOps, dictQuery.getDictQueryExpr(), dictQuery.getFn(),
+                            dictQuery.getType()); })
+                .put(DictMappingOperator.class, (op, childOps) -> {
+                    DictMappingOperator dictMapping = (DictMappingOperator) op;
+                    return new DictMappingOperator(dictMapping.getType(), dictMapping.getDictColumn(),
+                            dictMapping.getOriginScalaOperator(), childOps.get(0)); })
                 .put(DictionaryGetOperator.class, (op, childOps) -> {
                     DictionaryGetOperator dictGet = (DictionaryGetOperator) op;
                     return new DictionaryGetOperator(childOps, dictGet.getType(), dictGet.getDictionaryId(),

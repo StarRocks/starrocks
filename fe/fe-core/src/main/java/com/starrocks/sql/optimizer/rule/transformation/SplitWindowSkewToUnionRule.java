@@ -36,13 +36,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +124,10 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         if (input.getOp() instanceof LogicalWindowOperator lwo) {
             if (lwo.isOpRuleBitSet(OP_SPLIT_WINDOW_SKEW)) {
+                return false;
+            }
+            OptExpression child = input.inputAt(0);
+            if (child.getOp().accept(new NonDeterministicVisitor(), child, null)) {
                 return false;
             }
 
@@ -395,21 +399,26 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             }
 
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
-            var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
-            if (skewInfo.isSkewed()) {
-
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
-                }
-
-                return skewInfo.maybeMcvs().stream() //
-                        .flatMap(Collection::stream) //
-                        .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //
-                        .filter(Optional::isPresent) //
-                        .map(value -> new SkewedInfo(col, value.get())) //
-                        .toList();
-            }
+            // Window split can only peel off one value (see size-guard in transform) so we pick a single dominant skew
+            DataSkew.SkewCandidates candidates = 
+                    DataSkew.getSkewCandidates(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1), 0.0);
+            return pickDominantSkew(col, candidates)
+                    .map(value -> List.of(new SkewedInfo(col, value)))
+                    .orElse(Collections.emptyList());       
         }
         return Collections.emptyList();
+    }
+
+    private Optional<ConstantOperator> pickDominantSkew(ColumnRefOperator col, DataSkew.SkewCandidates candidates) {
+        if (!candidates.isSkewed()) {
+            return Optional.empty();
+        }
+        double nullFraction = candidates.nullSkewFactor().orElse(0.0);
+        double mcvFraction = candidates.maxMcvRatio().orElse(0.0);
+        if (nullFraction >= mcvFraction) {
+            return Optional.of(ConstantOperator.createNull(col.getType()));
+        }
+        String topValue = candidates.mcvs().get(0).first;
+        return ConstantOperator.createVarchar(topValue).castTo(col.getType());
     }
 }

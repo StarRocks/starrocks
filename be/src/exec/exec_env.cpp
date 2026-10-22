@@ -42,6 +42,7 @@
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
+#include "compute_env/ai/ai_executor.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
@@ -57,6 +58,7 @@
 #include "exprs/udf/python/env.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "platform/llm/ai_metrics.h"
 #include "platform/platform_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
@@ -101,6 +103,7 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.load_rowset_thread_pool = runtime_env->load_rowset_thread_pool();
     _execution_services.load_segment_thread_pool = runtime_env->load_segment_thread_pool();
     _execution_services.put_combined_txn_log_thread_pool = runtime_env->put_combined_txn_log_thread_pool();
+    _execution_services.load_sink_close_thread_pool = runtime_env->load_sink_close_thread_pool();
     _execution_services.pipeline_prepare_pool = runtime_env->pipeline_prepare_pool();
     _execution_services.pipeline_sink_io_pool = runtime_env->pipeline_sink_io_pool();
     _execution_services.query_rpc_pool = runtime_env->query_rpc_pool();
@@ -151,9 +154,19 @@ void ExecEnv::_refresh_service_contexts() {
 
     _agent_services.agent_server = _agent_server;
 
+    auto* ai_executor = _compute_env == nullptr ? nullptr : _compute_env->ai_executor();
+    _ai_services.config_source = ai_executor == nullptr ? nullptr : ai_executor->config_source();
+    _ai_services.admission_controller = ai_executor == nullptr ? nullptr : ai_executor->admission_controller();
+    _ai_services.http_client = ai_executor == nullptr ? nullptr : ai_executor->http_client();
+    _ai_services.completion_executor = ai_executor == nullptr ? nullptr : ai_executor->completion_executor();
+    _ai_services.clock = ai_executor == nullptr ? nullptr : ai_executor->clock();
+    _ai_services.random = ai_executor == nullptr ? nullptr : ai_executor->random();
+    _ai_services.metrics = ai_executor == nullptr ? nullptr : AIMetrics::instance();
+
     _query_execution_services.execution = &_execution_services;
     _query_execution_services.rpc = &_rpc_services;
     _query_execution_services.runtime = &_runtime_services;
+    _query_execution_services.ai = &_ai_services;
     _query_execution_services.process_metrics =
             _process_metrics_registry == nullptr ? nullptr : _process_metrics_registry->root_registry();
 

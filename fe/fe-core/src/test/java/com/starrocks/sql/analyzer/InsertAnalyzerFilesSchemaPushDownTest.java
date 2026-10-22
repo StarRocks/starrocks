@@ -4,9 +4,11 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -16,7 +18,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -139,5 +143,36 @@ public class InsertAnalyzerFilesSchemaPushDownTest extends PlanTestBase {
                 "Integer type push-down must still rewrite inferred INT to TINYINT");
         ScalarType fileStringType = (ScalarType) fileTable.getColumn("col_string").getType();
         assertEquals(StringType.MAX_STRING_LENGTH, fileStringType.getLength());
+    }
+
+    @Test
+    public void testPushedDownStrictModeReachesAPreResolvedFilesTable() {
+        // Reproduces the sequence the Sample-Based Tablet Pre-Split hook (and StatementPlanner's
+        // lock-free pre-analysis for an INSERT that mixes FILES() with locked tables) puts the
+        // statement through: FILES() is resolved BEFORE InsertAnalyzer#analyzeProperties pushes
+        // strict_mode down into the relation's property map, and QueryAnalyzer#resolveTableRef then
+        // reuses that instance instead of rebuilding it from the map. Without the re-apply step the
+        // scan would run non-strict no matter what the statement asked for.
+        String sql = "INSERT INTO t_sink PROPERTIES('strict_mode' = 'true') SELECT x, y FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x BIGINT, y VARCHAR(64)')";
+        ConnectContext context = starRocksAssert.getCtx();
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parseSingleStatement(
+                sql, context.getSessionVariable().getSqlMode());
+
+        new QueryAnalyzer(context).analyzeFilesOnly(insertStmt.getQueryStatement());
+        SelectRelation selectRelation = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation fileRelation = (FileTableFunctionRelation) selectRelation.getRelation();
+        TableFunctionTable preResolved = (TableFunctionTable) fileRelation.getTable();
+        assertFalse(preResolved.isStrictMode(),
+                "the pre-resolution runs before the push-down, so strict_mode is not visible yet");
+
+        Analyzer.analyze(insertStmt, context);
+
+        assertSame(preResolved, fileRelation.getTable(),
+                "the analyzer must reuse the pre-resolved FILES table rather than rebuild it");
+        assertTrue(preResolved.isStrictMode(),
+                "the pushed-down strict_mode must be re-applied to the reused FILES table");
     }
 }

@@ -42,9 +42,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.UnknownType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
@@ -86,6 +90,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
+    public static final String MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME = "t_complex";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
     public static final String MOCKED_PARTITIONED_V2_TABLE_NAME = "t1_v2";
@@ -208,6 +213,31 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         required(7, "c1", Types.IntegerType.get()),
                         required(8, "c2", Types.IntegerType.get())),
                 3);
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_COMPLEX_TABLE_NAME,
+                ImmutableList.of(new Column("k", IntegerType.INT, true),
+                        new Column("name", StringType.STRING, true),
+                        new Column("arr", new ArrayType(IntegerType.INT), true),
+                        new Column("st", new StructType(Lists.newArrayList(
+                                new StructField("a", IntegerType.INT), new StructField("b", IntegerType.INT))), true),
+                        new Column("mp", new MapType(IntegerType.INT, IntegerType.INT), true),
+                        new Column("arr_st", new ArrayType(new StructType(Lists.newArrayList(
+                                new StructField("a", IntegerType.INT)))), true),
+                        new Column("st_arr", new StructType(Lists.newArrayList(
+                                new StructField("a", new ArrayType(IntegerType.INT)))), true),
+                        new Column("v", IntegerType.BIGINT, true)),
+                new Schema(required(1, "k", Types.IntegerType.get()),
+                        required(2, "name", Types.StringType.get()),
+                        required(3, "arr", Types.ListType.ofRequired(4, Types.IntegerType.get())),
+                        required(5, "st", Types.StructType.of(required(6, "a", Types.IntegerType.get()),
+                                required(7, "b", Types.IntegerType.get()))),
+                        required(8, "mp", Types.MapType.ofRequired(9, 10,
+                                Types.IntegerType.get(), Types.IntegerType.get())),
+                        required(11, "arr_st", Types.ListType.ofRequired(12,
+                                Types.StructType.of(required(13, "a", Types.IntegerType.get())))),
+                        required(14, "st_arr", Types.StructType.of(required(15, "a",
+                                Types.ListType.ofRequired(16, Types.IntegerType.get())))),
+                        required(17, "v", Types.LongType.get())),
+                3);
     }
 
     private static void registerUnpartitionedTable(Map<String, IcebergTableInfo> icebergTableInfoMap,
@@ -241,13 +271,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 new Column("id", IntegerType.INT, true),
                 new Column("data", StringType.STRING, true),
                 new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
+                new Column("geography_col", UnknownType.UNKNOWN_TYPE, true),
                 new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
         schemas = addMetaColumns(schemas);
 
         Schema schema = new Schema(
                 required(3, "id", Types.IntegerType.get()),
                 required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.StringType.get()),
+                required(5, "geo_col", Types.GeometryType.crs84()),
+                required(7, "geography_col", Types.GeographyType.crs84()),
                 required(6, "ts_nano_col", Types.StringType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
@@ -255,7 +287,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_UNKNOWN_TYPE_TABLE_NAME), MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 schema, spec, 3);
 
-        MockIcebergTable mockIcebergTable = new MockIcebergTable(2, MOCKED_UNKNOWN_TYPE_TABLE_NAME,
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(MOCKED_UNKNOWN_TYPE_TABLE_NAME.hashCode(),
+                MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
                 MOCKED_UNKNOWN_TYPE_TABLE_NAME, schemas, baseTable, null, "");
 

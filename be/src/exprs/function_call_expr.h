@@ -55,7 +55,7 @@ protected:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    const FunctionDescriptor* _get_function_by_fid(const TFunction& fn);
+    const FunctionDescriptor* _get_function_by_fid(const TFunction& fn, const std::vector<TypeDescriptor>& arg_types);
     const FunctionDescriptor* _get_function(const TFunction& fn, const std::vector<TypeDescriptor>& arg_types,
                                             const TypeDescriptor& result_type, std::vector<bool> arg_nullables);
 

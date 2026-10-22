@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.function;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
@@ -42,6 +43,10 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.SqlUtils;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -98,6 +103,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.starrocks.type.PrimitiveType.BOOLEAN;
@@ -235,14 +241,18 @@ public class MetaFunctions {
         return ConstantOperator.createVarchar(json);
     }
 
+    private static final int UNLOCKED_READ_ATTEMPTS = 3;
+
     public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
-        Locker locker = new Locker();
         // Compute mvToRefreshPartitions before acquiring the lock to avoid holding the lock
-        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan).
+        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan). Like readUnderTableLock, a thread
+        // that already holds metadata locks reads the base tables without theirs: a read broken by a concurrent
+        // change leaves the set empty.
         Set<String> mvToRefreshPartitions;
         try {
-            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
-                    mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
+            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, LockHoldDepth.isUnderLock()
+                    ? MVTimelinessArbiter.QueryRewriteParams.ofUnlockedRefresh()
+                    : MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
             if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
                 // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.
@@ -254,50 +264,56 @@ public class MetaFunctions {
             LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
             mvToRefreshPartitions = Sets.newHashSet();
         }
-        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
-        try {
-            Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
-            Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
-            Map<String, String> tablePartitionInfos = Maps.newHashMap();
-            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                Table baseTable = MvUtils.getTableChecked(baseTableInfo);
-                Set<String> toUpdatePartitions = null;
-                if (baseTable instanceof OlapTable) {
-                    toUpdatePartitions = mv.getUpdatedPartitionNamesOfOlapTable((OlapTable) baseTable, false);
-                } else {
-                    toUpdatePartitions = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, false);
-                }
-                if (CollectionUtils.isNotEmpty(toUpdatePartitions)) {
-                    tableToUpdatePartitions.put(baseTable.getName(), toUpdatePartitions);
-                }
-                tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
-                String partitionInfo = getTablePartitionInfo(baseTable);
-                tablePartitionInfos.put(baseTable.getName(), partitionInfo);
+        // The rest of the report compares each base table against the MV's refresh state. It works on a copy of
+        // that state taken under the MV lock and then holds no MV lock: external base tables cost a connector
+        // round trip, and the FE has no identity to lock them by; each internal base table is read under its own
+        // READ lock. The base table locks are never nested inside the MV lock, since paths that alter a base
+        // table go on to lock the MV. Every field of the report is derived from the one copy, so it describes a
+        // single refresh state even if a refresh commits meanwhile.
+        MvRefreshStateCopy mvState = readUnderTableLock(db.getId(), mv.getId(), () -> {
+            MaterializedView.AsyncRefreshContext copied = mv.getRefreshScheme().getAsyncRefreshContext().copy();
+            // copy() shares the per-table partition maps with the live MV, and this copy is read with no lock held.
+            copied.getBaseTableVisibleVersionMap().replaceAll((id, partitions) -> Maps.newHashMap(partitions));
+            copied.getBaseTableInfoVisibleVersionMap().replaceAll((info, partitions) -> Maps.newHashMap(partitions));
+            return new MvRefreshStateCopy(Lists.newArrayList(mv.getBaseTableInfos()), copied);
+        });
+        List<BaseTableInfo> baseTableInfos = mvState.baseTableInfos();
+        MaterializedView.AsyncRefreshContext refreshContext = mvState.refreshContext();
+
+        Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
+        Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
+        Map<String, String> tablePartitionInfos = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            BaseTableRefreshInfo refreshInfo = collectBaseTableRefreshInfo(mv, baseTableInfos, refreshContext,
+                    baseTableInfo);
+            Table baseTable = refreshInfo.table();
+            if (CollectionUtils.isNotEmpty(refreshInfo.toUpdatePartitions())) {
+                tableToUpdatePartitions.put(baseTable.getName(), refreshInfo.toUpdatePartitions());
             }
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
-                    olapVisibleVersionMap.entrySet().stream()
-                            .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
-                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
-
-            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableVisibleVersionMap =
-                    externalVisibleVersionMap.entrySet().stream()
-                            .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
-                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
-
-            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
-                    mvToRefreshPartitions,
-                    tableToUpdatePartitions,
-                    tablePartitionInfos,
-                    baseOlapTableVisibleVersionMap,
-                    baseExternalTableVisibleVersionMap);
-            return meta.inspect();
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+            tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+            tablePartitionInfos.put(baseTable.getName(), refreshInfo.partitionInfo());
         }
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
+                refreshContext.getBaseTableVisibleVersionMap();
+        Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
+                olapVisibleVersionMap.entrySet().stream()
+                        .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
+                        .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
+                refreshContext.getBaseTableInfoVisibleVersionMap();
+        Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableVisibleVersionMap =
+                externalVisibleVersionMap.entrySet().stream()
+                        .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
+                        .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
+        MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
+                mvToRefreshPartitions,
+                tableToUpdatePartitions,
+                tablePartitionInfos,
+                baseOlapTableVisibleVersionMap,
+                baseExternalTableVisibleVersionMap);
+        return meta.inspect();
     }
 
     @ConstantFunction(name = "inspect_table_partition_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
@@ -321,6 +337,71 @@ public class MetaFunctions {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
+    }
+
+    /**
+     * Everything {@link #inspectMVRefreshInfo(Database, MaterializedView)} needs about one base table.
+     */
+    private record BaseTableRefreshInfo(Table table, Set<String> toUpdatePartitions, String partitionInfo) {
+    }
+
+    /** What {@link #inspectMVRefreshInfo(Database, MaterializedView)} reads from the MV, copied at one moment. */
+    private record MvRefreshStateCopy(List<BaseTableInfo> baseTableInfos,
+                                      MaterializedView.AsyncRefreshContext refreshContext) {
+    }
+
+    /**
+     * Compares one base table against {@code refreshContext}, a copy of the MV's refresh state. An internal base
+     * table is resolved and read under its own READ lock; an external one is read with no lock held.
+     */
+    private static BaseTableRefreshInfo collectBaseTableRefreshInfo(MaterializedView mv,
+                                                                    List<BaseTableInfo> baseTableInfos,
+                                                                    MaterializedView.AsyncRefreshContext refreshContext,
+                                                                    BaseTableInfo baseTableInfo) {
+        if (!baseTableInfo.isInternalCatalog()) {
+            return collectBaseTableRefreshInfoUnlocked(mv, baseTableInfos, refreshContext, baseTableInfo);
+        }
+        return readUnderTableLock(baseTableInfo.getDbId(), baseTableInfo.getTableId(),
+                () -> collectBaseTableRefreshInfoUnlocked(mv, baseTableInfos, refreshContext, baseTableInfo));
+    }
+
+    /**
+     * Runs {@code read} under a READ lock on one table, and on nothing else. The function is constant-folded while
+     * the statement is planned, and some statements are planned under the planner's locks on the tables they
+     * reference: one more lock taken there could close a wait cycle with another statement and the writers queued
+     * on the two tables. A thread that already holds metadata locks therefore takes none, and retries a read that
+     * a concurrent change broke (the partition maps are plain HashMaps).
+     */
+    private static <T> T readUnderTableLock(long dbId, long tableId, Supplier<T> read) {
+        if (!LockHoldDepth.isUnderLock()) {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                return read.get();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        }
+        RuntimeException lastFailure = null;
+        for (int attempt = 0; attempt < UNLOCKED_READ_ATTEMPTS; attempt++) {
+            try {
+                return read.get();
+            } catch (RuntimeException e) {
+                lastFailure = e;
+            }
+        }
+        throw lastFailure;
+    }
+
+    private static BaseTableRefreshInfo collectBaseTableRefreshInfoUnlocked(MaterializedView mv,
+                                                                            List<BaseTableInfo> baseTableInfos,
+                                                                            MaterializedView.AsyncRefreshContext
+                                                                                    refreshContext,
+                                                                            BaseTableInfo baseTableInfo) {
+        Table baseTable = MvUtils.getTableChecked(baseTableInfo);
+        Set<String> toUpdatePartitions =
+                ConnectorPartitionTraits.build(mv, baseTable).getUpdatedPartitionNames(baseTableInfos, refreshContext);
+        return new BaseTableRefreshInfo(baseTable, toUpdatePartitions, getTablePartitionInfo(baseTable));
     }
 
     private static String getTablePartitionInfo(Table table) {
@@ -761,9 +842,17 @@ public class MetaFunctions {
     public static ConstantOperator lookupString(ConstantOperator tableName,
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
+        // Fetch and validate the caller before parsing the table name: TableName.fromString()
+        // dereferences ConnectContext.get() to resolve one- and two-part names, so a missing
+        // thread-local context must be rejected here rather than surfacing as a NullPointerException.
+        ConnectContext caller = ConnectContext.get();
+        if (caller == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "lookup_string must be called within a user session");
+        }
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
         Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(new ConnectContext(), tableNameValue);
+                .getTable(caller, tableNameValue);
         maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
         if (!(maybeTable.get() instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
@@ -777,13 +866,34 @@ public class MetaFunctions {
         }
         Column keyColumn = table.getKeyColumns().get(0);
 
-        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
-                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
+        // Validate the return column exists, and build the SQL from trusted, properly escaped
+        // identifiers / literals. The three arguments are user-controlled, so interpolating them
+        // raw (the previous behavior) allowed SQL injection: a backtick in the column name or a
+        // single quote in the key could break out of the identifier / string literal.
+        Column returnColumnObj = table.getColumn(returnColumn.getVarchar());
+        if (returnColumnObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR,
+                    returnColumn.getVarchar(), tableNameValue.toString());
+        }
+        // Backquote each identifier individually: ParseUtil.backquote doubles embedded backticks,
+        // whereas TableName.toSql() only wraps each component in backticks without escaping them.
+        // Native db/table names allow any non-NUL character, so a backtick in the name would
+        // otherwise break out of the identifier. The table is a resolved native (internal-catalog)
+        // primary-key table, so only db and table need qualifying.
+        String qualifiedTable = ParseUtil.backquote(tableNameValue.getDb()) + "."
+                + ParseUtil.backquote(tableNameValue.getTbl());
+        String sql = String.format("select cast(%s as string) from %s where %s = %s limit 1",
+                ParseUtil.backquote(returnColumnObj.getName()), qualifiedTable,
+                ParseUtil.backquote(keyColumn.getName()),
+                "'" + SqlUtils.escapeSqlString(lookupKey.getVarchar()) + "'");
         try {
             // lookup_string is folded in the optimizer during the outer query's planning; bound the
             // internal point-lookup by the outer query's remaining query_timeout (not the 1h default).
             int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
-            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql, Math.max(1, remaining));
+            // Run the lookup as the caller rather than ROOT, so the caller's privileges and access
+            // control policies apply to the table being read.
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor()
+                    .executeDQLAsCaller(sql, Math.max(1, remaining), caller);
             return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";
@@ -793,7 +903,9 @@ public class MetaFunctions {
                     root != null && root.getMessage().contains(notFoundMessage)) {
                 return ConstantOperator.NULL;
             }
-            if (root instanceof StarRocksPlannerException) {
+            // Surface planner errors and access denied from the caller's privilege check as is,
+            // instead of the generic "execute sql failed" wrapper.
+            if (root instanceof StarRocksPlannerException || root instanceof ErrorReportException) {
                 throw new SemanticException("lookup failed: " + root.getMessage(), root);
             } else {
                 throw new SemanticException("lookup failed: " + e.getMessage(), e);

@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <queue>
 
 #include "base/concurrency/race_detect.h"
@@ -113,6 +114,9 @@ protected:
     std::atomic_uint64_t _running_flush_tasks{};
 
     FlushAllCallBack _flush_all_callback;
+    // Guards _flush_all_callback. The thread installing it and the thread completing the last
+    // in-flight flush reach it at the same time; see SpillerWriter::_decrease_running_flush_tasks().
+    std::mutex _flush_all_callback_mutex;
 };
 
 class RawSpillerWriter final : public SpillerWriter {
@@ -143,7 +147,10 @@ public:
 
     Status set_flush_all_call_back(FlushAllCallBack callback) override {
         _running_flush_tasks++;
-        _flush_all_callback = std::move(callback);
+        {
+            std::lock_guard<std::mutex> guard(_flush_all_callback_mutex);
+            _flush_all_callback = std::move(callback);
+        }
         return _decrease_running_flush_tasks();
     }
 
@@ -240,7 +247,10 @@ public:
 
     Status set_flush_all_call_back(FlushAllCallBack callback) override {
         _running_flush_tasks++;
-        _flush_all_callback = std::move(callback);
+        {
+            std::lock_guard<std::mutex> guard(_flush_all_callback_mutex);
+            _flush_all_callback = std::move(callback);
+        }
         return _decrease_running_flush_tasks();
     }
 

@@ -66,12 +66,34 @@ bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_writes_second("starlet_io_wr
 using FileSystemFactory = staros::starlet::fslib::FileSystemFactory;
 using WriteOptions = staros::starlet::fslib::WriteOptions;
 using ReadOptions = staros::starlet::fslib::ReadOptions;
+using CacheOptions = staros::starlet::fslib::CacheOptions;
 using Configuration = staros::starlet::fslib::Configuration;
 using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+
+// The BE gates the two directions of the local disk cache separately -- skip_disk_cache the
+// lookup, skip_fill_local_cache the fill -- while fslib folds them into a single read mode.
+// Skipping the lookup subsumes the fill: a bypassing read is handed straight to the persistent
+// filesystem, which fills nothing. The skip_read_local_cache flag this enum replaced behaved the
+// same way, so the fold costs no behavior that was ever honored.
+//
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | skip_disk_cache | skip_fill_local_cache | what the BE asks for       | fslib read mode           |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | false           | false                 | read cache, fill on miss   | READ_THROUGH              |
+// | false           | true                  | read cache, do not fill    | READ_THROUGH_NO_FILL      |
+// | true            | false                 | skip lookup, still fill    | READ_THROUGH_BYPASS_CACHE |
+// | true            | true                  | do not touch the cache     | READ_THROUGH_BYPASS_CACHE |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip_fill_cache) {
+    if (skip_read_cache) {
+        return CacheOptions::ReadMode::READ_THROUGH_BYPASS_CACHE;
+    }
+    return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
+}
 
 static const std::string kFileTagType = "type";
 static const std::string kFileTagTypeData = "data";
@@ -345,9 +367,8 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
-        opt.skip_read_local_cache = opts.skip_disk_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -375,7 +396,7 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
         auto file_st = (*fs_st)->open(pair.first, opt);
 
@@ -670,7 +691,13 @@ private:
             return fs_st;
         }
 #endif
-        return get_staros_worker()->get_shard_filesystem(shard_id, _conf);
+        auto worker = get_staros_worker();
+        if (worker == nullptr) {
+            // Shutdown already released the StarOS worker while this operation was in flight.
+            // Fail the operation instead of dereferencing the retired global.
+            return absl::UnavailableError(fmt::format("StarOS worker is not available, shard_id: {}", shard_id));
+        }
+        return worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
@@ -735,6 +762,24 @@ static Cache* get_shard_fs_cache() {
     return g_shard_fs_cache.get();
 }
 
+#ifdef BE_TEST
+void TEST_clear_shard_fs_cache() {
+    get_shard_fs_cache()->prune();
+}
+#endif
+
+// Resolve a shard filesystem through the global StarOS worker. The worker is null once
+// `shutdown_staros_worker()` has retired it, which an in-flight operation can still reach; report
+// that as a status so the caller fails the operation instead of dereferencing the retired global.
+static absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem_from_worker(
+        int64_t shard_id, const staros::starlet::fslib::Configuration& conf) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        return absl::UnavailableError("StarOS worker is not available");
+    }
+    return worker->get_shard_filesystem(shard_id, conf);
+}
+
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
     // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
     // where each shard fs correspond to one storage volume on source cluster.
@@ -772,10 +817,10 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
-        fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
+        fs_st = get_shard_filesystem_from_worker(shard_id, conf);
     }
 #else
-    auto fs_st = get_staros_worker()->get_shard_filesystem(shard_id, conf);
+    auto fs_st = get_shard_filesystem_from_worker(shard_id, conf);
 #endif
     if (!fs_st.ok()) {
         LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path

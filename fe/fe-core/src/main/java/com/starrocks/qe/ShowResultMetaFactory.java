@@ -358,6 +358,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowProfilelistStatement(ShowProfilelistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("QueryId", TypeFactory.createVarcharType(48)))
+                .addColumn(new Column("CustomQueryId", TypeFactory.createVarcharType(128)))
                 .addColumn(new Column("StartTime", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("Time", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(16)))
@@ -1322,6 +1323,33 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Storage Volume", TypeFactory.createVarcharType(256)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Protocol", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("IsDefault", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("Endpoint", TypeFactory.createVarcharType(512)))
+                .addColumn(new Column("Model", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("Dimensions", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("MaxDocuments", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("TimeoutMs", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("ApiKey", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(1024)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(1024)))
                 .build();
     }
 

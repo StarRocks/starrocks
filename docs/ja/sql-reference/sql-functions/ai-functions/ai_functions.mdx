@@ -1,0 +1,70 @@
+---
+displayed_sidebar: docs
+description: "SQL で AI 関数を使用し、TopN プッシュダウンで AI 入力行数を削減します。"
+sidebar_position: 10
+---
+
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
+# AI 関数
+
+<Experimental />
+
+AI 関数は、SQL から設定済みのモデルサービスを呼び出します。テキスト生成については [ai_complete](ai_complete.md) を参照してください。
+
+## AI 関数の権限 {/* #ai-function-privileges */}
+
+AI 関数の実行には `USAGE ON AI FUNCTION <function_name>` または `USAGE ON ALL AI FUNCTIONS` が必要です。Provider を使用する呼び出しには、選択した AI PROVIDER の `USAGE` も必要です。関数と Provider の権限は互いを包含しません。
+
+対象は `ai_complete`、`ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter`、`ai_embed`、`ai_custom_query`、`ai_custom_embedding` です。同じ関数ファミリーのオーバーロードは権限を共有します。
+
+`ON ALL AI FUNCTIONS` は現在および将来の公開 AI 関数ファミリーを対象とします。`WITH GRANT OPTION` を付けると、個別またはすべての関数ファミリーの使用権限を再付与できます。個別の付与を取り消しても独立した全体への付与は残り、全体への付与を取り消しても個別に付与した権限は残ります。
+
+`public` ロールには AI 権限を暗黙に付与しません。組み込み `root` と `db_admin` ロールはグローバルな AI 関数使用権限と全 Provider の使用権限を持ちます。既存のテーブル、列、ビューの権限も必要です。ビューの参照権限は、その AI 関数を実行する権限を付与しません。
+
+```sql
+GRANT USAGE ON AI FUNCTION ai_complete TO ROLE ai_user;
+GRANT USAGE ON ALL AI FUNCTIONS TO ROLE ai_user;
+GRANT USAGE ON AI PROVIDER support_chat TO ROLE ai_user;
+GRANT USAGE ON ALL AI PROVIDERS TO ROLE ai_admin;
+```
+
+Provider 名は大文字と小文字を区別して完全一致します。権限は Provider の UUID に紐づきます。ALTER は権限を維持しますが、削除後に同じ名前で作成しても権限は継承されません。`ON ALL AI PROVIDERS` は将来の Provider も含みます。名前が `*` の Provider は個別に指定できません。全体への付与には明示的な ALL 構文を使用してください。
+
+SYSTEM 関数は既存の設定経路を維持し、Provider の権限を必要としません。Provider の CREATE、ALTER、DROP、SET DEFAULT、SHOW、DESC には従来どおり SYSTEM OPERATE が必要です。USAGE はこれらの管理操作を許可しません。
+
+関数または Provider の権限の取り消しは、プリペアド EXECUTE を含む後続の実行と再計画に適用されます。実行中のクエリはキャンセルしません。この機能はネイティブ認可に対応します。AI チェックを実装していない外部アクセスコントローラーは対象操作を拒否します。
+
+権限を有効にする前にすべての FE をアップグレードしてください。古い FE は新しいオブジェクト型を認可せず、その権限メタデータの読み込みを拒否する場合もあります。未知の権限メタデータを無視して非互換のダウングレードを回避しないでください。既存の一般ユーザーにはアップグレード後に AI 権限を明示的に付与する必要があります。
+
+### 実行コンテキストと制限
+
+AI 関数と Provider の権限は、UDF 権限と同様に現在の実行コンテキストで検査されます。タスク実行は、`mv_use_creator_based_authorization`（デフォルト `true`）を含む既存のタスクフレームワークの認可設定に従います。作成者ベースと root ベースの実行 ID については、[RUN_AS_USER](../../information_schema/materialized_view_refresh_jobs.md) を参照してください。
+
+既存の [SQL 配置制限](ai_complete.md#制限とセキュリティ)も適用されます。LOAD 式と同期マテリアライズドビューの式では、スカラー実行経路で AI 関数を実行できないため、AI 呼び出しをサポートしません。
+
+## AI 入力行数の削減 {/* #reducing-ai-input-rows */}
+
+`LIMIT` が正で `OFFSET` を含まない `ORDER BY ... LIMIT` クエリでは、ソート列が AI 投影とその間の通常の Project を変更されずに通過する場合、StarRocks は AI 投影の評価前に候補行を選択できます。
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) は SQL の `LIMIT N` に応じて戦略を選択します。
+
+- `N` がしきい値（デフォルト `1000`）以下の場合、グローバル候補 TopN により、書き換えられた AI 投影への入力を全体で最大 `N` 行に制限します。
+- `N` がしきい値を超える場合、ローカル候補 TopN により、その AI 投影への入力を fragment instance ごとに最大 `N` 行に制限します。BE ごとや pipeline driver ごとの上限ではありません。
+
+グローバル戦略では、全体の行数制限と引き換えにインスタンス間の AI 並列性が低下する場合があります。ローカル戦略は AI 実行前のグローバルな集約を追加しませんが、ローカルマージによってインスタンス内の並列性が低下する場合があります。どちらも AI 投影の上に元の TopN を保持し、出力順序と行数制限を維持します。`EXPLAIN` で実行計画を確認できます。
+
+この上限は書き換えられた AI 投影に適用され、クエリ全体の AI 処理を制限するものではありません。ネストした内側の AI 呼び出しは、より多くの行を処理する場合があります。また、HTTP リクエスト数やトークン数の上限ではありません。除外された行では AI 呼び出しは実行されません。
+
+この最適化は、ソートやフィルタリングに必要な AI 呼び出しの下に TopN を移動せず、既存の Limit や安全でない投影・述語の境界を越えません。パーティション化された TopN、`RANK`、`DENSE_RANK` にも適用されません。
+
+### 戦略の選択
+
+しきい値は、再起動なしで `SET`、以降のセッションに適用される `SET GLOBAL`、および文単位の `SET_VAR` ヒントで設定できます。AI 投影を含まないクエリには影響しません。`0` はローカルのみの削減を選択し、削減を無効にするものではありません。
+
+```sql
+-- LIMIT <= 1000 にはグローバル削減、それより大きい LIMIT にはローカル削減を使用します。
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- ローカル削減のみを使用します。
+SET ai_topn_pushdown_max_global_limit = 0;
+```

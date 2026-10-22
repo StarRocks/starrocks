@@ -18,9 +18,14 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <fstream>
+#include <limits>
+#include <thread>
 
 #include "base/bthreads/util.h"
+#include "base/coding.h"
 #include "base/failpoint/fail_point.h"
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
@@ -37,10 +42,12 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
+#include "storage/utils.h"
 #include "test_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
@@ -67,8 +74,9 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = new starrocks::lake::TabletManager(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                new starrocks::lake::TabletManager(_location_provider, _primary_key_manager.get(), 1024 * 1024);
     }
 
     void TearDown() override {
@@ -80,8 +88,21 @@ public:
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider{nullptr};
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
 };
+
+namespace {
+
+class MappedCacheKeyLocationProvider final : public lake::LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("virtual://{}", tablet_id); }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return fmt::format("physical/{}", virtual_path);
+    }
+};
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -160,6 +181,179 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->tablet_id(), tablet_id);
     EXPECT_EQ(res.value()->txn_id(), 2);
+}
+
+// A txn log is immutable once written, so a load that fails with Corruption is most likely served a
+// corrupted block from the local data cache. The loader must drop that cache copy and re-read once
+// instead of failing every publish until the cache entry is evicted, mirroring
+// tablet_meta_read_corrupted_and_recover. The test file system has no local cache to drop, so the
+// TabletManager::corrupted_txn_log_handler sync point stands in for a successful drop.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_and_recover) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(2);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    // put_txn_log() also fills the metacache; drop it so get_txn_log() has to read the file.
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // The txn log may be read with the legacy headerless format or the checksummed header format
+    // depending on lake_enable_protobuf_file_checksum, so inject the first-read corruption on both.
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(res.value()->tablet_id(), tablet_id);
+    EXPECT_EQ(res.value()->txn_id(), 2);
+    EXPECT_EQ(1, handler_called);
+    // Exactly one retry: the corrupted first read plus the re-read after the drop.
+    EXPECT_EQ(2, read_count);
+}
+
+// When the corrupted cache copy cannot be dropped (here: the test file system has no local cache,
+// so drop_local_cache reports NotFound), the original Corruption is reported and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_drop_cache_failed) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(3);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 3);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(1, read_count);
+    // A failed load must not leave anything in the metacache.
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_txn_log(_tablet_manager->txn_log_location(tablet_id, 3)));
+}
+
+// With lake_clear_corrupted_cache_meta off, a corrupted txn log read is reported as is: no cache drop
+// is attempted and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_clear_cache_disabled) {
+    auto old_flag = config::lake_clear_corrupted_cache_meta;
+    config::lake_clear_corrupted_cache_meta = false;
+    DeferOp guard([old_flag]() { config::lake_clear_corrupted_cache_meta = old_flag; });
+
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(4);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 4);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(0, handler_called);
+    EXPECT_EQ(1, read_count);
+}
+
+// The combined txn log written by a combined-txn publish takes the same recovery path as a single
+// txn log: drop the corrupted cache copy, re-read once, then serve every tablet's entry.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, combined_txnlog_read_corrupted_and_recover) {
+    const int64_t txn_id = 5;
+    auto partition_id = next_id();
+    auto tablet_id_1 = next_id();
+    auto tablet_id_2 = next_id();
+    starrocks::CombinedTxnLogPB combined_log;
+    for (auto tablet_id : {tablet_id_1, tablet_id_2}) {
+        auto* log = combined_log.add_txn_logs();
+        log->set_partition_id(partition_id);
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(txn_id);
+    }
+    EXPECT_OK(_tablet_manager->put_combined_txn_log(combined_log));
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto log_path = _tablet_manager->combined_txn_log_location(tablet_id_1, txn_id);
+    auto res = _tablet_manager->get_combined_txn_log(log_path);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, handler_called);
+    EXPECT_EQ(2, read_count);
+    ASSERT_EQ(2, res.value()->txn_logs_size());
+    EXPECT_EQ(tablet_id_1, res.value()->txn_logs(0).tablet_id());
+    EXPECT_EQ(tablet_id_2, res.value()->txn_logs(1).tablet_id());
+    EXPECT_EQ(txn_id, res.value()->txn_logs(1).txn_id());
+    // The healed copy, not the corrupted one, is what the metacache serves from now on.
+    auto cached = _tablet_manager->metacache()->lookup_combined_txn_log(log_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(2, cached->txn_logs_size());
 }
 
 // Compatibility: tablet metadata / txn logs written by an older BE without the checksum
@@ -584,6 +778,111 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
 
     // Verify no range is set
     EXPECT_FALSE(metadata->has_range());
+}
+
+// A range-distribution partition creates every tablet with its own version-1 metadata and range. That
+// metadata must win over a partition-shared version-1 object in the same directory (an older partition
+// layout), and every later version must keep the tablet's own range, whether it is written per tablet or
+// into a bundle.
+TEST_F(LakeTabletManagerTest, per_tablet_initial_metadata_keeps_each_tablet_range) {
+    auto make_int_bound = [](const std::string& value) {
+        TTypeDesc type_desc;
+        type_desc.types.resize(1);
+        type_desc.types[0].type = TTypeNodeType::SCALAR;
+        type_desc.types[0].scalar_type.type = TPrimitiveType::INT;
+        type_desc.types[0].__isset.scalar_type = true;
+        type_desc.__isset.types = true;
+        TVariant variant;
+        variant.__set_type(type_desc);
+        variant.__set_value(value);
+        variant.__set_variant_type(TVariantType::NORMAL_VALUE);
+        TTuple tuple;
+        tuple.values.push_back(variant);
+        return tuple;
+    };
+    auto make_request = [&](int64_t tablet_id, int64_t schema_id, const std::string* lower, const std::string* upper,
+                            bool shared) {
+        TCreateTabletReq req;
+        req.tablet_id = tablet_id;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.__set_enable_tablet_creation_optimization(shared);
+        req.tablet_schema.__set_id(schema_id);
+        req.tablet_schema.__set_schema_hash(270068375);
+        req.tablet_schema.__set_short_key_column_count(1);
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        TTabletRange range;
+        if (lower != nullptr) {
+            range.__set_lower_bound(make_int_bound(*lower));
+            range.__set_lower_bound_included(true);
+        }
+        if (upper != nullptr) {
+            range.__set_upper_bound(make_int_bound(*upper));
+            range.__set_upper_bound_included(false);
+        }
+        req.__set_range(range);
+        return req;
+    };
+
+    const std::string v100 = "100";
+    const std::string v200 = "200";
+    const auto schema_id = next_id();
+    const auto first_id = next_id();
+    const auto second_id = next_id();
+    const auto third_id = next_id();
+    // The older layout: one shared object, written from the first tablet, carrying (-inf, 100).
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(first_id, schema_id, nullptr, &v100, true)));
+    // The per-tablet layout for [100, 200) and [200, +inf).
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(second_id, schema_id, &v100, &v200, false)));
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(third_id, schema_id, &v200, nullptr, false)));
+    _tablet_manager->metacache()->prune();
+
+    auto expect_range = [](const TabletMetadataPtr& metadata, const std::string* lower, const std::string* upper) {
+        ASSERT_TRUE(metadata->has_range());
+        ASSERT_EQ(lower != nullptr, metadata->range().has_lower_bound());
+        if (lower != nullptr) {
+            EXPECT_EQ(*lower, metadata->range().lower_bound().values(0).value());
+        }
+        ASSERT_EQ(upper != nullptr, metadata->range().has_upper_bound());
+        if (upper != nullptr) {
+            EXPECT_EQ(*upper, metadata->range().upper_bound().values(0).value());
+        }
+    };
+
+    ASSIGN_OR_ABORT(auto second_v1, _tablet_manager->get_tablet_metadata(second_id, 1));
+    expect_range(second_v1, &v100, &v200);
+    ASSIGN_OR_ABORT(auto third_v1, _tablet_manager->get_tablet_metadata(third_id, 1));
+    expect_range(third_v1, &v200, nullptr);
+
+    // Version 2 written per tablet keeps the range.
+    auto publish_empty_write = [&](int64_t tablet_id, int64_t txn_id, bool skip_write_tablet_metadata) {
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(txn_id);
+        txn_log->mutable_op_write()->mutable_rowset()->set_num_rows(0);
+        txn_log->mutable_op_write()->mutable_rowset()->set_data_size(0);
+        txn_log->mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        CHECK_OK(_tablet_manager->put_txn_log(txn_log));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_txn_type(TXN_NORMAL);
+        return lake::publish_version(_tablet_manager, lake::PublishTabletInfo(tablet_id), /*base_version=*/1,
+                                     /*new_version=*/2, std::span<const TxnInfoPB>(&txn_info, 1),
+                                     skip_write_tablet_metadata);
+    };
+    ASSIGN_OR_ABORT(auto second_v2, publish_empty_write(second_id, next_id(), false));
+    expect_range(second_v2, &v100, &v200);
+
+    // Version 2 written into a bundle (what an aggregate publish does) keeps the range too.
+    ASSIGN_OR_ABORT(auto third_v2, publish_empty_write(third_id, next_id(), true));
+    std::map<int64_t, TabletMetadataPB> bundle;
+    bundle.emplace(third_id, *third_v2);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(bundle));
+    _tablet_manager->metacache()->prune();
+    ASSIGN_OR_ABORT(auto third_v2_read, _tablet_manager->get_tablet_metadata(third_id, 2));
+    expect_range(third_v2_read, &v200, nullptr);
 }
 
 // NOLINTNEXTLINE
@@ -1114,6 +1413,340 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
+TEST_F(LakeTabletManagerTest, bundled_metadata_partition_marker_uses_real_location) {
+    auto location_provider = std::make_shared<MappedCacheKeyLocationProvider>();
+    auto old_location_provider = _tablet_manager->TEST_set_location_provider(location_provider);
+    DeferOp restore_location_provider(
+            [&]() { _tablet_manager->TEST_set_location_provider(std::move(old_location_provider)); });
+
+    auto tablet_id = next_id();
+    auto virtual_key = location_provider->metadata_root_location(tablet_id);
+    ASSIGN_OR_ABORT(auto real_key, location_provider->real_location(virtual_key));
+
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    EXPECT_TRUE(_tablet_manager->lookup_cached_bundled_metadata_partition_marker(tablet_id));
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(real_key));
+    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(virtual_key));
+}
+
+TEST_F(LakeTabletManagerTest, bundled_metadata_not_found_reads_bundle_once) {
+    auto tablet_id = next_id();
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    int bundle_read_attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata",
+                                          [&](void*) { ++bundle_read_attempts; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto metadata = _tablet_manager->get_tablet_metadata(tablet_id, 2, false);
+
+    EXPECT_TRUE(metadata.status().is_not_found()) << metadata.status();
+    EXPECT_EQ(1, bundle_read_attempts);
+}
+
+namespace {
+
+// Records the remote tablet-metadata reads a get_tablet_metadata() call issues, so a test can assert
+// that the per-tablet version-1 key was never probed.
+class MetadataReadRecorder {
+public:
+    MetadataReadRecorder() {
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [this](void* arg) {
+            _paths.emplace_back(*static_cast<std::string*>(arg));
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    ~MetadataReadRecorder() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
+
+    size_t count() const { return _paths.size(); }
+
+    size_t count_ending_with(const std::string& suffix) const {
+        size_t n = 0;
+        for (const auto& path : _paths) {
+            if (path.size() >= suffix.size() && path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                ++n;
+            }
+        }
+        return n;
+    }
+
+    void clear() { _paths.clear(); }
+
+private:
+    std::vector<std::string> _paths;
+};
+
+lake::CacheOptions read_opts(bool fill_cache = true) {
+    return lake::CacheOptions{.fill_meta_cache = fill_cache, .fill_data_cache = fill_cache};
+}
+
+// Reads |tablet_id|'s version-1 metadata with FE's hint applied: shared object first.
+StatusOr<TabletMetadataPtr> read_v1_shared_first(lake::TabletManager* mgr, int64_t tablet_id, bool fill_cache = true) {
+    return mgr->get_tablet_metadata(tablet_id, 1, read_opts(fill_cache), /*expected_gtid=*/0, /*fs=*/nullptr,
+                                    lake::InitialMetadataOrder::kSharedFirst);
+}
+
+} // namespace
+
+// With FE's hint, a version-1 read goes straight to the partition-shared object: the per-tablet key
+// -- which a `file_bundling` partition never writes -- is not probed at all, and a sibling tablet of
+// the same partition is then served from the metacache with no remote read whatsoever.
+TEST_F(LakeTabletManagerTest, shared_first_hint_skips_per_tablet_probe) {
+    auto tablet_a = next_id();
+    auto tablet_b = next_id();
+
+    // FixedLocationProvider puts every tablet under one metadata root, i.e. one physical partition.
+    // Write ONLY the shared initial-metadata object, as DDL does for a file_bundling table.
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(tablet_a);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(tablet_a);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    // put_tablet_metadata() caches what it wrote; drop it so the reads below are the real thing.
+    _tablet_manager->metacache()->erase(shared_location);
+
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto meta_a, read_v1_shared_first(_tablet_manager, tablet_a));
+    EXPECT_EQ(tablet_a, meta_a->id());
+    // Exactly one read, and it is the shared object -- never the per-tablet key.
+    EXPECT_EQ(1UL, reads.count());
+    EXPECT_EQ(0UL, reads.count_ending_with(lake::tablet_metadata_filename(tablet_a, 1)));
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+
+    // Sibling tablet of the same partition: the shared object is cached, so zero reads.
+    reads.clear();
+    ASSIGN_OR_ABORT(auto meta_b, read_v1_shared_first(_tablet_manager, tablet_b));
+    EXPECT_EQ(tablet_b, meta_b->id());
+    EXPECT_EQ(0UL, reads.count());
+
+    // Each caller got its own id, and the PB cached under the shared key still carries the id it was
+    // written with -- the shared object must never be stamped in place.
+    EXPECT_NE(meta_a.get(), meta_b.get());
+    auto cached_shared = _tablet_manager->metacache()->lookup_tablet_metadata(shared_location);
+    ASSERT_TRUE(cached_shared != nullptr);
+    EXPECT_EQ(tablet_a, cached_shared->id());
+}
+
+// Nothing about the hint is remembered: a later read of the same tablet without it resolves through
+// the ordinary path. This is what keeps a bundled partition's layout from leaking onto another
+// index's tablets in the same storage path.
+TEST_F(LakeTabletManagerTest, shared_first_hint_is_not_remembered) {
+    auto tablet_id = next_id();
+
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(tablet_id);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(tablet_id);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    // A hinted read with per-tablet caching off, as publish issues it. It caches the shared OBJECT
+    // (dropped again below so the remote reads stay visible) but nothing about the ORDER.
+    ASSIGN_OR_ABORT(auto hinted_meta, read_v1_shared_first(_tablet_manager, tablet_id, /*fill_cache=*/false));
+    EXPECT_EQ(tablet_id, hinted_meta->id());
+    _tablet_manager->metacache()->erase(shared_location);
+
+    // An unhinted read of the same tablet probes its own key first, exactly as before the hint
+    // existed, and only then falls back to the shared object.
+    // No InitialMetadataOrder argument, so the default per-tablet-first order applies.
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto plain_meta, _tablet_manager->get_tablet_metadata(tablet_id, 1, read_opts(false)));
+    EXPECT_EQ(tablet_id, plain_meta->id());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_metadata_filename(tablet_id, 1)));
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+}
+
+// A hint that does not match the layout costs one request, not correctness: the shared probe misses
+// and the per-tablet key resolves the read, with no duplicate shared read.
+TEST_F(LakeTabletManagerTest, shared_first_hint_falls_back_when_absent) {
+    auto tablet_id = next_id();
+
+    // This partition owns a per-tablet version-1 object, as a non-bundling partition does.
+    const auto per_tablet_location = _tablet_manager->tablet_metadata_location(tablet_id, 1);
+    auto per_tablet = std::make_shared<TabletMetadata>();
+    per_tablet->set_id(tablet_id);
+    per_tablet->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(per_tablet));
+    _tablet_manager->metacache()->erase(per_tablet_location);
+
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto metadata, read_v1_shared_first(_tablet_manager, tablet_id));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_metadata_filename(tablet_id, 1)));
+}
+
+// Publish reads base-version metadata with fill_meta_cache off so the tablet's own entry stays out of
+// the metacache. The partition-shared object must be cached anyway: it is one object per partition,
+// and every tablet of the partition reads it in the same publish. Honoring the flag here made a cold
+// CN fetch it once per tablet.
+TEST_F(LakeTabletManagerTest, shared_object_is_cached_when_per_tablet_caching_is_off) {
+    auto tablet_a = next_id();
+    auto tablet_b = next_id();
+
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(tablet_a);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(tablet_a);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    // Exactly the CacheOptions lake::publish_version() reads its base version with.
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto meta_a, read_v1_shared_first(_tablet_manager, tablet_a, /*fill_cache=*/false));
+    EXPECT_EQ(tablet_a, meta_a->id());
+    EXPECT_EQ(1UL, reads.count());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+
+    // fill_meta_cache=false is honored for the tablet's own entry ...
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
+                        _tablet_manager->tablet_metadata_location(tablet_a, 1)) == nullptr);
+    // ... while the shared object is cached regardless, under its own key.
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(shared_location) != nullptr);
+
+    // So a sibling tablet in the same publish issues no remote read at all.
+    reads.clear();
+    ASSIGN_OR_ABORT(auto meta_b, read_v1_shared_first(_tablet_manager, tablet_b, /*fill_cache=*/false));
+    EXPECT_EQ(tablet_b, meta_b->id());
+    EXPECT_EQ(0UL, reads.count());
+}
+
+// The unhinted last-resort fallback gets the same dedup. Every tablet still probes its own key first
+// -- that is the ordering invariant -- but the shared object behind the probe is fetched once per
+// partition, not once per tablet.
+TEST_F(LakeTabletManagerTest, unhinted_fallback_reads_shared_object_once_per_partition) {
+    auto tablet_a = next_id();
+    auto tablet_b = next_id();
+
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(tablet_a);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(tablet_a);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto meta_a, _tablet_manager->get_tablet_metadata(tablet_a, 1, read_opts(false)));
+    EXPECT_EQ(tablet_a, meta_a->id());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_metadata_filename(tablet_a, 1)));
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+
+    reads.clear();
+    ASSIGN_OR_ABORT(auto meta_b, _tablet_manager->get_tablet_metadata(tablet_b, 1, read_opts(false)));
+    EXPECT_EQ(tablet_b, meta_b->id());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_metadata_filename(tablet_b, 1)));
+    EXPECT_EQ(0UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+}
+
+// A cold CN runs one publish task per tablet, so several tablets miss the metacache before the first
+// read of the shared object has landed. Those misses must collapse into one remote read rather than
+// one per task.
+TEST_F(LakeTabletManagerTest, concurrent_shared_initial_reads_coalesce) {
+    auto tablet_a = next_id();
+    auto tablet_b = next_id();
+
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(tablet_a);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(tablet_a);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    constexpr auto kDeadline = std::chrono::seconds(30);
+    std::atomic<int> remote_reads{0};
+    std::atomic<bool> first_read_in_progress{false};
+    std::atomic<bool> second_reader_joined{false};
+    // Hold the first remote read open until a second reader has joined the in-flight read, so the
+    // second reader provably arrives while the first is still outstanding.
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) {
+        ++remote_reads;
+        first_read_in_progress = true;
+        auto deadline = std::chrono::steady_clock::now() + kDeadline;
+        while (!second_reader_joined && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    // Fires on the duplicate caller's side of singleflight::Group::Do.
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) { second_reader_joined = true; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    StatusOr<TabletMetadataPtr> result_a = Status::InternalError("not run");
+    StatusOr<TabletMetadataPtr> result_b = Status::InternalError("not run");
+    std::thread reader_a([&]() { result_a = read_v1_shared_first(_tablet_manager, tablet_a, /*fill_cache=*/false); });
+    auto deadline = std::chrono::steady_clock::now() + kDeadline;
+    while (!first_read_in_progress && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (!first_read_in_progress) {
+        reader_a.join();
+        FAIL() << "first reader never reached the remote read";
+    }
+    std::thread reader_b([&]() { result_b = read_v1_shared_first(_tablet_manager, tablet_b, /*fill_cache=*/false); });
+    reader_a.join();
+    reader_b.join();
+
+    EXPECT_TRUE(second_reader_joined) << "second reader did not join the in-flight read";
+    ASSERT_OK(result_a.status());
+    ASSERT_OK(result_b.status());
+    EXPECT_EQ(tablet_a, result_a.value()->id());
+    EXPECT_EQ(tablet_b, result_b.value()->id());
+    EXPECT_EQ(1, remote_reads.load());
+}
+
+// Regression guard for the ordering invariant in a mixed-index directory. A rollup / schema-change
+// shadow index always keeps per-tablet version-1 objects, and shares a storage path with a base index
+// that may own a shared version-1 object whose name carries no index discriminator. An unhinted
+// version-1 read must therefore try the tablet's OWN key first: resolving the base tablet through the
+// shared object must leave the shadow tablet reading its own key and its own schema. Serving it the
+// shared object instead would succeed and silently return the base index's schema.
+TEST_F(LakeTabletManagerTest, shared_initial_read_does_not_affect_other_index) {
+    auto base_tablet = next_id();
+    auto shadow_tablet = next_id();
+
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(base_tablet);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(base_tablet);
+    shared->set_version(1);
+    shared->mutable_schema()->set_id(1111);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    const auto shadow_location = _tablet_manager->tablet_metadata_location(shadow_tablet, 1);
+    auto shadow = std::make_shared<TabletMetadata>();
+    shadow->set_id(shadow_tablet);
+    shadow->set_version(1);
+    shadow->mutable_schema()->set_id(4242);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shadow));
+    _tablet_manager->metacache()->erase(shadow_location);
+
+    // The base tablet resolves through the unhinted last-resort fallback.
+    ASSIGN_OR_ABORT(auto base_meta, _tablet_manager->get_tablet_metadata(base_tablet, 1, read_opts(false)));
+    EXPECT_EQ(base_tablet, base_meta->id());
+    EXPECT_EQ(1111, base_meta->schema().id());
+
+    // The shadow tablet still reads its OWN key and keeps its own schema.
+    MetadataReadRecorder reads;
+    ASSIGN_OR_ABORT(auto shadow_meta, _tablet_manager->get_tablet_metadata(shadow_tablet, 1, read_opts(false)));
+    EXPECT_EQ(shadow_tablet, shadow_meta->id());
+    EXPECT_EQ(4242, shadow_meta->schema().id());
+    EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_metadata_filename(shadow_tablet, 1)));
+    EXPECT_EQ(0UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
+}
+
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
@@ -1161,6 +1794,39 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
     // Same contract on the single-tablet (bundle) read path.
     res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
     EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// Each remote metadata read that returns NotFound is counted, including
+// fallback reads; hits must leave the metric alone.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    // A missing version 2 probes both the per-tablet metadata object and the
+    // bundled metadata fallback in remote storage.
+    auto res = _tablet_manager->get_tablet_metadata(next_id(), 2);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->get_tablet_metadata(tablet_id, 2).status());
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+}
+
+// The bundle file is the other location a tablet's metadata can live in, so the
+// bulk bundle reader used by vacuum shares the same accounting.
+TEST_F(LakeTabletManagerTest, get_metas_from_bundle_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    auto missing_bundle = _tablet_manager->bundle_tablet_metadata_location(next_id(), 2);
+    auto res = lake::TabletManager::get_metas_from_bundle_tablet_metadata(missing_bundle);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 1, not_found_metric.value());
 }
 
 // With a durable copy present, skip_meta_cache reads it from storage (not the
@@ -1595,6 +2261,167 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_checksum) {
     }
 }
 
+// A tablet page that fails verification may come from a read that mixed locally cached blocks of one
+// write of the bundle with remote blocks of another, while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the page was verified again against
+// a fresh read, and leaving the damage in place proves a bundle that stays bad is still reported.
+// Covers both readers of a bundle, the one for a single tablet and the one for every tablet at once,
+// and each way a page fails verification.
+TEST_F(LakeTabletManagerTest, bundle_readers_reread_corrupted_page) {
+    lake::ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    auto fs = FileSystem::Default();
+    auto overwrite = [&](const std::string& path, const std::string& content) {
+        ASSERT_OK(fs->delete_file(path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    auto read_file = [&](const std::string& path) {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        return content;
+    };
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    // Writes a one-tablet bundle for |tablet_id| at version 2.
+    auto write_bundle = [&](int64_t tablet_id) {
+        TabletMetadataPB metadata;
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+        metadata.mutable_schema()->CopyFrom(schema_pb);
+        (*metadata.mutable_historical_schemas())[10].CopyFrom(schema_pb);
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(tablet_id, metadata);
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+    };
+
+    std::string bundle_path;
+    std::string intact_content;
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(bundle_path, intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+
+    struct Reader {
+        const char* name;
+        std::function<StatusOr<TabletMetadataPtr>(int64_t tablet_id)> read;
+    };
+    const std::vector<Reader> readers = {
+            {"single tablet", [&](int64_t tablet_id) { return _tablet_manager->get_tablet_metadata(tablet_id, 2); }},
+            {"all tablets",
+             [&](int64_t) -> StatusOr<TabletMetadataPtr> {
+                 ASSIGN_OR_RETURN(auto metas, lake::TabletManager::get_metas_from_bundle_tablet_metadata(bundle_path));
+                 if (metas.size() != 1) {
+                     return Status::InternalError(fmt::format("expect 1 tablet in the bundle, got {}", metas.size()));
+                 }
+                 return metas[0];
+             }},
+    };
+
+    for (bool checksum : {true, false}) {
+        config::lake_enable_protobuf_file_checksum = checksum;
+        auto tablet_id = next_id();
+        bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, 2);
+        write_bundle(tablet_id);
+        intact_content = read_file(bundle_path);
+        ASSIGN_OR_ABORT(auto footer, lake::TabletManager::parse_bundle_tablet_metadata(bundle_path, intact_content));
+        const auto& page = footer->tablet_meta_pages().at(tablet_id);
+
+        // Garbles only this tablet's page; the page is tiny once the schema is stripped, so a
+        // fixed-size overwrite would spill into the footer.
+        std::string garbled_content = intact_content;
+        garbled_content.replace(page.offset(), page.size(), page.size(), static_cast<char>(0xFF));
+        // Points the page past the end of the file with an offset that makes offset + size wrap around.
+        std::string beyond_end_content;
+        {
+            auto bad_footer = *footer;
+            (*bad_footer.mutable_tablet_meta_pages())[tablet_id].set_offset(std::numeric_limits<uint64_t>::max());
+            std::string footer_bytes;
+            ASSERT_TRUE(bad_footer.SerializeToString(&footer_bytes));
+            uint64_t size_field = decode_fixed64_le(
+                    (const uint8_t*)(intact_content.data() + intact_content.size() - sizeof(uint64_t)));
+            const uint64_t footer_size = size_field & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+            const size_t tail_size = sizeof(uint64_t) + (checksum ? sizeof(uint32_t) : 0);
+            beyond_end_content = intact_content.substr(0, intact_content.size() - tail_size - footer_size);
+            beyond_end_content.append(footer_bytes);
+            size_field = footer_bytes.size();
+            if (checksum) {
+                put_fixed32_le(&beyond_end_content,
+                               olap_adler32(ADLER32_INIT, footer_bytes.data(), footer_bytes.size()));
+                size_field |= LAKE_BUNDLE_META_CHECKSUM_FLAG;
+            }
+            put_fixed64_le(&beyond_end_content, size_field);
+        }
+
+        struct Damage {
+            const char* name;
+            const std::string& content;
+            const char* error;
+        };
+        const std::vector<Damage> damages = {
+                {"garbled page", garbled_content, checksum ? "mismatched checksum of tablet" : "deserialized tablet"},
+                {"page beyond the end", beyond_end_content, "too small"},
+        };
+        for (const auto& damage : damages) {
+            for (const auto& reader : readers) {
+                SCOPED_TRACE(fmt::format("{} bundle, {}, {} reader", checksum ? "checksummed" : "legacy", damage.name,
+                                         reader.name));
+                // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+                config::lake_clear_corrupted_cache_meta = false;
+                restore_on_drop = true;
+                cache_drops = 0;
+                overwrite(bundle_path, damage.content);
+                _tablet_manager->metacache()->prune();
+                auto res = reader.read(tablet_id);
+                ASSERT_TRUE(res.status().is_corruption()) << res.status();
+                EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr(damage.error));
+                EXPECT_EQ(0, cache_drops);
+
+                // The damage is gone after the drop, so the second read succeeds.
+                config::lake_clear_corrupted_cache_meta = true;
+                _tablet_manager->metacache()->prune();
+                res = reader.read(tablet_id);
+                ASSERT_OK(res.status());
+                EXPECT_EQ(tablet_id, res.value()->id());
+                EXPECT_EQ(2, res.value()->version());
+                EXPECT_EQ(1, cache_drops);
+
+                // The damage is still there after the drop, so the second read reports it.
+                restore_on_drop = false;
+                cache_drops = 0;
+                overwrite(bundle_path, damage.content);
+                _tablet_manager->metacache()->prune();
+                res = reader.read(tablet_id);
+                ASSERT_TRUE(res.status().is_corruption()) << res.status();
+                EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr(damage.error));
+                EXPECT_EQ(1, cache_drops);
+            }
+        }
+    }
+}
+
 namespace {
 class PartitionedLocationProvider : public lake::LocationProvider {
 public:
@@ -1814,6 +2641,62 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     EXPECT_EQ(st.value()->num_columns(), 2);
     EXPECT_EQ(st.value()->column(0).name(), "c0");
     EXPECT_EQ(st.value()->column(1).name(), "c1");
+}
+
+// A version-1 read without a version-1 file resolves the tablet's shard to build the metadata. StarMgr
+// answers NOT_EXIST for a dropped shard, which must read as NotFound like every other version of the
+// tablet; failures that may be transient must not.
+TEST_F(LakeTabletManagerTest, resolve_shard_properties) {
+    using ShardInfoOr = absl::StatusOr<staros::starlet::ShardInfo>;
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
+
+    int64_t table_id = 0;
+    int64_t partition_id = 0;
+    int64_t index_id = 0;
+
+    // StarMgr no longer has the shard.
+    auto dropped_id = next_id();
+    auto not_exist = "shard " + std::to_string(dropped_id) + " not exist.";
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(dropped_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::NotFoundError(not_exist))));
+    auto st = lake::TabletManager::resolve_shard_properties(dropped_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_not_found()) << st;
+    EXPECT_NE(std::string::npos, st.message().find(not_exist)) << st;
+
+    // Starlet is not ready yet.
+    auto unavailable_id = next_id();
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(unavailable_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::UnavailableError("starlet is still not ready!"))));
+    st = lake::TabletManager::resolve_shard_properties(unavailable_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+
+    // The StarMgr RPC failed.
+    auto timeout_id = next_id();
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(timeout_id))
+            .WillOnce(::testing::Return(ShardInfoOr(absl::DeadlineExceededError("grpc.GetShard error"))));
+    st = lake::TabletManager::resolve_shard_properties(timeout_id, &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+
+    // The shard resolves.
+    auto live_id = next_id();
+    staros::starlet::ShardInfo shard_info;
+    shard_info.id = live_id;
+    shard_info.properties.emplace("tableId", "11");
+    shard_info.properties.emplace("partitionId", "12");
+    shard_info.properties.emplace("indexId", "13");
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(live_id)).WillOnce(::testing::Return(shard_info));
+    ASSERT_OK(lake::TabletManager::resolve_shard_properties(live_id, &table_id, &partition_id, &index_id));
+    EXPECT_EQ(11, table_id);
+    EXPECT_EQ(12, partition_id);
+    EXPECT_EQ(13, index_id);
+
+    // No StarOS worker at all.
+    set_staros_worker_for_test(nullptr);
+    st = lake::TabletManager::resolve_shard_properties(next_id(), &table_id, &partition_id, &index_id);
+    ASSERT_TRUE(st.is_not_found()) << st;
 }
 
 TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
@@ -2156,6 +3039,36 @@ TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all
     // unit tests (the StarOS worker is null), so the first candidate is picked immediately.
     std::vector<int64_t> candidates{300, 301, 302};
     EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+// A tablet whose shard info its owner handed over resolves without a starmgr RPC too, so it is the
+// anchor when no candidate is local. A local candidate still wins.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_prefers_borrowed_over_remote) {
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
+
+    StarOSWorker owner;
+    staros::starlet::ShardInfo borrowed;
+    borrowed.id = 401;
+    borrowed.hash_code = 0;
+    ASSERT_TRUE(owner.add_shard(borrowed).ok());
+    auto exported = owner.export_shard_info(401);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+    _tablet_manager->borrow_shard_info(*exported);
+    // The tablet manager only hands out shard infos of tablets this node owns.
+    EXPECT_TRUE(_tablet_manager->export_shard_info(401).empty());
+
+    std::vector<int64_t> candidates{400, 401, 402};
+    EXPECT_EQ(401, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+
+    staros::starlet::ShardInfo local;
+    local.id = 402;
+    local.hash_code = 0;
+    ASSERT_TRUE(worker->add_shard(local).ok());
+    EXPECT_EQ(402, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+    EXPECT_FALSE(_tablet_manager->export_shard_info(402).empty());
 }
 
 #endif // USE_STAROS

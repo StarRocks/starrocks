@@ -108,6 +108,7 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -160,6 +161,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -175,6 +177,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
@@ -195,6 +198,7 @@ import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -207,6 +211,13 @@ public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
     private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
+    // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
+    private static final int MIN_UT_PORT = 10000;
+    private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
+    // Serializes findValidPort() in this JVM. Two callers could otherwise pick the same port, both pass the
+    // RESERVED_PORTS check, and the second tryLock() on its file would throw OverlappingFileLockException.
+    // A dedicated lock rather than the class monitor, which createMinStarRocksCluster() holds while the FE starts.
+    private static final Object PORT_LOCK = new Object();
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -393,6 +404,10 @@ public class UtFrameUtils {
             }
             FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
+        } catch (MockedFrontend.FeStartException e) {
+            // Without a running FE the caller would only fail later with an unrelated error, such as an NPE on a
+            // missing edit log, so fail it now with the cause.
+            throw new IllegalStateException("failed to start the mocked fe", e);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -485,50 +500,110 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backendId);
     }
 
+    /**
+     * Returns a free port reserved for this JVM. Ports from the kernel's ephemeral range are also handed out to
+     * sockets bound to port 0 and to outgoing connections, so such a port can be taken between findValidPort()
+     * releasing it and the caller binding it, e.g. BDB then fails with "Address already in use". So pick ports
+     * below the ephemeral range first, and fall back to the ephemeral range only if none is free there.
+     */
     public static int findValidPort() {
+        synchronized (PORT_LOCK) {
+            return findValidPortLocked();
+        }
+    }
+
+    private static int findValidPortLocked() {
         File portDir = getUtPortDir();
         if (!portDir.exists() && !portDir.mkdirs()) {
             throw new IllegalStateException("Failed to create ut port dir: " + portDir.getAbsolutePath());
         }
+        for (int i = 0; i < 200 && MIN_UT_PORT < EPHEMERAL_PORT_LOW; i++) {
+            int port = ThreadLocalRandom.current().nextInt(MIN_UT_PORT, EPHEMERAL_PORT_LOW);
+            // reserve first so that another JVM checking the same port at the same time skips it
+            if (reservePort(port, portDir)) {
+                if (isPortFree(port)) {
+                    return logFoundPort(port, portDir);
+                }
+                releasePort(port);
+            }
+        }
         for (int i = 0; i < 50; i++) {
+            int port;
             try (ServerSocket socket = new ServerSocket(0)) {
-                socket.setReuseAddress(true);
-                int port = socket.getLocalPort();
-                if (RESERVED_PORTS.containsKey(port)) {
-                    continue;
-                }
-
-                File file = new File(portDir, String.valueOf(port));
-                RandomAccessFile accessFile = new RandomAccessFile(file, "rw");
-                FileLock lock;
-                try {
-                    lock = accessFile.getChannel().tryLock();
-                } catch (Exception e) {
-                    accessFile.close();
-                    throw e;
-                }
-                if (lock == null) {
-                    accessFile.close();
-                    continue;
-                }
-
-                PortReservation reservation = new PortReservation(accessFile, lock);
-                PortReservation existing = RESERVED_PORTS.putIfAbsent(port, reservation);
-                if (existing != null) {
-                    reservation.close();
-                    continue;
-                }
-
-                System.out.println("find valid port " + port + " at " + new Date()
-                        + ", lock dir: " + portDir.getAbsolutePath());
-                return port;
-            } catch (Exception e) {
+                port = socket.getLocalPort();
+            } catch (IOException e) {
                 e.printStackTrace();
                 throw new IllegalStateException("Could not find a free TCP/IP port " + e.getMessage());
+            }
+            if (reservePort(port, portDir)) {
+                return logFoundPort(port, portDir);
             }
         }
 
         throw new RuntimeException("can not find valid port");
+    }
+
+    private static int logFoundPort(int port, File portDir) {
+        System.out.println("find valid port " + port + " at " + new Date()
+                + ", lock dir: " + portDir.getAbsolutePath());
+        return port;
+    }
+
+    // Reserves the port across the JVMs that share portDir. Returns false if it is already reserved.
+    private static boolean reservePort(int port, File portDir) {
+        if (RESERVED_PORTS.containsKey(port)) {
+            return false;
+        }
+        try {
+            RandomAccessFile accessFile = new RandomAccessFile(new File(portDir, String.valueOf(port)), "rw");
+            FileLock lock;
+            try {
+                lock = accessFile.getChannel().tryLock();
+            } catch (Exception e) {
+                accessFile.close();
+                throw e;
+            }
+            if (lock == null) {
+                accessFile.close();
+                return false;
+            }
+
+            PortReservation reservation = new PortReservation(accessFile, lock);
+            if (RESERVED_PORTS.putIfAbsent(port, reservation) != null) {
+                reservation.close();
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new IllegalStateException("Could not reserve TCP/IP port " + port + ": " + e.getMessage());
+        }
+    }
+
+    private static void releasePort(int port) {
+        PortReservation reservation = RESERVED_PORTS.remove(port);
+        if (reservation != null) {
+            reservation.close();
+        }
+    }
+
+    private static boolean isPortFree(int port) {
+        try (ServerSocket socket = new ServerSocket()) {
+            socket.bind(new InetSocketAddress(port));
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static int readEphemeralPortLow() {
+        try {
+            String range = new String(Files.readAllBytes(Paths.get("/proc/sys/net/ipv4/ip_local_port_range"))).trim();
+            return Integer.parseInt(range.split("\\s+")[0]);
+        } catch (Exception e) {
+            // Not Linux. 32768 is the Linux default, and is below the 49152-65535 range that macOS uses.
+            return 32768;
+        }
     }
 
     private static File getUtPortDir() {
@@ -1368,6 +1443,7 @@ public class UtFrameUtils {
         }
 
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+        rejectUncapturedAIProviders(statementBase);
 
         if (statementBase instanceof QueryStatement) {
             return getQueryExecPlan((QueryStatement) statementBase, connectContext);
@@ -1383,10 +1459,20 @@ public class UtFrameUtils {
         tearMockEnv();
     }
 
+    private static void rejectUncapturedAIProviders(StatementBase statement) {
+        if (ResolvedAIFunctionDetector.findAll(statement).stream()
+                .anyMatch(call -> call.getFn().getAiModelSource() == TAIModelSource.PROVIDER)) {
+            throw new SemanticException("Query dump replay does not support named AI providers");
+        }
+    }
+
     public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
             throws Exception {
         String q = initMockEnv(connectContext, dumpInfo);
         try {
+            // Dumps do not capture AI model metadata. Never resolve an uncaptured dependency from live state.
+            StatementBase statement = parseStmtWithNewParser(q, connectContext);
+            rejectUncapturedAIProviders(statement);
             return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
         } finally {
             tearMockEnv();
@@ -1413,6 +1499,7 @@ public class UtFrameUtils {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 
+            rejectUncapturedAIProviders(statementBase);
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);
 

@@ -1,0 +1,81 @@
+---
+displayed_sidebar: docs
+description: "Use AI functions in SQL and reduce AI input rows with TopN pushdown."
+sidebar_position: 10
+---
+
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
+# AI functions
+
+<Experimental />
+
+AI functions call configured model services from SQL. For text generation, see [ai_complete](ai_complete.md).
+
+## AI function privileges {/* #ai-function-privileges */}
+
+AI-function execution requires `USAGE ON AI FUNCTION <function_name>` or `USAGE ON ALL AI FUNCTIONS`. Provider-backed calls additionally require `USAGE` on the selected AI PROVIDER. Function and provider privileges do not imply each other.
+
+These grants cover `ai_complete`, `ai_sentiment`, `ai_classify`, `ai_extract`, `ai_fix_grammar`, `ai_redact`, `ai_translate`, `ai_similarity`, `ai_summarize`, `ai_filter`, `ai_embed`, `ai_custom_query`, and `ai_custom_embedding`. Overloads share the same family grant.
+
+`ON ALL AI FUNCTIONS` covers current and future public AI function families. With `WITH GRANT OPTION`, it also permits granting usage on individual families or all families. Revoking a named grant does not remove an independently held wildcard grant, and revoking the wildcard does not remove separately granted named privileges.
+
+The `public` role receives no implicit AI grant. The built-in `root` and `db_admin` roles have global AI-function usage and usage on all providers. Existing table, column, and view privileges still apply. Reading a view does not grant permission to execute its AI functions.
+
+```sql
+GRANT USAGE ON AI FUNCTION ai_complete TO ROLE ai_user;
+GRANT USAGE ON ALL AI FUNCTIONS TO ROLE ai_user;
+GRANT USAGE ON AI PROVIDER support_chat TO ROLE ai_user;
+GRANT USAGE ON ALL AI PROVIDERS TO ROLE ai_admin;
+```
+
+Provider names are exact and case-sensitive. Grants follow the provider UUID: ALTER retains grants, but dropping and recreating a provider with the same name does not. `ON ALL AI PROVIDERS` also covers future providers. A single provider named `*` cannot be granted separately; use the explicit ALL syntax when appropriate.
+
+SYSTEM functions keep their existing configuration route and do not require a provider grant. Provider CREATE, ALTER, DROP, SET DEFAULT, SHOW, and DESC still require SYSTEM OPERATE; USAGE does not authorize those management operations.
+
+Revoking function or provider privileges applies to subsequent executions and replanning, including prepared EXECUTE. It does not cancel an in-flight query. This feature adds native authorization checks; external access controllers that do not implement AI checks deny these operations.
+
+Upgrade every FE before enabling these grants. Older FEs do not enforce these object types and may reject metadata containing them. Do not ignore unknown privilege metadata to work around an incompatible downgrade. Existing non-administrator users must receive explicit AI privileges after upgrading.
+
+### Execution context and limitations
+
+AI function and provider privileges are checked against the current execution context, like UDF privileges. Task execution follows the existing task framework's authorization settings, including `mv_use_creator_based_authorization` (default `true`). For creator-based and root-based execution identities, see [RUN_AS_USER](../../information_schema/materialized_view_refresh_jobs.md).
+
+The existing [SQL placement restrictions](ai_complete.md#limitations-and-security) also apply. LOAD expressions and synchronous materialized-view expressions do not support AI calls because their scalar execution paths cannot execute these functions.
+
+## Reducing AI input rows {/* #reducing-ai-input-rows */}
+
+For an `ORDER BY ... LIMIT` query with a positive `LIMIT` and no `OFFSET`, StarRocks can select candidate rows before
+evaluating an AI projection when the ordering columns pass through that projection and any intervening ordinary
+Project unchanged.
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) selects the
+strategy for SQL `LIMIT N`:
+
+- `N` at or below the threshold (default `1000`): a global candidate TopN limits input to the rewritten AI projection
+  to at most `N` rows.
+- `N` above the threshold: a local candidate TopN limits input to that AI projection to at most `N` rows per fragment
+  instance, not per BE or pipeline driver.
+
+The global strategy can trade cross-instance AI parallelism for a global row bound. The local strategy avoids an
+additional global gather before AI execution, although local merging can reduce parallelism within an instance.
+Both retain the original TopN above the AI projection to preserve output order and limit. Use `EXPLAIN` to inspect
+the resulting plan.
+
+These bounds apply to the rewritten AI projection, not all AI work in a query: an inner nested AI call may still
+process more rows. They are not HTTP request or token limits. Pruned rows do not execute AI calls.
+
+The optimization does not move TopN below AI calls needed for ordering or filtering, cross existing limits or unsafe
+projection and predicate barriers, or apply to partitioned TopN, `RANK`, or `DENSE_RANK`.
+
+### Selecting the strategy
+
+The threshold supports `SET`, `SET GLOBAL` for future sessions, and statement-level `SET_VAR` hints without restarting.
+It does not affect queries without an AI projection. Setting it to `0` selects local-only pruning, not disabled pruning.
+
+```sql
+-- Use global pruning for LIMIT <= 1000, and local pruning for larger limits.
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- Use local-only pruning.
+SET ai_topn_pushdown_max_global_limit = 0;
+```

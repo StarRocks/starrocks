@@ -42,12 +42,11 @@ jdk_version() {
     echo "$result"
 }
 
-# Print a hard-to-miss banner for a deprecated JVM options config parameter.
-# The parameter is still honored, and still overrides JAVA_OPTS, so that upgrades
-# from older versions keep working, but it will be removed in a future release.
+# Print a hard-to-miss banner for a JVM options config parameter that is no
+# longer supported. The parameter is IGNORED: only JAVA_OPTS is honored.
 # Output goes to stderr so it is not lost if the caller only redirects stdout.
-# Usage: warn_deprecated_java_opts <component> <var_name> <conf_file>
-warn_deprecated_java_opts() {
+# Usage: warn_removed_java_opts <component> <var_name> <conf_file>
+warn_removed_java_opts() {
     local component=$1
     local var_name=$2
     local conf_file=$3
@@ -55,32 +54,33 @@ warn_deprecated_java_opts() {
 
 ################################################################################
 ###                                                                          ###
-###         ACTION REQUIRED: DEPRECATED CONFIGURATION PARAMETER              ###
+###       ACTION REQUIRED: UNSUPPORTED CONFIGURATION PARAMETER IGNORED       ###
 ###                                                                          ###
 ################################################################################
 ###
-### This DEPRECATED parameter is set and is in effect right now:
+### This parameter is set but is NO LONGER SUPPORTED, and is being IGNORED:
 ###   $var_name
 ###
 ### JAVA_OPTS is the only supported place to set JVM parameters.
 ###
-### $component still honors it for this start, so that upgrades from older
-### versions keep working, but support WILL BE REMOVED in an upcoming
-### StarRocks release. After that it is IGNORED WITHOUT ANY WARNING:
-### $component falls back to JAVA_OPTS, so every JVM parameter set only
-### here (heap size, GC, add-opens, kerberos, ...) SILENTLY STOPS TAKING
-### EFFECT and the process comes up with a different heap and GC setup.
-###
+### Every JVM parameter set only here (heap size, GC, add-opens, kerberos,
+### ...) IS NOT IN EFFECT for this start. $component is starting with
 EOF
     if [ ! -z "${JAVA_OPTS}" ] ; then
         cat >&2 << EOF
-### JAVA_OPTS is also set, and this parameter OVERRIDES IT COMPLETELY.
-### The two are NOT merged, your JAVA_OPTS value is being DISCARDED.
+### JAVA_OPTS instead, so its heap and GC setup may differ from what you
+### configured here.
+###
+EOF
+    else
+        cat >&2 << EOF
+### JAVA_OPTS instead, which is EMPTY, so it falls back to the built-in
+### default heap and GC setup.
 ###
 EOF
     fi
     cat >&2 << EOF
-### HOW TO FIX (before your next StarRocks upgrade):
+### HOW TO FIX:
 ###   1. Edit $conf_file
 ###   2. Move the JVM parameters into JAVA_OPTS, merging them by hand if
 ###      JAVA_OPTS already has a value.
@@ -212,5 +212,23 @@ check_and_update_max_processes() {
             echo "Warn: update max user processes failed, please refer to https://docs.starrocks.io/docs/deployment/environment_configurations/#max-user-processes"
         fi
     fi
+}
+
+# Kill the python UDF worker processes this instance spawned, then remove their sockets.
+# Workers live under $UDF_RUNTIME_DIR/pyworker, which is derived from this instance's
+# STARROCKS_HOME, so several instances on one host reap only their own. Their socket name
+# does not encode the worker pid, so they are matched by that directory in their command
+# line rather than by a pid parsed out of the file name -- which also keeps working when a
+# launcher sits between the instance and its workers. The directory is escaped before it
+# goes into the pattern: a deployment path may contain regex metacharacters.
+reap_python_udf_workers() {
+    local worker_dir="${UDF_RUNTIME_DIR}/pyworker"
+    if [[ -z "${UDF_RUNTIME_DIR}" || ! -d "$worker_dir" ]]; then
+        return 0
+    fi
+    local escaped_dir
+    escaped_dir=$(printf '%s' "${worker_dir}/" | sed 's/[][\\.*+?(){}|^$]/\\&/g')
+    pkill -9 -f "flight_server\.py .*${escaped_dir}" > /dev/null 2>&1
+    rm -rf "$worker_dir" > /dev/null 2>&1
 }
 

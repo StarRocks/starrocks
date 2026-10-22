@@ -30,9 +30,12 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
+#include "exprs/agg/coverage_window.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/ds_hll_count_distinct.h"
+#include "exprs/agg/ds_theta_combine.h"
 #include "exprs/agg/ds_theta_count_distinct.h"
+#include "exprs/agg/ds_theta_intersect_cond.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -201,6 +204,10 @@ public:
     template <LogicalType T>
     static AggregateFunctionPtr MakeThetaSketchAggregateFunction();
 
+    static AggregateFunctionPtr MakeThetaSketchCombineAggregateFunction();
+
+    static AggregateFunctionPtr MakeThetaSketchIntersectCondAggregateFunction();
+
     template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
@@ -228,6 +235,7 @@ public:
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
+    static AggregateFunctionPtr MakeCoverageWindowFunction();
 
     static AggregateFunctionPtr MakeRankWindowFunction();
 
@@ -437,6 +445,14 @@ AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeThetaSketchAggregateFunction() {
     return new ThetaSketchAggregateFunction<LT>();
+}
+
+inline AggregateFunctionPtr AggregateFactory::MakeThetaSketchCombineAggregateFunction() {
+    return new ThetaSketchCombineAggregateFunction();
+}
+
+inline AggregateFunctionPtr AggregateFactory::MakeThetaSketchIntersectCondAggregateFunction() {
+    return new ThetaSketchIntersectCondAggregateFunction();
 }
 
 template <LogicalType LT>

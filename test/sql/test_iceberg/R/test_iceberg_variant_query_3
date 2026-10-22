@@ -219,8 +219,8 @@ ORDER BY test_id;
 6	bigint_max_to_int_overflow	BIGINT	INT	-1	FAIL
 7	array_to_int	ARRAY	INT	None	PASS
 8	object_to_int	OBJECT	INT	None	PASS
-11	valid_numeric_string_to_int	STRING	INT	None	FAIL
-12	valid_negative_string_to_int	STRING	INT	None	FAIL
+11	valid_numeric_string_to_int	STRING	INT	123	PASS
+12	valid_negative_string_to_int	STRING	INT	-456	PASS
 -- !result
 SELECT 'Query 7: Validate numeric overflow handling for SMALLINT' AS test_description;
 -- result:

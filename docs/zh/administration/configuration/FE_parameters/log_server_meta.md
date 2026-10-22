@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当为 true 时，生成的 Log4j2 配置会将 ".gz" 后缀附加到轮转的审计日志文件名 (fe.audit.log.*) 中，以便 Log4j2 在轮转时生成压缩的 (.gz) 归档审计日志文件。此设置在 FE 启动期间在 Log4jConfig.initLogging 中读取，并应用于审计日志的 RollingFile appender；它仅影响轮转/归档文件，而不影响活动审计日志。由于该值在启动时初始化，因此更改它需要重启 FE 才能生效。与审计日志轮转设置 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) 一起使用。
 - 引入版本: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: 字符
+- 是否可变: Yes
+- 描述: 语句执行失败时，审计日志中 `ErrorMessage` 字段记录的最大长度，按 UTF-16 code unit 计算，因此基本多文种平面之外的字符（例如 emoji）按两个计。超长的错误信息会被截断，并追加 `... /* truncated, audit_log_error_message_max_length=<value> */`，该后缀本身不计入上限。设置为 `0` 表示不再记录错误信息，此时审计记录中不会出现该字段。当 `enable_sql_desensitize_in_log` 为 `true`，或 `enable_audit_sql` 为 `false` 时，同样不记录错误信息，因为错误信息会引用导致语句失败的具体值和出错的 token。
+- 引入版本: 4.2.0
+
 ### `audit_log_json_format`
 
 - 默认值: false
@@ -805,6 +814,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000
@@ -958,9 +976,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
-  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+  `/dump`、`/dump_starmgr`、`/service_id` 不在豁免范围内：无论该参数如何设置，都只允许已认证的管理员访问。认证方式可以是 HTTP Basic 认证，也可以是登录 FE Web 控制台后获得的会话 cookie。满足以下任一条件即视为管理员：通过登录时处于激活状态的角色拥有 SYSTEM 级 `NODE` 权限，例如将内置角色 `cluster_admin` 设为用户的默认角色（当 `activate_all_roles_on_login` 为 `true` 时，用户被授予的任意角色均可）；是 `root` 用户或拥有 `root` 角色；同时拥有 `db_admin` 和 `user_admin` 角色。
+
+  `/api/_meta_replay_state` 同样不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
+
+  受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
+### `enable_rest_bearer_authentication`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
+- 引入版本: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1196,7 +1227,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: No
-- 描述: 空闲客户端连接超时的时间长度。
+- 描述: 空闲客户端连接超时的时间长度。FE Thrift 服务器会关闭空闲达到该时长的客户端连接。因此，FE 连接池中通往其他 FE 的连接空闲达到该值的 80% 后，会在下次使用前被替换为新连接，避免在对端可能已经关闭的连接上发送请求。建议所有 FE 使用相同的取值。
 - 引入版本: -
 
 ### `thrift_rpc_max_body_size`
@@ -1223,8 +1254,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: No
-- 描述: 请求待处理队列的长度。如果 Thrift 服务器中正在处理的线程数超过 `thrift_server_max_worker_threads` 中指定的值，则新请求将添加到待处理队列。
+- 描述: 当 `thrift_server_max_worker_threads` 个工作线程全部繁忙时，可排队等待工作线程的连接数量。该值限定的是待处理队列能容纳多少连接，而非最终会处理多少连接：队列已满时到达的连接会被立即关闭，不再重试；已入队但等待时间超过 `thrift_server_queue_timeout_ms` 的连接，会在工作线程取到它时被直接关闭、不予处理。这两种情况分别由 `starrocks_fe_thrift_server_rejected_connections_total` 和 `starrocks_fe_thrift_server_expired_connections_total` 统计。
 - 引入版本: -
+
+### `thrift_server_queue_timeout_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: ms
+- 是否可变: Yes
+- 描述: 连接在被工作线程取走之前，可在 Thrift 服务器待处理队列中滞留的最长时间。超过该时间的连接将被直接关闭且不予处理，其前提是此时调用方已经放弃，继续处理只会占住工作线程，使其无法处理仍有人等待的请求。启用后，该值同时限定了突发流量过后队列排空所需的时间，无论此前堆积多深。
+
+  默认值 `0` 表示关闭该检查：无论滞留多久，所有排队连接都会被处理。默认关闭是因为上述前提并不适用于所有调用方，而排队中的连接并未携带服务端可读取的截止时间。各类调用方实际使用的超时相差四个数量级：FE 内部普通 RPC 在 `thrift_rpc_timeout_ms`（10 秒）后放弃；而从 Follower 转发到 Leader 的语句会等待会话执行超时加 `thrift_rpc_timeout_ms`——按 `query_timeout` 默认值约为 310 秒，按 `insert_timeout` 默认值约为 4 小时；BE 的 Stream Load 与事务提交 RPC 则等待 `stream_load_thrift_rpc_timeout_ms`（60 秒）与该导入任务 `timeout_second` 四分之一中的较大值。由于 `query_timeout`、`insert_timeout` 和 `timeout_second` 均可由用户设置且没有上限，不存在对所有集群都安全的固定值：任何短到足以加快恢复的超时，都可能在它本应缓解的饱和期间，切断客户端仍在等待的转发语句。
+
+  请按集群启用，取值应高于该集群客户端实际依赖的最大截止时间——依据该集群的 `query_timeout` 与 `insert_timeout` 推导。每次丢弃都会计入 `starrocks_fe_thrift_server_expired_connections_total`，并输出一条标明对端地址、经过限流的 WARN 日志。无论是否启用该检查，`starrocks_fe_thrift_server_queue_wait_ms` 都会报告队列等待时间，可据此在启用前确定取值。
+- 引入版本: v4.2.0
 
 ## 元数据和集群管理
 
@@ -1654,6 +1698,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: LockChecker 前端守护程序（名为 "deadlock-checker"）执行的间隔（秒）。守护程序执行死锁检测和慢锁扫描；配置值乘以 1000 以设置计时器（毫秒）。减小此值可减少检测延迟但增加调度和 CPU 开销；增加此值可减少开销但延迟检测和慢锁报告。更改在运行时生效，因为守护程序每次运行都会重置其间隔。此设置与 `lock_checker_enable_deadlock_check`（启用死锁检查）和 `slow_lock_threshold_ms`（定义慢锁的构成）交互。
 - 引入版本: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- 默认值: 256
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: Lock Manager 用于分片元数据锁的哈希桶（即锁表）数量。每个资源按其资源 ID 映射到一个桶，每个桶由各自的互斥量保护，因此该值越大，操作不相关资源的加锁者之间的竞争越小，代价是略微增加内存占用。该值仅在创建 Lock Manager 时读取一次，因此修改后需重启 FE 才能生效。自 v4.1.0、v4.0.1 和 v3.5.8 起，默认值从 `32` 变更为 `256`。
+- 引入版本: v3.3.0
+
 ### `master_sync_policy`
 
 - 默认值: SYNC
@@ -1687,6 +1740,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Follower 和 Observer FE 上的元数据可以比 Leader FE 上的元数据落后最长时间。单位：秒。如果超过此持续时间，非 Leader FE 将停止提供服务。
 - 引入版本: -
 
+### `meta_freshness_check_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
+- 引入版本: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- 默认值: 30
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
+- 引入版本: v4.2
+
 ### `meta_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1703,6 +1774,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否忽略未知日志 ID。当 FE 回滚时，早期版本的 FE 可能无法识别某些日志 ID。如果值为 `TRUE`，FE 将忽略未知日志 ID。如果值为 `FALSE`，FE 将退出。
+- 引入版本: -
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- 默认值: 128L * 1024 * 1024 (134217728)
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: FE 用于 gzip 和 zlib 压缩的堆外缓冲区的总大小上限，例如查询 profile 存入 `ProfileManager` 之前的压缩。使用堆外缓冲区进行压缩，可以避免 JVM 在压缩期间阻塞垃圾回收；否则在堆中仍有可回收空间时，内存分配也可能因 `OutOfMemoryError` 而失败。无论数据大小，每个进行中的压缩都使用两个 256 KB 的缓冲区，因此默认值允许同时进行 256 个压缩。当在此上限内没有可用的缓冲区时，数据会像之前一样在堆上压缩。运行时调小该值，会在缓冲区归还时生效。设置为 `0` 即关闭堆外压缩：所有数据改为在堆上分小块压缩，已分配的堆外缓冲区会被释放。
 - 引入版本: -
 
 ### `profile_info_format`
@@ -1777,7 +1857,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
+- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次重试前，执行器会先随机等待一段时间再重新打开连接：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止。这样，同时断开连接的多个调用方不会在同一时刻集中重连。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
 - 引入版本: v3.2.0
 
 ### `thrift_rpc_strict_mode`

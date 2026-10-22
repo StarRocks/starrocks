@@ -1,0 +1,90 @@
+-- name: test_lookup_string_privilege
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_dict(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
+-- result:
+-- !result
+insert into t_dict values ('k1', 'v1'), ('k2', 'v2');
+-- result:
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+-- result:
+v1
+-- !result
+create user if not exists u1_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u1_${uuid0};
+-- result:
+-- !result
+create role if not exists r_${uuid0};
+-- result:
+-- !result
+grant select on table db_${uuid0}.t_dict to role r_${uuid0};
+-- result:
+-- !result
+create user if not exists u2_${uuid0};
+-- result:
+-- !result
+grant impersonate on user root to u2_${uuid0};
+-- result:
+-- !result
+grant r_${uuid0} to user u2_${uuid0};
+-- result:
+-- !result
+execute as u1_${uuid0} with no revert;
+-- result:
+-- !result
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
+-- result:
+None
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant select on table db_${uuid0}.t_dict to user u1_${uuid0};
+-- result:
+-- !result
+execute as u1_${uuid0} with no revert;
+-- result:
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+-- result:
+v1
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as u2_${uuid0} with no revert;
+-- result:
+-- !result
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k2', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
+-- result:
+None
+-- !result
+set role r_${uuid0};
+-- result:
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
+-- result:
+v2
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user u1_${uuid0};
+-- result:
+-- !result
+drop user u2_${uuid0};
+-- result:
+-- !result
+drop role r_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

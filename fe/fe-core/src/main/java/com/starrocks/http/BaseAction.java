@@ -36,6 +36,8 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthChannel;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
@@ -100,15 +102,35 @@ public abstract class BaseAction implements IAction {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
     }
 
+    /**
+     * Emit the {@code WWW-Authenticate} challenges for a 401. Both schemes are advertised because
+     * every FE HTTP endpoint accepts both Basic and Bearer; Basic comes first so a client that only
+     * parses the first challenge behaves exactly as it did before Bearer existed.
+     *
+     * <p>The failure reason is deliberately not disclosed (RFC 6750 §3) - malformed / expired /
+     * signature-mismatch all read as {@code invalid_token} to the client, and the real reason only
+     * goes to the log and the failure-reason metric. Never interpolate the token or password into
+     * these headers.
+     *
+     * <p>All FE 401 exits go through here (BaseAction / RestBaseAction / WebBaseAction) so the
+     * three cannot drift apart again; the BE gate has its own copy of the same contract.
+     */
+    protected static void addAuthChallenges(BaseResponse response) {
+        response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"StarRocks\"");
+        response.addCustomHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(),
+                "Bearer realm=\"StarRocks\", error=\"invalid_token\"");
+    }
+
     @Override
     public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}, exception: {}", request.getRequest().uri(), DebugUtil.getStackTrace(e));
+            LOG.warn("fail to process url: {}, exception: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    DebugUtil.getStackTrace(e));
             if (e instanceof AccessDeniedException) {
-                response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+                addAuthChallenges(response);
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
             } else {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
@@ -277,28 +299,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    public static class ActionAuthorizationInfo {
-        public String fullUserName;
-        public String remoteIp;
-        public String password;
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("user: ").append(fullUserName).append(", remote ip: ").append(remoteIp);
-            sb.append(", password: ").append(password);
-            return sb.toString();
-        }
-
-        public static ActionAuthorizationInfo of(String fullUserName, String password, String remoteIp) {
-            ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-            authInfo.fullUserName = fullUserName;
-            authInfo.remoteIp = remoteIp;
-            authInfo.password = password;
-            return authInfo;
-        }
-    }
-
     // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
@@ -315,95 +315,94 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // return currentUserIdentity from StarRocks auth
-    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
-        try {
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
-        } catch (AuthenticationException e) {
-            throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
+    /**
+     * Parse the {@code Authorization} header into a protocol-neutral {@link AuthCredentials},
+     * supporting both Basic (plaintext password) and Bearer (token). Returns {@code null} when the
+     * header is missing or its scheme is unknown / malformed (the caller then returns 401).
+     */
+    public AuthCredentials parseAuthCredentials(BaseRequest request) {
+        String header = request.getAuthorizationHeader();
+        if (Strings.isNullOrEmpty(header)) {
+            return null;
         }
-    }
-
-    public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)
-            throws AccessDeniedException {
-        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-        try {
-            if (!parseAuthInfo(request, authInfo)) {
-                LOG.info("parse auth info failed, url {}", request.getRequest().uri());
-                throw new AccessDeniedException("Need auth information.");
-            }
-            LOG.debug("get auth info: {}", authInfo);
-            return authInfo;
-        } catch (Exception e) {
-            throw new AccessDeniedException(e.getMessage());
-        }
-    }
-
-    private boolean parseAuthInfo(BaseRequest request, ActionAuthorizationInfo authInfo) {
-        String encodedAuthString = request.getAuthorizationHeader();
-        if (Strings.isNullOrEmpty(encodedAuthString)) {
-            return false;
-        }
-        String[] parts = encodedAuthString.split(" ");
+        String[] parts = header.split(" ", 2);
         if (parts.length != 2) {
-            return false;
+            return null;
         }
-        encodedAuthString = parts[1];
-        ByteBuf buf = null;
-        ByteBuf decodeBuf = null;
-        try {
-            buf = Unpooled.copiedBuffer(ByteBuffer.wrap(encodedAuthString.getBytes()));
-
-            // The authString is a string connecting user-name and password with
-            // a colon(':')
-            decodeBuf = Base64.decode(buf);
-            String authString = decodeBuf.toString(CharsetUtil.UTF_8);
-            if (authString.isEmpty()) {
-                return false;
+        String host = request.getHostString();
+        if (parts[0].equalsIgnoreCase("Basic")) {
+            ByteBuf buf = null;
+            ByteBuf decodeBuf = null;
+            try {
+                buf = Unpooled.copiedBuffer(ByteBuffer.wrap(parts[1].getBytes()));
+                decodeBuf = Base64.decode(buf);
+                String authString = decodeBuf.toString(CharsetUtil.UTF_8);
+                if (authString.isEmpty()) {
+                    return null;
+                }
+                // Note that the password may contain a colon, so split on the first one only.
+                int index = authString.indexOf(':');
+                if (index == -1) {
+                    return null;
+                }
+                String fullUserName = authString.substring(0, index);
+                String[] elements = fullUserName.split("@");
+                if (elements.length == 2) {
+                    fullUserName = elements[0];
+                }
+                return AuthCredentials.ofPassword(fullUserName, authString.substring(index + 1), AuthChannel.HTTP, host);
+            } finally {
+                if (buf != null) {
+                    buf.release();
+                }
+                if (decodeBuf != null) {
+                    decodeBuf.release();
+                }
             }
-            // Note that password may contain colon, so can not simply use a
-            // colon to split.
-            int index = authString.indexOf(":");
-            if (index == -1) {
-                return false;
-            }
-            authInfo.fullUserName = authString.substring(0, index);
-            final String[] elements = authInfo.fullUserName.split("@");
-            if (elements.length == 2) {
-                authInfo.fullUserName = elements[0];
-            }
-            authInfo.password = authString.substring(index + 1);
-            authInfo.remoteIp = request.getHostString();
-        } finally {
-            // release the buf and decode buf after using Unpooled.copiedBuffer
-            // or it will get memory leak
-            if (buf != null) {
-                buf.release();
-            }
-
-            if (decodeBuf != null) {
-                decodeBuf.release();
-            }
+        } else if (parts[0].equalsIgnoreCase("Bearer")) {
+            return AuthCredentials.ofBearer(parts[1].trim(), AuthChannel.HTTP, host);
         }
-        return true;
+        return null;
     }
 
-    // Refer to {@link #parseAuthInfo(BaseRequest, ActionAuthorizationInfo)}
-    public static ActionAuthorizationInfo parseAuthInfo(String fullUserName, String password, String host) {
-        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
-        final String[] elements = fullUserName.split("@");
-        if (elements.length == 2) {
-            authInfo.fullUserName = elements[0];
-        } else {
-            authInfo.fullUserName = fullUserName;
+    /**
+     * Authenticate onto the caller's own {@link ConnectContext}.
+     *
+     * <p>Use this whenever anything downstream authorizes: authentication resolves the user's
+     * groups and the roles those groups map to onto the context it is handed. A user that comes
+     * from a security integration owns no roles of its own - every privilege it has arrives that
+     * way - so authorizing on a different context would see an identity with no roles at all.
+     *
+     */
+    public static void checkCredential(ConnectContext ctx, AuthCredentials cred) throws AccessDeniedException {
+        if (cred == null) {
+            throw new AccessDeniedException("Need auth information.");
         }
-        authInfo.password = password;
-        authInfo.remoteIp = host;
+        try {
+            AuthenticationHandler.authenticate(ctx, cred);
+        } catch (AuthenticationException e) {
+            // Do not echo the credential or the precise failure reason back to the client.
+            throw new AccessDeniedException("Access denied");
+        }
+    }
 
-        LOG.debug("Parse result for the input [{} {} {}]: {}", fullUserName, password, host, authInfo);
-
-        return authInfo;
+    /**
+     * The admin check of {@link #checkUserOwnsAdminRole} on the roles the context actually carries.
+     * A user from a security integration owns no roles of its own: everything it has arrives through
+     * its groups and sits on the context authentication wrote to, so that is what is looked at
+     * first; the user-owned lookup is the fallback for users the role table knows directly.
+     */
+    protected void checkAdminRole(ConnectContext ctx) throws AccessDeniedException {
+        UserIdentity currentUser = ctx.getCurrentUserIdentity();
+        Set<Long> roleIds = ctx.getCurrentRoleIds();
+        if (currentUser != null && roleIds != null
+                && (currentUser.equals(UserIdentity.ROOT)
+                || roleIds.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID)
+                || (roleIds.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID)
+                && roleIds.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+            return;
+        }
+        checkUserOwnsAdminRole(currentUser);
     }
 
     protected int checkIntParam(String strParam) {

@@ -141,7 +141,6 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
 template <LogicalType lt>
 struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
-    using LargeColumnType = RunTimeLargeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;
 
@@ -155,19 +154,11 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
     }
 
     static void append_values(Column* column, const ValueType& value, size_t count) {
-        if (UNLIKELY(column->is_large_binary())) {
-            Slice slice(value.data(), value.size());
-            down_cast<LargeColumnType*>(column)->append_value_multiple_times(&slice, count);
-        } else {
-            Slice slice(value.data(), value.size());
-            down_cast<ColumnType*>(column)->append_value_multiple_times(&slice, count);
-        }
+        Slice slice(value.data(), value.size());
+        down_cast<ColumnType*>(column)->append_value_multiple_times(&slice, count);
     }
 
     static RefType get_row_ref(const Column& column, size_t row) {
-        if (UNLIKELY(column.is_large_binary())) {
-            return down_cast<const LargeColumnType&>(column).get_slice(row);
-        }
         return down_cast<const ColumnType&>(column).get_slice(row);
     }
 

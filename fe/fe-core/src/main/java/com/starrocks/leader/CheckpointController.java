@@ -45,6 +45,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalType;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
@@ -93,6 +94,7 @@ public class CheckpointController extends LeaderDaemon {
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
+    private final JournalType journalType;
 
     // Package-private so same-package tests can assert on the cleared-on-demotion contract
     // without reflection.
@@ -121,6 +123,7 @@ public class CheckpointController extends LeaderDaemon {
         this.journal = journal;
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
+        this.journalType = belongToGlobalStateMgr ? JournalType.FE_META : JournalType.STAR_MGR;
         nodesToPushImage = new HashSet<>();
         this.clusterSnapshotInfo = null;
     }
@@ -491,7 +494,8 @@ public class CheckpointController extends LeaderDaemon {
         // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
         long minReplayedJournalId = getMinReplayedJournalId();
         long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
-        journal.deleteJournals(deleteVersion + 1);
+        long minJournalId = journal.deleteJournalsAndGetMinJournalId(deleteVersion + 1);
+        MetricRepo.updateEditLogRetainedMinJournalId(journalType, minJournalId);
         LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
                 deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
 

@@ -27,6 +27,58 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 
 :::
 
+## 3.5.21
+
+リリース日: 2026年8月28日
+
+### 動作変更
+
+- 3.5.20 で行われた、Iceberg REST の vended-credential テーブルをキャッシュしその認証情報を更新し続ける変更を取り消しました。`branch-3.5` では、この改修によって REST メタデータの更新が Planner がトランザクション公開にも必要とするロックを保持している間に実行され得るようになり、応答の遅い Iceberg REST カタログに対する `INSERT OVERWRITE` トランザクションが数秒間 `COMMITTED` のまま `VISIBLE` にならない問題が発生していました。このキャッシュ動作は 4.x 系列では維持されます。 [#77039](https://github.com/StarRocks/starrocks/pull/77039)
+- 主キーテーブル上の GIN（転置）インデックスは、カラムモードの部分更新後に正しいセグメントから読み取るようになり、変更されていないベースセグメントの古いインデックスデータを返さなくなりました。 [#76271](https://github.com/StarRocks/starrocks/pull/76271)
+- Leader FE へ転送されたステートメントの監査ログは、Follower 側の未解決の名前ではなく、Leader が解決した完全修飾のテーブル関係（CTE を除く）を記録するようになりました。 [#76387](https://github.com/StarRocks/starrocks/pull/76387)
+- `ARRAY` / `MAP` コンストラクタ式は、展開後のサイズが 4 GB を超える結果を、静かにラップアラウンドして破損した値を返す代わりに、拒否するようになりました。 [#76419](https://github.com/StarRocks/starrocks/pull/76419)
+- OAuth2 クライアントクレデンシャルを使用する Iceberg REST カタログは、長期間の失敗の後にバックグラウンドのトークン更新セッションを自己修復するようになり、カタログがアクセストークンを永続的に更新できなくなることがなくなりました。 [#76457](https://github.com/StarRocks/starrocks/pull/76457)
+- External Scan のコンテキスト（例えば放棄された Spark/Flink コネクタの読み取り）は、期限切れとして回収される際にパイプラインフラグメントを正しくキャンセルするようになり、実行され続けることがなくなりました。 [#76535](https://github.com/StarRocks/starrocks/pull/76535)
+- External Scan の実行計画（Spark/Flink コネクタの読み取り）は `query_delivery_timeout` を設定するようになり、`QueryContext` が二度と到達しないフラグメントを無期限に待ち続けることがなくなりました。 [#76536](https://github.com/StarRocks/starrocks/pull/76536)
+- 整数配列に対する `array_difference()` は、`BIGINT` へ拡張する前に 32 ビット精度でオーバーフローしなくなり、実際の差分が `INT` の範囲外になる場合の誤った結果を修正しました。 [#76569](https://github.com/StarRocks/starrocks/pull/76569)
+- 非定数の除数を持つ除算式（例: `10 DIV c`）は単調であるとは見なされなくなり、ZoneMap ベースのプルーニングが空または誤った結果を返す問題を修正しました。 [#76744](https://github.com/StarRocks/starrocks/pull/76744)
+- 設定された圧縮コーデックは、フラット化された JSON、`ARRAY`、`MAP`、`STRUCT` 列の合成 null/offset サブカラムにも適用されるようになり、常に非圧縮の生ページとして書き込まれることがなくなりました。 [#76949](https://github.com/StarRocks/starrocks/pull/76949)
+- ロードのクォーラム選定において、`DECOMMISSION` 状態のレプリカがロードのプライマリとして選ばれなくなりました。 [#77035](https://github.com/StarRocks/starrocks/pull/77035)
+- 論理ウィンドウ演算子を再構築するオプティマイザルールは `inputIsBinary` フラグを保持するようになり、ランキングウィンドウの事前集約に対するバイナリ入力マージ最適化が維持されるようになりました。 [#77058](https://github.com/StarRocks/starrocks/pull/77058)
+
+### 改善点
+
+- マテリアライズドビューを手動で `INACTIVE` から `ACTIVE` に設定した場合、全パーティションのリフレッシュを強制しなくなりました。スキーマ変更時にはメタデータバージョンマップのみがクリアされます。 [#57371](https://github.com/StarRocks/starrocks/pull/57371)
+- 大きな列容量制限チェックのエラーメッセージを改善しました。ユーザー向けエラーから内部診断情報（生ポインタ、オペレータダンプ）を削除し、共有ステータス文字列内の誤字も修正しました。 [#76303](https://github.com/StarRocks/starrocks/pull/76303)
+
+### バグ修正
+
+以下の問題を修正しました。
+
+- 循環したビュー定義への対策を追加しました。参照の循環（`v1` -> `v2` -> `v1`）を閉じる `ALTER VIEW` は、後続の `SELECT` が無限に再帰して `StackOverflowError` でクラッシュする代わりに、明確なエラーで拒否されるようになりました。 [#75033](https://github.com/StarRocks/starrocks/pull/75033)
+- NULL でない定数の ELSE 分岐を持つ CASE 式を通した集約のプッシュダウンを禁止し、そのルールが発火した際にプランニングが中断する（`IllegalStateException`）問題を修正しました。 [#75037](https://github.com/StarRocks/starrocks/pull/75037)
+- `CTEAnchor` の子が `ValueOperator` の場合に正しくプルーニングされるようになりました。 [#64491](https://github.com/StarRocks/starrocks/pull/64491)
+- Paimon の述語変換を修正しました。AND で結合された述語は、変換全体が null を返す代わりに、変換可能な not-null 分岐を保持するようになりました。 [#66038](https://github.com/StarRocks/starrocks/pull/66038)
+- Arrow Flight の Prepared Statement のスキーマが、実際の `NOT NULL` 定義に関わらずすべてのビュー列を nullable として報告する問題を修正しました。また、`GROUP BY ROLLUP` / `CUBE` / `GROUPING SETS` のキー列に対して誤った nullability を生成する関連の回帰も修正しました。 [#75684](https://github.com/StarRocks/starrocks/pull/75684) [#76149](https://github.com/StarRocks/starrocks/pull/76149)
+- 統計情報に関する 2 つの問題を修正しました。OR 述語の統計情報推定で、実際の値に関わらず統合後の `nullsFraction` が常に `1` にクランプされる問題、および列の永続化された min/max が空文字列の場合に `ERROR_IF_OVERFLOW` 下で列統計情報キャッシュのロードが失敗する問題です。 [#75864](https://github.com/StarRocks/starrocks/pull/75864) [#76684](https://github.com/StarRocks/starrocks/pull/76684)
+- bRPC のスタブキャッシュにおけるタイマーリークを修正しました。この問題は時間の経過とともにメモリリークを引き起こしていました。 [#75973](https://github.com/StarRocks/starrocks/pull/75973)
+- `UNNEST` 出力の Struct プルーニングは、出力自身のサブフィールドグループではなく、入力配列のサブフィールドグループを使用するようになり、BE がマテリアライズする Struct 型と FE が宣言する型の不一致を修正しました。 [#76002](https://github.com/StarRocks/starrocks/pull/76002)
+- リクエストが別の FE に転送される際に、Arrow Flight の Prepared Statement 転送が誤った action-type 文字列を送信していた問題を修正しました。この問題により、ロードバランサー配下で Prepared Statement を使用するすべての ADBC クライアントが失敗していました。 [#76310](https://github.com/StarRocks/starrocks/pull/76310)
+- Hive の `getTable()` は、`get_table_req()` にフォールバックする前に再接続するようになり、Hive Metastore カタログ経由で Iceberg テーブルをクエリする際に発生する断続的な `out of sequence response` / `Unknown table` エラーを修正しました。 [#76456](https://github.com/StarRocks/starrocks/pull/76456)
+- カタログ削除の存在チェックを書き込みロック下でアトミックにし、同じカタログに対する 2 つの削除が並行して実行された際に、check-then-act の競合によって冗長な削除レコードが永続化される問題を修正しました。 [#76778](https://github.com/StarRocks/starrocks/pull/76778)
+- `PipeObservable` が遅延した Sink 通知に対して Sink イベントではなく Source イベントを発行する問題を修正しました。この問題により Driver が `OUTPUT_FULL` でブロックされ応答しなくなることがありました。 [#76782](https://github.com/StarRocks/starrocks/pull/76782)
+- `dictionary_get()` は、入力列のキャッシュされた `has_null` フラグが古くなっている場合に、NULL でないキーを誤って拒否しなくなりました。 [#76881](https://github.com/StarRocks/starrocks/pull/76881)
+- Arrow Flight SQL に不足していた `arrow-compression` モジュールを追加し、圧縮された Arrow IPC を使用するクライアント向けの LZ4/ZSTD コーデックサポートを復元しました。 [#76921](https://github.com/StarRocks/starrocks/pull/76921)
+- spill が有効な状態でメモリ負荷が高い場合に、ストリーミング事前集約で OOM が発生する問題を修正しました。 [#76702](https://github.com/StarRocks/starrocks/pull/76702)
+- `Set` 演算子は colocate 実行グループに配置されなくなり、そのブランチが通常の local-exchange sink（グループ実行用の sink ではなく）によって終端されることに起因するハングを修正しました。 [#77025](https://github.com/StarRocks/starrocks/pull/77025)
+- `LIMIT` 付きの集約に対して、クエリキャッシュが不完全な Tablet 単位の結果を保存しないようにし、キャッシュから誤った結果が返されることを防ぎました。 [#77066](https://github.com/StarRocks/starrocks/pull/77066)
+- insert-overwrite の失敗が、並行して削除されたテーブルに対してジャーナル記録されなくなり、ジャーナルリプレイ時の FE クラッシュを修正しました。 [#77212](https://github.com/StarRocks/starrocks/pull/77212)
+- チェックポイントスレッドが作成したスレッドプールが、メトリクスレジストリに登録されなくなりました。 [#77367](https://github.com/StarRocks/starrocks/pull/77367)
+- `java-extensions` のリーダーライブラリで test-scope の jar を同梱しないようにしました。 [#77752](https://github.com/StarRocks/starrocks/pull/77752)
+- `TabletInvertedIndex` の書き込みロックの外で tablet の backend ID を解決するようにし、マテリアライズドビューのリフレッシュ／insert-overwrite のコミットと tablet の強制削除との間で発生する FE のデッドロックを修正しました。 [#78102](https://github.com/StarRocks/starrocks/pull/78102)
+- 複数の BE/CN のクラッシュを修正しました。グレースフルシャットダウン中に `SinkBuffer` が破棄された後に保留中の brpc クロージャが実行されることによるクラッシュ、空の物理分割 tablet に対する `SparseRangeIterator::has_more()` の null ポインタクラッシュ、`PipelineDriver` のデストラクタでスケジュールされていないグローバル runtime filter タイマーによる `bad_weak_ptr` アボート、不完全なネストされた lake スキーマにおけるネイティブ Parquet リーダーの SIGSEGV、バッファ拡張をまたぐ複数文字の CSV 区切り文字による heap-use-after-free、`SimdJsonConverter` で生の JSON 値のエラーメッセージを構築する際の heap-buffer-overflow です。 [#73202](https://github.com/StarRocks/starrocks/pull/73202) [#75985](https://github.com/StarRocks/starrocks/pull/75985) [#76252](https://github.com/StarRocks/starrocks/pull/76252) [#76455](https://github.com/StarRocks/starrocks/pull/76455) [#76718](https://github.com/StarRocks/starrocks/pull/76718) [#76752](https://github.com/StarRocks/starrocks/pull/76752)
+- 複数の依存関係の CVE を修正しました。脆弱な jQuery 1.4.2 を同梱していた未使用の `avro-ipc` 依存関係を除外し、Netty を 4.1.136.Final にアップグレードし、脆弱な Jetty jar を除外して pgjdbc を 42.7.12 にアップグレードし、Apache Thrift を 0.24.0 にアップグレードし、Apache HttpCore を 5.4.3 にアップグレードしました。 [#76270](https://github.com/StarRocks/starrocks/pull/76270) [#76555](https://github.com/StarRocks/starrocks/pull/76555) [#76783](https://github.com/StarRocks/starrocks/pull/76783) [#76922](https://github.com/StarRocks/starrocks/pull/76922) [#77753](https://github.com/StarRocks/starrocks/pull/77753)
+
 ## 3.5.20
 
 リリース日: 2026年7月23日

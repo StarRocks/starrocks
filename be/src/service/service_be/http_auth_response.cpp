@@ -19,6 +19,7 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include "base/auth/auth_info.h"
 #include "common/config_http_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
@@ -44,10 +45,14 @@ std::string build_auth_failure_body(std::string_view message) {
     return std::string(buf.GetString(), buf.GetSize());
 }
 
+// Both challenges, the same two the FE sends (BaseAction#addAuthChallenges): every endpoint on
+// this port takes a password or an IdP token, and a client that only knows one scheme picks
+// the line it understands. `error="invalid_token"` is the flat Bearer verdict from RFC 6750:
+// the response never says which check failed.
 EvHttpServer::AuthVerifyFailure make_unauthorized(std::string_view message) {
     return EvHttpServer::AuthVerifyFailure{
             .http_status = HttpStatus::UNAUTHORIZED,
-            .www_authenticate = "Basic realm=\"\"",
+            .www_authenticate = {"Basic realm=\"StarRocks\"", "Bearer realm=\"StarRocks\", error=\"invalid_token\""},
             .body = build_auth_failure_body(message),
     };
 }
@@ -55,7 +60,7 @@ EvHttpServer::AuthVerifyFailure make_unauthorized(std::string_view message) {
 EvHttpServer::AuthVerifyFailure make_server_error(HttpStatus http_status, std::string_view message) {
     return EvHttpServer::AuthVerifyFailure{
             .http_status = http_status,
-            .www_authenticate = {}, // no Basic challenge — re-auth won't help
+            .www_authenticate = {}, // no challenge — re-auth won't help
             .body = build_auth_failure_body(message),
     };
 }
@@ -91,21 +96,20 @@ TPrivilegeRequirement::type to_thrift_privilege(HttpHandler::RequiredPrivilege p
     return TPrivilegeRequirement::OPERATE;
 }
 
-std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(
-        HttpRequest* req, HttpHandler::RequiredPrivilege required_privilege) {
+std::optional<EvHttpServer::AuthVerifyFailure> verify_http_auth(HttpRequest* req,
+                                                                HttpHandler::RequiredPrivilege required_privilege) {
     if (!config::enable_http_auth) {
         return std::nullopt;
     }
 
     AuthInfo auth;
-    if (!parse_basic_auth(*req, &auth)) {
-        return make_unauthorized("missing Basic authorization");
+    if (!parse_auth(*req, &auth)) {
+        return make_unauthorized("missing/invalid authorization");
     }
 
     TAuthenticateParams params;
-    params.__set_user(auth.user);
-    params.__set_passwd(auth.passwd);
-    params.__set_host(auth.user_ip);
+    // user is empty for Bearer (the principal is inside the token); passwd carries the token then.
+    set_request_auth(&params, auth);
     if (required_privilege != HttpHandler::RequiredPrivilege::NONE) {
         params.__set_required_privilege(to_thrift_privilege(required_privilege));
     }

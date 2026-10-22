@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -65,9 +66,18 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
 
     @Override
     public KeyPropertySet visitPhysicalProject(OptExpression optExpression, Void ctx) {
-        KeyPropertySet input = infer(optExpression.inputAt(0), ctx);
         PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
-        ColumnRefSet projectColumns = new ColumnRefSet(project.getOutputColumns());
+        return inferProject(optExpression, ctx, new ColumnRefSet(project.getOutputColumns()));
+    }
+
+    @Override
+    public KeyPropertySet visitPhysicalAIProject(OptExpression optExpression, Void ctx) {
+        PhysicalAIProjectOperator project = (PhysicalAIProjectOperator) optExpression.getOp();
+        return inferProject(optExpression, ctx, new ColumnRefSet(project.getOutputColumns()));
+    }
+
+    private KeyPropertySet inferProject(OptExpression optExpression, Void ctx, ColumnRefSet projectColumns) {
+        KeyPropertySet input = infer(optExpression.inputAt(0), ctx);
 
         KeyPropertySet res = new KeyPropertySet();
         for (KeyProperty key : input.getKeys()) {

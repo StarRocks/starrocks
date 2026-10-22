@@ -16,17 +16,26 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <new>
+#include <thread>
+#include <vector>
+
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -39,8 +48,9 @@ public:
 
         _location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
     }
 
     void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -50,7 +60,7 @@ protected:
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
 };
 
 // Test load_from_meta with empty pdelvec pointer
@@ -310,6 +320,138 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_mismatched_cached_metadata
     EXPECT_EQ(expected_delvec, pdelvec->save());
 }
 
+// CompactionDelvecHolder is what keeps a vertical compaction from reloading every delvec once per
+// column-group pass: the pass loop keeps re-inserting the (much larger) segment objects over them in
+// the metadata cache, so the cache does not keep them alive. Pins the contract every pass relies on:
+// a (segment, version) already loaded is served from the holder -- the same instance, no file read --
+// while a different segment or a different version is not.
+TEST_F(LakeDelvecLoaderTest, test_load_with_compaction_delvec_holder) {
+    const int64_t tablet_id = 10008;
+    const uint32_t segment_id = 800;
+    const int64_t version = 17;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {2, 4, 8, 16};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    std::string expected_delvec = ndv->save();
+
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    TabletSegmentId tsid(tablet_id, segment_id);
+    LakeIOOptions lake_io_opts;
+
+    DelVectorPtr first;
+    {
+        LakeDelvecLoader loader(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+        ASSERT_TRUE(loader.load(tsid, version, &first).ok());
+        ASSERT_TRUE(first != nullptr);
+        EXPECT_EQ(expected_delvec, first->save());
+    }
+
+    // Make every path to the file fail, so only the holder can still answer.
+    ASSERT_TRUE(FileSystem::Default()->delete_file(_tablet_manager->tablet_metadata_location(tablet_id, version)).ok());
+    _tablet_manager->metacache()->prune();
+
+    // A later pass builds its own loader but shares the holder: same (segment, version), same
+    // instance handed back, no file read.
+    LakeDelvecLoader next_pass(_tablet_manager.get(), nullptr, false /* fill_cache */, lake_io_opts, nullptr, holder);
+    DelVectorPtr second;
+    ASSERT_TRUE(next_pass.load(tsid, version, &second).ok());
+    ASSERT_EQ(first.get(), second.get());
+
+    // Neither the segment id nor the version may be dropped from the key: a different one must miss
+    // the holder and go to the (now missing) file rather than silently reusing this delvec.
+    DelVectorPtr other;
+    EXPECT_FALSE(next_pass.load(TabletSegmentId(tablet_id, segment_id + 1), version, &other).ok());
+    EXPECT_FALSE(next_pass.load(tsid, version + 1, &other).ok());
+}
+
+// Range-split parallel compaction shares one holder across concurrent PK subtasks; get_or_load
+// must be single-flight per key: concurrent callers that miss together produce exactly one load,
+// everyone shares that instance, and a failed load releases the key for a retry instead of
+// caching the error or leaving waiters stuck.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_single_flight) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10009, 900);
+    const int64_t version = 7;
+
+    std::atomic<int> loads{0};
+    constexpr int kThreads = 4;
+    std::vector<DelVectorPtr> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            DelVectorPtr dv;
+            auto st = holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                loads++;
+                // Keep the elected load in flight long enough for every other thread to arrive.
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                *out = std::make_shared<DelVector>();
+                return Status::OK();
+            });
+            EXPECT_TRUE(st.ok());
+            results[t] = std::move(dv);
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_TRUE(results[t] != nullptr);
+        EXPECT_EQ(results[0].get(), results[t].get());
+    }
+
+    // A failed load must release the in-flight key: the next caller retries and can succeed.
+    const TabletSegmentId failing(10009, 901);
+    DelVectorPtr dv;
+    EXPECT_FALSE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) {
+                           return Status::InternalError("boom");
+                       }).ok());
+    EXPECT_TRUE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr* out) {
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
+    EXPECT_TRUE(dv != nullptr);
+}
+
+// Same contract as the segment election: |load| reads a remote file and deserializes a roaring
+// bitmap, so it can throw std::bad_alloc when the mem-tracker hook makes the allocator return
+// nullptr. The in-flight key must be given back on the unwind, or every later caller asking for the
+// same (segment, version) waits on the condition variable for good.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_releases_key_on_exception) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10010, 950);
+    const int64_t version = 3;
+
+    DelVectorPtr dv;
+    EXPECT_THROW((void)holder->get_or_load(tsid, version, &dv, [](DelVectorPtr*) -> Status { throw std::bad_alloc(); }),
+                 std::bad_alloc);
+
+    // The key was released, so this call loads instead of blocking on a mark nobody will clear.
+    int loads = 0;
+    ASSERT_TRUE(holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                          loads++;
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
+    EXPECT_EQ(1, loads);
+    EXPECT_TRUE(dv != nullptr);
+}
+
 // Test load with pk_builder
 TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
     const int64_t tablet_id = 10005;
@@ -353,6 +495,73 @@ TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
     st = loader.load(tsid, version, &pdelvec);
     // The load should succeed (either found in builder or loaded from file)
     ASSERT_TRUE(st.ok());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_mem_limits) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
+    SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(1000, manager.index_cache().capacity());
+    ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
+    ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
+
+    config::lake_pk_preload_memory_limit_percent = 50;
+    primary_key_tracker.set_limit(2000);
+    manager.refresh_mem_limits();
+    ASSERT_EQ(2000, manager.index_cache().capacity());
+    ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
+    ASSERT_EQ(200, manager.block_cache()->cache()->get_capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_preload_memory_limit_percent = 200;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(2000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(2000, manager.compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_preload_memory_limit_percent, 30);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
+
+    config::lake_pk_preload_memory_limit_percent = 50;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(500, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(500, manager.compaction_state_mem_tracker()->limit());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_preload_memory_limit_percent = 200;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
+    config::lake_pk_preload_memory_limit_percent = -1;
+    manager.refresh_preload_mem_limit();
+    ASSERT_EQ(0, manager.update_state_mem_tracker()->limit());
+    ASSERT_EQ(0, manager.compaction_state_mem_tracker()->limit());
+}
+
+TEST_F(LakeDelvecLoaderTest, test_refresh_block_cache_mem_limit) {
+    SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
+    MemTracker primary_key_tracker(1000, "primary_key");
+    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
+
+    config::lake_pk_index_block_cache_limit_percent = 50;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(500, manager.block_cache()->cache()->get_capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::lake_pk_index_block_cache_limit_percent = 200;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(1000, manager.block_cache()->cache()->get_capacity());
+    config::lake_pk_index_block_cache_limit_percent = -1;
+    manager.refresh_block_cache_mem_limit();
+    ASSERT_EQ(0, manager.block_cache()->cache()->get_capacity());
 }
 
 } // namespace starrocks::lake

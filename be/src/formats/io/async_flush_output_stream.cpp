@@ -145,7 +145,7 @@ Status AsyncFlushOutputStream::close() {
         to_enqueue_tasks.emplace_back(task);
     }
 
-    auto close_task = [&]() {
+    auto close_task = [this, promise = _promise]() {
         Status status;
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -153,13 +153,18 @@ Status AsyncFlushOutputStream::close() {
             CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
             status = _file->close();
         }
+        Status io_status;
         {
             std::scoped_lock lock(_mutex);
             _io_status.update(status);
             DCHECK(_task_queue.empty()); // close task is the last task
             _has_in_flight_io = false;
-            _promise.set_value(_io_status); // notify
+            io_status = _io_status;
         }
+        // Signal outside the lock, and as the last statement that reaches anything this stream
+        // owns: the waiter may destroy the stream the moment the promise is satisfied, which would
+        // leave the scoped_lock above unlocking a dead mutex.
+        promise->set_value(std::move(io_status)); // notify
     };
     to_enqueue_tasks.emplace_back(close_task);
     enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));

@@ -16,6 +16,7 @@ package com.starrocks.scheduler.history;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -24,7 +25,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
@@ -46,6 +50,7 @@ import java.nio.ByteBuffer;
 import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -100,7 +105,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1' " +
+                        "get_json_string(history_content_json, 'dbName') IN ('d1', 'default_cluster:d1') " +
                         "ORDER BY create_time DESC LIMIT 10000", anyInt);
             }
         };
@@ -536,5 +541,127 @@ public class TaskRunHistoryTest {
         params3.setTask_name("x\\");
         params3.setQuery_id(" UNION SELECT 1 -- ");
         history.lookup(params3);
+    }
+
+    @Test
+    public void testArchiveRedactsCredentialsInDefinition() {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        List<String> inserts = Lists.newArrayList();
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public void executeDML(String sql) {
+                inserts.add(sql);
+            }
+        };
+
+        String accessKey = "FAKEACCESSKEY0000REPRO";
+        String secretKey = "FAKE_SECRET_KEY_FOR_REPRO_ONLY";
+        String definition = "INSERT INTO FILES('path' = 's3://repro-bucket/repro/', 'format' = 'csv', " +
+                "'aws.s3.access_key' = '" + accessKey + "', 'aws.s3.secret_key' = '" + secretKey + "') SELECT 1 AS n";
+
+        boolean oldMask = Config.enable_task_info_mask_credential;
+        try {
+            Config.enable_task_info_mask_credential = true;
+            archiveOneRun("q1", definition);
+            assertEquals(1, inserts.size());
+            Assertions.assertFalse(inserts.get(0).contains(accessKey), inserts.get(0));
+            Assertions.assertFalse(inserts.get(0).contains(secretKey), inserts.get(0));
+            Assertions.assertTrue(inserts.get(0).contains("s3://repro-bucket/repro/"), inserts.get(0));
+            Assertions.assertTrue(inserts.get(0).contains("***"), inserts.get(0));
+
+            // With masking turned off the history keeps the raw definition, same as information_schema.task_runs.
+            Config.enable_task_info_mask_credential = false;
+            archiveOneRun("q2", definition);
+            assertEquals(2, inserts.size());
+            Assertions.assertTrue(inserts.get(1).contains(secretKey), inserts.get(1));
+        } finally {
+            Config.enable_task_info_mask_credential = oldMask;
+        }
+    }
+
+    private static String tenantValues(int count) {
+        Set<PListCell> cells = new LinkedHashSet<>();
+        for (int i = 0; i < count; i++) {
+            cells.add(new PListCell("tenant-" + i + ".com"));
+        }
+        return PListCell.batchSerialize(cells);
+    }
+
+    private static int totalOf(String partitionValues) {
+        return JsonParser.parseString(partitionValues).getAsJsonObject().get("total").getAsInt();
+    }
+
+    @Test
+    public void testArchiveShrinksListPartitionValues() {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        List<String> inserts = Lists.newArrayList();
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public void executeDML(String sql) {
+                inserts.add(sql);
+            }
+        };
+
+        TaskRunStatus batchRun = new TaskRunStatus();
+        batchRun.setExpireTime(System.currentTimeMillis() + 10000);
+        batchRun.setQueryId("q_batch");
+        batchRun.setTaskName("mv-1");
+        batchRun.setSource(Constants.TaskSource.MV);
+        batchRun.setState(Constants.TaskRunState.SUCCESS);
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TaskRun.PARTITION_VALUES, tenantValues(1000));
+        properties.put(TaskRun.START_TASK_RUN_ID, "q_start");
+        batchRun.setProperties(properties);
+        MVTaskRunExtraMessage extraMessage = batchRun.getMvTaskRunExtraMessage();
+        extraMessage.getExecuteOption().getTaskRunProperties().put(TaskRun.PARTITION_VALUES, tenantValues(1000));
+        extraMessage.setNextPartitionValues(tenantValues(999));
+        int jsonLengthBefore = batchRun.toJSON().length();
+
+        TaskRunStatus shortRun = new TaskRunStatus();
+        shortRun.setExpireTime(System.currentTimeMillis() + 10000);
+        shortRun.setQueryId("q_short");
+        shortRun.setTaskName("mv-2");
+        shortRun.setSource(Constants.TaskSource.MV);
+        shortRun.setState(Constants.TaskRunState.SUCCESS);
+        String shortValues = tenantValues(3);
+        shortRun.getMvTaskRunExtraMessage().setNextPartitionValues(shortValues);
+
+        TaskRunHistory history = new TaskRunHistory();
+        history.addHistory(batchRun);
+        history.addHistory(shortRun);
+        history.vacuum(true);
+
+        assertEquals(1, inserts.size());
+        assertEquals(1000, totalOf(batchRun.getProperties().get(TaskRun.PARTITION_VALUES)));
+        assertEquals(1000, totalOf(extraMessage.getExecuteOption().getTaskRunProperties().get(TaskRun.PARTITION_VALUES)));
+        assertEquals(999, totalOf(extraMessage.getNextPartitionValues()));
+        assertEquals("q_start", batchRun.getProperties().get(TaskRun.START_TASK_RUN_ID));
+        assertFalse(batchRun.isRefreshFinished());
+        Assertions.assertTrue(batchRun.toJSON().length() * 10 < jsonLengthBefore,
+                batchRun.toJSON().length() + " vs " + jsonLengthBefore);
+
+        assertEquals(shortValues, shortRun.getMvTaskRunExtraMessage().getNextPartitionValues());
+    }
+
+    private static void archiveOneRun(String queryId, String definition) {
+        TaskRunHistory history = new TaskRunHistory();
+        TaskRunStatus run = new TaskRunStatus();
+        run.setExpireTime(System.currentTimeMillis() + 10000);
+        run.setQueryId(queryId);
+        run.setTaskName("t_" + queryId);
+        run.setState(Constants.TaskRunState.SUCCESS);
+        run.setDefinition(definition);
+        history.addHistory(run);
+        history.vacuum(true);
     }
 }

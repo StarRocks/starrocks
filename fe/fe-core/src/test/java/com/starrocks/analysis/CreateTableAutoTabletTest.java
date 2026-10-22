@@ -284,8 +284,8 @@ public class CreateTableAutoTabletTest {
             UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
             Assertions.fail(); // should raise Exception
         } catch (Exception e) {
-            Assertions.assertEquals("Getting analyzing error. Detail message: Incorrect database name '"
-                    + longDbName + "'.", e.getMessage());
+            Assertions.assertEquals("Getting analyzing error. Detail message: Identifier name '"
+                    + longDbName + "' is too long, the maximum length is 256.", e.getMessage());
         }
     }
 

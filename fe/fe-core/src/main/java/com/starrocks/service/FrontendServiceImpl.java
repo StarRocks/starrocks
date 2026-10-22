@@ -43,6 +43,9 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.authentication.AuthChannel;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -92,7 +95,6 @@ import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -428,12 +430,13 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TBase;
 import org.apache.thrift.TException;
+import org.apache.thrift.TFieldIdEnum;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -465,6 +468,27 @@ import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
+    // Stands in for the passwd field when a load request is logged: with auth_type=bearer that field
+    // carries the caller's token, which must never reach a log file.
+    private static final String REDACTED_CREDENTIAL = "***";
+
+    /**
+     * A copy of a load request with its {@code passwd} field replaced, for a debug log line. The
+     * generated toString prints every field, and the credential field carries the caller's password
+     * or, with auth_type=bearer, its token. The field is found by name, so the helper works for every
+     * request struct that carries one, whatever its field id.
+     */
+    private static <T extends TBase<T, F>, F extends TFieldIdEnum> T withCredentialRedacted(T request) {
+        T copy = request.deepCopy();
+        for (short id = 1; id < 64; id++) {
+            F field = copy.fieldForId(id);
+            if (field != null && "passwd".equals(field.getFieldName())) {
+                copy.setFieldValue(field, REDACTED_CREDENTIAL);
+                break;
+            }
+        }
+        return copy;
+    }
 
     // Pending partition creation requests.
     // Key = "tableId_txnId_sortedNormalizedPartitionValues" -> CompletableFuture.
@@ -518,19 +542,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get db names: {}", dbNames);
 
         List<String> dbs = new ArrayList<>();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
+        for (String db : dbNames) {
             if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, db);
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            dbs.add(fullName);
+            dbs.add(db);
         }
         result.setDbs(dbs);
         return result;
@@ -1162,7 +1185,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TFeResult checkAuth(TAuthenticateParams request) throws TException {
         TStatus status = new TStatus(TStatusCode.OK);
         TFeResult result = new TFeResult(FrontendServiceVersion.V1, status);
-        if (request == null || !request.isSetUser() || !request.isSetPasswd()) {
+        if (request == null || !request.isSetPasswd()) {
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("missing authentication parameters");
+            return result;
+        }
+        // Bearer carries no declared user (the principal lives in the token), so only require
+        // `user` for basic. Only the Resource Server form of OAuth2 arrives here, i.e. a client
+        // that already holds an IdP token and presents it. The MySQL browser flow never reaches
+        // this RPC at all: its token arrives asynchronously through the OAuth2Action callback, not
+        // in TAuthenticateParams.
+        boolean isBearer = AuthCredentialKind.isBearer(request.getAuth_type());
+        if (!isBearer && !request.isSetUser()) {
             status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
             status.addToError_msgs("missing authentication parameters");
             return result;
@@ -1181,8 +1215,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
             // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
             // and the OPERATE/NODE checks below would falsely reject privileged callers.
-            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
-                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+            AuthCredentials cred = isBearer
+                    ? AuthCredentials.ofBearer(request.getPasswd(), AuthChannel.THRIFT_GATEWAY, host)
+                    : AuthCredentials.ofPassword(request.getUser(), request.getPasswd(),
+                            AuthChannel.THRIFT_GATEWAY, host);
+            AuthenticationHandler.authenticate(ctx, cred);
 
             // getRequired_privilege() can return null when a newer BE sends an enum value
             // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
@@ -1282,19 +1319,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new TNotifyForwardDeploymentFinishedRespone().setStatus(status);
     }
 
-    private UserIdentity checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
+    private UserIdentity checkAuthAndLoadPriv(String user, String passwd, String authType, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
             return UserIdentity.ROOT;
         }
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8));
-        // check INSERT action on table
+        // A bearer kind means `passwd` holds an IdP token and no user was declared; otherwise it
+        // is an ordinary plaintext password.
+        AuthCredentials cred = AuthCredentialKind.isBearer(authType)
+                ? AuthCredentials.ofBearer(passwd, AuthChannel.THRIFT_LOAD, clientIp)
+                : AuthCredentials.ofPassword(user, passwd, AuthChannel.THRIFT_LOAD, clientIp);
+        ConnectContext authCtx = new ConnectContext();
+        UserIdentity currentUser = AuthenticationHandler.authenticate(authCtx, cred);
+        // check INSERT action on table, reusing the authenticated context so group-derived roles
+        // (e.g. INSERT granted via an LDAP/SI group mapping) are honored rather than user-only
+        // roles.
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
-            Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(authCtx, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1345,7 +1386,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String clientAddr = getClientAddrAsString();
         LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getLabel(), clientAddr);
-        LOG.debug("txn begin request: {}", request);
+        LOG.debug("txn begin request: {}", () -> withCredentialRedacted(request));
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
         TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
@@ -1388,7 +1429,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
-        checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+        checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
         // check txn
@@ -1456,7 +1497,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String clientAddr = getClientAddrAsString();
         LOG.debug("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
-        LOG.debug("txn commit request: {}", request);
+        LOG.debug("txn commit request: {}", () -> withCredentialRedacted(request));
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
         TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
@@ -1497,7 +1538,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+            checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
         }
 
@@ -1550,7 +1591,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String clientAddr = getClientAddrAsString();
         LOG.debug("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
-        LOG.debug("get txn status request: {}", request);
+        LOG.debug("get txn status request: {}", () -> withCredentialRedacted(request));
 
         TGetLoadTxnStatusResult result = new TGetLoadTxnStatusResult();
         // if current node is not master, reject the request
@@ -1588,7 +1629,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String clientAddr = getClientAddrAsString();
         LOG.debug("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
-        LOG.debug("txn prepare request: {}", request);
+        LOG.debug("txn prepare request: {}", () -> withCredentialRedacted(request));
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
         TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
@@ -1618,7 +1659,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+            checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
         }
 
@@ -1648,7 +1689,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String clientAddr = getClientAddrAsString();
         LOG.debug("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
-        LOG.debug("txn rollback request: {}", request);
+        LOG.debug("txn rollback request: {}", () -> withCredentialRedacted(request));
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
         TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
@@ -1703,7 +1744,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+            checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
         }
         String dbName = request.getDb();
@@ -1727,7 +1768,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
-        LOG.debug("stream load put request: {}", request);
+        LOG.debug("stream load put request: {}", () -> withCredentialRedacted(request));
 
         ConnectContext context = new ConnectContext();
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -1739,10 +1780,31 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             context.setCurrentUserIdentity(res.getKey());
             context.setCurrentRoleIds(res.getKey());
         } else {
-            TAuthInfo auth = new TAuthInfo();
-            auth.setUser(request.getUser());
-            auth.setUser_ip(request.getUser_ip());
-            UserIdentityUtils.setAuthInfoFromThrift(context, auth);
+            // SI / ephemeral / Bearer users are not in the native user table, so
+            // getBestMatchedUserIdentity cannot resolve them. Authenticate the credential to
+            // recover the real identity (and group-derived roles) instead of guessing from the user
+            // name -- otherwise an SI/Bearer stream load that passed loadTxnBegin would still fail
+            // at the put/plan stage.
+            boolean resolved = false;
+            if (request.isSetPasswd()) {
+                try {
+                    AuthCredentials cred = AuthCredentialKind.isBearer(request.getAuth_type())
+                            ? AuthCredentials.ofBearer(request.getPasswd(), AuthChannel.THRIFT_LOAD, request.getUser_ip())
+                            : AuthCredentials.ofPassword(request.getUser(), request.getPasswd(),
+                                    AuthChannel.THRIFT_LOAD, request.getUser_ip());
+                    AuthenticationHandler.authenticate(context, cred);
+                    resolved = true;
+                } catch (AuthenticationException e) {
+                    LOG.warn("stream load put failed to resolve identity for user={}: {}",
+                            request.getUser(), e.getMessage());
+                }
+            }
+            if (!resolved) {
+                TAuthInfo auth = new TAuthInfo();
+                auth.setUser(request.getUser());
+                auth.setUser_ip(request.getUser_ip());
+                UserIdentityUtils.setAuthInfoFromThrift(context, auth);
+            }
         }
 
         TStreamLoadPutResult result = new TStreamLoadPutResult();
@@ -1928,8 +1990,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (isAuthorizedByInternalToken(request.getInternal_token(), request.getDb(), request.getTbl())) {
                 userIdentity = UserIdentity.ROOT;
             } else {
-                userIdentity = checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
-                        request.getTbl(), request.getUser_ip());
+                userIdentity = checkAuthAndLoadPriv(request.getUser(), request.getPasswd(),
+                        request.getAuth_type(), request.getDb(), request.getTbl(), request.getUser_ip());
             }
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
@@ -2030,7 +2092,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // PrivPredicate.LOAD on the given tables. The implementation is similar with that
     // of stream load, and you can refer to RestBaseAction#execute and LoadAction#executeWithoutPassword
     // to know more about the related part.
-    static TStatus checkPasswordAndLoadPrivilege(TAuthenticateParams authParams) {
+    static TStatus checkAuthAndExternalTablePriv(TAuthenticateParams authParams) {
         if (authParams == null) {
             LOG.debug("received null TAuthenticateParams");
             return new TStatus(TStatusCode.OK);
@@ -2047,11 +2109,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 " target cluster if you don't want to check the authorization and privilege.";
 
         // 1. check user and password
-        UserIdentity userIdentity;
+        ConnectContext context = new ConnectContext();
         try {
-            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
-                    authParams.getUser(), authParams.getPasswd(), authParams.getHost());
-            userIdentity = BaseAction.checkPassword(authInfo);
+            // The external-table check comes in over the BE->FE gateway RPC and always carries a
+            // plaintext password. Strip a "user@host" form the same way the HTTP Basic parser does.
+            String user = authParams.getUser();
+            String[] elements = user == null ? new String[0] : user.split("@");
+            if (elements.length == 2) {
+                user = elements[0];
+            }
+            // Form B on purpose: authenticate onto the very context the privilege check below uses,
+            // so roles derived from LDAP / security-integration groups survive. Handing back only a
+            // UserIdentity and rebuilding a context would drop them and reject users whose INSERT
+            // comes from a group mapping.
+            BaseAction.checkCredential(context, AuthCredentials.ofPassword(
+                    user, authParams.getPasswd(), AuthChannel.THRIFT_GATEWAY, authParams.getHost()));
         } catch (Exception e) {
             LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
                     authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
@@ -2065,9 +2137,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(userIdentity);
-                context.setCurrentRoleIds(userIdentity);
                 Authorizer.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
@@ -2082,7 +2151,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
-        TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
+        TStatus status = checkAuthAndExternalTablePriv(request.getAuth_info());
         if (status.getStatus_code() != TStatusCode.OK) {
             TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
             response.setStatus(status);
@@ -2249,25 +2318,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
-            PhysicalPartition p = table.getPhysicalPartition(id);
-            if (p == null) {
-                LOG.warn("physical partition id {} does not exist", id);
-                continue;
-            }
-            Partition partition = olapTable.getPartition(p.getParentId());
-            if (partition == null) {
-                LOG.warn("partition id {} does not exist", p.getParentId());
-                continue;
-            }
-            updatePartitionIds.add(p.getParentId());
-            p.setImmutable(true);
-
+            Partition partition;
             List<PhysicalPartition> mutablePartitions;
-            // Reads sub-partitions of one known table; intensive table READ
+            // Reads the partition maps and sub-partitions of one known table; intensive table READ
             // (IS-on-db + READ-on-table) is enough. Acquire before try so a
             // failed acquire does not trigger an unlock of an unheld lock.
             locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
+                PhysicalPartition p = table.getPhysicalPartition(id);
+                if (p == null) {
+                    LOG.warn("physical partition id {} does not exist", id);
+                    continue;
+                }
+                partition = olapTable.getPartition(p.getParentId());
+                if (partition == null) {
+                    LOG.warn("partition id {} does not exist", p.getParentId());
+                    continue;
+                }
+                updatePartitionIds.add(p.getParentId());
+                p.setImmutable(true);
+
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
@@ -2280,17 +2350,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
+        // Multi-node write, resolved the same way as on the create-partition path
+        // (buildCreatePartitionResponse): the width this table's plan recorded, and the nodes alive now.
+        final int writerWidth = txnState.getMultiNodeWriteWidth(olapTable.getId());
+        final List<Long> writerCandidates = writerWidth > 1
+                ? OlapTableSink.resolveWriterCandidates(warehouseManager, computeResource)
+                : Collections.emptyList();
+
         // return all mutable partitions
         for (Long id : updatePartitionIds) {
-            Partition partition = olapTable.getPartition(id);
-            if (partition == null) {
-                LOG.warn("partition id {} does not exist", id);
-                continue;
-            }
-
             long mutablePartitionNum = 0;
             locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
+                Partition partition = olapTable.getPartition(id);
+                if (partition == null) {
+                    LOG.warn("partition id {} does not exist", id);
+                    continue;
+                }
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2303,7 +2379,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     buildPartitions(olapTable, physicalPartition, partitions, tPartition, txnState);
-                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
+                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState,
+                            writerWidth, writerCandidates);
                 }
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
@@ -2397,18 +2474,36 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState)
+                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState,
+                                     int writerWidth, List<Long> writerCandidates)
             throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : txnState.getPartitionLoadedIndexes(olapTable.getId(), physicalPartition)) {
             if (olapTable.isCloudNativeTable()) {
+                int tabletCount = index.getTablets().size();
                 for (Tablet tablet : index.getTablets()) {
+                    // Every sink instance of the load sends this RPC on its own, and each response
+                    // lists every mutable sub-partition, including ones an earlier call created. Key-hash
+                    // routing needs all instances to see the SAME node list for a tablet, so the first
+                    // answer for a tablet is kept for the rest of the transaction, as the create-partition
+                    // path does. BE keeps the first location it gets for a tablet, so answering a tablet the
+                    // sink already knows from its plan changes nothing there.
+                    TTabletLocation cached = txnState.getTabletIdToTTabletLocation().get(tablet.getId());
+                    if (cached != null) {
+                        tablets.add(cached);
+                        continue;
+                    }
                     try {
                         // use default warehouse nodes
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
                                 tablet.getId());
-                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
+                        TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
+                                OlapTableSink.buildRuntimePartitionNodeIds(computeNode.getId(), writerCandidates,
+                                        writerWidth, tabletCount, tablet.getId()));
+                        TTabletLocation previous =
+                                txnState.getTabletIdToTTabletLocation().putIfAbsent(tablet.getId(), tabletLocation);
+                        tablets.add(previous != null ? previous : tabletLocation);
                     } catch (Exception exception) {
                         throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
                     }
@@ -2634,7 +2729,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // Step 2: Validate transaction state
         TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
-        TCreatePartitionResult errorResult = validateTransactionState(txnState, txnId, tableId, olapTable.getName());
+        TCreatePartitionResult errorResult =
+                validateTransactionState(txnState, txnId, tableId, olapTable.getName(), creatingPartitionNames);
         metrics.recordValidateTxnState();
         if (errorResult != null) {
             return errorResult;
@@ -2740,13 +2836,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new ValidatedTableInfo(db, olapTable);
     }
 
+    /**
+     * Validate the transaction and the per-load partition budget.
+     *
+     * <p>The budget is counted over the partitions this transaction would have touched once the request is
+     * served, i.e. the union of the partitions already cached on the transaction and {@code creatingPartitionNames}.
+     */
     private static TCreatePartitionResult validateTransactionState(TransactionState txnState, long txnId,
-                                                                   long tableId, String tableName) {
+                                                                   long tableId, String tableName,
+                                                                   Set<String> creatingPartitionNames) {
         if (txnState == null) {
             return buildErrorResult(String.format("automatic create partition failed. error: txn %d not exist", txnId));
         }
 
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
+        ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
+        long partitionNumAfterRequest = cachedPartitions.size()
+                + creatingPartitionNames.stream().filter(name -> !cachedPartitions.containsKey(name)).count();
+        if (partitionNumAfterRequest > Config.max_partitions_in_one_batch) {
             return buildErrorResult(String.format(
                     "Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                             "You can modify this restriction on by setting max_partitions_in_one_batch larger.",
@@ -3015,6 +3121,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
+        // Multi-node write: the width OlapTableSink.createLocation resolved for THIS table when this
+        // load was planned, and the nodes alive now to spend it on. A load long enough to create a
+        // partition can outlive the node list it was planned against, so the candidates are resolved
+        // here rather than carried. Both are left at their no-spread values unless that table's plan
+        // recorded a width, which it does only for a table whose own sink also carries
+        // enable_multi_node_write -- see TransactionState. Asking per table matters because one
+        // transaction can carry several and only some of them may be eligible.
+        final int writerWidth = txnState.getMultiNodeWriteWidth(olapTable.getId());
+        final List<Long> writerCandidates = writerWidth > 1
+                ? OlapTableSink.resolveWriterCandidates(warehouseManager, computeResource)
+                : Collections.emptyList();
         for (String partitionName : partitionNames) {
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
@@ -3047,6 +3164,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (MaterializedIndex index :
                     txnState.getPartitionLoadedIndexesWithoutLock(olapTable.getId(), physicalPartition)) {
                 if (olapTable.isCloudNativeTable()) {
+                    int tabletCount = index.getTablets().size();
                     for (Tablet tablet : index.getTablets()) {
                         try {
                             // use default warehouse nodes
@@ -3058,8 +3176,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 result.setStatus(errorStatus);
                                 return result;
                             }
+                            // One node unless this load spreads a tablet's write, which is the whole reason
+                            // a brand-new partition -- typically one tablet, since its data boundaries have
+                            // not been seen yet -- would otherwise funnel through a single node for the rest
+                            // of the load.
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
-                                    Collections.singletonList(computeNodeId));
+                                    OlapTableSink.buildRuntimePartitionNodeIds(computeNodeId, writerCandidates,
+                                            writerWidth, tabletCount, tablet.getId()));
                             tablets.add(tabletLocation);
                             txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
                         } catch (Exception exception) {

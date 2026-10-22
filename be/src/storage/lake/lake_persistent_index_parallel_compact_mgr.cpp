@@ -31,10 +31,11 @@
 #include "platform/key_cache.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/concatenating_iterator.h"
 #include "storage/sstable/iterator.h"
@@ -116,6 +117,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     sstable::ReadOptions read_options;
     read_options.fill_cache = false;
+    // Catch corrupted data blocks as Corruption instead of merging garbage into the
+    // compaction output.
+    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
 
     bool contain_shared_sstables = false;
     // Open each sstable and create iterator
@@ -398,7 +402,7 @@ Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const Per
     sample_keys->push_back(sstable_pb.range().start_key());
     if (sstable_pb.filesize() > config::pk_index_sstable_sample_interval_bytes) {
         // get sample keys from large sstables
-        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+        auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),

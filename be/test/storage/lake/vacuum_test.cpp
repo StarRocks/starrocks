@@ -18,7 +18,9 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <ctime>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -31,6 +33,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "json2pb/json_to_pb.h"
+#include "service/mem_hook.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
@@ -40,7 +43,30 @@
 #include "storage/lake/vacuum_full.h"
 #include "test_util.h"
 
+#if defined(ADDRESS_SANITIZER)
+#include <sanitizer/allocator_interface.h>
+#elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
+#include "jemalloc/jemalloc.h"
+#endif
+
 namespace starrocks::lake {
+
+// Bytes allocated and not yet freed as the allocator reports them: process-wide under ASAN, the calling
+// thread's own when malloc goes through jemalloc. nullopt when the build offers neither.
+static std::optional<int64_t> allocated_bytes() {
+#if defined(ADDRESS_SANITIZER)
+    return static_cast<int64_t>(__sanitizer_get_current_allocated_bytes());
+#elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
+    uint64_t allocated = 0;
+    uint64_t deallocated = 0;
+    size_t size = sizeof(uint64_t);
+    CHECK_EQ(0, je_mallctl("thread.allocated", &allocated, &size, nullptr, 0));
+    CHECK_EQ(0, je_mallctl("thread.deallocated", &deallocated, &size, nullptr, 0));
+    return static_cast<int64_t>(allocated - deallocated);
+#else
+    return std::nullopt;
+#endif
+}
 
 // Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
 int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
@@ -96,6 +122,19 @@ protected:
         std::string error;
         CHECK(json2pb::JsonToProtoMessage(json, message.get(), &error)) << error;
         return message;
+    }
+
+    // Writes one bundle metadata file per version in [first_version, last_version], each holding
+    // |tablet_ids| with no rowsets.
+    void put_empty_bundles(const std::vector<int64_t>& tablet_ids, int64_t first_version, int64_t last_version) {
+        for (int64_t version = first_version; version <= last_version; version++) {
+            std::map<int64_t, TabletMetadataPB> tablet_metas;
+            for (auto tablet_id : tablet_ids) {
+                tablet_metas[tablet_id].set_id(tablet_id);
+                tablet_metas[tablet_id].set_version(version);
+            }
+            ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+        }
     }
 };
 
@@ -1877,6 +1916,226 @@ TEST_P(LakeVacuumTest, test_delete_tablets_bundle_metadata_files) {
     }
 }
 
+// A drop request can carry every tablet a reshard replaced in a partition, and the partition can keep as
+// many bundle versions: what delete_tablets() holds must grow with their sum, not their product.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_bundle_state_memory_is_linear) {
+    if (!allocated_bytes().has_value()) {
+        GTEST_SKIP() << "this build exposes no allocator statistics";
+    }
+    put_empty_bundles({700, 701}, 2, 76);
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(701);
+    // Tablets found in no metadata file, like replaced tablets whose history vacuum has reclaimed.
+    for (int64_t i = 0; i < 20000; i++) {
+        request.add_tablet_ids(800000 + i);
+    }
+
+    int64_t max_growth = 0;
+    int samples = 0;
+    const int64_t baseline = *allocated_bytes();
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata", [&](void*) {
+        max_growth = std::max(max_growth, *allocated_bytes() - baseline);
+        samples++;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    ASSERT_GT(samples, 0);
+    // One map node per (tablet, bundle version) would hold 20001 * 75 * 48 bytes, about 72 MB, here.
+    EXPECT_LT(max_growth, 8L << 20);
+}
+
+// A tablet a reshard replaced is not in the newest bundle, so reading it there can only return NotFound.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_skips_tablets_absent_from_newest_bundle) {
+    put_empty_bundles({700, 701}, 2, 4);
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(701);
+    for (int64_t i = 0; i < 50; i++) {
+        request.add_tablet_ids(800000 + i);
+    }
+
+    int bundle_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata", [&](void*) { bundle_reads++; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // Only tablet 701, which the newest bundle still holds, is read.
+    EXPECT_EQ(1, bundle_reads);
+    // Tablet 700 is alive, so every bundle stays.
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_deletes_each_bundle_file_once) {
+    put_empty_bundles({900, 901, 902}, 2, 4);
+
+    std::atomic<int> deletes{0};
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void*) { deletes++; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(900);
+    request.add_tablet_ids(901);
+    request.add_tablet_ids(902);
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 4)));
+    // The tablets own nothing else, so the three bundle files are the only deletions.
+    EXPECT_EQ(3, deletes.load());
+}
+
+// When a version has both a tablet's own metadata file and a bundle file, the bundle's state decides. Here
+// the bundle holds only the dropped tablet, so its shared files may go, and the tablet's own file stays.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_bundle_state_overrides_tablet_file_at_same_version) {
+    const std::string shared_segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    const std::string private_segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a2.dat";
+    create_data_file(shared_segment);
+    create_data_file(private_segment);
+
+    auto metadata = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 8,
+                    "segment_metas": [
+                        {"filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat", "shared": true},
+                        {"filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a2.dat"}
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    std::map<int64_t, TabletMetadataPB> bundle;
+    bundle[600] = *metadata;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(600);
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(shared_segment));
+    EXPECT_FALSE(file_exist(private_segment));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 3)));
+}
+
+// A tablet absent from the newest bundle is still walked when the metacache answers for it at that version.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_reads_cached_metadata_of_tablet_absent_from_newest_bundle) {
+    const std::string segment = "0000000000f259e4_33333333-3333-3333-3333-3333333333b1.dat";
+    create_data_file(segment);
+    put_empty_bundles({700, 701, 702}, 2, 3);
+    put_empty_bundles({700, 702}, 4, 4);
+    auto cached = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 701,
+            "version": 4,
+            "rowsets": [
+                {
+                    "data_size": 4,
+                    "segment_metas": [{"filename": "0000000000f259e4_33333333-3333-3333-3333-3333333333b1.dat"}]
+                }
+            ]
+        }
+        )DEL");
+    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(701, 4), cached);
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(701);
+    request.add_tablet_ids(702);
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(segment));
+}
+
+// A version the walk reaches but that no listing recorded can only come from a stale metacache entry. Its
+// state is unknown, so the shared files it lists stay.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_unknown_version_keeps_shared_files) {
+    const std::string shared_v3 = "0000000000f259e4_44444444-4444-4444-4444-4444444444c1.dat";
+    const std::string shared_v5 = "0000000000f259e4_44444444-4444-4444-4444-4444444444c2.dat";
+    create_data_file(shared_v3);
+    create_data_file(shared_v5);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 5,
+            "prev_garbage_version": 3,
+            "compaction_inputs": [
+                {
+                    "data_size": 4,
+                    "segment_metas": [
+                        {"filename": "0000000000f259e4_44444444-4444-4444-4444-4444444444c2.dat", "shared": true}
+                    ]
+                }
+            ]
+        }
+        )DEL")));
+    auto cached_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 600,
+            "version": 3,
+            "compaction_inputs": [
+                {
+                    "data_size": 4,
+                    "segment_metas": [
+                        {"filename": "0000000000f259e4_44444444-4444-4444-4444-4444444444c1.dat", "shared": true}
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), cached_v3);
+
+    DeleteTabletRequest request;
+    request.add_tablet_ids(600);
+    DeleteTabletResponse response;
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_TRUE(file_exist(shared_v3));
+    EXPECT_TRUE(file_exist(shared_v5));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 5)));
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     const std::string shared_segment = "0000000000f159e4_11111111-1111-1111-1111-1111111111a1.dat";
@@ -2015,6 +2274,104 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
         EXPECT_FALSE(file_exist(shared_segment));
         EXPECT_FALSE(file_exist(shared_delvec));
         EXPECT_FALSE(file_exist(shared_sstable));
+    }
+}
+
+// Deciding whether a bundle file goes with the deleted tablets reads its footer, which may come from a
+// read that mixed locally cached blocks of two writes while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the footer was read again, and
+// leaving the damage in place proves nothing is deleted on a bundle that stays bad.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_rereads_corrupted_bundle) {
+    ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    const std::string segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    create_data_file(segment);
+    auto t720_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[720] = *t720_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    auto fs = FileSystem::Default();
+    auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(720, 2);
+    auto overwrite = [&](const std::string& content) {
+        ASSERT_OK(fs->delete_file(bundle_path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(bundle_path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto intact_content, rf->read_all());
+    // The footer ends with [crc32][size]; flipping a byte of the stored crc fails the footer check.
+    std::string mixed_content = intact_content;
+    mixed_content[mixed_content.size() - sizeof(uint64_t) - sizeof(uint32_t)] ^= 0xFF;
+
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+    auto delete_tablet_720 = [&]() {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(720);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    {
+        // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+        config::lake_clear_corrupted_cache_meta = false;
+        overwrite(mixed_content);
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(0, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is still there after the drop, so the second read fails and nothing is deleted.
+        config::lake_clear_corrupted_cache_meta = true;
+        restore_on_drop = false;
+        cache_drops = 0;
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is gone after the drop, so the second read succeeds and the tablet's files go.
+        restore_on_drop = true;
+        cache_drops = 0;
+        EXPECT_EQ(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(segment));
     }
 }
 
@@ -5056,7 +5413,9 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        // The grace period stopped every tablet from advancing, so the partition-level version range is
+        // empty and vacuum must not speculatively delete each tablet's version-1 metadata.
+        EXPECT_EQ(0, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -5345,7 +5704,9 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        // The grace period stopped every tablet from advancing, so the partition-level version range is
+        // empty and vacuum must not speculatively delete each tablet's version-1 metadata.
+        EXPECT_EQ(0, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -6967,6 +7328,247 @@ TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
     }
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// The grace period stops a round from deleting anything, but a walk that ran off the bottom of the
+// prev_garbage_version chain still proved where that bottom is. That floor must be handed back to the
+// FE, otherwise every following round re-walks the same versions and re-pays the same NotFound read.
+TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
+    // Tablet 5300's only surviving metadata is version 10; its prev_garbage_version points at version 6,
+    // which an earlier vacuum already removed. commit_time 2000 is at/after the grace timestamp used
+    // below, so the grace period blocks every deletion this round.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5300,
+            "version": 10,
+            "prev_garbage_version": 6,
+            "commit_time": 2000
+        }
+        )DEL")));
+
+    int64_t total_reads = 0;
+    int64_t not_found_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        ++total_reads;
+        if (res->status().is_not_found()) {
+            ++not_found_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    int64_t next_min_version = 0;
+    // Round 1: read version 10, follow its prev_garbage_version to the missing version 6, stop there.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5300);
+        info->set_min_version(1);
+        request.set_min_retain_version(10);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(2, total_reads);
+        EXPECT_EQ(1, not_found_reads);
+        // Inside the grace window nothing may be deleted, and version 10 stays retained.
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5300, 10)));
+        EXPECT_EQ(9, response.vacuumed_version());
+        // The only bound the walk established: nothing exists at or below version 6. NOT
+        // final_retain_version (10) -- version 10 was not deleted and its garbage is still to collect.
+        ASSERT_EQ(1, response.tablet_infos_size());
+        EXPECT_EQ(7, response.tablet_infos(0).min_version());
+        next_min_version = response.tablet_infos(0).min_version();
+    }
+
+    // Round 2: the FE replays the floor the BE reported. The walk stops at it instead of re-reading --
+    // and re-paying the NotFound on -- version 6. Before the fix this round repeated both reads.
+    total_reads = 0;
+    not_found_reads = 0;
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5300);
+        info->set_min_version(next_min_version);
+        request.set_min_retain_version(10);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(0, not_found_reads);
+        EXPECT_EQ(0, response.vacuumed_files());
+        // Nothing new was proved, so the floor is echoed back unchanged -- never lowered either.
+        ASSERT_EQ(1, response.tablet_infos_size());
+        EXPECT_EQ(7, response.tablet_infos(0).min_version());
+    }
+}
+
+// The counterpart of the test above: a NotFound on the very FIRST read is not proof of a chain bottom.
+// min_retain_version can be lowered to a bookmark fence version that this tablet never materialized
+// (batch publish folds a run of txns into a single snapshot at the batch's final version), so treating
+// that hole as the bottom would strand every version below it. The floor must stay put.
+TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_keeps_floor_on_unanchored_miss) {
+    // Version 8 is a hole for this tablet; versions 5 and 12 are materialized. Both are inside the
+    // grace window.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5301,
+            "version": 5,
+            "commit_time": 2000
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5301,
+            "version": 12,
+            "prev_garbage_version": 5,
+            "commit_time": 2000
+        }
+        )DEL")));
+
+    int64_t total_reads = 0;
+    int64_t not_found_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        ++total_reads;
+        if (res->status().is_not_found()) {
+            ++not_found_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Round 1: the retain boundary is the hole at version 8, so the very first read misses.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5301);
+        info->set_min_version(1);
+        request.set_min_retain_version(8);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(1, not_found_reads);
+        ASSERT_EQ(1, response.tablet_infos_size());
+        // The floor must NOT advance to 9: version 5 is still down there and still has to be walked.
+        EXPECT_EQ(1, response.tablet_infos(0).min_version());
+    }
+
+    // Round 2: the retain boundary lands on a materialized version again. Version 5 is still reachable,
+    // which it would not be had round 1 pushed the floor above it.
+    total_reads = 0;
+    not_found_reads = 0;
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5301);
+        info->set_min_version(1);
+        request.set_min_retain_version(5);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(0, not_found_reads);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5301, 5)));
+    }
+}
+
+// With file bundling on, vacuum also deletes each tablet's own version-1 metadata -- the initial file
+// create_tablet writes under the tablet id rather than into a bundle. That delete is only legal when
+// version 1 falls inside the partition-level deletable range; an empty range means nothing at all may
+// be deleted this round.
+TEST_P(LakeVacuumTest, test_vacuum_bundle_keeps_v1_metadata_when_range_empty) {
+    for (int64_t tablet_id : {700, 701}) {
+        auto v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+            {
+                "version": 1,
+                "commit_time": 2000
+            }
+            )DEL");
+        v1->set_id(tablet_id);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(v1));
+        auto v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+            {
+                "version": 2,
+                "prev_garbage_version": 1,
+                "commit_time": 2000
+            }
+            )DEL");
+        v2->set_id(tablet_id);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(v2));
+    }
+    ASSERT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+    ASSERT_TRUE(file_exist(tablet_metadata_filename(701, 1)));
+
+    auto make_request = [](VacuumRequest* request, int64_t grace_timestamp) {
+        request->set_delete_txn_log(false);
+        for (int64_t tablet_id : {700, 701}) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(1);
+        }
+        request->set_min_retain_version(2);
+        request->set_grace_timestamp(grace_timestamp);
+        request->set_min_active_txn_id(99999);
+        request->set_enable_file_bundling(true);
+        request->set_enable_shared_file_cleanup(true);
+    };
+
+    // Both versions were committed inside the grace window, so no tablet contributes a deletable range
+    // and the partition range stays empty. Before the fix the empty range still satisfied
+    // `min_version <= 1` and vacuum deleted both tablets' version-1 metadata, reporting 2 vacuumed files.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        make_request(&request, 1000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 1)));
+    }
+
+    // Once the grace timestamp moves past the commit time the range becomes [1, 2), which does contain
+    // version 1: the special case still applies and both files go away.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        make_request(&request, 3000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Two per-tablet version-1 files plus the (absent) bundle file for version 1.
+        EXPECT_EQ(3, response.vacuumed_files());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 2)));
+    }
 }
 
 } // namespace starrocks::lake

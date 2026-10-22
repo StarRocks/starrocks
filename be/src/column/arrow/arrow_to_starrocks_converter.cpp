@@ -34,6 +34,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -1029,6 +1030,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
         for (auto i = 0; i < 2; ++i) {
+            if (conv_func->children[i] == nullptr) {
+                // A pruned MAP child still needs one placeholder per entry.
+                kv_columns[i]->append_default(col_offsets->get_data().back() - kv_size[i]);
+                continue;
+            }
             size_t child_array_start_idx;
             size_t child_array_num_elements;
             const auto* child_array = get_list_map_array_child<arrow::MapType>(
@@ -1090,6 +1096,45 @@ Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t 
     }
     column->append_default(num_elements);
     return {};
+}
+
+// Convert an unshredded Arrow variant, i.e. struct<value: binary, metadata: binary> as emitted
+// by lake formats such as Paimon, into a VariantColumn. Wired up directly by
+// build_arrow_column_convert_plan instead of the [arrow type, logical type] converter table
+// because the match is on the struct layout, not on the Arrow type id alone.
+static Status variant_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                                size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
+                                ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
+    if (null_data == nullptr) {
+        return Status::InvalidArgument(
+                fmt::format("The variant column ({}) must be nullable", current_column_name_or_null(ctx)));
+    }
+    auto* variant_column = down_cast<VariantColumn*>(column);
+    const auto* struct_array = down_cast<const arrow::StructArray*>(array);
+    const auto value_array = struct_array->GetFieldByName("value");
+    const auto metadata_array = struct_array->GetFieldByName("metadata");
+    if (value_array == nullptr || metadata_array == nullptr || value_array->type_id() != ArrowTypeId::BINARY ||
+        metadata_array->type_id() != ArrowTypeId::BINARY) {
+        return Status::InternalError(
+                fmt::format("The variant column ({}) requires an arrow struct<value: binary, metadata: binary>, "
+                            "actual type is {}",
+                            current_column_name_or_null(ctx), array->type()->ToString()));
+    }
+    const auto* value_binary = down_cast<const arrow::BinaryArray*>(value_array.get());
+    const auto* metadata_binary = down_cast<const arrow::BinaryArray*>(metadata_array.get());
+    for (size_t i = 0; i < num_elements; ++i) {
+        const int64_t idx = array_start_idx + i;
+        if (array->IsNull(idx)) {
+            // The null flag is already set by fill_null_column(); keep the data column aligned.
+            variant_column->append_default();
+            continue;
+        }
+        const auto value_view = value_binary->GetView(idx);
+        const auto metadata_view = metadata_binary->GetView(idx);
+        variant_column->append_shredded(Slice(metadata_view.data(), metadata_view.size()),
+                                        Slice(value_view.data(), value_view.size()));
+    }
+    return Status::OK();
 }
 
 constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
@@ -1254,6 +1299,13 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
 
         raw_type_desc->type = TYPE_MAP;
         for (auto i = 0; i < 2; i++) {
+            // Complex-type pruning marks an unused MAP key/value as UNKNOWN. Preserve its slot,
+            // but skip Arrow conversion; materialization fills defaults for that child.
+            if (type_desc->children[i].is_unknown_type()) {
+                raw_type_desc->children.emplace_back(TYPE_UNKNOWN);
+                conv_func->children.emplace_back(nullptr);
+                continue;
+            }
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
             auto sub_at = i == 0 ? down_cast<const arrow::MapType*>(arrow_type)->key_type()
@@ -1272,7 +1324,7 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
                                 arrow_type->name(), type_to_string(lt)));
         }
         auto field_size = type_desc->children.size();
-        auto arrow_field_size = arrow_type->num_fields();
+        const auto* struct_type = down_cast<const arrow::StructType*>(arrow_type);
 
         raw_type_desc->type = TYPE_STRUCT;
         raw_type_desc->field_names = type_desc->field_names;
@@ -1280,12 +1332,39 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
         for (auto i = 0; i < field_size; i++) {
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
-            auto sub_at = i >= arrow_field_size ? arrow::null() : arrow_type->field(i)->type();
-            RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
-                                                            cf.get(), need_cast, strict_mode));
+            // Match the name used by the converter, not the position in a pruned slot.
+            auto field = struct_type->GetFieldByName(type_desc->field_names[i]);
+            if (field == nullptr) {
+                // Materialization appends NULLs for absent fields, including complex children.
+                type = type_desc->children[i];
+                cf->func = null_converter;
+            } else {
+                RETURN_IF_ERROR(build_arrow_column_convert_plan(field->type().get(), &type_desc->children[i], true,
+                                                                &type, cf.get(), need_cast, strict_mode));
+            }
             raw_type_desc->children.emplace_back(std::move(type));
             conv_func->children.emplace_back(std::move(cf));
         }
+        break;
+    }
+    case TYPE_VARIANT: {
+        if (at != ArrowTypeId::STRUCT) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
+        const auto* struct_type = down_cast<const arrow::StructType*>(arrow_type);
+        const auto value_field = struct_type->GetFieldByName("value");
+        const auto metadata_field = struct_type->GetFieldByName("metadata");
+        if (value_field == nullptr || metadata_field == nullptr || value_field->type()->id() != ArrowTypeId::BINARY ||
+            metadata_field->type()->id() != ArrowTypeId::BINARY) {
+            return Status::InternalError(
+                    fmt::format("The variant type requires an arrow struct<value: binary, metadata: binary>, "
+                                "actual type is {}",
+                                arrow_type->ToString()));
+        }
+        conv_func->func = variant_converter;
+        *raw_type_desc = *type_desc;
         break;
     }
     default: {

@@ -285,6 +285,7 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getNormalizedErrorCode())
+                .setErrorMessage(auditedErrorMessage(ctx.getState().getErrorMessage(), origStmt))
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
@@ -392,6 +393,20 @@ public class ConnectProcessor {
             MetricRepo.HISTO_CACHE_MISS_RATIO.update((long) (auditEvent.getCacheMissRatio() * 10));
         }
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(auditEvent);
+    }
+
+    // The statement is redacted with the "key" = value context still in hand, but a parser error
+    // quotes the offending token on its own, where nothing marks it as a credential: for
+    // PROPERTIES ("aws.s3.secret_key" = AKIA...) the statement is audited as *** while the message
+    // would carry the key verbatim. Drop the message instead of recording a secret.
+    static String auditedErrorMessage(String errorMessage, String origStmt) {
+        if (Strings.isNullOrEmpty(errorMessage) || !Config.enable_audit_sql) {
+            return "";
+        }
+        if (origStmt != null && !origStmt.equals(SqlCredentialRedactor.redact(origStmt))) {
+            return "";
+        }
+        return errorMessage;
     }
 
     private String formatStmt(String origStmt, StatementBase parsedStmt) {
@@ -1047,9 +1062,57 @@ public class ConnectProcessor {
     }
 
     private void handleStmtClose() {
-        int stmtId = packetBuf.getInt();
+        int stmtId = MysqlCodec.readInt4(packetBuf);
         ctx.removePreparedStmt(String.valueOf(stmtId));
         ctx.getState().setStateType(QueryState.MysqlStateType.NOOP);
+    }
+
+    /**
+     * A connection whose handshake was answered before the login completed - an OAuth2 user whose
+     * token arrives later through the browser callback - may ping, quit or re-authenticate, and
+     * nothing else: until the token is there, {@code checkLoginSuccess} refuses every other command
+     * with the same error the first statement would get (the authorization URL). Without this,
+     * such a connection could switch databases, list columns or probe which databases exist,
+     * because only the statement commands checked. Those keep their own check inside
+     * {@link #handleQuery} / {@link #handleExecute}, which also records the refusal in the audit log.
+     */
+    private boolean refusedUntilLoggedIn(MysqlCommand command) {
+        switch (command) {
+            // Allowed while the login is pending: a client keeps the connection alive with PING
+            // while the user is in the browser, may give up with QUIT, and CHANGE_USER is itself a
+            // new authentication.
+            case COM_QUIT:
+            case COM_PING:
+            case COM_CHANGE_USER:
+                return false;
+            // Not exempt, just checked elsewhere: the statement commands run the same
+            // checkLoginSuccess inside handleQuery / handleExecute (validateStmtBeforeExecution),
+            // where the refusal is also written to the audit log. Checking here too would only
+            // report it twice.
+            case COM_QUERY:
+            case COM_STMT_PREPARE:
+            case COM_STMT_EXECUTE:
+                return false;
+            // Everything else - COM_INIT_DB, COM_FIELD_LIST, COM_STMT_RESET / CLOSE, ... - asks now.
+            default:
+                break;
+        }
+        AuthenticationProvider provider = ctx.getAuthenticationProvider();
+        if (provider == null) {
+            return false;
+        }
+        try {
+            provider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
+            return false;
+        } catch (AuthenticationException e) {
+            if (e.getErrorCode() != null) {
+                ErrorReport.report(e.getErrorCode(), e.getMessage());
+            } else {
+                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, e.getMessage());
+            }
+            ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            return true;
+        }
     }
 
     private static boolean isNull(byte[] bitmap, int position) {
@@ -1071,6 +1134,11 @@ public class ConnectProcessor {
         ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
+
+        if (refusedUntilLoggedIn(command)) {
+            replaceDiagnosticsForCommand();
+            return;
+        }
 
         switch (command) {
             case COM_INIT_DB:

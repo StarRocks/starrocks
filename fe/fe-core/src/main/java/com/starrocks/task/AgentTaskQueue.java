@@ -84,7 +84,7 @@ public class AgentTaskQueue {
         // stale entry in a non-leader's queue that could shadow a same-signature task after
         // re-election. Refuse by returning false (the duplicate-signature convention below), NOT
         // by throwing: enqueues also happen inside WAL appliers (e.g. DROP TABLE ->
-        // OlapTable.onDrop -> sendDropAutoIncrementMapTask), where an exception after the journal
+        // OlapTable.onDrop -> sendDropAutoIncrementMapTaskBestEffort), where an exception after the journal
         // committed would tear the apply in half, and on follower-resident schedulers started by
         // image load / replay (e.g. CompactionControlScheduler), which run here on a timer.
         // Callers uniformly treat false as "not enqueued, skip" and the AgentBatchTask.run()
@@ -133,6 +133,15 @@ public class AgentTaskQueue {
         signatureMap.remove(signature);
         LOG.debug("remove task: type[{}], backend[{}], signature[{}]", type, backendId, signature);
         --taskNum;
+    }
+
+    // Removes the task only if it is still the one queued under its signature, so that a task another job queued under
+    // the same signature in the meantime stays queued.
+    public static synchronized void removeTaskIfSame(AgentTask task) {
+        Map<Long, AgentTask> signatureMap = tasks.get(task.getBackendId(), task.getTaskType());
+        if (signatureMap != null && signatureMap.get(task.getSignature()) == task) {
+            removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
     }
 
     /*

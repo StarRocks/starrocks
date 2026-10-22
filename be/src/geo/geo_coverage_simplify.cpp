@@ -1,0 +1,926 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "geo/geo_coverage_simplify.h"
+
+#include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <map>
+#include <numeric>
+#include <variant>
+#include <vector>
+
+#define BOOST_MATH_DISABLE_FLOAT128
+#define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/box.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
+#include <boost/geometry/index/rtree.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
+
+#include "geo/geo_exact_arithmetic.h"
+#include "types/geo_wkb.h"
+
+namespace starrocks {
+namespace {
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
+constexpr uint32_t kAbsent = std::numeric_limits<uint32_t>::max();
+using Key = std::pair<uint32_t, uint32_t>;
+struct Stop {
+    Status status;
+};
+[[noreturn]] void invalid(const char* message) {
+    throw Stop{Status::InvalidArgument(message)};
+}
+
+// uint32_t graph indices reserve the largest value for absent links.
+uint32_t index(size_t size) {
+    if (size >= kAbsent) invalid("ST_CoverageSimplify graph index range exceeded");
+    return static_cast<uint32_t>(size);
+}
+
+// Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
+// ring sums with native WKB positions <4219. 16384 checked bits also cover
+// tolerance^2 and doubled midpoint samples. Dynamic limbs use the standard allocator.
+using DynamicInteger = boost::multiprecision::number<
+        boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
+                                               boost::multiprecision::checked,
+                                               std::allocator<boost::multiprecision::limb_type>>,
+        boost::multiprecision::et_off>;
+using FixedInteger = boost::multiprecision::number<
+        boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::signed_magnitude,
+                                               boost::multiprecision::checked, void>,
+        boost::multiprecision::et_off>;
+
+// Finite binary64 as an odd significand times 2^shift, in the original 2^1074 scale.
+struct Binary64 {
+    uint64_t significand;
+    unsigned shift;
+    bool negative;
+    explicit Binary64(double value) {
+        const uint64_t bits = std::bit_cast<uint64_t>(value), exponent = (bits >> 52) & 0x7ff;
+        significand = bits & ((uint64_t{1} << 52) - 1);
+        if (exponent) significand |= uint64_t{1} << 52;
+        shift = exponent ? exponent - 1 : 0;
+        negative = bits >> 63;
+        if (significand) {
+            const unsigned zeros = std::countr_zero(significand);
+            significand >>= zeros;
+            shift += zeros;
+        }
+    }
+};
+struct ArithmeticBounds {
+    unsigned common_shift = 2098, high_bit = 0;
+    uint32_t positions = 0;
+    void include(double value) {
+        const Binary64 parts(value);
+        if (!parts.significand) return;
+        common_shift = std::min(common_shift, parts.shift);
+        high_bit = std::max(high_bit, parts.shift + unsigned(std::bit_width(parts.significand)));
+    }
+    bool fixed() const {
+        const unsigned b = high_bit ? high_bit - common_shift : 0;
+        // |coordinate|, tolerance <2^b. Determinants use <=2b+4 bits;
+        // every (also shortened) ring sum uses <=2b+1+bit_width(positions).
+        // The first bound also keeps multiplication operands within two limbs,
+        // so Boost's full four-limb multiplication scratch fits in 256 bits.
+        return b + 2 <= 128 && 2 * b + std::bit_width(positions) + 4 <= 255;
+    }
+};
+template <class Integer>
+int sign(const Integer& value) {
+    return geo_exact::sign(value);
+}
+template <class Integer>
+struct NumericPoint {
+    double x, y;
+    Integer ex, ey;
+};
+template <class Integer>
+Integer orientation(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c) {
+    return geo_exact::orientation(a.ex, a.ey, b.ex, b.ey, c.ex, c.ey);
+}
+Key key(uint32_t a, uint32_t b) {
+    return std::minmax(a, b);
+}
+// Wider exponent range prevents box split/area overflow at binary64 extremes.
+// Index boxes only select candidates; all topology decisions are exact.
+using BoxPoint = bg::model::d2::point_xy<long double>;
+using Box = bg::model::box<BoxPoint>;
+using Item = std::pair<Box, uint32_t>;
+using Tree = bgi::rtree<Item, bgi::quadratic<16>>;
+// query() traverses recursively with stack storage; qbegin() in Boost 1.80
+// instead owns a std::vector path stack.
+template <class F>
+struct QueryOutput {
+    F* visitor;
+    QueryOutput& operator*() { return *this; }
+    QueryOutput& operator++() { return *this; }
+    QueryOutput operator++(int) { return *this; }
+    QueryOutput& operator=(const Item& item) {
+        (*visitor)(item);
+        return *this;
+    }
+};
+template <class F>
+void query(const Tree& tree, const Box& box, F&& visitor) {
+    tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
+}
+template <class Integer>
+Box bounds(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
+    return {{std::min(a.x, b.x), std::min(a.y, b.y)}, {std::max(a.x, b.x), std::max(a.y, b.y)}};
+}
+template <class Integer>
+bool between(const NumericPoint<Integer>& p, const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
+    return std::min(a.x, b.x) <= p.x && p.x <= std::max(a.x, b.x) && std::min(a.y, b.y) <= p.y &&
+           p.y <= std::max(a.y, b.y);
+}
+enum class Contact { NONE, ENDPOINT, TJUNCTION, CROSS, OVERLAP };
+template <class Integer>
+Contact contact(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c,
+                const NumericPoint<Integer>& d) {
+    const int ac = sign(orientation(a, b, c)), ad = sign(orientation(a, b, d));
+    const int ca = sign(orientation(c, d, a)), cb = sign(orientation(c, d, b));
+    if (ac * ad < 0 && ca * cb < 0) return Contact::CROSS;
+    if (ac == 0 && ad == 0 && ca == 0 && cb == 0) {
+        auto less = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+            return p.x < q.x || (p.x == q.x && p.y < q.y);
+        };
+        const auto& lo1 = less(a, b) ? a : b;
+        const auto& hi1 = less(a, b) ? b : a;
+        const auto& lo2 = less(c, d) ? c : d;
+        const auto& hi2 = less(c, d) ? d : c;
+        const auto& lo = less(lo1, lo2) ? lo2 : lo1;
+        const auto& hi = less(hi1, hi2) ? hi1 : hi2;
+        if (less(hi, lo)) return Contact::NONE;
+        if (less(lo, hi)) return Contact::OVERLAP;
+    }
+    auto equal = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+        return p.x == q.x && p.y == q.y;
+    };
+    if ((ac == 0 && between(c, a, b) && !equal(c, a) && !equal(c, b)) ||
+        (ad == 0 && between(d, a, b) && !equal(d, a) && !equal(d, b)) ||
+        (ca == 0 && between(a, c, d) && !equal(a, c) && !equal(a, d)) ||
+        (cb == 0 && between(b, c, d) && !equal(b, c) && !equal(b, d)))
+        return Contact::TJUNCTION;
+    if ((ac == 0 && between(c, a, b)) || (ad == 0 && between(d, a, b)) || (ca == 0 && between(a, c, d)) ||
+        (cb == 0 && between(b, c, d)))
+        return Contact::ENDPOINT;
+    return Contact::NONE;
+}
+
+struct Occurrence {
+    uint32_t node, ring, previous, next;
+    bool active = true;
+};
+template <class Integer>
+struct NumericRing {
+    uint32_t first, count, component;
+    bool hole;
+    Integer area;
+};
+struct Component {
+    uint32_t row, first, count;
+};
+struct EdgeInterval {
+    uint32_t occurrence, ymin, ymax;
+};
+struct RingIndex {
+    uint32_t first, xmin, xmax, ymin, ymax;
+};
+struct LocationIndex {
+    std::vector<EdgeInterval> edges;
+    std::vector<RingIndex> rings;
+};
+template <class Integer>
+struct NumericNode {
+    NumericPoint<Integer> point;
+    std::vector<uint32_t> occurrences;
+    uint32_t version = 0;
+    bool fixed = false, active = true;
+    explicit NumericNode(NumericPoint<Integer> p) : point(std::move(p)) {}
+};
+struct Edge {
+    uint32_t a, b;
+    std::array<uint32_t, 2> owners{};
+    unsigned count = 0;
+    bool active = true;
+};
+struct Row {
+    std::vector<uint8_t> bytes;
+    size_t output_first = 0, output_size = 0;
+    uint32_t first = 0, count = 0;
+    bool null = false, multi = false;
+};
+template <class Integer>
+struct NumericCandidate {
+    Integer area;
+    uint32_t node, version;
+};
+template <class Integer>
+struct NumericCandidateLess {
+    bool operator()(const NumericCandidate<Integer>& a, const NumericCandidate<Integer>& b) const {
+        return a.area != b.area ? a.area > b.area : a.node > b.node;
+    }
+};
+
+// Native OGC WKB access only, with structural preflight before payload copies.
+class Reader {
+public:
+    explicit Reader(Slice bytes) : bytes(bytes) {}
+    template <class T>
+    T number(bool little) {
+        if (sizeof(T) > bytes.size - position) invalid("ST_CoverageSimplify truncated WKB");
+        T result;
+        memcpy(&result, bytes.data + position, sizeof(T));
+        position += sizeof(T);
+        if (little != (std::endian::native == std::endian::little)) {
+            auto* raw = reinterpret_cast<uint8_t*>(&result);
+            std::reverse(raw, raw + sizeof(T));
+        }
+        return result;
+    }
+    std::pair<bool, uint32_t> header() {
+        uint8_t order = number<uint8_t>(true);
+        if (order > 1) invalid("ST_CoverageSimplify invalid WKB byte order");
+        return {order == 1, number<uint32_t>(order == 1)};
+    }
+    void done() const {
+        if (position != bytes.size) invalid("ST_CoverageSimplify trailing WKB bytes");
+    }
+    Slice bytes;
+    size_t position = 0;
+    size_t coordinates = 0;
+    size_t components = 0;
+};
+template <class T>
+void write(std::vector<uint8_t>& output, T value) {
+    if constexpr (std::endian::native != std::endian::little) {
+        auto* raw = reinterpret_cast<uint8_t*>(&value);
+        std::reverse(raw, raw + sizeof(T));
+    }
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+    output.insert(output.end(), bytes, bytes + sizeof(T));
+}
+struct Partition {
+    std::vector<Row> rows;
+    std::vector<uint8_t> output_bytes;
+    size_t input_bytes = 0, calls = 0;
+    bool finished = false, failed = false, null_parameter = false;
+    ArithmeticBounds arithmetic;
+    void preflight(Reader& reader, bool child) {
+        const GeoWkbLimits native_limits;
+        if (reader.bytes.size > native_limits.max_bytes)
+            invalid("ST_CoverageSimplify exceeds native WKB payload limit");
+        if (reader.components == native_limits.max_components)
+            invalid("ST_CoverageSimplify exceeds native WKB component limit");
+        ++reader.components;
+        auto [little, type] = reader.header();
+        if (type != 3 && (type != 6 || child)) invalid("ST_CoverageSimplify requires XY POLYGON/MULTIPOLYGON WKB");
+        uint32_t n = reader.number<uint32_t>(little);
+        if (type == 3) {
+            if (n > native_limits.max_components - reader.components)
+                invalid("ST_CoverageSimplify exceeds native WKB component limit");
+            reader.components += n;
+        }
+        // Every declared ring/child needs at least its count/header bytes.
+        if (n > (reader.bytes.size - reader.position) / (type == 3 ? 4 : 9))
+            invalid("ST_CoverageSimplify truncated WKB components");
+        for (uint32_t i = 0; i < n; ++i) {
+            if (type == 6) {
+                preflight(reader, true);
+                continue;
+            }
+            const uint32_t positions = reader.number<uint32_t>(little);
+            if (positions > native_limits.max_coordinates - reader.coordinates)
+                invalid("ST_CoverageSimplify exceeds native WKB coordinate limit");
+            reader.coordinates += positions;
+            arithmetic.positions = std::max(arithmetic.positions, positions);
+            if (positions > (reader.bytes.size - reader.position) / 16)
+                invalid("ST_CoverageSimplify truncated WKB ring");
+            for (uint32_t j = 0; j < positions; ++j) {
+                double x = reader.number<double>(little), y = reader.number<double>(little);
+                if (!std::isfinite(x) || !std::isfinite(y)) invalid("ST_CoverageSimplify nonfinite XY coordinate");
+                arithmetic.include(x);
+                arithmetic.include(y);
+            }
+        }
+    }
+};
+
+template <class Integer>
+struct Kernel {
+    using Point = NumericPoint<Integer>;
+    using Node = NumericNode<Integer>;
+    using Ring = NumericRing<Integer>;
+    using Candidate = NumericCandidate<Integer>;
+    using CandidateLess = NumericCandidateLess<Integer>;
+    std::vector<Row>& rows;
+    std::vector<uint8_t>& output_bytes;
+    size_t& input_bytes;
+    size_t& calls;
+    unsigned shift;
+    std::vector<Node> nodes;
+    std::vector<Occurrence> occurrences;
+    std::vector<Ring> rings;
+    std::vector<Component> components;
+    std::map<std::pair<double, double>, uint32_t> node_map;
+    std::map<Key, uint32_t> edge_map;
+    std::vector<Edge> edges;
+    std::vector<Candidate> heap;
+    Tree edge_tree, node_tree;
+    Kernel(Partition& partition, unsigned shift)
+            : rows(partition.rows),
+              output_bytes(partition.output_bytes),
+              input_bytes(partition.input_bytes),
+              calls(partition.calls),
+              shift(shift) {}
+    Integer scaled(double value) const {
+        if constexpr (std::is_same_v<Integer, DynamicInteger>) {
+            return geo_exact::scaled_binary64<Integer>(value);
+        } else {
+            const Binary64 parts(value);
+            Integer result(parts.significand);
+            if (parts.significand) result <<= parts.shift - shift;
+            return parts.negative ? -result : result;
+        }
+    }
+    void run(double tolerance, bool boundary) {
+        decode();
+        graph();
+        validate();
+        if (tolerance > 0 && !nodes.empty()) simplify(tolerance, boundary);
+        output(tolerance == 0);
+    }
+    uint32_t intern(double x, double y) {
+        auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
+        if (fresh) {
+            it->second = index(nodes.size());
+            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)});
+        }
+        return it->second;
+    }
+    void polygon(Reader& reader, uint32_t row, bool little) {
+        uint32_t n = reader.number<uint32_t>(little), component = index(components.size());
+        components.push_back({row, uint32_t(rings.size()), n});
+        for (uint32_t r = 0; r < n; ++r) {
+            const uint32_t positions = reader.number<uint32_t>(little), ring = index(rings.size());
+            if (positions < 4) invalid("ST_CoverageSimplify degenerate polygon ring");
+            uint32_t first = kAbsent, previous = kAbsent, first_node = kAbsent, last_node = kAbsent;
+            for (uint32_t j = 0; j < positions; ++j) {
+                double x = reader.number<double>(little), y = reader.number<double>(little);
+                const uint32_t node = intern(x, y);
+                if (j == 0) first_node = node;
+                if (j + 1 == positions) {
+                    if (node != first_node) invalid("ST_CoverageSimplify unclosed polygon ring");
+                    break;
+                }
+                // Consecutive repeated positions contribute to admission, but
+                // a zero-length edge is not a distinct coverage segment.
+                if (node == last_node) continue;
+                uint32_t occurrence = index(occurrences.size());
+                occurrences.push_back({node, ring, previous, kAbsent});
+                nodes[node].occurrences.push_back(occurrence);
+                if (previous != kAbsent)
+                    occurrences[previous].next = occurrence;
+                else
+                    first = occurrence;
+                previous = occurrence;
+                last_node = node;
+            }
+            if (first == kAbsent) invalid("ST_CoverageSimplify empty polygon ring");
+            // The consecutive run can cross the circular seam. Remove its
+            // trailing occurrence before linking the ring, without changing
+            // the original WKB or the admitted coordinate/byte counts.
+            if (previous != first && last_node == first_node) {
+                const uint32_t trailing = previous;
+                previous = occurrences[trailing].previous;
+                nodes[first_node].occurrences.pop_back();
+                occurrences.pop_back();
+            }
+            occurrences[first].previous = previous;
+            occurrences[previous].next = first;
+            rings.push_back({first, uint32_t(occurrences.size() - first), component, r != 0, Integer(0)});
+            if (rings.back().count < 3) invalid("ST_CoverageSimplify degenerate polygon ring");
+            uint32_t o = first;
+            do {
+                const auto& a = nodes[occurrences[o].node].point;
+                const auto& b = nodes[occurrences[occurrences[o].next].node].point;
+                rings.back().area += a.ex * b.ey - a.ey * b.ex;
+                o = occurrences[o].next;
+            } while (o != first);
+            if (rings.back().area == 0) invalid("ST_CoverageSimplify zero-area polygon ring");
+        }
+    }
+    void decode() {
+        for (uint32_t r = 0; r < rows.size(); ++r) {
+            auto& row = rows[r];
+            row.first = components.size();
+            if (row.null) continue;
+            Reader reader(Slice(reinterpret_cast<const char*>(row.bytes.data()), row.bytes.size()));
+            auto [little, type] = reader.header();
+            row.multi = type == 6;
+            if (!row.multi)
+                polygon(reader, r, little);
+            else {
+                uint32_t n = reader.number<uint32_t>(little);
+                for (uint32_t i = 0; i < n; ++i) {
+                    auto [order, child] = reader.header();
+                    polygon(reader, r, order);
+                }
+            }
+            row.count = components.size() - row.first;
+            reader.done();
+        }
+        for (uint32_t n = 0; n < nodes.size(); ++n) {
+            node_tree.insert({bounds(nodes[n].point, nodes[n].point), n});
+        }
+    }
+    void add_edge(uint32_t occurrence) {
+        uint32_t a = occurrences[occurrence].node, b = occurrences[occurrences[occurrence].next].node;
+        auto [it, fresh] = edge_map.emplace(key(a, b), 0);
+        if (fresh) {
+            it->second = index(edges.size());
+            edges.push_back({std::min(a, b), std::max(a, b)});
+            edge_tree.insert({bounds(nodes[a].point, nodes[b].point), it->second});
+        }
+        auto& edge = edges[it->second];
+        if (edge.count == 2) invalid("ST_CoverageSimplify more than two coverage edge owners");
+        edge.owners[edge.count++] = occurrence;
+    }
+    void erase_edge(uint32_t id) {
+        auto& edge = edges[id];
+        // Boost 1.80 remove() owns an uncustomizable underflow std::vector.
+        // Keep old indexed items, mark inactive and filter queries. At most
+        // one new edge per removed node, hence bounded storage, without that
+        // default allocator bypass. The charged traversal includes stale items.
+        edge_map.erase(key(edge.a, edge.b));
+        edge.active = false;
+    }
+    void graph() {
+        for (uint32_t o = 0; o < occurrences.size(); ++o) add_edge(o);
+        std::vector<unsigned> degree(nodes.size(), 0);
+        for (const auto& edge : edges) {
+            ++degree[edge.a];
+            ++degree[edge.b];
+        }
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            nodes[i].fixed = degree[i] != 2;
+        }
+    }
+    LocationIndex prepare_locations() {
+        LocationIndex result;
+        size_t count = 0;
+        for (const auto& ring : rings) {
+            count += ring.count;
+        }
+        result.edges.reserve(count);
+        result.rings.reserve(rings.size());
+        for (const auto& ring : rings) {
+            uint32_t o = ring.first, n = occurrences[o].node;
+            RingIndex entry{index(result.edges.size()), n, n, n, n};
+            do {
+                uint32_t a = occurrences[o].node, b = occurrences[occurrences[o].next].node;
+                const auto& p = nodes[a].point;
+                if (p.x < nodes[entry.xmin].point.x) entry.xmin = a;
+                if (p.x > nodes[entry.xmax].point.x) entry.xmax = a;
+                if (p.y < nodes[entry.ymin].point.y) entry.ymin = a;
+                if (p.y > nodes[entry.ymax].point.y) entry.ymax = a;
+                result.edges.push_back({o, p.y <= nodes[b].point.y ? a : b, p.y >= nodes[b].point.y ? a : b});
+                o = occurrences[o].next;
+            } while (o != ring.first);
+            auto first = result.edges.begin() + entry.first;
+            std::sort(first, result.edges.end(), [&](const EdgeInterval& a, const EdgeInterval& b) {
+                double ay = nodes[a.ymin].point.y, by = nodes[b.ymin].point.y;
+                return ay != by ? ay < by : a.occurrence < b.occurrence;
+            });
+            uint32_t ymax = first->ymax;
+            for (auto it = first; it != result.edges.end(); ++it) {
+                if (nodes[it->ymax].point.y > nodes[ymax].point.y) ymax = it->ymax;
+                it->ymax = ymax; // Prefix maximum, not this edge's upper endpoint.
+            }
+            result.rings.push_back(entry);
+        }
+        return result;
+    }
+    // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
+    int location(const Integer& x, const Integer& y, const Ring& ring, const LocationIndex& locations) {
+        const auto& box = locations.rings[&ring - rings.data()];
+        if (x < 2 * nodes[box.xmin].point.ex || x > 2 * nodes[box.xmax].point.ex || y < 2 * nodes[box.ymin].point.ey ||
+            y > 2 * nodes[box.ymax].point.ey)
+            return -1;
+        auto first = locations.edges.begin() + box.first, last = first + ring.count;
+        first = std::lower_bound(first, last, y, [&](const EdgeInterval& edge, const Integer& value) {
+            return 2 * nodes[edge.ymax].point.ey < value;
+        });
+        last = std::upper_bound(first, last, y, [&](const Integer& value, const EdgeInterval& edge) {
+            return value < 2 * nodes[edge.ymin].point.ey;
+        });
+        bool inside = false;
+        for (auto it = first; it != last; ++it) {
+            uint32_t o = it->occurrence;
+            const auto& a = nodes[occurrences[o].node].point;
+            const auto& b = nodes[occurrences[occurrences[o].next].node].point;
+            const Integer ay = 2 * a.ey, by = 2 * b.ey;
+            // Closed ranges retain boundary hits; the half-open test retains vertex parity.
+            if (y < std::min(ay, by) || y > std::max(ay, by)) continue;
+            const Integer ax = 2 * a.ex, bx = 2 * b.ex;
+            if (x > std::max(ax, bx)) continue;
+            const bool crosses = (ay > y) != (by > y);
+            if (x < std::min(ax, bx)) {
+                if (crosses) inside = !inside;
+                continue;
+            }
+            Integer side = (b.ex - a.ex) * (y - ay) - (b.ey - a.ey) * (x - ax);
+            if (side == 0) return 0; // Both coordinates are within the closed edge bounds.
+            if (crosses && sign(side) == sign(b.ey - a.ey)) inside = !inside;
+        }
+        return inside ? 1 : -1;
+    }
+    int location(const Integer& x, const Integer& y, const Component& component, const LocationIndex& locations) {
+        if (component.count == 0) return -1;
+        int outer = location(x, y, rings[component.first], locations);
+        if (outer != 1) return outer;
+        for (uint32_t r = 1; r < component.count; ++r) {
+            int hole = location(x, y, rings[component.first + r], locations);
+            if (hole >= 0) return -hole;
+        }
+        return 1;
+    }
+    template <class Region>
+    int relation(const Ring& ring, const Region& region, const LocationIndex& locations) {
+        int relation = 0;
+        uint32_t o = ring.first;
+        do {
+            const auto& a = nodes[occurrences[o].node].point;
+            const auto& b = nodes[occurrences[occurrences[o].next].node].point;
+            int next = location(a.ex + b.ex, a.ey + b.ey, region, locations);
+            if (next != 0) {
+                if (relation != 0 && relation != next) invalid("ST_CoverageSimplify crossing polygon interiors");
+                relation = next;
+            }
+            o = occurrences[o].next;
+        } while (o != ring.first);
+        return relation;
+    }
+    int side(uint32_t owner, const Edge& edge) const {
+        const auto& occurrence = occurrences[owner];
+        const auto& ring = rings[occurrence.ring];
+        return sign(ring.area) * (ring.hole ? -1 : 1) * (occurrence.node == edge.a ? 1 : -1);
+    }
+    void validate() {
+        // Contact incidence forest detects disconnected interiors (e.g. a hole
+        // touching its shell twice) without a quadratic ring-pair allocation.
+        std::vector<uint32_t> parent(rings.size());
+        std::iota(parent.begin(), parent.end(), 0);
+        std::map<Key, uint32_t> contacts;
+        std::map<Key, bool> links;
+        auto root = [&](uint32_t id) {
+            while (parent[id] != id) {
+                parent[id] = parent[parent[id]];
+                id = parent[id];
+            }
+            return id;
+        };
+        auto link = [&](uint32_t ring, uint32_t node) {
+            uint32_t component = rings[ring].component;
+            auto [it, fresh] = contacts.emplace(Key{component, node}, 0);
+            if (fresh) {
+                it->second = index(parent.size());
+                parent.push_back(it->second);
+            }
+            if (!links.emplace(Key{ring, it->second}, true).second) return;
+            uint32_t a = root(ring), b = root(it->second);
+            if (a == b) invalid("ST_CoverageSimplify disconnected polygon interior");
+            parent[a] = b;
+        };
+        for (uint32_t i = 0; i < edges.size(); ++i) {
+            auto& edge = edges[i];
+            if (!edge.active) continue;
+            if (edge.count == 2) {
+                const auto& a = rings[occurrences[edge.owners[0]].ring];
+                const auto& b = rings[occurrences[edge.owners[1]].ring];
+                if (a.component == b.component || components[a.component].row == components[b.component].row ||
+                    side(edge.owners[0], edge) == side(edge.owners[1], edge))
+                    invalid("ST_CoverageSimplify overlapping polygon boundary owners");
+            }
+            query(edge_tree, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](const Item& item) {
+                uint32_t j = item.second;
+                if (j <= i || !edges[j].active) return;
+                const auto& other = edges[j];
+                Contact c =
+                        contact(nodes[edge.a].point, nodes[edge.b].point, nodes[other.a].point, nodes[other.b].point);
+                if (c == Contact::NONE) return;
+                if (c != Contact::ENDPOINT)
+                    invalid("ST_CoverageSimplify invalid coverage crossing or mismatched subdivision");
+                uint32_t node = (edge.a == other.a || edge.a == other.b) ? edge.a : edge.b;
+                for (unsigned a = 0; a < edge.count; ++a)
+                    for (unsigned b = 0; b < other.count; ++b) {
+                        uint32_t x = edge.owners[a], y = other.owners[b];
+                        const auto& ox = occurrences[x];
+                        const auto& oy = occurrences[y];
+                        if (ox.ring == oy.ring) {
+                            if (ox.next != y && oy.next != x) invalid("ST_CoverageSimplify self-touching polygon ring");
+                        } else if (rings[ox.ring].component == rings[oy.ring].component) {
+                            link(ox.ring, node);
+                            link(oy.ring, node);
+                        }
+                    }
+            });
+        }
+        const auto locations = prepare_locations();
+        Tree polygons;
+        for (uint32_t c = 0; c < components.size(); ++c) {
+            const auto& component = components[c];
+            if (component.count == 0) continue;
+            const auto& outer = rings[component.first];
+            for (uint32_t h = 1; h < component.count; ++h) {
+                const auto& hole = rings[component.first + h];
+                if (relation(hole, outer, locations) != 1 || relation(outer, hole, locations) >= 0)
+                    invalid("ST_CoverageSimplify hole outside its shell");
+                for (uint32_t k = 1; k < h; ++k)
+                    if (relation(hole, rings[component.first + k], locations) >= 0 ||
+                        relation(rings[component.first + k], hole, locations) >= 0)
+                        invalid("ST_CoverageSimplify overlapping holes");
+            }
+            const auto& bounds = locations.rings[component.first];
+            Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
+                    {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
+            query(polygons, box, [&](const Item& item) {
+                const auto& other = components[item.second];
+                for (uint32_t r = 0; r < component.count; ++r)
+                    if (relation(rings[component.first + r], other, locations) > 0)
+                        invalid("ST_CoverageSimplify overlapping coverage interiors");
+                for (uint32_t r = 0; r < other.count; ++r)
+                    if (relation(rings[other.first + r], component, locations) > 0)
+                        invalid("ST_CoverageSimplify overlapping coverage interiors");
+            });
+            polygons.insert({box, c});
+        }
+    }
+    bool candidate(uint32_t n, bool boundary, uint32_t& a, uint32_t& c) {
+        auto& node = nodes[n];
+        if (node.fixed || !node.active || node.occurrences.empty()) return false;
+        bool first = true;
+        for (uint32_t o : node.occurrences) {
+            const auto& occurrence = occurrences[o];
+            if (!occurrence.active || rings[occurrence.ring].count <= 3) return false;
+            const uint32_t left = occurrences[occurrence.previous].node, right = occurrences[occurrence.next].node;
+            if (first) {
+                a = std::min(left, right);
+                c = std::max(left, right);
+                first = false;
+            } else if (key(left, right) != Key{a, c})
+                return false;
+        }
+        if (a == c) return false;
+        auto left = edge_map.find(key(a, n)), right = edge_map.find(key(n, c));
+        if (left == edge_map.end() || right == edge_map.end()) return false;
+        if (!boundary && (edges[left->second].count != 2 || edges[right->second].count != 2)) return false;
+        return true;
+    }
+    void enqueue(uint32_t n, bool boundary, const Integer& floor) {
+        uint32_t a, c;
+        if (!candidate(n, boundary, a, c)) return;
+        Integer area = boost::multiprecision::abs(orientation(nodes[a].point, nodes[n].point, nodes[c].point));
+        if (area < floor) area = floor;
+        heap.push_back({std::move(area), n, nodes[n].version});
+        std::push_heap(heap.begin(), heap.end(), CandidateLess{});
+    }
+    bool removable(uint32_t n, uint32_t a, uint32_t c) {
+        const auto& p = nodes[a].point;
+        const auto& q = nodes[n].point;
+        const auto& r = nodes[c].point;
+        uint32_t left = edge_map.at(key(a, n)), right = edge_map.at(key(n, c));
+        bool safe = true;
+        query(edge_tree, bounds(p, r), [&](const Item& item) {
+            uint32_t id = item.second;
+            if (id == left || id == right || !edges[id].active || !safe) return;
+            const auto& e = edges[id];
+            auto kind = contact(p, r, nodes[e.a].point, nodes[e.b].point);
+            if (kind != Contact::NONE && kind != Contact::ENDPOINT) safe = false;
+            if (kind == Contact::ENDPOINT && e.a != a && e.b != a && e.a != c && e.b != c) safe = false;
+        });
+        if (!safe) return false;
+        Integer area = orientation(p, q, r);
+        if (area != 0) {
+            Box box{{std::min({p.x, q.x, r.x}), std::min({p.y, q.y, r.y})},
+                    {std::max({p.x, q.x, r.x}), std::max({p.y, q.y, r.y})}};
+            query(node_tree, box, [&](const Item& item) {
+                uint32_t id = item.second;
+                if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
+                const auto& point = nodes[id].point;
+                int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
+                    z = sign(orientation(r, p, point));
+                if ((x >= 0 && y >= 0 && z >= 0) || (x <= 0 && y <= 0 && z <= 0)) safe = false;
+            });
+            if (!safe) return false;
+        }
+        for (uint32_t o : nodes[n].occurrences) {
+            const auto& occurrence = occurrences[o];
+            const auto& ring = rings[occurrence.ring];
+            Integer next = ring.area - orientation(nodes[occurrences[occurrence.previous].node].point, q,
+                                                   nodes[occurrences[occurrence.next].node].point);
+            if (sign(next) != sign(ring.area)) return false;
+        }
+        return true;
+    }
+    void remove(uint32_t n, uint32_t a, uint32_t c) {
+        erase_edge(edge_map.at(key(a, n)));
+        erase_edge(edge_map.at(key(n, c)));
+        for (uint32_t o : nodes[n].occurrences) {
+            auto& occurrence = occurrences[o];
+            auto& ring = rings[occurrence.ring];
+            auto& previous = occurrences[occurrence.previous];
+            auto& next = occurrences[occurrence.next];
+            ring.area -= orientation(nodes[previous.node].point, nodes[n].point, nodes[next.node].point);
+            previous.next = occurrence.next;
+            next.previous = occurrence.previous;
+            if (ring.first == o) ring.first = occurrence.next;
+            --ring.count;
+            occurrence.active = false;
+            add_edge(occurrence.previous);
+        }
+        nodes[n].active = false;
+        ++nodes[a].version;
+        ++nodes[c].version;
+    }
+    void simplify(double tolerance, bool boundary) {
+        ++calls;
+        const Integer t = scaled(tolerance), threshold = 2 * t * t;
+        Integer floor = 0;
+        for (uint32_t n = 0; n < nodes.size(); ++n) {
+            enqueue(n, boundary, floor);
+        }
+        while (!heap.empty()) {
+            std::pop_heap(heap.begin(), heap.end(), CandidateLess{});
+            Candidate next = std::move(heap.back());
+            heap.pop_back();
+            if (next.area > threshold) break;
+            if (!nodes[next.node].active || next.version != nodes[next.node].version) continue;
+            uint32_t a, c;
+            if (!candidate(next.node, boundary, a, c) || !removable(next.node, a, c)) continue;
+            floor = std::max(floor, next.area);
+            remove(next.node, a, c);
+            enqueue(a, boundary, floor);
+            enqueue(c, boundary, floor);
+        }
+        validate();
+    }
+    void emit_polygon(std::vector<uint8_t>& output, const Component& component) {
+        write<uint8_t>(output, 1);
+        write<uint32_t>(output, 3);
+        write<uint32_t>(output, component.count);
+        for (uint32_t r = 0; r < component.count; ++r) {
+            const auto& ring = rings[component.first + r];
+            write<uint32_t>(output, ring.count + 1);
+            uint32_t o = ring.first;
+            do {
+                const auto& p = nodes[occurrences[o].node].point;
+                write<double>(output, p.x);
+                write<double>(output, p.y);
+                o = occurrences[o].next;
+            } while (o != ring.first);
+            const auto& p = nodes[occurrences[ring.first].node].point;
+            write<double>(output, p.x);
+            write<double>(output, p.y);
+        }
+    }
+    void output(bool unchanged) {
+        // Removing source vertices cannot enlarge native WKB. One bounded
+        // allocation gives the window adapter contiguous read-only backing.
+        output_bytes.reserve(input_bytes);
+        for (auto& row : rows) {
+            row.output_first = output_bytes.size();
+            if (row.null) continue;
+            if (unchanged) {
+                output_bytes.insert(output_bytes.end(), row.bytes.begin(), row.bytes.end());
+            } else {
+                if (row.multi) {
+                    write<uint8_t>(output_bytes, 1);
+                    write<uint32_t>(output_bytes, 6);
+                    write<uint32_t>(output_bytes, row.count);
+                }
+                for (uint32_t c = 0; c < row.count; ++c) emit_polygon(output_bytes, components[row.first + c]);
+            }
+            row.output_size = output_bytes.size() - row.output_first;
+        }
+    }
+};
+
+} // namespace
+
+struct GeoCoverageSimplify::Impl : Partition {
+    // Dispatch once, after every row and tolerance have contributed to the same bound.
+    std::variant<std::monostate, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
+    void run(double tolerance, bool boundary) {
+        arithmetic.include(tolerance);
+        if (arithmetic.fixed())
+            kernel.emplace<1>(*this, arithmetic.common_shift).run(tolerance, boundary);
+        else
+            kernel.emplace<2>(*this, 0).run(tolerance, boundary);
+    }
+};
+
+GeoCoverageSimplify::GeoCoverageSimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
+GeoCoverageSimplify::~GeoCoverageSimplify() = default;
+
+StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create() {
+    try {
+        auto impl = std::make_unique<Impl>();
+        return std::unique_ptr<GeoCoverageSimplify>(new GeoCoverageSimplify(std::move(impl)));
+    } catch (const std::bad_alloc&) {
+        return Status::MemoryLimitExceeded("ST_CoverageSimplify state allocation failed");
+    }
+}
+Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
+    auto& s = *_impl;
+    if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
+    try {
+        index(s.rows.size());
+        if (wkb) {
+            Reader reader(*wkb);
+            s.preflight(reader, false);
+            reader.done();
+        }
+        s.rows.emplace_back();
+        auto& row = s.rows.back();
+        row.null = !wkb;
+        if (wkb) {
+            row.bytes.assign(reinterpret_cast<const uint8_t*>(wkb->data),
+                             reinterpret_cast<const uint8_t*>(wkb->data) + wkb->size);
+            s.input_bytes += wkb->size;
+        }
+        return Status::OK();
+    } catch (const Stop& stop) {
+        s.failed = true;
+        return stop.status;
+    } catch (const std::bad_alloc&) {
+        s.failed = true;
+        return Status::MemoryLimitExceeded("ST_CoverageSimplify admission allocation failed");
+    } catch (const std::exception& e) {
+        s.failed = true;
+        return Status::InvalidArgument(std::string("ST_CoverageSimplify admission failed: ") + e.what());
+    }
+}
+Status GeoCoverageSimplify::finish(std::optional<double> tolerance, std::optional<bool> boundary) {
+    auto& s = *_impl;
+    if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
+    try {
+        s.null_parameter = !tolerance || !boundary;
+        if (!s.null_parameter) {
+            if (!std::isfinite(*tolerance) || *tolerance < 0 || !std::isfinite(*tolerance * *tolerance))
+                invalid("ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance "
+                        "squared");
+            s.run(*tolerance, *boundary);
+        }
+        s.finished = true;
+        return Status::OK();
+    } catch (const Stop& stop) {
+        s.failed = true;
+        return stop.status;
+    } catch (const std::bad_alloc&) {
+        s.failed = true;
+        return Status::MemoryLimitExceeded("ST_CoverageSimplify kernel allocation failed");
+    } catch (const std::exception& e) {
+        s.failed = true;
+        return Status::InvalidArgument(std::string("ST_CoverageSimplify kernel failed: ") + e.what());
+    }
+}
+StatusOr<std::optional<Slice>> GeoCoverageSimplify::result(size_t position) const {
+    const auto& s = *_impl;
+    if (!s.finished || s.failed || position >= s.rows.size())
+        return Status::InvalidArgument("ST_CoverageSimplify result unavailable");
+    const auto& row = s.rows[position];
+    if (s.null_parameter || row.null) return std::optional<Slice>{};
+    return std::optional<Slice>{
+            Slice(reinterpret_cast<const char*>(s.output_bytes.data()) + row.output_first, row.output_size)};
+}
+StatusOr<Slice> GeoCoverageSimplify::result_buffer() const {
+    if (!_impl->finished || _impl->failed) return Status::InvalidArgument("ST_CoverageSimplify result unavailable");
+    return Slice(reinterpret_cast<const char*>(_impl->output_bytes.data()), _impl->output_bytes.size());
+}
+size_t GeoCoverageSimplify::rows() const {
+    return _impl->rows.size();
+}
+size_t GeoCoverageSimplify::kernel_calls() const {
+    return _impl->calls;
+}
+} // namespace starrocks

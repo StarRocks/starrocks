@@ -24,6 +24,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.type.PrimitiveType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
@@ -183,7 +184,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw.
         // The query analyzer will reject queries on these columns at analysis time.
         Assertions.assertTrue(fromIcebergType(Types.GeometryType.crs84()).isUnknown());
-        Assertions.assertTrue(fromIcebergType(Types.GeographyType.crs84()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.FixedType.ofLength(16)).isUnknown());
     }
 
@@ -202,13 +202,36 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertFalse(fromIcebergType(Types.UUIDType.get()).isUnknown());
         Assertions.assertFalse(fromIcebergType(Types.TimeType.get()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.VariantType.get()).isVariantType());
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
+                fromIcebergType(Types.GeographyType.crs84()).getPrimitiveType());
+    }
+
+    @Test
+    public void testIcebergUnknownTypeReadsAsNull() {
+        // The v3 `unknown` type is always null and never stored, so it maps to NULL, and an enclosing
+        // struct/list/map stays readable instead of degrading to UNKNOWN_TYPE.
+        Assertions.assertTrue(fromIcebergType(Types.UnknownType.get()).isNull());
+
+        com.starrocks.type.Type struct = fromIcebergType(Types.StructType.of(
+                Types.NestedField.required(1, "a", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "u", Types.UnknownType.get())));
+        Assertions.assertTrue(struct.isStructType(), struct.toString());
+        Assertions.assertTrue(((com.starrocks.type.StructType) struct).getField("u").getType().isNull());
+
+        com.starrocks.type.Type list = fromIcebergType(
+                Types.ListType.ofOptional(3, Types.UnknownType.get()));
+        Assertions.assertTrue(list.isArrayType(), list.toString());
+
+        com.starrocks.type.Type map = fromIcebergType(
+                Types.MapType.ofOptional(4, 5, Types.StringType.get(), Types.UnknownType.get()));
+        Assertions.assertTrue(map.isMapType(), map.toString());
     }
 
     @Test
     public void testToFullSchemasDegradesToUnknownForUnsupportedType() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw,
         // so that queries not involving the column still work.
-        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeographyType.crs84());
+        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.crs84());
         Schema schema = new Schema(field);
 
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
@@ -232,7 +255,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     }
 
     @Test
-    public void testToPartitionFieldFailsOnUnsupportedTransform() {
+    public void testToPartitionFieldShowsUnsupportedTransform() {
         // Create a partition spec with a known transform, then test with unknown transform string
         // We use a mock PartitionField to simulate an unsupported V3 multi-arg transform
         org.apache.iceberg.PartitionField mockField = mock(org.apache.iceberg.PartitionField.class);
@@ -247,11 +270,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 Types.NestedField.required(1, "id", Types.IntegerType.get()));
         when(mockSpec.schema()).thenReturn(schema);
 
-        StarRocksConnectorException ex = Assertions.assertThrows(
-                StarRocksConnectorException.class,
-                () -> toPartitionField(mockSpec, mockField, false));
-        Assertions.assertTrue(ex.getMessage().contains("Unsupported partition transform"),
-                "Expected unsupported transform error, got: " + ex.getMessage());
+        // Shown as is, so SHOW CREATE TABLE and ALTER TABLE keep working on such a table.
+        Assertions.assertEquals("range[10, 20](`id`)", toPartitionField(mockSpec, mockField, false));
     }
 
     @Test

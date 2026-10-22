@@ -63,12 +63,14 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -96,6 +98,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
@@ -131,6 +134,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class DefaultCoordinator extends Coordinator {
@@ -139,6 +143,9 @@ public class DefaultCoordinator extends Coordinator {
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
     // Cap on how many pending instances are named individually, so a wide fan-out cannot blow up the log.
     private static final int MAX_LOGGED_UNREPORTED_INSTANCES = 20;
+    // Matches the value of a `host: x`, `host=x` or `host [x]` fragment in a BE error message.
+    private static final Pattern HOST_VALUE_PATTERN =
+            Pattern.compile("(?i)(\\bhost\\s*(?:[:=]\\s*|\\[\\s*))[^\\s,;)\\]]+");
     private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
             ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "external-resource-cleanup", false);
 
@@ -180,6 +187,13 @@ public class DefaultCoordinator extends Coordinator {
      * Once this is set to true, errors from remote fragments are ignored.
      */
     private boolean returnedAllResults;
+
+    /**
+     * Set whenever {@link #cancel} is invoked, i.e. execution was stopped by a deliberate decision
+     * (KILL, timeout, backend loss, scheduling failure) rather than by a fragment reporting an error.
+     * Guards {@link #updateStatus} from letting a late fragment error revive such a query.
+     */
+    private boolean explicitlyCancelled;
 
     private boolean thriftServerHighLoad;
 
@@ -505,7 +519,7 @@ public class DefaultCoordinator extends Coordinator {
             if (!jobSpec.getFragments().isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
                         DebugUtil.printId(jobSpec.getQueryId()),
-                        jobSpec.getFragments().get(0).toThrift());
+                        jobSpec.getFragments().get(0).getExplainString(TExplainLevel.VERBOSE));
             }
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
@@ -618,13 +632,26 @@ public class DefaultCoordinator extends Coordinator {
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
+        } catch (RangeColocateUnalignedException e) {
+            // Nothing is deployed yet. Give the query-queue slot back now rather than after the statement is re-planned
+            // (the retry loop releases it again when it unregisters this coordinator, which is harmless), and close any
+            // external scan sources this attempt opened: the retry loop does not clear them.
+            onReleaseSlots();
+            clearExternalResources();
+            throw e;
         }
 
-        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
-            deliverExecFragments(option);
-        }
+        try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
+                deliverExecFragments(option);
+            }
 
-        scheduler.continueSchedule(option);
+            scheduler.continueSchedule(option);
+        } catch (RangeColocateUnalignedException e) {
+            // Fragments may already be running here (phased scheduling assigns more scan ranges after deploying the
+            // first ones), so this attempt must not be re-planned: fail it as the plain scheduling error it was.
+            throw new IllegalStateException(e.getMessage(), e);
+        }
 
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {
@@ -961,6 +988,19 @@ public class DefaultCoordinator extends Coordinator {
 
             // don't override an error status; also, cancellation has already started
             if (!queryStatus.ok()) {
+                // One exception: a fragment that only got cancelled may report before the fragment that
+                // actually failed, which would bury a retryable cause under a generic CANCELLED and make
+                // the query fail where a retry would have succeeded. Let the retryable status win --
+                // but never over a deliberate cancel (KILL, timeout, limit reached), which must stay
+                // final. Cancellation is not re-run: it is already in flight from the status we are
+                // replacing. Deployer.waitForDeploymentCompletion applies the same preference at
+                // deploy time.
+                if (queryStatus.isCancelled() && !explicitlyCancelled
+                        && ExecuteExceptionHandler.isRetryableStatus(status.getErrorCode())) {
+                    LOG.warn("replace cancelled query status with retryable status {}, query id: {}",
+                            status.getErrorCode(), DebugUtil.printId(jobSpec.getQueryId()));
+                    queryStatus.setStatus(status);
+                }
                 return;
             }
 
@@ -988,6 +1028,10 @@ public class DefaultCoordinator extends Coordinator {
                 throw new RemoteFileNotFoundException(status.getErrorMsg());
             }
 
+            if (status.isLakeMetaVersionNotFound()) {
+                throw new LakeMetaVersionNotFoundException(status.getErrorMsg());
+            }
+
             if (status.isGlobalDictNotMatch()) {
                 throw new GlobalDictNotMatchException(status.getErrorMsg());
             }
@@ -1000,11 +1044,7 @@ public class DefaultCoordinator extends Coordinator {
                     LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
                 }
 
-                // hide host info
-                int hostIndex = errMsg.indexOf("host");
-                if (hostIndex != -1) {
-                    errMsg = errMsg.substring(0, hostIndex);
-                }
+                errMsg = hideHostInfo(errMsg);
                 InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
                 if (status.isCancelled() &&
                         status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
@@ -1113,6 +1153,12 @@ public class DefaultCoordinator extends Coordinator {
     public void cancel(PPlanFragmentCancelReason reason, String message) {
         lock();
         try {
+            // Record the deliberate stop before any early return below. A fragment may already have
+            // put a CANCELLED in queryStatus, in which case this call takes the "can't cancel twice"
+            // return without recording anything -- and updateStatus would then let a late retryable
+            // fragment error replace that CANCELLED and revive a query someone stopped on purpose.
+            explicitlyCancelled = true;
+
             // All results have been obtained. The query has ended. Ignore this error.
             if (returnedAllResults) {
                 cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
@@ -1200,6 +1246,15 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("failed to summarize unreported instances of query {}",
                     DebugUtil.printId(jobSpec.getQueryId()), e);
         }
+    }
+
+    /**
+     * Masks host values in a BE error message before it reaches the client, keeping the rest of the
+     * message so the failure cause stays readable. The caller logs the unmasked message.
+     */
+    @VisibleForTesting
+    static String hideHostInfo(String errMsg) {
+        return HOST_VALUE_PATTERN.matcher(errMsg).replaceAll("$1***");
     }
 
     /**
@@ -1708,8 +1763,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public PQueryStatistics getAuditStatistics() {
-        return auditStatistics;
+    public synchronized PQueryStatistics getAuditStatistics() {
+        // Reports can arrive while execution finishes. Do not expose the mutable accumulator to readers.
+        return AuditStatisticsUtil.copyProtobuf(auditStatistics);
     }
 
     @Override

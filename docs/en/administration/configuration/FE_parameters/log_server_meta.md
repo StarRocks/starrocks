@@ -92,6 +92,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, the generated Log4j2 configuration appends a ".gz" postfix to rotated audit log filenames (fe.audit.log.*) so that Log4j2 will produce compressed (.gz) archived audit log files on rollover. The setting is read during FE startup in Log4jConfig.initLogging and is applied to the RollingFile appender for audit logs; it only affects rotated/archived files, not the active audit log. Because the value is initialized at startup, changing it requires restarting the FE to take effect. Use alongside audit log rotation settings (`audit_log_dir`, `audit_log_roll_interval`, `audit_roll_maxsize`, `audit_log_roll_num`).
 - Introduced in: 3.2.12
 
+### `audit_log_error_message_max_length`
+
+- Default: 1024
+- Type: Int
+- Unit: Characters
+- Is mutable: Yes
+- Description: The maximum length of the `ErrorMessage` field recorded in the audit log for a failed statement, counted in UTF-16 code units, so a character outside the Basic Multilingual Plane such as an emoji counts as two. A longer message is truncated and suffixed with `... /* truncated, audit_log_error_message_max_length=<value> */`; the suffix is not counted against the limit. Set it to `0` to stop recording error messages altogether, in which case the field is omitted from the audit record. Error messages are also omitted when `enable_sql_desensitize_in_log` is `true` or when `enable_audit_sql` is `false`, because an error message quotes the statement that failed, down to the values and the offending token.
+- Introduced in: 4.2.0
+
 ### `audit_log_json_format`
 
 - Default: false
@@ -806,6 +815,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000
@@ -959,9 +977,22 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2.0
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
-  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
+  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
 
-  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+  `/dump`, `/dump_starmgr`, and `/service_id` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege through a role that is active at login, for example the built-in `cluster_admin` role set as a default role of the user (when `activate_all_roles_on_login` is `true`, any granted role counts); the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
+
+  `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
+
+  Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+
+### `enable_rest_bearer_authentication`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1197,7 +1228,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which idle client connections time out.
+- Description: The length of time after which idle client connections time out. The FE Thrift server closes a client connection once it has been idle for this long. An FE therefore replaces its own pooled connections to other FEs once they have been idle for 80% of this value, instead of sending a request on a connection that the other FE may already have closed. Set the same value on all FEs.
 - Introduced in: -
 
 ### `thrift_rpc_max_body_size`
@@ -1224,8 +1255,21 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+- Description: How many connections can wait for a worker thread while all `thrift_server_max_worker_threads` workers are busy. This bounds what the pending queue can hold, not what it will serve: a connection arriving once the queue is full is closed immediately instead of being retried, and a queued connection that waits longer than `thrift_server_queue_timeout_ms` is closed without being served once a worker reaches it. The two cases are counted separately, by `starrocks_fe_thrift_server_rejected_connections_total` and `starrocks_fe_thrift_server_expired_connections_total`.
 - Introduced in: -
+
+### `thrift_server_queue_timeout_ms`
+
+- Default: 0
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: The maximum time a connection may wait in the Thrift server pending queue before a worker thread picks it up. A connection that has waited longer is closed without being served, on the assumption that its caller has abandoned it and serving it only holds a worker away from work someone is still waiting for. When armed, this also bounds how long the queue takes to drain after a burst, however deep it grew.
+
+  `0`, the default, disables the check: every queued connection is served no matter how long it waited. The check is off by default because that assumption does not hold for every caller, and a queued connection carries no deadline the server can read. The deadlines callers actually use span four orders of magnitude. Plain FE-internal RPCs give up after `thrift_rpc_timeout_ms` (10 seconds), but a statement forwarded from a follower to the leader waits the session's execution timeout plus `thrift_rpc_timeout_ms` -- about 310 seconds at the default `query_timeout`, and about four hours at the default `insert_timeout` -- and BE stream-load and transaction-commit RPCs wait `stream_load_thrift_rpc_timeout_ms` (60 seconds) or a quarter of the load's own `timeout_second`, whichever is larger. Because `query_timeout`, `insert_timeout` and `timeout_second` are all user-settable and unbounded, no fixed value is safe for every cluster: a timeout short enough to speed up recovery can also cut off a forwarded statement whose client is still waiting, during exactly the saturation it was meant to shorten.
+
+  Arm it per cluster, at a value above the largest deadline that cluster's clients rely on -- derive it from that cluster's `query_timeout` and `insert_timeout`. Each drop is counted in `starrocks_fe_thrift_server_expired_connections_total` and reported by a rate-limited WARN naming the peer. `starrocks_fe_thrift_server_queue_wait_ms` reports queue waits whether or not the check is armed, so use it to size the value before arming it.
+- Introduced in: v4.2.0
 
 ## Metadata and cluster management
 
@@ -1655,6 +1699,15 @@ This topic introduces the following types of FE configurations:
 - Description: Interval, in seconds, between executions of the LockChecker frontend daemon (named "deadlock-checker"). The daemon performs deadlock detection and slow-lock scanning; the configured value is multiplied by 1000 to set the timer in milliseconds. Decreasing this value reduces detection latency but increases scheduling and CPU overhead; increasing it reduces overhead but delays detection and slow-lock reporting. Changes take effect at runtime because the daemon resets its interval each run. This setting interacts with `lock_checker_enable_deadlock_check` (enables deadlock checks) and `slow_lock_threshold_ms` (defines what constitutes a slow lock).
 - Introduced in: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. The default value is changed from `32` to `256` from v4.1.0, v4.0.1, and v3.5.8 onwards.
+- Introduced in: v3.3.0
+
 ### `master_sync_policy`
 
 - Default: SYNC
@@ -1688,6 +1741,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 - Introduced in: -
 
+### `meta_freshness_check_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
+- Introduced in: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
+- Introduced in: v4.2
+
 ### `meta_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1704,6 +1775,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- Introduced in: -
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- Default: 128L * 1024 * 1024 (134217728)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of the off-heap buffers that the FE keeps for gzip and zlib compression, such as compressing query profiles before they are stored in `ProfileManager`. Compressing between off-heap buffers keeps the JVM from blocking garbage collection during compression, which can otherwise make memory allocations fail with an `OutOfMemoryError` while the heap still has room to reclaim. Each compression in progress uses two 256 KB buffers regardless of the data size, so the default value allows 256 compressions at the same time. When no buffer is available within this limit, the data is compressed on the heap as before. Lowering the value at runtime takes effect as buffers are returned. Set it to `0` to disable off-heap compression: all data is then compressed on the heap in small chunks, and the off-heap buffers already allocated are released.
 - Introduced in: -
 
 ### `profile_info_format`
@@ -1778,7 +1858,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
+- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Before each retry, the executor waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms) and only then reopens the connection, so that callers that lost their connections at the same moment do not all reconnect at the same moment. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
 - Introduced in: v3.2.0
 
 ### `thrift_rpc_strict_mode`

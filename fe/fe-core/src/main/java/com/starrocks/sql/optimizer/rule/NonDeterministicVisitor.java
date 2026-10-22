@@ -18,7 +18,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -31,9 +33,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void> {
+    private final Predicate<CallOperator> callPredicate;
+
     public NonDeterministicVisitor() {
+        this(call -> FunctionSet.allNonDeterministicFunctions.contains(call.getFnName()));
+    }
+
+    public NonDeterministicVisitor(Predicate<CallOperator> callPredicate) {
+        this.callPredicate = callPredicate;
     }
 
     private boolean checkColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
@@ -49,11 +59,8 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     }
 
     private boolean hasNonDeterministicFunc(ScalarOperator scalarOperator) {
-        if (scalarOperator instanceof CallOperator) {
-            String fnName = ((CallOperator) scalarOperator).getFnName();
-            if (FunctionSet.allNonDeterministicFunctions.contains(fnName)) {
-                return true;
-            }
+        if (scalarOperator instanceof CallOperator && callPredicate.test((CallOperator) scalarOperator)) {
+            return true;
         } else if (scalarOperator instanceof LambdaFunctionOperator) {
             LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) scalarOperator;
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = lambdaOp.getColumnRefMap();
@@ -148,6 +155,21 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     }
 
     @Override
+    public Boolean visitLogicalApply(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        LogicalApplyOperator applyOperator = (LogicalApplyOperator) optExpression.getOp();
+        if ((applyOperator.getSubqueryOperator() != null &&
+                hasNonDeterministicFunc(applyOperator.getSubqueryOperator())) ||
+                (applyOperator.getCorrelationConjuncts() != null &&
+                        hasNonDeterministicFunc(applyOperator.getCorrelationConjuncts()))) {
+            return true;
+        }
+        return visitChildren(optExpression);
+    }
+
+    @Override
     public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
         if (checkCommon(optExpression)) {
             return true;
@@ -179,6 +201,19 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
             if (hasNonDeterministicFunc(scalarOperator)) {
                 return true;
             }
+        }
+        return visitChildren(optExpression);
+    }
+
+    @Override
+    public Boolean visitLogicalAIProject(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        LogicalAIProjectOperator aiProject = optExpression.getOp().cast();
+        if (checkColumnRefMap(aiProject.getColumnRefMap()) ||
+                checkColumnRefMap(aiProject.getCommonSubOperatorMap())) {
+            return true;
         }
         return visitChildren(optExpression);
     }

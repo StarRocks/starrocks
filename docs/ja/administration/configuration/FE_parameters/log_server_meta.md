@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：true の場合、生成された Log4j2 設定は、ローテーションされた監査ログファイル名 (fe.audit.log.*) に ".gz" 接尾辞を追加し、Log4j2 がロールオーバー時に圧縮された (.gz) アーカイブ監査ログファイルを生成するようにします。この設定は、FE 起動時に Log4jConfig.initLogging で読み込まれ、監査ログの RollingFile アペンダーに適用されます。アクティブな監査ログではなく、ローテーション/アーカイブされたファイルにのみ影響します。値は起動時に初期化されるため、変更を有効にするには FE の再起動が必要です。監査ログのローテーション設定 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) とともに使用します。
 - 導入時期：3.2.12
 
+### `audit_log_error_message_max_length`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：文字
+- 変更可能：Yes
+- 説明：ステートメントが失敗した場合に監査ログの `ErrorMessage` フィールドへ記録される最大長です。長さは UTF-16 コードユニットで数えるため、絵文字などの基本多言語面外の文字は 2 としてカウントされます。これを超えるエラーメッセージは切り詰められ、末尾に `... /* truncated, audit_log_error_message_max_length=<value> */` が付きます（この接尾辞は上限に含まれません）。`0` に設定するとエラーメッセージは記録されず、監査レコードにこのフィールドは現れません。エラーメッセージはステートメントを失敗させた値やエラー箇所のトークンを含むため、`enable_sql_desensitize_in_log` が `true` の場合、および `enable_audit_sql` が `false` の場合も記録されません。
+- 導入時期：4.2.0
+
 ### `audit_log_json_format`
 
 - デフォルト：false
@@ -797,6 +806,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- デフォルト：32768
+- タイプ：Int
+- 単位：Bytes
+- 変更可能：No
+- 説明：Arrow Flight SQL サーバーが受け付けるリクエストヘッダーの合計サイズの上限（バイト）。1 つの gRPC リクエストのすべてのヘッダーを合計して数えます。Arrow Flight SQL セッションの最初のリクエストはクライアントの認証情報をヘッダーで運び、ユーザーの所属グループを列挙した JWT はグループ数に応じて大きくなります。Microsoft Entra ID が 1 つのトークンに入れるグループ ID は最大 200 個で、約 10 KB になります。gRPC のデフォルトの 8 KB では認証が始まる前にこのようなリクエストが拒否されるため、デフォルト値は `http_max_header_size` に合わせています。クライアントがより大きなトークンを送る場合は値を大きくしてください。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - デフォルト：10000
@@ -950,9 +968,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入時期：v4.2.0
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
-  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+  `/dump`、`/dump_starmgr`、`/service_id` は除外されません：この設定にかかわらず、認証済みの管理者のみがアクセスできます。認証には HTTP Basic 認証、または FE Web コンソールへのログインで取得したセッション Cookie を使用できます。次のいずれかを満たすユーザーが管理者として扱われます：ログイン時に有効なロールを通じて SYSTEM レベルの `NODE` 権限を持つ（例：組み込みロール `cluster_admin` をユーザーのデフォルトロールに設定する。`activate_all_roles_on_login` が `true` の場合は付与されている任意のロールが対象）；`root` ユーザーである、または `root` ロールを持つ；`db_admin` ロールと `user_admin` ロールの両方を持つ。
+
+  `/api/_meta_replay_state` も除外されません：この設定にかかわらず、`root` ユーザー、`root` ロールを持つユーザー、または `db_admin` ロールと `user_admin` ロールの両方を持つユーザーによる HTTP Basic 認証が必要です。`NODE` 権限だけではアクセスできません。
+
+  この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
+### `enable_rest_bearer_authentication`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：MySQL 以外のチャネル（HTTP、Arrow Flight、BE 直結の Stream Load）における Bearer トークン認証のマスタースイッチ。`false` に設定すると、これらのチャネルは `Authorization: Bearer ...` を含むリクエストをすべて HTTP 401 で拒否し、「トークン認証は MySQL プロトコルのみ」という以前の動作に戻ります。Basic 認証と既存の Arrow Flight UUID セッショントークンは影響を受けません。MySQL プロトコルの認証がこのスイッチで制限されることはありません。
+- 導入時期：v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1188,7 +1219,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Milliseconds
 - 変更可能：No
-- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。
+- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。FE の Thrift サーバーは、この時間アイドル状態が続いたクライアント接続をクローズします。そのため FE は、他の FE へのプール接続のアイドル時間がこの値の 80% に達すると、次の使用前に新しい接続に置き換えます。これにより、接続先がすでにクローズした可能性のある接続でリクエストを送信することを避けます。すべての FE で同じ値を設定することを推奨します。
 - 導入時期：-
 
 ### `thrift_rpc_max_body_size`
@@ -1215,8 +1246,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：No
-- 説明：要求が保留されているキューの長さ。Thrift サーバーで処理されているスレッドの数が `thrift_server_max_worker_threads` で指定された値を超えると、新しい要求が保留中のキューに追加されます。
+- 説明：`thrift_server_max_worker_threads` のワーカー スレッドがすべて処理中のときに、ワーカー スレッドの空きを待って待機できる接続の数。この値が制限するのは待機キューが保持できる接続数であり、最終的に処理される接続数ではありません。キューが満杯の状態で到着した接続は、再試行されることなく直ちにクローズされます。また、キューに入ってからの待機時間が `thrift_server_queue_timeout_ms` を超えた接続は、ワーカー スレッドが取り出した時点で処理されずにクローズされます。この 2 つはそれぞれ `starrocks_fe_thrift_server_rejected_connections_total` と `starrocks_fe_thrift_server_expired_connections_total` でカウントされます。
 - 導入時期：-
+
+### `thrift_server_queue_timeout_ms`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：ms
+- 変更可能：Yes
+- 説明：ワーカー スレッドに取り出されるまで、接続が Thrift サーバーの待機キューに滞留できる最大時間。これを超えて待機した接続は処理されずにクローズされます。呼び出し元がすでに諦めており、処理してもワーカーを占有して、まだ待っている処理を妨げるだけだという前提に基づきます。有効な場合、バースト後にキューが排出されるまでの時間も、キューがどれだけ深くなっていたかにかかわらず上限で抑えます。
+
+  デフォルトの `0` はこのチェックを無効にし、滞留時間にかかわらずすべての接続が処理されます。デフォルトで無効なのは、上記の前提がすべての呼び出し元に当てはまるわけではなく、待機中の接続にはサーバーが読み取れる期限が付いていないためです。呼び出し元が実際に用いる期限は 4 桁の幅があります。FE 内部の通常の RPC は `thrift_rpc_timeout_ms`（10 秒）で諦めますが、Follower から Leader に転送された文はセッションの実行タイムアウトに `thrift_rpc_timeout_ms` を加えた時間まで待機し、`query_timeout` のデフォルトでは約 310 秒、`insert_timeout` のデフォルトでは約 4 時間になります。BE のストリームロードおよびトランザクション コミットの RPC は `stream_load_thrift_rpc_timeout_ms`（60 秒）と、そのロードの `timeout_second` の 4 分の 1 のうち大きい方まで待機します。`query_timeout`、`insert_timeout`、`timeout_second` はいずれもユーザーが設定でき上限もないため、すべてのクラスターにとって安全な固定値は存在しません。回復を早めるほど短いタイムアウトは、まさにそれが緩和しようとしている飽和のさなかに、クライアントがまだ待っている転送済みの文を切断しかねません。
+
+  クラスターごとに、そのクラスターのクライアントが依存する最大の期限を上回る値で有効化してください。値はそのクラスターの `query_timeout` と `insert_timeout` から導出します。破棄された接続は `starrocks_fe_thrift_server_expired_connections_total` でカウントされ、対象ピアを示すレート制限付きの WARN ログが出力されます。`starrocks_fe_thrift_server_queue_wait_ms` はチェックの有効・無効にかかわらずキューの待機時間を報告するので、有効化前の値の見積もりに利用してください。
+- 導入時期：v4.2.0
 
 ## メタデータとクラスター管理
 
@@ -1646,6 +1690,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：LockChecker フロントエンドデーモン ("deadlock-checker" という名前) の実行間の間隔 (秒単位)。デーモンはデッドロック検出と低速ロックのスキャンを実行します。設定値はミリ秒でタイマーを設定するために 1000 倍されます。この値を減らすと検出レイテンシーが短くなりますが、スケジューリングと CPU オーバーヘッドが増加します。増やすとオーバーヘッドが減少しますが、検出と低速ロックレポートが遅れます。変更は、デーモンが実行ごとに間隔をリセットするため、実行時に有効になります。この設定は、`lock_checker_enable_deadlock_check` (デッドロックチェックを有効にする) と `slow_lock_threshold_ms` (低速ロックを構成するものを定義する) と相互作用します。
 - 導入時期：v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- デフォルト：256
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：Lock Manager がメタデータロックを分散させるハッシュバケット (ロックテーブル) の数です。各リソースはリソース ID によって 1 つのバケットにマッピングされ、各バケットはそれぞれ独自のミューテックスで保護されます。そのため、値を大きくすると、無関係なリソースを操作するロッカー間の競合が減りますが、メモリ使用量がわずかに増えます。この値は Lock Manager の作成時に一度だけ読み取られるため、変更は FE の再起動後にのみ有効になります。v4.1.0、v4.0.1、v3.5.8 以降、デフォルト値は `32` から `256` に変更されました。
+- 導入時期：v3.3.0
+
 ### `master_sync_policy`
 
 - デフォルト：SYNC
@@ -1679,6 +1732,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：フォロワー FE およびオブザーバー FE のメタデータがリーダー FE のメタデータよりも遅延できる最大期間。単位: 秒。この期間を超えると、非リーダー FE はサービスの提供を停止します。
 - 導入時期：-
 
+### `meta_freshness_check_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：フォロワー FE およびオブザーバー FE が、自身のメタデータが読み取りを提供できるだけ新しいかどうかを再評価する間隔です。判定基準は `meta_delay_toleration_second` です。[10, 5000] の範囲外の値はこの範囲に丸められます。このチェックはメタデータ再生スレッドではなく専用スレッドで実行されます。そのため、1 件のジャーナルの適用に長時間かかっている場合（たとえば再生処理がデータベースロックを待っている場合）でも、ノードは古いメタデータの提供を止めることができます。
+- 導入時期：v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- デフォルト：30
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：メタデータジャーナルの適用がこの時間を超えた場合、再生が滞っているものとして再生スレッドのスタックとともに **fe.log** に記録します。これによりメタデータ再生を妨げている処理を特定できます。`0` を設定するとこのログを無効にします。
+- 導入時期：v4.2
+
 ### `meta_dir`
 
 - デフォルト：`StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1695,6 +1766,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：未知のログ ID を無視するかどうか。FE がロールバックされた場合、以前のバージョンの FE は一部のログ ID を認識できない可能性があります。値が `TRUE` の場合、FE は未知のログ ID を無視します。値が `FALSE` の場合、FE は終了します。
+- 導入時期：-
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- デフォルト：128L * 1024 * 1024 (134217728)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：FE が gzip および zlib 圧縮（たとえば、クエリプロファイルを `ProfileManager` に格納する前の圧縮）のために保持するオフヒープバッファの合計サイズの上限。オフヒープバッファ間で圧縮することで、圧縮中に JVM がガベージコレクションをブロックすることを防ぎます。そうしないと、ヒープにまだ回収可能な領域がある場合でも、メモリ割り当てが `OutOfMemoryError` で失敗することがあります。データサイズに関係なく、進行中の圧縮はそれぞれ 256 KB のバッファを 2 つ使用するため、デフォルト値では同時に 256 個の圧縮が可能です。この上限内で利用可能なバッファがない場合、データは従来どおりヒープ上で圧縮されます。実行時にこの値を小さくすると、バッファが返却される時点で反映されます。`0` に設定するとオフヒープ圧縮が無効になります。すべてのデータはヒープ上で小さなチャンク単位で圧縮され、すでに割り当てられたオフヒープバッファは解放されます。
 - 導入時期：-
 
 ### `profile_info_format`
@@ -1769,7 +1849,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
+- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各再試行の前に、エグゼキューターはランダムな時間だけ待機してから接続を再開します。待機時間は最初の再試行で 100～200 ミリ秒、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ミリ秒に達するとそれ以上は増えません。これにより、同時に接続を失った複数の呼び出し元が一斉に再接続することを防ぎます。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
 - 導入時期：v3.2.0
 
 ### `thrift_rpc_strict_mode`

@@ -190,6 +190,16 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ai_topn_pushdown_max_global_limit
+
+* **Description**: The largest SQL `LIMIT` that uses a global candidate TopN below an eligible AI projection. Larger limits use local candidate TopN pruning per fragment instance. `0` selects local-only pruning; it does not disable the optimization.
+* **Default**: 1000
+* **Data type**: long
+* **Range**: [0, 9223372036854775807]
+* **Scope**: Session, Global
+
+Supports `SET`, `SET GLOBAL`, and statement-level `SET_VAR` hints without restarting. For strategy details and examples, see [Reducing AI input rows](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows).
+
 ### ann_params
 
 * **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
@@ -263,6 +273,30 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Valid values**: `CIRCULAR`, `RANDOM`
 * **Introduced in**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
 
 ### broadcast_row_limit
 
@@ -455,6 +489,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
 * **Default**: 1024
 * **Introduced in**: v2.5
+
+### count_distinct_implementation
+
+* **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
+  * `default`: Reserves the `COUNT(DISTINCT expr)` implementation. The optimizer chooses the suitable aggregation plan based on query form, statistics, and costs.
+  * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
+  * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
+* **Default**: `default`
+* **Introduced in**: v3.3.6、v3.4.0
+
+:::note[Usage Notes for `multi_distinct_count`]
+`multi_distinct_count()` returns precise results.
+
+For most queries, `COUNT(DISTINCT expr)` is recommended. Set `count_distinct_implementation` to `default` to allow the optimizer to choose a suitable aggregation plan.
+
+When deduplicating low- and medium-cardinality columns, you can test and use `multi_distinct_count()`. This function uses two phases of aggregation, and can reduce a shuffle and deduplication phase for better performance. However, its HashSet status and final merging can cause excessive memory consumption and even OOM when deduplicating high-cardinality columns.
+
+If you want to test this implementation on one `COUNT(DISTINCT expr)` instead of changing the whole session, you can set `count_distinct_implementation` in a query hint:
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+Setting this value with hints applies only to `COUNT(DISTINCT)` with a single parameter. It will not affect multi-column deduplication expressions such as `COUNT(DISTINCT expr1, expr2)`.
+:::
 
 ### custom_query_id (session)
 
@@ -679,6 +740,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.3.8, v3.4.0, v3.5.0
 
+### enable_exchange_sink_buffer_flush
+
+* **Description**: Whether to limit the memory that an exchange sink uses to buffer rows for a shuffle before they are sent. The exchange sink keeps one partial chunk per destination pipeline driver and normally sends it only when the chunk is full; when this variable is `true` and the partial chunks of a driver retain more memory than the BE configuration item `exchange_sink_buffer_flush_threshold_bytes`, they are sent immediately. Set it to `false` to restore the previous behavior for a session.
+* **Default**: true
+* **Introduced in**: -
+
 ### enable_filter_unused_columns_in_scan_stage
 
 * **Description**: Controls pruning of columns produced by Scan nodes so the scan stage only outputs columns that are actually needed downstream (either as outputs or for non-pushable predicates). When enabled, PlanFragmentBuilder.setUnUsedOutputColumns will mark scan output columns that are exclusively used in pushdownable predicates and not required later, allowing the scan to trim those columns and reduce I/O and network transfer. The pruning is guarded: it will not apply for aggregation-family indexes in the non-skip-aggregation (non-skip-aggr) scan stage (keys/value columns must be retained to merge/aggregate), and the planner always ensures at least one column is returned from a scan. See `isEnableFilterUnusedColumnsInScanStage()` and the enable/disable helpers `enableTrimOnlyFilteredColumnsInScanStage()` / `disableTrimOnlyFilteredColumnsInScanStage()` in SessionVariable.
@@ -692,6 +759,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this prevents the gather fragment from being placed on a BE that the rest of the query does not use. It does not guarantee label isolation by itself: if any other fragment of the query runs outside the label, the gather fragment may also run there. Known cases include scans of external catalog tables (such as Hive or Iceberg), `choose_execute_instances_mode` values other than `LOCALITY`, `prefer_compute_node=true`, and right or full bucket-shuffle joins with pruned buckets. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
 
 ### enable_gin_filter
 
@@ -1438,6 +1511,14 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Unit**: Byte
 * **Data type**: Int
 
+### max_array_length
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### max_parallel_scan_instance_num
 
 * **Scope**: Session
@@ -1534,6 +1615,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
 
 ### parallel_exchange_instance_num
 
@@ -1698,7 +1786,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -1905,6 +1993,37 @@ Used to specify the preaggregation mode for the first phase of GROUP BY. If the 
 ### system_time_zone
 
 Used to display the time zone of the current system. Cannot be changed.
+
+### lake_multi_node_tablet_write_mode
+
+* **Description**: Only applies in shared-data mode. Controls whether a load may spread one tablet's write across several compute nodes instead of sending every row to the single node the tablet is assigned to. Three values:
+  * `off` -- never spreads; the behavior that existed before this feature.
+  * `auto` (default) -- spreads for a table on a **range-bucket** distribution whose partition still holds fewer tablets than the number of writers this load is worth (see `lake_multi_node_write_bytes_per_node`). Pre-split runs and is waited on before the statement is planned, so that tablet count is pre-split's result: if it split the partition wide enough, `auto` declines; if it was skipped, or its wait timed out and the load fell back to the layout it can see, `auto` engages. Applies to every key type -- rows sharing a key are routed by a hash of the key columns and therefore all reach one node, so the result does not depend on which node wrote which row and nothing has to be asked of the user first. Hash-bucket tables are excluded because they can simply be given more buckets to fill the cluster.
+  * `force` -- spreads whenever the remaining preconditions allow, including hash-bucket distributions. Use it when you want the spread on a table `auto` declines to take.
+* Regardless of the mode, the feature also requires a cloud-native table with `file_bundling` enabled, a transaction on combined txn logs, and a partition with fewer tablets than the number of nodes this load is actually spread over. That width is the smallest of three: the node count derived from the load's size (`lake_multi_node_write_bytes_per_node`), `lake_multi_node_write_max_nodes`, and the alive compute nodes. A partition that already holds that many tablets stays on the single-node path even under `force` -- five tablets on a six-node warehouse do not spread if the load's size is only worth three writers. Stream load and routine load are excluded outright: neither can be sized at planning time, and treating an unknown size as a large one there would give the smallest and most frequent batches the widest spread. Partial updates (row and column mode), condition updates, loads omitting an auto-increment column, and loads during a schema change are all supported.
+* A partition that automatic partitioning creates during the load itself is spread too. It is not in the plan, so its tablets are handed to the load afterwards, over the create-partition RPC: they are spread over the same number of nodes the load resolved when it was planned, picked from the compute nodes alive at the moment the partition is created -- a long load can outlive the node list it was planned against. Such a partition normally starts with a single tablet, because the data boundaries that would have split it have not been seen yet, so it is exactly the shape this setting exists for.
+* Sub-partitions that automatic bucketing (`bucket_size`) adds during the load are spread as well. Automatic bucketing applies only to `RANDOM` distribution, so this takes effect only under `force`.
+* **Default**: auto
+* **Type**: String
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **Description**: Upper bound on how many compute nodes may write **one tablet** in parallel. Every node in a tablet's node list opens its own delta writer and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their sink instance -- their rows simply travel over the network to a node inside the list, which is the behavior that existed before this feature, so the bound costs locality but never correctness. This is an upper bound, not the parallelism itself: the number actually used is the smallest of this, the node count derived from the load's estimated size (`lake_multi_node_write_bytes_per_node`), and the number of alive compute nodes. Set to `0` or less for no bound.
+* **Default**: 6
+* **Type**: Int
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **Description**: Only applies in shared-data mode, and only when `lake_multi_node_tablet_write_mode` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the session variable `lake_multi_node_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows -- so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load. Primary Key `UPDATE` and `DELETE` use the estimated output row count and widths of the columns actually written. A partial update counts the key and updated/generated columns; a delete counts the key, any required generated partition columns, and the operation column. These estimates do not use the source scan size. If the row count is reliable but column widths are unknown, type sizes are used. Missing or inaccurate row counts keep the size unknown; the existing node and alive-node bounds then apply. Stream load and routine load are the exception and do not spread at all -- there an unknown size means a micro-batch, not an unmeasured bulk load. Set to 0 to disable size-based sizing.
+* **Default**: 2147483648 (2 GB)
+* **Unit**: Bytes
+* **Type**: Long
+* **Scope**: Session
+* **Introduced in**: v4.2
 
 ### time_zone
 

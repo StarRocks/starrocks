@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -25,6 +26,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +34,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -39,11 +42,14 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionIdGenerator;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
@@ -55,6 +61,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1388,6 +1395,61 @@ public class LakeTableIndexFastPathJobBaseTest {
         assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
     }
 
+    /**
+     * Regression test for the "schema for load not found which should not happen" publish wedge
+     * (StarRocksTest#12167): the bloom-filter / ADD INDEX fast path re-stamps each affected index meta
+     * with a NEW schema id in place, retiring the previous id from the catalog. A load already bound to
+     * the retired id and published after the flip must still be able to resolve its schema, so the flip
+     * has to record it as history.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_RecordsRetiredSchemaAsHistory() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+        setPublishFuture(job, true);
+        // The meta this flip re-stamps, i.e. the one whose current schema id is about to be retired.
+        job.putNewSchema(7L, 4242L, 2L);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        MaterializedIndexMeta retiredMeta = mock(MaterializedIndexMeta.class);
+        when(retiredMeta.getSchemaId()).thenReturn(999L);
+        when(retiredMeta.getSchemaVersion()).thenReturn(1);
+        when(retiredMeta.getKeysType()).thenReturn(KeysType.DUP_KEYS);
+        when(retiredMeta.getShortKeyColumnCount()).thenReturn((short) 1);
+        when(retiredMeta.getSchema()).thenReturn(List.of(new Column("c0", com.starrocks.type.IntegerType.INT)));
+        when(retiredMeta.shallowCopy()).thenReturn(retiredMeta);
+        when(table.getIndexMetaByMetaId(7L)).thenReturn(retiredMeta);
+        when(table.getStorageType()).thenReturn(TStorageType.COLUMN);
+        when(table.getCopiedIndexes()).thenReturn(new ArrayList<>());
+        when(table.getBaseIndexMetaId()).thenReturn(7L);
+        when(table.getIndexMetaIdToMeta()).thenReturn(new HashMap<>());
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        TransactionIdGenerator idGenerator = mock(TransactionIdGenerator.class);
+        when(idGenerator.getNextTransactionId()).thenReturn(555L);
+        when(txnMgr.getTransactionIDGenerator()).thenReturn(idGenerator);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        OlapTableHistorySchema history = job.getHistorySchema().orElse(null);
+        assertNotNull(history, "the flip must record the schema it retired");
+        assertEquals(555L, history.getHistoryTxnIdThreshold());
+        assertFalse(history.isExpired());
+    }
+
     @Test
     public void testRunFinishedRewritingJob_DbMissingThrows() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -2108,5 +2170,266 @@ public class LakeTableIndexFastPathJobBaseTest {
         // Must not throw despite the missing partition.
         runReplay(target, other, new Database(2L, "db"), table);
         verify(table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    // -------- vacuum pin of the dispatch version --------
+
+    private static PhysicalPartition mockDispatchablePartition(OlapTable table, long ppId, long visibleVersion) {
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(visibleVersion);
+        when(table.getPhysicalPartition(ppId)).thenReturn(pp);
+        MaterializedIndex latestIndex = mock(MaterializedIndex.class);
+        when(latestIndex.getId()).thenReturn(70L);
+        when(latestIndex.getTablet(anyLong())).thenReturn(mock(Tablet.class));
+        when(pp.getLatestIndex(50L)).thenReturn(latestIndex);
+        return pp;
+    }
+
+    private static WarehouseManager warehouseWithComputeNode() {
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode cn = mock(ComputeNode.class);
+        when(cn.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
+        when(wm.acquireComputeResource(any(CRAcquireContext.class))).thenReturn(mock(ComputeResource.class));
+        return wm;
+    }
+
+    /**
+     * Runs {@code action} with the catalog, the agent task queue and the executor mocked so that every task of a
+     * dispatch registers and submits cleanly.
+     */
+    private void withDispatchMocks(OlapTable table, WarehouseManager wm, ThrowingRunnable action) throws Exception {
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true);
+            action.run();
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private void dispatch(LakeTableAddIndexJob job, OlapTable table) throws Exception {
+        withDispatchMocks(table, warehouseWithComputeNode(), () -> invokePrivate(job, "runRunningJob"));
+    }
+
+    private void cancel(LakeTableAddIndexJob job, OlapTable table) {
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("cancelled by test"));
+        }
+    }
+
+    @Test
+    public void testDispatchPinsTheVersionItsTasksRead() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L, 2L);
+
+        dispatch(job, table);
+
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        verify(pp).setMinRetainVersion(3L);
+        verify(pp, never()).releaseMinRetainVersion(anyLong());
+        AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
+        assertEquals(2, batch.getTaskNum());
+        for (AgentTask task : batch.getAllTasks()) {
+            assertEquals(3L, ((AlterReplicaTask) task).getVersion());
+        }
+    }
+
+    @Test
+    public void testFinishedRewritingReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+        AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
+        for (AgentTask task : batch.getAllTasks()) {
+            task.setFinished(true);
+        }
+        when(pp.getNextVersion()).thenReturn(5L);
+
+        withDispatchMocks(table, warehouseWithComputeNode(), () -> invokePrivate(job, "runRunningJob"));
+
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        cancel(job, table);
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelReleasesThePinOfATableThatLeftTheCatalog() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        // DROP TABLE without FORCE moves the table to the recycle bin; the catalog no longer finds it.
+        cancel(job, null);
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testFailedDispatchReleasesEveryPinItTook() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(50L)).thenReturn(mock(MaterializedIndexMeta.class));
+        Map<Long, List<Long>> partitionToTablets = new LinkedHashMap<>();
+        partitionToTablets.put(100L, Collections.singletonList(1L));
+        partitionToTablets.put(200L, Collections.singletonList(2L));
+        setField(job, "partitionToTablets", partitionToTablets);
+        Map<Long, Long> tabletToIndexMetaId = new HashMap<>();
+        tabletToIndexMetaId.put(1L, 50L);
+        tabletToIndexMetaId.put(2L, 50L);
+        setField(job, "tabletToIndexMetaId", tabletToIndexMetaId);
+        PhysicalPartition pp1 = mockDispatchablePartition(table, 100L, 3L);
+        PhysicalPartition pp2 = mockDispatchablePartition(table, 200L, 4L);
+        WarehouseManager wm = warehouseWithComputeNode();
+        // Partition 200 is pinned before its tablet turns out to have no compute node.
+        when(wm.getComputeNodeAssignedToTablet(any(), eq(2L))).thenReturn(null);
+
+        withDispatchMocks(table, wm,
+                () -> assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob")));
+        verify(pp1).setMinRetainVersion(3L);
+        verify(pp2).setMinRetainVersion(4L);
+
+        cancel(job, table);
+
+        verify(pp1).releaseMinRetainVersion(3L);
+        verify(pp2).releaseMinRetainVersion(4L);
+    }
+
+    @Test
+    public void testFailedDispatchReleasesOnlyThePinsItTook() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(50L)).thenReturn(mock(MaterializedIndexMeta.class));
+        Map<Long, List<Long>> partitionToTablets = new LinkedHashMap<>();
+        partitionToTablets.put(100L, Collections.singletonList(1L));
+        partitionToTablets.put(200L, Collections.singletonList(2L));
+        setField(job, "partitionToTablets", partitionToTablets);
+        Map<Long, Long> tabletToIndexMetaId = new HashMap<>();
+        tabletToIndexMetaId.put(1L, 50L);
+        tabletToIndexMetaId.put(2L, 50L);
+        setField(job, "tabletToIndexMetaId", tabletToIndexMetaId);
+        PhysicalPartition pp1 = mockDispatchablePartition(table, 100L, 3L);
+        // Partition 200 is gone, so dispatch fails before pinning it.
+        when(table.getPhysicalPartition(200L)).thenReturn(null);
+
+        withDispatchMocks(table, warehouseWithComputeNode(),
+                () -> assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob")));
+        verify(pp1).setMinRetainVersion(3L);
+
+        cancel(job, table);
+
+        verify(pp1).releaseMinRetainVersion(3L);
+        verify(pp1, times(1)).releaseMinRetainVersion(anyLong());
+    }
+
+    @Test
+    public void testDemotionReleasesThePinAndRedispatchPinsTheNewVersion() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        dispatch(job, table);
+
+        job.resetToLastDurableState();
+
+        assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        verify(pp).releaseMinRetainVersion(3L);
+
+        // Elected again: the job dispatches at the version visible by then.
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        when(pp.getVisibleVersion()).thenReturn(6L);
+        dispatch(job, table);
+
+        verify(pp).setMinRetainVersion(6L);
+        verify(pp, never()).releaseMinRetainVersion(6L);
+    }
+
+    @Test
+    public void testDispatchFailureInRunCancelsAndReleasesThePin() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = warehouseWithComputeNode();
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // run() builds an internal ConnectContext, which takes a fresh session variable.
+        VariableMgr vm = mock(VariableMgr.class);
+        when(vm.newSessionVariable()).thenReturn(new SessionVariable());
+        when(gsm.getVariableMgr()).thenReturn(vm);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            // The queue refuses the task, so the dispatch fails after pinning.
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(false);
+            job.run();
+        } finally {
+            ConnectContext.remove();
+        }
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(pp).setMinRetainVersion(3L);
+        verify(pp).releaseMinRetainVersion(3L);
+    }
+
+    @Test
+    public void testCancelBeforeDispatchLeavesThePartitionPinAlone() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        // The tablet snapshot is taken at PENDING, but nothing has been dispatched or pinned yet: a pin on the
+        // partition, e.g. a running compaction's, belongs to someone else.
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+
+        cancel(job, table);
+
+        verify(pp, never()).setMinRetainVersion(anyLong());
+        verify(pp, never()).releaseMinRetainVersion(anyLong());
     }
 }

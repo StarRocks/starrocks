@@ -206,7 +206,7 @@ properties (
 
 * `table`: データベース内のターゲットテーブル名。
 
-StarRocksとターゲットデータベース間のサポートされているデータ型とデータ型のマッピングについては、[Data type mapping](External_table.md#Data type mapping) を参照してください。
+StarRocksとターゲットデータベース間のサポートされているデータ型とデータ型のマッピングについては、[Data type mapping](#data-type-mapping) を参照してください。
 
 > 注：
 >

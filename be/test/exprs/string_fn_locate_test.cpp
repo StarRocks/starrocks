@@ -145,6 +145,51 @@ TEST_F(StringFunctionLocateTest, locatePosTest) {
     }
 }
 
+TEST_F(StringFunctionLocateTest, locateStartBeyondLastUtf8CharTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto sub = BinaryColumn::create();
+    auto str = BinaryColumn::create();
+    auto pos = Int32Column::create();
+
+    // a start position past the last character leaves nothing to scan, so the result is 0;
+    // the walk has to step over the whole last character to reach that end
+    str->append("你a");
+    sub->append("a");
+    pos->append(3);
+
+    str->append("你好b");
+    sub->append("b");
+    pos->append(4);
+
+    // a start position on the last character still finds it
+    str->append("你好");
+    sub->append("好");
+    pos->append(2);
+
+    // the 0xF0 lead byte claims four bytes while only two are left, so the walk ends at the end
+    // of the value and the search is left with nothing to scan
+    str->append(
+            Slice("a\xF0"
+                  "b",
+                  3));
+    sub->append("b");
+    pos->append(3);
+
+    columns.emplace_back(std::move(sub));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+    ASSERT_EQ(4, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+    ASSERT_EQ(0, v->get_data()[0]);
+    ASSERT_EQ(0, v->get_data()[1]);
+    ASSERT_EQ(2, v->get_data()[2]);
+    ASSERT_EQ(0, v->get_data()[3]);
+}
+
 TEST_F(StringFunctionLocateTest, locateHayStackEqualNeedleTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

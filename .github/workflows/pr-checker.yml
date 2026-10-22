@@ -39,25 +39,40 @@ jobs:
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: SYNC CHECKER
     outputs:
-      BACKPORT_SOURCE_PR: ${{ steps.backport_assign.outputs.ORI_PR }}
+      BACKPORT_SOURCE_PR: ${{ steps.backport_source.outputs.ORI_PR }}
     steps:
       - run: echo "Normal PR."
 
-      - name: backport assign
-        id: backport_assign
+      - name: backport source
+        id: backport_source
         if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.number }}
           REPO: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
-            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
+
+  # Assign the backport to the owner of its main PR. The owner is not always the
+  # author (CD->SR sync PRs are opened by a bot), so the logic is in ci-tool.
+  backport-assign:
+    needs: sync-checker
+    if: needs.sync-checker.outputs.BACKPORT_SOURCE_PR != ''
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
+    steps:
+      - name: backport assign
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 lib/backport_assign.py
 
   title-check:
     runs-on: ubuntu-latest
@@ -79,6 +94,11 @@ jobs:
       - name: update body
         if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
+          # MUST stay a PAT: this step edits the PR body to check "[x] This is a
+          # backport pr", and the edit must emit an `edited` event that re-triggers
+          # this workflow so `check backport pr's title` runs on the updated body.
+          # GITHUB_TOKEN edits do not trigger workflows, which would silently skip
+          # the backport-title check.
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
@@ -255,3 +275,18 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
 
+
+  conflict-marker-check:
+    # Deliberately NOT exempted for backport / cherry-pick PRs the way changelist-check
+    # is: an automated backport that hits a conflict and commits its own markers is
+    # exactly the case this gate exists for.
+    runs-on: [self-hosted, quick]
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: Check Conflict Markers
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/check-conflict-markers.py

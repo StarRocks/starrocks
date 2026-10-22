@@ -76,6 +76,10 @@ public class SecurityIntegrationStatementAnalyzer {
                 throw new SemanticException("'type' property cannot be changed");
             }
 
+            // ALTER does not go through checkProperty(); each type validates what the statement sets.
+            authenticationMgr.getSecurityIntegration(statement.getName())
+                    .checkAlteredProperties(statement.getProperties());
+
             return null;
         }
 

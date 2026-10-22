@@ -204,6 +204,20 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: INT8カラムプールによって使用されるメモリ。
 
+## `jwks_fetch_latency_ms`
+
+- 単位: ms
+- タイプ: Histogram
+- 説明: ID プロバイダーから JWKS（JSON Web Key Set）を取得するたびのレイテンシ。きっかけは問いません。`jwks_url` の初回ロード、キャッシュ TTL 前のバックグラウンド更新、未知の `kid` を持つトークンによる強制更新、リトライのいずれも含み、失敗した取得も計測します。JWT の署名検証自体は安定した CPU コストなので、Bearer 認証が遅くなったときに時間がかかっているのはこの取得です。
+- 導入時期: v4.2
+
+## `jwks_refresh_total`
+
+- 単位: 個
+- タイプ: Counter
+- 説明: ID プロバイダーからの JWKS 取得の総数。`result`（`success` または `failure`）でラベル付けされます。HTTP 取得そのものの時点で 1 回ずつ数えるため、バックグラウンド更新は 1 回として数えられ、取得に失敗してキャッシュ済みの鍵で応答した場合（`jwks_cache_outage_ttl_seconds` を参照）は `failure` として数えられます。`failure` が増え続ける場合は ID プロバイダーの JWKS エンドポイントが不健全です。障害許容ウィンドウが尽きるまでは、認証はキャッシュ済みの鍵で継続します。
+- 導入時期: v4.2
+
 ## `jemalloc_active_bytes`
 
 - 単位: バイト
@@ -254,6 +268,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `lake_compaction_held_segment_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 入力セグメントを保持する実行中の lake compaction タスクが現在ピン留めしているセグメントメタデータのサイズ（`lake_compaction_hold_input_segments` で制御）。メタデータキャッシュとは異なり、このメモリは LRU の管理下になく、保持しているタスクの終了時に解放されます。値が継続的に高い場合は、キャッシュのサイズ不足ではなく長時間実行中の compaction を示します。
+
 ## `lake_compaction_failed`
 
 - 単位: 件数
@@ -284,6 +304,60 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_pk_index_cache_delvec_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルに付随する DelVector が使用するメモリ。DelVector を伴って取り込まれた SST ファイル（Compaction の出力など）だけが DelVector を持ちます。このメモリは主キーインデックスキャッシュには計上されないため、`information_schema.be_tablets` の `INDEX_MEM` にも含まれません。
+
+## `lake_pk_index_cache_filter_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのブルームフィルターが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_hit_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスがすでに主キーインデックスキャッシュにロードされていた回数。`lake_pk_index_load_total` と合わせると、キャッシュのヒット率は `hit / (hit + load)` で求められます。
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのインデックスブロックが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE でキャッシュされている主キーインデックスの MemTable（書き込み中のものとフラッシュ中のものの両方）が使用するメモリ。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_load_duration_us`
+
+- 単位: us
+- タイプ: 累積
+- 説明: 共有データモード専用。`lake_pk_index_load_total` で数えられる主キーインデックスのロードに費やされた合計時間。`lake_pk_index_load_total` で割ると、tablet 1 つあたりのインデックスの平均ロード時間が得られます。
+
+## `lake_pk_index_load_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
+## `lake_tablet_location_handoff_entries`
+
+- 単位: 件数
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE が所有していない tablet について保持しているストレージロケーションの件数。これらは combined txn log を書き込むために、ロード時に tablet の所有ノードから引き渡されたものです（BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照）。エントリは `staros_shard_info_fallback_cache_entries` で数えられるエントリと共有する 16 MiB の LRU キャッシュに保持され、最後の更新から `lake_shard_info_cache_ttl_sec` の間有効で、キャッシュに空きが必要になったときに削除されます。そのため、この値は引き渡しが現在使われているかどうかではなく、キャッシュの占有量を表します。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE が所有していない tablet のストレージロケーションを、StarMgr に問い合わせる代わりに所有ノードから引き渡されたロケーションで解決した回数。1 回増えるごとに StarMgr の GetShard RPC が 1 回省かれます。`file_bundling` が有効なテーブルへのロードを調整するノードで増加します。`staros_shard_info_fallback_total` と合わせると、引き渡しのヒット率は `hits / (hits + fallback)` で求められます。
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
@@ -321,6 +395,48 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: RPCスレッドプールの現在のサイズ。これは、ルーチンロードとテーブル関数を介したロードの処理に使用されます。デフォルト値は10で、最大値は1000です。この値は、スレッドプールの使用状況に基づいて動的に調整されます。
+
+## `load_sink_close_active_threads`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールで実行中のクローズ処理の数。共有データクラスタでは、各クローズ処理がロードの結合トランザクションログをオブジェクトストレージに書き込みます。
+
+## `load_sink_close_execute_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積
+- 説明: 完了したロード Sink クローズタスクの累積実行時間。クローズ中の待機とオブジェクトストレージへの書き込み時間を含み、各タスクの終了時に更新されます。
+
+## `load_sink_close_executed_tasks_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: スレッドプールで完了したロード Sink クローズタスクの数。エラーを返したクローズタスクも含みます。
+
+## `load_sink_close_pending_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積
+- 説明: 完了したロード Sink クローズタスクがスレッドプールのキューで待機した累積時間。各タスクの終了時に更新され、現在キューで待機中のタスクはまだ含まれません。
+
+## `load_sink_close_queue_count`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールのキューで待機しているクローズ処理の数。値が増え続ける場合、オブジェクトストレージへの書き込みがロードの完了に追いついていません。
+
+## `load_sink_close_running_threads`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールのスレッド数。
+
+## `load_sink_close_threadpool_size`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールの最大スレッド数。`load_sink_close_thread_pool_num_max` で設定します。
 
 ## `local_column_pool_bytes (Deprecated)`
 
@@ -455,6 +571,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: サマリー
 - 説明: RPCリクエストとストリームロードパイプが利用可能になるのを待機する時間の合計レイテンシー。
 
+## `meta_replay_lag_second`
+
+- 単位: 秒
+- タイプ: Gauge
+- 説明: この FE が再生済みのメタデータが、Leader の時刻からどれだけ遅れているか。Leader FE は 10 秒ごとにタイムスタンプをジャーナルに書き込んでおり、この項目はこのノードが再生した最新のタイムスタンプの経過時間です。`max_journal_replay_lag` は Leader のみが報告しますが、この項目は遅延しているノード自身が報告し、1 件のジャーナルの再生が滞っている間も増加し続けます。Leader FE はタイムスタンプを再生せず書き込む側であるため、常に `0` を報告します。この値が `meta_delay_toleration_second` を超えると、そのノードは自身のメタデータでの読み取り提供を停止し、クエリを Leader に転送します。ただし例外が 2 つあります。1 つは `ignore_meta_check` が `true` の場合で、このときは読み取りの提供を続けます。もう 1 つは、前回のチェック以降ジャーナルを 1 件も再生しておらず、かつ Leader との接続が保たれている場合です。このときそのノードは現在の読み取り提供状態をそのまま維持します。Leader が何も書き込んでいなければ、その時刻から遅れていること自体はこのノードの状態を表さないためです。この 2 つ目のケースはノードをサービスから外さないだけであり、すでに読み取りの提供を停止しているノードを復帰させるものではありません。
+
 ## `meta_request_duration`
 
 - 単位: us
@@ -540,10 +662,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: BEのパイプラインエグゼキュータのドライバーのスケジューリング時間の累積数。
 
+## `pipe_drivers`
+
+- 単位: カウント
+- 説明: BE のアドミッション制御が現在予約している論理 driver 容量。fragment が driver と operator をインスタンス化する間に保持する予約と、インスタンス化後も解放されていない予約を含みます。colocate 実行グループを含む論理 DOP の計数規則に従う値であり、生成済み driver オブジェクト数や実行中のスレッド数ではありません。準備の失敗や fragment の完了などで予約が解放されると、この値は減少します。
+
 ## `pipe_poller_block_queue_len`
 
 - 単位: カウント
 - 説明: パイプラインエンジン内のPipelineDriverPollerのブロックキューの現在の長さ。
+
+## `pipe_poller_max_driver_check`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: PipelineDriverPollerの1回のポーリングで、最も時間がかかった単一ドライバーのチェックに要した時間。値が大きい場合、1つのブロック中ドライバーのチェックがポーリング全体を遅らせています。
+
+## `pipe_poller_pass`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: PipelineDriverPollerがブロック中のドライバーを1回ポーリングするのに要した時間。各エグゼキュータセットのポーラースレッドは1つだけのため、1回のポーリングが長いと、そのスレッドを待つすべてのドライバーが遅れます。直近のウィンドウ内の最大値は `pipe_poller_pass_max_latency` で確認できます。
 
 ## `pipe_prepare_pool_queue_len`
 

@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -455,5 +457,132 @@ public class JsonPathRewriteTest extends PlanTestBase {
         }
     }
 
-}
+    /**
+     * The extended column synthesized for a JSON subfield is a per-query artifact: it only ever travels
+     * through the scan's colRefToColumnMetaMap and the ColumnAccessPath list. It must not be registered on
+     * the OlapTable, because statements whose source table is not copied (INSERT ... SELECT and MV refresh
+     * both reuse the live catalog instance) would then mutate the shared table -- that is POST-1773.
+     */
+    @Test
+    public void testExtendedColumnNotRegisteredOnTable() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        starRocksAssert.withTable(
+                "create table json_no_pollute (k int, j json) properties('replication_num'='1')");
+        try {
+            OlapTable table = (OlapTable) starRocksAssert.getTable("test", "json_no_pollute");
+            int schemaSizeBefore = table.getFullSchema().size();
+            int maxColUniqueIdBefore = table.getMaxColUniqueId();
 
+            // A plain SELECT plans against AnalyzerUtils.copyTable's copy, so it cannot show the leak.
+            // DML does not copy its source table -- that is the path that mutates the live catalog object.
+            String plan = getFragmentPlan(
+                    "insert into json_no_pollute select k, j from json_no_pollute "
+                            + "where get_json_int(j, '$.a') = 1");
+            // the rewrite did happen ...
+            assertContains(plan, "j.a");
+
+            // ... and yet the shared catalog object is untouched.
+            Assertions.assertEquals(schemaSizeBefore, table.getFullSchema().size(),
+                    "json path rewrite must not grow the shared table schema");
+            Assertions.assertNull(table.getColumn("j.a"),
+                    "extended column must not be resolvable through the table");
+            Assertions.assertEquals(maxColUniqueIdBefore, table.getMaxColUniqueId(),
+                    "json path rewrite must not consume column unique ids (maxColUniqueId is persisted)");
+
+            // Planning it again must not accumulate anything either.
+            getFragmentPlan("insert into json_no_pollute select k, j from json_no_pollute "
+                    + "where get_json_string(j, '$.b') = 'x'");
+            Assertions.assertEquals(schemaSizeBefore, table.getFullSchema().size(),
+                    "repeated planning must not accumulate extended columns");
+            Assertions.assertEquals(maxColUniqueIdBefore, table.getMaxColUniqueId(),
+                    "repeated planning must not consume column unique ids");
+        } finally {
+            starRocksAssert.dropTable("json_no_pollute");
+        }
+    }
+
+    /**
+     * POST-1773: `insert into t select ... from t where <json subfield predicate>` used to fail with
+     * "number of exprs is not same with slots". InsertPlanner takes outputFullSchema from
+     * targetTable.getFullSchema() (a live reference) before optimizing; the rewrite then grew that list
+     * mid-flight, so the sink tuple got one more slot than there were output exprs. On the second attempt
+     * the counts matched again -- at the cost of shipping a phantom always-NULL column on every load.
+     */
+    @Test
+    public void testSelfReferencingInsertHasNoPhantomColumn() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        starRocksAssert.withTable(
+                "create table json_self_insert (k int, j json) properties('replication_num'='1')");
+        try {
+            String sql = "insert into json_self_insert select k, j from json_self_insert "
+                    + "where get_json_int(j, '$.a') = 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "OLAP TABLE SINK");
+            // Two real columns in, two out -- no synthesized third slot.
+            assertContains(plan, "OUTPUT EXPRS:1: k | 2: j\n");
+            assertNotContains(plan, "3: expr");
+
+            // Planning it twice must produce the very same sink shape; the old behaviour differed between
+            // the first and the following runs because the first one left the extra column behind.
+            Assertions.assertEquals(plan, getFragmentPlan(sql),
+                    "the insert plan must be stable across repeated planning");
+        } finally {
+            starRocksAssert.dropTable("json_self_insert");
+        }
+    }
+
+    /**
+     * Two scans over the same table that read the same path with different types must each get their own
+     * extended column. While the columns were registered on the shared table, the second scan reused the
+     * first one's column and inherited its type, which pinned the slot to the wrong type and produced
+     * wrong results (a self-join filtering on both int and string form of $.x returned 0 rows).
+     */
+    @Test
+    public void testCrossScanSamePathDifferentTypes() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable(
+                "create table json_cross_scan (k int, j json) properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "select count(*) from json_cross_scan a join json_cross_scan b on a.k = b.k "
+                            + "where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '2'");
+            // Each side keeps the type its own expression asked for.
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(bigint(20))/x(bigint(20))]");
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar)/x(varchar)]");
+        } finally {
+            starRocksAssert.dropTable("json_cross_scan");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+    /**
+     * Same as above but reached through an inlined CTE, which is how it shows up in real workloads:
+     * the two consumers become two scans of the same table.
+     */
+    @Test
+    public void testInlinedCteSamePathDifferentTypes() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        boolean cteReuse = connectContext.getSessionVariable().isCboCteReuse();
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        starRocksAssert.withTable(
+                "create table json_cte_scan (k int, j json) properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "with c as (select k, j from json_cte_scan where k < 100) "
+                            + "select count(*) from c c1 join c c2 on c1.k = c2.k "
+                            + "where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '2'");
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(bigint(20))/x(bigint(20))]");
+            assertContains(plan, "ExtendedColumnAccessPath: [/j(varchar)/x(varchar)]");
+        } finally {
+            starRocksAssert.dropTable("json_cte_scan");
+            connectContext.getSessionVariable().setCboCteReuse(cteReuse);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+}

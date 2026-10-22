@@ -34,9 +34,7 @@
 
 #include "base/compression/block_compression.h"
 
-#ifdef __x86_64__
 #include <libdeflate.h>
-#endif
 #include <zlib.h>
 
 #include <atomic>
@@ -1199,7 +1197,6 @@ private:
     const static int MEM_LEVEL = 8;
 };
 
-#ifdef __x86_64__
 class GzipBlockCompressionV2 final : public GzipBlockCompression {
 public:
     GzipBlockCompressionV2() : GzipBlockCompression() {}
@@ -1233,7 +1230,6 @@ public:
         return Status::OK();
     }
 };
-#endif
 
 class LzoBlockCompression : public BlockCompressionCodec {
 public:
@@ -1335,11 +1331,7 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         }
         break;
     case CompressionTypePB::GZIP:
-#ifdef __x86_64__
         *codec = GzipBlockCompressionV2::instance();
-#else
-        *codec = GzipBlockCompression::instance();
-#endif
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();

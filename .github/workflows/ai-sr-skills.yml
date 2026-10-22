@@ -15,7 +15,11 @@ permissions:
 
 jobs:
   assign-reviewer:
-    runs-on: [self-hosted, normal]
+    # Runs on the dedicated AI host (bare `claude`, claudeci pre-authed, the
+    # starrocks-assign-pr-reviewer skill installed) instead of the shared build pool
+    # + the claude-cli docker sandbox. Isolates this pull_request_target job away from
+    # the general build fleet (defense-in-depth) and drops the container dependency.
+    runs-on: [self-hosted, ubuntu, ai]
     continue-on-error: true
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -26,24 +30,22 @@ jobs:
       !contains(github.head_ref, '-sync-pr-')
     steps:
       - name: Recommend Reviewer (AI)
+        # Thin call. The two security controls for this pull_request_target job — the TRUST
+        # GATE (author_association / internal allowlist) and the READ-ONLY tool allowlist —
+        # both live in ci-tool bin/assign-reviewer.sh so they always travel together and
+        # can't be shipped half-applied. REPO/PR_NUMBER are safe context (repo name +
+        # integer); no untrusted github.head_ref reaches the shell (the script reads the
+        # author association from the API). The host-side "Apply Reviewer" step below does
+        # the actual assignment.
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          echo "=== DEBUG ==="
-          echo "PR: ${{ github.event.number }}"
-          echo "ACTION: ${{ github.event.action }}"
-          echo "BASE_REF: ${{ github.base_ref }}"
-          echo "HEAD_REF: ${{ github.head_ref }}"
-          echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
-          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
-          echo "=== RUN ==="
-          # Runs inside claude-cli docker; produces only "Recommended reviewer: <login>"
-          # output. The host-side "Apply Reviewer" step below actually attaches it
-          # (gh is not available inside the container).
-          # tee captures the skill's stdout for the downstream steps to parse.
-          docker exec -i -u claudeuser \
-            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
-            claude-cli claude --dangerously-skip-permissions \
-            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" \
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && (git pull >/dev/null 2>&1 || true)
+          ./bin/assign-reviewer.sh --repo "${REPO}" --pr "${PR_NUMBER}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 
       - name: Apply Reviewer

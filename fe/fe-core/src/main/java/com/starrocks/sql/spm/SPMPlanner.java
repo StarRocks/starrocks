@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -79,6 +80,10 @@ public class SPMPlanner {
         String result = SPMMetrics.REWRITE_MISS;
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
+            if (ResolvedAIFunctionDetector.contains(query)) {
+                baseline = null;
+                return query;
+            }
             checkTimeout();
 
             List<BaselinePlan> plans = Lists.newArrayList();

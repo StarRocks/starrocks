@@ -79,6 +79,10 @@ struct TAuthenticateParams {
     // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
     // admin/operate-level checks without round-tripping the role check themselves.
     6: optional TPrivilegeRequirement required_privilege;
+    // Credential shape: "basic" (or unset) means `passwd` is a plaintext password; "bearer" means `passwd`
+    // carries a token. Projection of the FE-side AuthCredentialKind wire names; unset defaults to basic
+    // for backward compatibility with older BEs.
+    7: optional string auth_type;
 }
 
 struct TColumnDesc {
@@ -436,8 +440,9 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
-    38: optional string last_freshness_confirmed_at
-    39: optional string base_table_refresh_version_times
+    // Ids 38/39 must stay as branch-4.1 shipped them in 4.1.4: rolling upgrade runs new BEs against old FEs.
+    38: optional string base_table_refresh_version_times
+    39: optional string last_freshness_confirmed_at
 }
 
 struct TListPipesParams {
@@ -631,6 +636,10 @@ struct TGetLoadsParams {
     18: optional i64 load_finish_time_to_ms
     19: optional i64 create_time_from_ms
     20: optional i64 create_time_to_ms
+    // Only return loads whose job id >= this value. Setting the field is how a caller
+    // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
+    // result set unpaged when it is absent, so an old BE keeps its previous behavior.
+    21: optional i64 start_job_id_offset
 }
 
 struct TTrackingLoadInfo {
@@ -695,6 +704,8 @@ struct TLoadInfo {
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+    // max job id in loads + 1, if set to 0 or absent, it means reaches end
+    2: optional i64 next_job_id_offset
 }
 
 struct TRoutineLoadJobInfo {
@@ -878,6 +889,22 @@ struct TAuditStatisticsItem {
     3: optional i64 table_id
 }
 
+// Additive observed AI task statistics; token usage counts distinguish unknown from reported zero.
+struct TAIExecutionStatistics {
+    1: optional i64 task_count
+    2: optional i64 request_count
+    3: optional i64 retry_count
+    4: optional i64 timeout_count
+    5: optional i64 error_count
+    6: optional i64 http_time_ns
+    7: optional i64 prompt_tokens
+    8: optional i64 completion_tokens
+    9: optional i64 total_tokens
+    10: optional i64 prompt_usage_count
+    11: optional i64 completion_usage_count
+    12: optional i64 total_usage_count
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -889,6 +916,7 @@ struct TAuditStatistics {
     9: optional list<TAuditStatisticsItem> stats_items
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
+    13: optional TAIExecutionStatistics ai_statistics
 }
 
 struct TReportAuditStatisticsParams {
@@ -1025,6 +1053,8 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    12: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1097,6 +1127,8 @@ struct TStreamLoadPutRequest {
     56: optional string payload_compression_type
     // CDC envelope format
     57: optional PlanNodes.TEnvelopeType envelope
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    58: optional string auth_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -1124,6 +1156,9 @@ struct TMergeCommitRequest {
     // (currently `_statistics_.rejected_records`); any other db/tbl
     // falls back to the normal user/passwd check regardless of token.
     9: optional string internal_token;
+    // "basic" (default when unset) or "bearer"; when "bearer", `passwd` carries the token.
+    // Unset is exactly equivalent to "basic", which is what makes a rolling FE/BE upgrade safe.
+    10: optional string auth_type;
 }
 
 struct TMergeCommitResult {
@@ -1199,6 +1234,8 @@ struct TLoadTxnCommitRequest {
     13: optional list<Types.TTabletFailInfo> failInfos
     // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
     14: optional i32 prepared_timeout_second
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    15: optional string auth_type
 }
 
 struct TLoadTxnCommitResult {
@@ -1221,6 +1258,8 @@ struct TLoadTxnRollbackRequest {
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
     12: optional list<Types.TTabletCommitInfo> commitInfos
+    // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
+    13: optional string auth_type
 }
 
 struct TGetLoadTxnStatusResult {

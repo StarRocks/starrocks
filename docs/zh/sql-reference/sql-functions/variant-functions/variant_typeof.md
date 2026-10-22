@@ -24,7 +24,7 @@ VARCHAR variant_typeof(variant_expr)
 返回表示类型名称的 VARCHAR 值。
 
 可能的返回值包括:
-- `"Null"` - 对于 NULL 值
+- `"Null"` - 对于 VARIANT null（例如 JSON null）。对于 SQL NULL（包括路径不存在时 `variant_query` 的返回值），函数返回 NULL。如需判断 VARIANT null，请使用 [is_variant_null](./is_variant_null.md)。
 - `"Boolean(true)"` - 对于布尔值 true
 - `"Boolean(false)"` - 对于布尔值 false
 - `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - 对于整数值

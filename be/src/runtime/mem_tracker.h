@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -120,7 +121,8 @@ enum class MemTrackerType {
     DEL_VEC_CACHE,
     COMPACTION_STATE,
     BUILTIN_INVERTED_INDEX,
-    VECTOR_INDEX
+    VECTOR_INDEX,
+    JVM
 };
 
 class MemTracker {
@@ -266,6 +268,44 @@ public:
         return nullptr;
     }
 
+    /// Reclassifies already allocated process memory to this tracker and its non-root ancestors. The root tracker is
+    /// not incremented because allocator hooks have already charged the physical allocation there. An already
+    /// exceeded root still rejects new ownership.
+    WARN_UNUSED_RESULT
+    MemTracker* try_consume_without_root(int64_t bytes) {
+        if (UNLIKELY(bytes <= 0)) return nullptr;
+        if (UNLIKELY(_all_trackers.empty())) {
+            return this;
+        }
+
+        MemTracker* root = _all_trackers.back();
+        if (UNLIKELY(root->type() != MemTrackerType::PROCESS)) {
+            return root;
+        }
+        if (UNLIKELY(root->limit_exceeded())) {
+            return root;
+        }
+
+        int64_t i;
+        // Walk the non-root tracker chain top-down.
+        for (i = static_cast<int64_t>(_all_trackers.size()) - 2; i >= 0; --i) {
+            MemTracker* tracker = _all_trackers[i];
+            const int64_t limit = tracker->limit();
+            const int64_t effective_limit = limit < 0 ? std::numeric_limits<int64_t>::max() : limit;
+            if (LIKELY(tracker->_consumption->try_add(bytes, effective_limit))) {
+                continue;
+            } else {
+                // Roll back only the non-root ancestors updated by this call.
+                for (int64_t j = static_cast<int64_t>(_all_trackers.size()) - 2; j > i; --j) {
+                    _all_trackers[j]->_consumption->add(-bytes);
+                }
+                return tracker;
+            }
+        }
+        DCHECK_EQ(i, -1);
+        return nullptr;
+    }
+
     // Attempts to consume `bytes` memory from all trackers in the hierarchy.
     WARN_UNUSED_RESULT
     MemTracker* try_consume_with_limited(int64_t bytes, size_t shared_reserve_bytes) {
@@ -374,11 +414,20 @@ public:
         return nullptr;
     }
 
-    bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
+    bool limit_exceeded() const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && limit < consumption();
+    }
 
-    bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
+    bool limit_exceeded_by_ratio(int64_t ratio) const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && (limit * ratio / 100) < consumption();
+    }
 
-    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+    bool limit_exceeded_precheck(int64_t consume) const {
+        const int64_t limit = this->limit();
+        return limit >= 0 && limit < consumption() + consume;
+    }
 
     bool any_limit_exceeded_precheck(int64_t consume) const {
         for (auto& _limit_tracker : _limit_trackers) {
@@ -389,11 +438,13 @@ public:
         return false;
     }
 
-    void set_limit(int64_t limit) { _limit = limit; }
+    // The limit may be changed at runtime while other threads are consuming. Switching between limited (>= 0)
+    // and unlimited (< 0) is not reflected in _limit_trackers of descendants, which is built at construction.
+    void set_limit(int64_t limit) { _limit.store(limit, std::memory_order_relaxed); }
 
-    int64_t limit() const { return _limit; }
+    int64_t limit() const { return _limit.load(std::memory_order_relaxed); }
 
-    bool has_limit() const { return _limit >= 0; }
+    bool has_limit() const { return limit() >= 0; }
 
     void set_reserve_limit(int64_t reserve_limit) { _reserve_limit = reserve_limit; }
 
@@ -431,7 +482,7 @@ public:
 
     std::string debug_string() {
         std::stringstream msg;
-        msg << "limit: " << _limit << "; "
+        msg << "limit: " << limit() << "; "
             << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
             << "allocation: " << COUNTER_VALUE(_allocation) << "; "
@@ -475,7 +526,7 @@ private:
     MemTrackerType _type{MemTrackerType::NO_SET};
 
     int32_t _level = 1;
-    int64_t _limit;              // in bytes
+    std::atomic<int64_t> _limit; // in bytes
     int64_t _reserve_limit = -1; // only used in spillable query
 
     std::string _label;

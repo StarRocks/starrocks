@@ -79,6 +79,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::COMPACTION_STATE, "compaction_state"},
         {MemTrackerType::BUILTIN_INVERTED_INDEX, "builtin_inverted_index"},
         {MemTrackerType::VECTOR_INDEX, "vector_index"},
+        {MemTrackerType::JVM, "jvm"},
 };
 
 static std::map<MemTrackerType, std::string> s_type_to_label_map;
@@ -165,7 +166,7 @@ MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> att
 }
 
 void MemTracker::Init() {
-    DCHECK_GE(_limit, -1);
+    DCHECK_GE(limit(), -1);
     // populate _all_trackers and _limit_trackers
     MemTracker* tracker = this;
     while (tracker != nullptr) {
@@ -216,7 +217,7 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     item->label = _label;
     item->parent = parent;
     item->level = _level;
-    item->limit = _limit;
+    item->limit = limit();
     item->cur_consumption = _consumption->current_value();
     item->peak_consumption = COUNTER_VALUE(_consumption);
 
