@@ -1,0 +1,484 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class AggregateJoinPushDownRuleMVPruneTest {
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    private static Table mockTable(String name) {
+        Table t = Mockito.mock(Table.class);
+        Mockito.when(t.toString()).thenReturn(name);
+        return t;
+    }
+
+    /**
+     * Builds an {@link OptExpression} wrapping a mocked {@link LogicalScanOperator} whose
+     * {@code getPredicate()} returns {@code predicate} and {@code getColRefToColumnMetaMap()}
+     * returns {@code refToCol}.
+     */
+    private static OptExpression scanNode(Table table,
+                                          Map<ColumnRefOperator, Column> refToCol,
+                                          ScalarOperator predicate) {
+        LogicalScanOperator scan = Mockito.mock(LogicalScanOperator.class);
+        Mockito.when(scan.getTable()).thenReturn(table);
+        Mockito.when(scan.getColRefToColumnMetaMap()).thenReturn(refToCol);
+        Mockito.when(scan.getPredicate()).thenReturn(predicate);
+        // make instanceof LogicalScanOperator work
+        OptExpression node = Mockito.mock(OptExpression.class);
+        Mockito.when(node.getOp()).thenReturn(scan);
+        Mockito.when(node.getInputs()).thenReturn(Collections.emptyList());
+        return node;
+    }
+
+    /**
+     * Builds an {@link OptExpression} wrapping a mocked {@link LogicalJoinOperator} whose
+     * {@code getOnPredicate()} returns {@code onPredicate}, with the given child scan nodes.
+     */
+    private static OptExpression joinNode(ScalarOperator onPredicate, List<OptExpression> children) {
+        LogicalJoinOperator join = Mockito.mock(LogicalJoinOperator.class);
+        Mockito.when(join.getOnPredicate()).thenReturn(onPredicate);
+        OptExpression node = Mockito.mock(OptExpression.class);
+        Mockito.when(node.getOp()).thenReturn(join);
+        Mockito.when(node.getInputs()).thenReturn(children);
+        return node;
+    }
+
+    /**
+     * Builds an {@link OptExpression} wrapping a real {@link LogicalFilterOperator} with the given
+     * predicate, and a single child node.
+     */
+    private static OptExpression filterNode(ScalarOperator predicate, OptExpression child) {
+        LogicalFilterOperator filter = new LogicalFilterOperator(predicate);
+        OptExpression node = Mockito.mock(OptExpression.class);
+        Mockito.when(node.getOp()).thenReturn(filter);
+        Mockito.when(node.getInputs()).thenReturn(ImmutableList.of(child));
+        return node;
+    }
+
+    // -----------------------------------------------------------------------
+    // Group 1: Scan predicate
+    // -----------------------------------------------------------------------
+
+    /**
+     * Scan with predicate {@code col = 1} → col added.
+     */
+    @Test
+    public void testScanPredicateAddsColumn() {
+        Table tableA = mockTable("a");
+        ColumnRefOperator colRef = new ColumnRefOperator(1, IntegerType.INT, "col", true);
+        Column col = new Column("col", IntegerType.INT);
+        ScalarOperator pred = new BinaryPredicateOperator(BinaryType.EQ, colRef, ConstantOperator.createInt(1));
+
+        OptExpression node = scanNode(tableA, ImmutableMap.of(colRef, col), pred);
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(node, result);
+
+        assertEquals(Set.of("col"), result.get(tableA));
+    }
+
+    /**
+     * Scan with no predicate → nothing collected.
+     */
+    @Test
+    public void testScanNullPredicateCollectsNothing() {
+        Table tableA = mockTable("a");
+        ColumnRefOperator colRef = new ColumnRefOperator(1, IntegerType.INT, "col", true);
+        Column col = new Column("col", IntegerType.INT);
+
+        OptExpression node = scanNode(tableA, ImmutableMap.of(colRef, col), null);
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(node, result);
+
+        assertTrue(result.isEmpty());
+    }
+
+    /**
+     * Scan with compound predicate {@code col1 = 1 AND col2 > 5} → both cols added.
+     */
+    @Test
+    public void testScanCompoundPredicateAddsMultipleColumns() {
+        Table tableA = mockTable("a");
+        ColumnRefOperator ref1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator ref2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        Column col1 = new Column("col1", IntegerType.INT);
+        Column col2 = new Column("col2", IntegerType.INT);
+
+        ScalarOperator pred = CompoundPredicateOperator.and(
+                new BinaryPredicateOperator(BinaryType.EQ, ref1, ConstantOperator.createInt(1)),
+                new BinaryPredicateOperator(BinaryType.GT, ref2, ConstantOperator.createInt(5)));
+
+        OptExpression node = scanNode(tableA, ImmutableMap.of(ref1, col1, ref2, col2), pred);
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(node, result);
+
+        assertEquals(Set.of("col1", "col2"), result.get(tableA));
+    }
+
+    // -----------------------------------------------------------------------
+    // Group 2: JOIN ON filter predicate
+    // -----------------------------------------------------------------------
+
+    /**
+     * JOIN ON {@code a.id = b.id} → a.id collected for tableA, b.id collected for tableB.
+     * Both sides must appear in the MV's group-by for the rewrite to be valid.
+     */
+    @Test
+    public void testJoinOnEquiJoinCollectsBothSides() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator aId = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        ColumnRefOperator bId = new ColumnRefOperator(2, IntegerType.INT, "id", true);
+        Column colA = new Column("id", IntegerType.INT);
+        Column colB = new Column("id", IntegerType.INT);
+
+        ScalarOperator onPred = new BinaryPredicateOperator(BinaryType.EQ, aId, bId);
+
+        OptExpression leftScan = scanNode(tableA, ImmutableMap.of(aId, colA), null);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId, colB), null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(2, result.size());
+        assertEquals(Set.of("id"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
+    }
+
+    /**
+     * JOIN ON {@code a.id = b.id AND a.col = 1} → a.id and a.col collected for tableA, b.id for tableB.
+     */
+    @Test
+    public void testJoinOnCompoundPartialFilter() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator aId  = new ColumnRefOperator(1, IntegerType.INT, "id",  true);
+        ColumnRefOperator bId  = new ColumnRefOperator(2, IntegerType.INT, "id",  true);
+        ColumnRefOperator aCol = new ColumnRefOperator(3, IntegerType.INT, "col", true);
+        Column colAId  = new Column("id",  IntegerType.INT);
+        Column colBId  = new Column("id",  IntegerType.INT);
+        Column colACol = new Column("col", IntegerType.INT);
+
+        ScalarOperator onPred = CompoundPredicateOperator.and(
+                new BinaryPredicateOperator(BinaryType.EQ, aId, bId),
+                new BinaryPredicateOperator(BinaryType.EQ, aCol, ConstantOperator.createInt(1)));
+
+        OptExpression leftScan  = scanNode(tableA, ImmutableMap.of(aId, colAId, aCol, colACol), null);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId, colBId),                null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(2, result.size());
+        assertEquals(Set.of("id", "col"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
+    }
+
+    /**
+     * JOIN ON {@code concat(a.lo_linenumber,'c') = concat(1,'2',3)} → lo_linenumber collected.
+     */
+    @Test
+    public void testJoinOnFunctionWrappedFilterAddsColumn() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator lineNum = new ColumnRefOperator(1, IntegerType.INT, "lo_linenumber", true);
+        ColumnRefOperator bId    = new ColumnRefOperator(2, IntegerType.INT, "id",            true);
+        Column colLineNum = new Column("lo_linenumber", IntegerType.INT);
+        Column colBId     = new Column("id",            IntegerType.INT);
+
+        ScalarOperator lhs = new CallOperator("concat", VarcharType.VARCHAR,
+                ImmutableList.of(lineNum, ConstantOperator.createVarchar("c")));
+        ScalarOperator rhs = new CallOperator("concat", VarcharType.VARCHAR,
+                ImmutableList.of(ConstantOperator.createInt(1),
+                        ConstantOperator.createVarchar("2"),
+                        ConstantOperator.createInt(3)));
+        ScalarOperator onPred = new BinaryPredicateOperator(BinaryType.EQ, lhs, rhs);
+
+        OptExpression leftScan  = scanNode(tableA, ImmutableMap.of(lineNum, colLineNum), null);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId,     colBId),     null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(1, result.size());
+        assertEquals(Set.of("lo_linenumber"), result.get(tableA));
+    }
+
+    /**
+     * Scan predicate {@code col1 = 1} and JOIN ON {@code a.col2 = b.id AND a.col3 = 99}:
+     * col1, col2, col3 collected for tableA; b.id collected for tableB.
+     */
+    @Test
+    public void testScanPredicateAndJoinOnFilterCombined() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator aCol1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator aCol2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        ColumnRefOperator aCol3 = new ColumnRefOperator(3, IntegerType.INT, "col3", true);
+        ColumnRefOperator bId   = new ColumnRefOperator(4, IntegerType.INT, "id",   true);
+        Column colA1 = new Column("col1", IntegerType.INT);
+        Column colA2 = new Column("col2", IntegerType.INT);
+        Column colA3 = new Column("col3", IntegerType.INT);
+        Column colBI = new Column("id",   IntegerType.INT);
+
+        // scan predicate: col1 = 1
+        ScalarOperator scanPred = new BinaryPredicateOperator(BinaryType.EQ, aCol1, ConstantOperator.createInt(1));
+        // ON: a.col2 = b.id (equi, both sides collected) AND a.col3 = 99 (filter)
+        ScalarOperator onPred = CompoundPredicateOperator.and(
+                new BinaryPredicateOperator(BinaryType.EQ, aCol2, bId),
+                new BinaryPredicateOperator(BinaryType.EQ, aCol3, ConstantOperator.createInt(99)));
+
+        OptExpression leftScan  = scanNode(tableA,
+                ImmutableMap.of(aCol1, colA1, aCol2, colA2, aCol3, colA3), scanPred);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId, colBI), null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(2, result.size());
+        assertEquals(Set.of("col1", "col2", "col3"), result.get(tableA));
+        assertEquals(Set.of("id"), result.get(tableB));
+    }
+
+    /**
+     * LogicalFilterOperator above a scan with predicate {@code col1 > 5 AND col2 = 1} → both cols collected.
+     *
+     * filters not pushed into the scan must still contribute their referenced columns
+     * so that MV candidates can be pruned correctly.
+     */
+    @Test
+    public void testFilterOperatorPredicateAddsColumns() {
+        Table tableA = mockTable("a");
+        ColumnRefOperator ref1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator ref2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        Column col1 = new Column("col1", IntegerType.INT);
+        Column col2 = new Column("col2", IntegerType.INT);
+
+        // scan has no pushed-down predicate
+        OptExpression scan = scanNode(tableA, ImmutableMap.of(ref1, col1, ref2, col2), null);
+
+        // filter above scan: col1 > 5 AND col2 = 1
+        ScalarOperator filterPred = CompoundPredicateOperator.and(
+                new BinaryPredicateOperator(BinaryType.GT, ref1, ConstantOperator.createInt(5)),
+                new BinaryPredicateOperator(BinaryType.EQ, ref2, ConstantOperator.createInt(1)));
+        OptExpression filter = filterNode(filterPred, scan);
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(filter, result);
+
+        assertEquals(1, result.size());
+        assertEquals(Set.of("col1", "col2"), result.get(tableA));
+    }
+
+    /**
+     * JOIN ON {@code a.col1 > a.col2} (same-table column comparison, no constant child) →
+     * both col1 and col2 collected.
+     *
+     * a same-table conjunct must not be skipped just because it has no constant child.
+     */
+    @Test
+    public void testJoinOnSameTableColumnComparisonCollected() {
+        Table tableA = mockTable("a");
+        Table tableB = mockTable("b");
+        ColumnRefOperator aCol1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
+        ColumnRefOperator aCol2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
+        ColumnRefOperator bId   = new ColumnRefOperator(3, IntegerType.INT, "id",   true);
+        Column colA1 = new Column("col1", IntegerType.INT);
+        Column colA2 = new Column("col2", IntegerType.INT);
+        Column colBI = new Column("id",   IntegerType.INT);
+
+        // ON: a.col1 > a.col2 (same-table filter, no constant child)
+        ScalarOperator onPred = new BinaryPredicateOperator(BinaryType.GT, aCol1, aCol2);
+
+        OptExpression leftScan  = scanNode(tableA, ImmutableMap.of(aCol1, colA1, aCol2, colA2), null);
+        OptExpression rightScan = scanNode(tableB, ImmutableMap.of(bId, colBI), null);
+        OptExpression join = joinNode(onPred, ImmutableList.of(leftScan, rightScan));
+
+        Map<Table, Set<String>> result = new HashMap<>();
+        MvUtils.collectPredicateColumnsByTable(join, result);
+
+        assertEquals(1, result.size(), "Only tableA columns should be collected");
+        assertEquals(Set.of("col1", "col2"), result.get(tableA));
+        assertFalse(result.containsKey(tableB));
+    }
+
+    // -----------------------------------------------------------------------
+    // Group 3: validMvGroupByAndPredicateColumns
+    // -----------------------------------------------------------------------
+
+    /**
+     * Builds a mock {@link MaterializationContext} with pre-cached predicate/grouping columns
+     * and an {@link OptExpression} that reports whether the MV contains aggregation.
+     *
+     * @param mvPredicateCols  pre-cached MV predicate columns (null → not cached, will be computed)
+     * @param mvGroupingCols   pre-cached MV grouping columns (null → not cached, will be computed)
+     * @param hasAggregation   whether the MV expression tree contains an aggregation operator
+     */
+    private static MaterializationContext mockMvContext(Set<String> mvGroupingCols,
+                                                        Set<String> mvPredicateCols,
+                                                        boolean hasAggregation) {
+        // Build a minimal MV OptExpression that answers containsAggregation correctly.
+        OptExpression mvExpr = Mockito.mock(OptExpression.class);
+        if (hasAggregation) {
+            LogicalAggregationOperator agg = Mockito.mock(LogicalAggregationOperator.class);
+            Mockito.when(mvExpr.getOp()).thenReturn(agg);
+            Mockito.when(mvExpr.getInputs()).thenReturn(Collections.emptyList());
+        } else {
+            LogicalScanOperator scan = Mockito.mock(LogicalScanOperator.class);
+            Mockito.when(mvExpr.getOp()).thenReturn(scan);
+            Mockito.when(mvExpr.getInputs()).thenReturn(Collections.emptyList());
+        }
+
+        // Use CALLS_REAL_METHODS so validSPGMvGroupByAndPredicateColumns executes real logic.
+        MaterializationContext ctx = Mockito.mock(MaterializationContext.class, Mockito.CALLS_REAL_METHODS);
+        Deencapsulation.setField(ctx, "mvExpression", mvExpr);
+        Deencapsulation.setField(ctx, "groupingColumns", mvGroupingCols);
+        Deencapsulation.setField(ctx, "predicateColumns", mvPredicateCols);
+        return ctx;
+    }
+
+    /**
+     * MV predicate = {}, query predicate = null, MV has aggregation, MV groupBy = {a, b}.
+     * Query groupBy+pred = {a} → MV groupBy covers it → valid.
+     */
+    @Test
+    public void testValidMv_NoPredicate_GroupByCovered() {
+        MaterializationContext ctx = mockMvContext(
+                Set.of("a", "b"),  // mvGroupingCols  (cached)
+                Set.of(),          // mvPredicateCols (cached, empty)
+                true);             // has aggregation
+
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("a"),   // queryGroupByAndPred
+                null);         // queryPredicateColumns (no predicate in query)
+
+        assertTrue(result);
+    }
+
+    /**
+     * MV predicate = {lo_linenumber}, query predicate = null → valid.
+     * Please check <a href="https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#predicate-union-rewrite">Union rewrite</a>
+     */
+    @Test
+    public void testValidMv_MvHasPredicate_QueryHasNone() {
+        MaterializationContext ctx = mockMvContext(
+                Set.of("lo_orderdate", "lo_linenumber"),
+                Set.of("lo_linenumber"), // mvPredicateCols
+                true);
+
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("lo_orderdate"),
+                null);  // query has no predicate
+
+        // do not verify predicate column contain
+        assertTrue(result);
+    }
+
+    /**
+     * MV predicate = {b}, query predicate = {b} (covered),
+     * MV groupBy = {a, b, c},
+     * query groupBy = {a, b} → covered → valid.
+     */
+    @Test
+    public void testValidMv_PredicateCovered_GroupByCovered() {
+        MaterializationContext ctx = mockMvContext(
+                Set.of("a", "b", "c"),
+                Set.of("b"),
+                true);
+
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("a", "b"),  // queryGroupByAndPred
+                Set.of("b")); // query groupBy {b}
+
+        assertTrue(result);
+    }
+
+    /**
+     * MV predicate = {lo_linenumber, lo_custkey},
+     * query predicate = {lo_linenumber} only → query doesn't cover all MV predicate columns → valid.
+     */
+    @Test
+    public void testValidMv_MvPredicateNotCoveredByQuery() {
+        MaterializationContext ctx = mockMvContext(
+                Set.of("lo_orderdate", "lo_linenumber", "lo_custkey"),
+                Set.of("lo_linenumber", "lo_custkey"),
+                true);
+
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("lo_orderdate", "lo_linenumber"),
+                Set.of("lo_linenumber"));  // missing lo_custkey
+
+        // do not verify predicate column contain
+        assertTrue(result);
+    }
+
+    /**
+     * MV predicate = {}, MV has aggregation, MV groupBy = {a},
+     * query groupBy+pred = {a, b} → MV groupBy does NOT cover b → invalid.
+     */
+    @Test
+    public void testInvalidMv_GroupByNotCovered() {
+        MaterializationContext ctx = mockMvContext(
+                Set.of("a"),
+                Set.of(),
+                true);
+
+        boolean result = ctx.validSPGMvGroupByAndPredicateColumns(
+                Set.of("a", "b"),  // query needs both a and b
+                Set.of());         // empty predicate
+
+        assertFalse(result);
+    }
+}
