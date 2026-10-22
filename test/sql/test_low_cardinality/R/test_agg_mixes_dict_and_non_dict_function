@@ -1,0 +1,56 @@
+-- name: test_agg_mixes_dict_and_non_dict_function
+admin set frontend config ("dict_thrash_guard_threshold" = "1000000");
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = true;
+-- result:
+-- !result
+CREATE TABLE `agg_mixed_dict_t` (
+  `s` varchar(65533) NULL,
+  `g` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`s`)
+DISTRIBUTED BY HASH(`s`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into agg_mixed_dict_t
+select concat('V', generate_series % 3), cast(generate_series % 2 as int)
+from TABLE(generate_series(0, 299));
+-- result:
+-- !result
+[UC] analyze full table agg_mixed_dict_t;
+function: wait_global_dict_ready('s', 'agg_mixed_dict_t')
+-- result:
+
+-- !result
+[ORDER]
+select g, min(s), length(group_concat(s, ' ')) from agg_mixed_dict_t where s is null or s != 'V0' group by g order by g;
+-- result:
+0	V1	399
+1	V1	399
+-- !result
+[ORDER]
+select g, max(s), length(group_concat(s, ' ')) from agg_mixed_dict_t where s is null or s != 'V0' group by g order by g;
+-- result:
+0	V2	399
+1	V2	399
+-- !result
+[ORDER]
+select g, count(*), count(s), min(s), max(s), length(group_concat(s, ' '))
+from agg_mixed_dict_t where s is null or s != 'V0' group by g order by g;
+-- result:
+0	100	100	V1	V2	399
+1	100	100	V1	V2	399
+-- !result
+[ORDER]
+select g, min(s), max(s) from agg_mixed_dict_t where s is null or s != 'V0' group by g order by g;
+-- result:
+0	V1	V2
+1	V1	V2
+-- !result
