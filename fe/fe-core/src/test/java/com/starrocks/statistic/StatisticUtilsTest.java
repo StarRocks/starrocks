@@ -27,6 +27,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -325,4 +326,23 @@ class StatisticUtilsTest extends PlanTestBase {
         Assertions.assertThrows(SemanticException.class,
                 () -> StatisticUtils.getQueryStatisticsColumnType(table, "nonexistent"));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    void testFilterOnColumnWithoutStatisticType() throws Exception {
+        Assertions.assertTrue(StatisticUtils.convertStatisticsToDouble(VarbinaryType.VARBINARY, "abc").isEmpty());
+
+        // Planning an equality filter on a VARBINARY column used to fail with "Error statistic type : varbinary".
+        starRocksAssert.withTable("CREATE TABLE test.varbinary_filter (id INT, bin VARBINARY) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        try {
+            String plan = getFragmentPlan("SELECT id FROM test.varbinary_filter WHERE bin = X'616263'");
+            assertContains(plan, "PREDICATES: 2: bin = '616263'");
+        } finally {
+            starRocksAssert.dropTable("test.varbinary_filter");
+        }
+    }
+}
+>>>>>>> fd2c1839fc6... [BugFix][RB-545] Do not fail planning on an equality filter over a VARBINARY column (#66435)
