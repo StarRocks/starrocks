@@ -180,14 +180,10 @@ public class ArrowFlightSqlSessionManager {
         }
         if (tokenInfo.isExpiredAt(System.currentTimeMillis())) {
             // The JWT that opened this session has expired; the removal listener kills the context.
-            // Not an IllegalArgumentException: with the proxy on, the authenticator lets that through
-            // as "unknown here, owned by another FE", so the client would get NOT_FOUND instead of this.
             tokenCache.invalidate(sessionToken);
-            throw CallStatus.UNAUTHENTICATED
-                    .withDescription(String.format(
-                            "bearer token [%s] is no longer valid: the credential it was opened with has expired, " +
-                                    "please authenticate again", sessionToken))
-                    .toRuntimeException();
+            throw new IllegalArgumentException(String.format(
+                    "bearer token [%s] is no longer valid: the credential it was opened with has expired, " +
+                            "please authenticate again", sessionToken));
         }
     }
 

@@ -202,14 +202,22 @@ class ArrowFlightSqlAuthenticatorTest {
     }
 
     @Test
-    void testValidateBearerToken_expiredSessionRejectedWhenProxyEnabled() {
+    void testValidateBearerToken_unknownLocalTokenRejectedWhenProxyEnabled() {
+        // first call after JWT expiry, then a retry once the session is gone
+        String[] messages = {"bearer token [10.0.6.7|some-uuid] is no longer valid: the credential it was opened " +
+                "with has expired, please authenticate again", "invalid bearer token [10.0.6.7|some-uuid]"};
+        for (String message : messages) {
+            assertLocalTokenRejected(message);
+        }
+    }
+
+    private void assertLocalTokenRejected(String message) {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        // A local session whose JWT has expired; its host is a valid FE, so the proxy fallback must not see it
-        String expiredToken = "10.0.6.7|some-uuid";
-        doThrow(CallStatus.UNAUTHENTICATED.withDescription("expired").toRuntimeException())
-                .when(sessionManager).validateToken(expiredToken);
+        String localToken = "10.0.6.7|some-uuid";
+        doThrow(new IllegalArgumentException(message)).when(sessionManager).validateToken(localToken);
+        when(sessionManager.isLocalToken(localToken)).thenReturn(true);
 
         try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
                 MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
@@ -224,10 +232,11 @@ class ArrowFlightSqlAuthenticatorTest {
             when(mockFe.getHost()).thenReturn("10.0.6.7");
 
             CallHeaders headers = mock(CallHeaders.class);
-            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + expiredToken);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + localToken);
 
             FlightRuntimeException e = assertThrows(FlightRuntimeException.class, () -> authenticator.authenticate(headers));
             assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
+            assertEquals(message, e.status().description());
         }
     }
 }

@@ -88,9 +88,9 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
         try {
             sessionManager.validateToken(sessionToken);
         } catch (IllegalArgumentException e) {
-            // Not found locally - if proxy is enabled and the token names a valid FE, let it through
-            // for the request handlers to forward.
-            if (isProxyEnabled()) {
+            // Not found locally - if proxy is enabled and the token names another valid FE, let it through
+            // for the request handlers to forward. A token of this FE that is not cached is invalid everywhere.
+            if (isProxyEnabled() && !sessionManager.isLocalToken(sessionToken)) {
                 String feHost = ArrowFlightSqlSessionManager.extractFeHost(sessionToken);
                 if (feHost != null && ArrowFlightSqlSessionManager.isValidFeHost(feHost)) {
                     return createAuthResult(sessionToken);
