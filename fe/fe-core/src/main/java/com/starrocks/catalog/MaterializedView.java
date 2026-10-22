@@ -2708,6 +2708,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+        // The property is authoritative: images checkpointed before ALTER replay applied it carry a stale field.
+        if (tableProperty != null) {
+            String staleness = tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+            if (staleness != null) {
+                maxMVRewriteStaleness = Integer.parseInt(staleness);
+            }
+        }
         List<Column> partitionCols = getPartitionColumns();
         if (CollectionUtils.isEmpty(partitionCols)) {
             return;
