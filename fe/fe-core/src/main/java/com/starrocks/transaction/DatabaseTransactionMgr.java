@@ -1041,14 +1041,22 @@ public class DatabaseTransactionMgr {
     }
 
     /**
-     * The given physical partitions that the transaction committed into or registered as write targets.
+     * The given physical partitions that the transaction committed into or may still write to.
      */
     static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
         Set<Long> touched = Sets.newHashSet();
         TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
-        if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {
-            addIntersection(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds, touched);
+        Map<Long, PartitionCommitInfo> committedPartitions = tableCommitInfo == null ? null
+                : tableCommitInfo.getIdToPartitionCommitInfo();
+        if (committedPartitions != null) {
+            addIntersection(committedPartitions.keySet(), physicalPartitionIds, touched);
+            // Once committed, no more partitions can be written. Planned targets may include partitions
+            // that received no rows, so the actual commit metadata (even an empty map) is authoritative.
+            if (txn.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                return touched;
+            }
         }
+        // Keep the conservative planning fallback while in flight or when commit metadata is missing.
         addIntersection(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds, touched);
         return touched;
     }

@@ -1681,6 +1681,71 @@ public class GlobalTransactionMgrTest {
                 GlobalStateMgrTestUtil.testTableId1, physicalPartitionId));
     }
 
+    @Test
+    public void testCommittedTxnIgnoresPlannedButUnwrittenPartitions() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long writtenPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        long unwrittenPartitionId = writtenPartitionId + 1;
+        long transactionId = beginTxnTargeting(writtenPartitionId);
+        TransactionState plannedTxn = masterTransMgr.getTransactionState(dbId, transactionId);
+        // A load without PARTITIONS can plan both, although every row routes to just one of them.
+        plannedTxn.addPartitionLoadedIndexes(tableId, unwrittenPartitionId,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+        masterTransMgr.commitTransaction(dbId, transactionId, transTablets, Lists.newArrayList(), null);
+
+        TransactionState committedTxn = masterTransMgr.getTransactionState(dbId, transactionId);
+        Assertions.assertEquals(TransactionStatus.COMMITTED, committedTxn.getTransactionStatus());
+        Assertions.assertTrue(committedTxn.getLoadedPhysicalPartitionIds(tableId).contains(unwrittenPartitionId));
+        Assertions.assertEquals(Map.of(writtenPartitionId, Lists.newArrayList(transactionId)),
+                masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId,
+                        Sets.newHashSet(writtenPartitionId, unwrittenPartitionId)));
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(dbId, tableId,
+                Sets.newHashSet(unwrittenPartitionId)).isEmpty());
+        Assertions.assertEquals(Lists.newArrayList(transactionId),
+                masterTransMgr.getConflictingTxnIds(dbId, tableId, Sets.newHashSet(writtenPartitionId)));
+    }
+
+    @Test
+    public void testTouchedPartitionsRetainsConservativeFallback() {
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long plannedPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        long writtenPartitionId = plannedPartitionId + 1;
+        Set<Long> queriedPartitions = Sets.newHashSet(plannedPartitionId, writtenPartitionId);
+        TransactionState txn = new TransactionState();
+        txn.addPartitionLoadedIndexes(tableId, plannedPartitionId,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        TableCommitInfo commitInfo = new TableCommitInfo(tableId);
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(writtenPartitionId, 2, 0));
+        txn.putIdToTableCommitInfo(tableId, commitInfo);
+
+        for (TransactionStatus status : List.of(TransactionStatus.PREPARE, TransactionStatus.PREPARED)) {
+            txn.setTransactionStatus(status);
+            Assertions.assertEquals(queriedPartitions,
+                    DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, queriedPartitions));
+        }
+        txn.setTransactionStatus(TransactionStatus.COMMITTED);
+        Assertions.assertEquals(Sets.newHashSet(writtenPartitionId),
+                DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, queriedPartitions));
+        // An empty actual set is complete metadata, not a reason to resurrect planned targets.
+        txn.putIdToTableCommitInfo(tableId, new TableCommitInfo(tableId));
+        Assertions.assertTrue(DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, queriedPartitions).isEmpty());
+
+        txn.getIdToTableCommitInfos().clear();
+        Assertions.assertEquals(Sets.newHashSet(plannedPartitionId),
+                DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, queriedPartitions));
+        TableCommitInfo missingPartitionMap = Mockito.mock(TableCommitInfo.class);
+        Mockito.when(missingPartitionMap.getIdToPartitionCommitInfo()).thenReturn(null);
+        txn.putIdToTableCommitInfo(tableId, missingPartitionMap);
+        Assertions.assertEquals(Sets.newHashSet(plannedPartitionId),
+                DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, queriedPartitions));
+    }
+
     // The per partition lookup that partition replacement runs over all its source partitions at once: each
     // partition gets the transactions that target it, and a partition without any is left out.
     @Test
@@ -1781,6 +1846,39 @@ public class GlobalTransactionMgrTest {
         Assertions.assertTrue(
                 masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds).isEmpty());
         masterTransMgr.clearExplicitTxnState(transactionId);
+    }
+
+    @Test
+    public void testCommittedExplicitTxnIgnoresStalePlannedPartitions() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long writtenPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        long unwrittenPartitionId = writtenPartitionId + 1;
+        TransactionState plannedTxn = beginExplicitTxnPlannedOn(writtenPartitionId, System.currentTimeMillis());
+        long transactionId = plannedTxn.getTransactionId();
+        plannedTxn.addPartitionLoadedIndexes(tableId, unwrittenPartitionId,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        masterTransMgr.registerExplicitTransactionState(transactionId, dbId);
+        masterTransMgr.activateExplicitTransactionTable(transactionId, dbId, tableId);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+        try {
+            masterTransMgr.commitTransaction(dbId, transactionId, transTablets, Lists.newArrayList(), null);
+            // Commit is copy-on-write: the explicit layout reservation still holds the PREPARE object.
+            Assertions.assertEquals(TransactionStatus.PREPARE, plannedTxn.getTransactionStatus());
+            Assertions.assertEquals(TransactionStatus.COMMITTED,
+                    masterTransMgr.getTransactionState(dbId, transactionId).getTransactionStatus());
+            Assertions.assertEquals(Map.of(writtenPartitionId, Lists.newArrayList(transactionId)),
+                    masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId,
+                            Sets.newHashSet(writtenPartitionId, unwrittenPartitionId)));
+            Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(dbId, tableId,
+                    Sets.newHashSet(unwrittenPartitionId)).isEmpty());
+        } finally {
+            masterTransMgr.clearExplicitTxnState(transactionId);
+        }
     }
 
     // Nothing aborts an explicit transaction on timeout before it joined the database transaction manager, so a

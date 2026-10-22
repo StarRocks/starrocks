@@ -383,6 +383,55 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(untouchedPartition.getId(), olapTable.getPartition("p2").getId());
     }
 
+    @Test
+    public void testCommittedIngestionIgnoresPlannedButUnwrittenSourcePartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `testOptimizeCommittedPartitioned` (\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "PARTITION BY RANGE(`v1`)\n" +
+                "(PARTITION p1 VALUES LESS THAN (\"100\"),\n" +
+                " PARTITION p2 VALUES LESS THAN (\"200\"))\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "testOptimizeCommittedPartitioned");
+        Partition optimizedPartition = olapTable.getPartition("p1");
+        Partition untouchedPartition = olapTable.getPartition("p2");
+
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table testOptimizeCommittedPartitioned partition (p1) distributed by hash(v1) buckets 5",
+                starRocksAssert.getCtx());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, stmt);
+
+        // A load without a PARTITIONS clause plans both partitions, but only p2 receives rows.
+        // Register p1 before commit, as the sink does, and keep the committed load unpublished.
+        long txnId = commitTxnWithoutPublish(db, olapTable, untouchedPartition, optimizedPartition);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState committedTxn = transactionMgr.getTransactionState(db.getId(), txnId);
+        Assertions.assertEquals(TransactionStatus.COMMITTED, committedTxn.getTransactionStatus());
+        Set<Long> plannedPhysicalPartitionIds = Lists.newArrayList(optimizedPartition, untouchedPartition).stream()
+                .flatMap(partition -> partition.getSubPartitions().stream())
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        Assertions.assertEquals(plannedPhysicalPartitionIds, committedTxn.getLoadedPhysicalPartitionIds(olapTable.getId()));
+        Set<Long> actualPhysicalPartitionIds = untouchedPartition.getSubPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        Assertions.assertEquals(actualPhysicalPartitionIds,
+                committedTxn.getTableCommitInfo(olapTable.getId()).getIdToPartitionCommitInfo().keySet());
+        markAllRewriteTasksSucceeded(db, job);
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
+        Assertions.assertNotEquals(optimizedPartition.getId(), olapTable.getPartition("p1").getId());
+        Assertions.assertEquals(untouchedPartition.getId(), olapTable.getPartition("p2").getId());
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+    }
+
     /**
      * Submit the given alter statement and drive its optimize job until the rewrite tasks are outstanding,
      * which is the state every concurrency test starts from.
@@ -422,9 +471,19 @@ public class OptimizeJobV2Test extends DDLTestBase {
     /**
      * Write into the given partition and commit, without letting the transaction publish, which is the
      * state a rewrite is in when its data is durable but not visible yet.
+     * Additional planned partitions are registered before commit without contributing any committed tablets.
      */
-    private long commitTxnWithoutPublish(Database db, OlapTable table, Partition partition) throws Exception {
+    private long commitTxnWithoutPublish(Database db, OlapTable table, Partition partition,
+                                         Partition... additionalPlannedPartitions) throws Exception {
         long txnId = beginTxnWriting(db, table, partition);
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), txnId);
+        for (Partition plannedPartition : additionalPlannedPartitions) {
+            for (PhysicalPartition physicalPartition : plannedPartition.getSubPartitions()) {
+                txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                        Lists.newArrayList(table.getBaseIndexMetaId()));
+            }
+        }
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
