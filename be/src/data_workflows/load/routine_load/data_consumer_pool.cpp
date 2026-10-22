@@ -154,6 +154,7 @@ void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& cons
         return;
     }
 
+    consumer->update_last_visit_time();
     _pool.push_back(consumer);
     VLOG(3) << "return the data consumer: " << consumer->id() << ", current pool size: " << _pool.size();
 }
@@ -165,28 +166,28 @@ void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {
 }
 
 void DataConsumerPool::stop() {
-    std::unique_lock<std::mutex> l(_lock);
-    *_is_closed = true;
+    _is_closed->store(true, std::memory_order_release);
 
     if (_clean_idle_consumer_thread.joinable()) {
         _clean_idle_consumer_thread.join();
     }
+
+    std::unique_lock<std::mutex> l(_lock);
+    _pool.clear();
 }
 
 void DataConsumerPool::start_bg_worker() {
-    std::shared_ptr<bool> is_closed = _is_closed;
+    std::shared_ptr<std::atomic_bool> is_closed = _is_closed;
 
-    _clean_idle_consumer_thread = std::thread([=] {
+    _clean_idle_consumer_thread = std::thread([this, is_closed] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();
 #endif
 
         uint32_t interval = 60;
-        while (true) {
-            if (*is_closed) {
-                return;
-            }
-            nap_sleep(interval, [&is_closed] { return *is_closed; });
+        while (!is_closed->load(std::memory_order_acquire)) {
+            _clean_idle_consumer_bg();
+            nap_sleep(interval, [&is_closed] { return is_closed->load(std::memory_order_acquire); });
         }
     });
     Thread::set_thread_name(_clean_idle_consumer_thread, "clean_idle_cm");
@@ -198,7 +199,7 @@ void DataConsumerPool::_clean_idle_consumer_bg() {
     std::unique_lock<std::mutex> l(_lock);
     time_t now = time(nullptr);
 
-    if (*_is_closed) {
+    if (_is_closed->load(std::memory_order_acquire)) {
         return;
     }
 
