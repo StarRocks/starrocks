@@ -26,9 +26,6 @@ admin enable failpoint 'fragment_prepare_sleep';
 -- result:
 -- !result
 [UC] select count(*) from t0;
--- result:
-8192
--- !result
 admin disable failpoint 'fragment_prepare_sleep';
 -- result:
 -- !result
