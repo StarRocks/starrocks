@@ -102,6 +102,10 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         // one partitioned spec in the group is enough; schemas of other keys are ignored
         Assertions.assertTrue(IcebergEqualityDeleteRewriteRule.needsPartitionMatch(
                 table, Set.of(IcebergDeleteSchema.of(byId, 0), IcebergDeleteSchema.of(byId, 1)), byId));
+        // deletes of two specs, each implied by the key: a global delete must still reach data files of the
+        // other spec, and a partitioned one must not, which only the partition key tells apart
+        Assertions.assertTrue(IcebergEqualityDeleteRewriteRule.needsPartitionMatch(
+                table, Set.of(IcebergDeleteSchema.of(byIdAndP, 0), IcebergDeleteSchema.of(byIdAndP, 1)), byIdAndP));
         Assertions.assertFalse(IcebergEqualityDeleteRewriteRule.needsPartitionMatch(
                 table, Set.of(IcebergDeleteSchema.of(byId, 1)), byIdAndP));
 
