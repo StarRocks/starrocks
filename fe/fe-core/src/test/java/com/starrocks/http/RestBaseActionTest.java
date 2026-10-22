@@ -445,6 +445,19 @@ public class RestBaseActionTest {
     }
 
     @Test
+    public void testExecuteWithMalformedBasicHeaderIsRefusedAsUnauthorized() throws Exception {
+        // A Basic header whose payload is not Base64 is answered like a missing one (AccessDeniedException,
+        // which handleRequest turns into a 401), not with the decoder's IllegalArgumentException (a 500).
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        BaseRequest request = mockExecutableRequest("Basic !!!not-base64!!!", new HttpConnectContext());
+
+        AccessDeniedException e = Assertions.assertThrows(AccessDeniedException.class,
+                () -> action.execute(request, new BaseResponse()));
+        Assertions.assertTrue(e.getMessage().contains("Need auth information"), e.getMessage());
+        Assertions.assertFalse(action.executed);
+    }
+
+    @Test
     public void testExecuteWithInvalidCredentialsThrowsAccessDeniedBeforeDispatch() throws Exception {
         TestableRestBaseAction action = new TestableRestBaseAction();
         BaseRequest request = mockExecutableRequest(basicAuth("bad_user", "bad_pwd"), new HttpConnectContext());

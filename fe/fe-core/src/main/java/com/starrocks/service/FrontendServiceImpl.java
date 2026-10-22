@@ -1438,8 +1438,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
-        checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
-                request.getTbl(), request.getUser_ip());
+        UserIdentity authenticatedUser = checkAuthAndLoadPriv(request.getUser(),
+                request.getPasswd(), request.getAuth_type(), request.getDb(), request.getTbl(),
+                request.getUser_ip());
+        // A Bearer request declares no user (the BE sends an empty one; the principal lives in the
+        // token), so record the load under the user the token authenticated as.
+        String loadUser = AuthCredentialKind.isBearer(request.getAuth_type())
+                ? authenticatedUser.getUser() : request.getUser();
 
         // check txn
         long limit = Config.stream_load_max_txn_num_per_be;
@@ -1487,7 +1492,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
+                loadUser, clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();
@@ -1897,8 +1902,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
                 }
                 // Resource-group resolution on the pipeline path reads ctx.getQualifiedUser();
-                // set it here (pipeline path only, so the legacy path is unchanged).
-                context.setQualifiedUser(request.getUser());
+                // set it here (pipeline path only, so the legacy path is unchanged). A Bearer
+                // request declares no user, and authenticating its token already set the real one.
+                if (!AuthCredentialKind.isBearer(request.getAuth_type())) {
+                    context.setQualifiedUser(request.getUser());
+                }
                 // The LoadPlanner/JobSpec path derives query_globals.time_zone from the context
                 // session variable, not from streamLoadInfo; set it so the load honors its timezone.
                 context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());

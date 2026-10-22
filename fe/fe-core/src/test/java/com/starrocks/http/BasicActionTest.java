@@ -18,6 +18,8 @@ package com.starrocks.http;
 import com.starrocks.authentication.AuthChannel;
 import com.starrocks.authentication.AuthCredentialKind;
 import com.starrocks.authentication.AuthCredentials;
+import com.starrocks.authentication.AuthFailureReason;
+import com.starrocks.metric.MetricRepo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -76,6 +78,48 @@ public class BasicActionTest {
         Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic", "10.1.2.3")));
         // Base64 of "nocolon" - no ':' separator, so user and password cannot be split.
         Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic bm9jb2xvbg==", "10.1.2.3")));
+        // Not Base64 at all: refused the same way, not with the decoder's IllegalArgumentException.
+        Assertions.assertNull(action.parseAuthCredentials(mockRequest("Basic !!!not-base64!!!", "10.1.2.3")));
+    }
+
+    @Test
+    public void testUnparsableBasicHeaderCountsAsMalformedFailure() {
+        BaseAction action = new BaseAction(null) {
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        };
+        boolean savedInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            // A Basic header that yields no user and password is a failed login: one MALFORMED
+            // failure each. "Basic " decodes to an empty string; bm9jb2xvbg== is "nocolon".
+            for (String header : new String[] {"Basic", "Basic ", "Basic bm9jb2xvbg==",
+                    "Basic !!!not-base64!!!"}) {
+                long reasons = malformedFailures();
+                long failures = httpPasswordFailures();
+                Assertions.assertNull(action.parseAuthCredentials(mockRequest(header, "10.1.2.3")));
+                assertEquals(reasons + 1, malformedFailures(), header);
+                assertEquals(failures + 1, httpPasswordFailures(), header);
+            }
+            // No header at all, or a scheme we do not speak, is no login attempt: nothing counted.
+            for (String header : new String[] {null, "Foo xxx"}) {
+                long reasons = malformedFailures();
+                Assertions.assertNull(action.parseAuthCredentials(mockRequest(header, "10.1.2.3")));
+                assertEquals(reasons, malformedFailures(), String.valueOf(header));
+            }
+        } finally {
+            MetricRepo.hasInit = savedInit;
+        }
+    }
+
+    private static long malformedFailures() {
+        return MetricRepo.COUNTER_AUTH_FAILURE_REASON.getMetric(AuthFailureReason.MALFORMED.label())
+                .getValue();
+    }
+
+    private static long httpPasswordFailures() {
+        return MetricRepo.COUNTER_AUTH_FAILURE.getMetric("http", "plain_password").getValue();
     }
 
     private static AuthCredentials parseBasic(String user, String password, String host) {
