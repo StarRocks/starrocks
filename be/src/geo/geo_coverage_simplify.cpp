@@ -16,13 +16,11 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <map>
-#include <memory_resource>
 #include <numeric>
 #include <variant>
 #include <vector>
@@ -47,13 +45,6 @@ using Key = std::pair<uint32_t, uint32_t>;
 struct Stop {
     Status status;
 };
-// Lives independently before the public object and survives its destructor.
-// The entire state/public-object allocation has one captured allocator owner.
-struct StateAllocation {
-    memory::Allocator* allocator;
-    void* raw;
-    size_t bytes;
-};
 [[noreturn]] void invalid(const char* message) {
     throw Stop{Status::InvalidArgument(message)};
 }
@@ -64,109 +55,13 @@ uint32_t index(size_t size) {
     return static_cast<uint32_t>(size);
 }
 
-// Tracked individually freed allocations, including temporary peaks. An aligned
-// view retains its raw allocation header; accounting uses the underlying size
-// class before alloc, not requested WKB length or a model expansion estimate.
-class Memory final : public std::pmr::memory_resource {
-public:
-    explicit Memory(memory::Allocator* allocator) : allocator(allocator) {}
-    void retain(size_t count) {
-        size_t current = used.load(std::memory_order_relaxed);
-        while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed)) {
-        }
-        size_t previous = peak.load(std::memory_order_relaxed);
-        while (previous < current + count &&
-               !peak.compare_exchange_weak(previous, current + count, std::memory_order_relaxed)) {
-        }
-    }
-    void release(size_t count) { used.fetch_sub(count, std::memory_order_relaxed); }
-    memory::Allocator* allocator;
-    // The algorithm is single-owner. Immutable native output buffers can be
-    // released by independent downstream workers after it has finished.
-    std::atomic<size_t> used{0}, peak{0};
-
-private:
-    struct Header {
-        void* raw;
-        size_t requested;
-        size_t charged;
-    };
-    void* do_allocate(size_t count, size_t alignment) override {
-        if (alignment > std::numeric_limits<size_t>::max() - sizeof(Header) ||
-            count > std::numeric_limits<size_t>::max() - alignment - sizeof(Header))
-            throw std::bad_alloc();
-        const size_t request = count + alignment + sizeof(Header);
-        const int64_t size_class = allocator->nallox(request);
-        if (size_class <= 0 || uint64_t(size_class) < request) throw std::bad_alloc();
-        retain(size_class);
-        void* raw;
-        try {
-            raw = allocator->alloc(request);
-        } catch (...) {
-            release(size_class);
-            throw;
-        }
-        if (raw == nullptr) {
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        void* aligned = static_cast<char*>(raw) + sizeof(Header);
-        size_t space = request - sizeof(Header);
-        if (std::align(alignment, count, aligned, space) == nullptr) {
-            allocator->free(raw, request);
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        auto* header = static_cast<Header*>(aligned) - 1;
-        *header = {raw, request, size_t(size_class)};
-        return aligned;
-    }
-    void do_deallocate(void* pointer, size_t, size_t) override {
-        auto header = *(static_cast<Header*>(pointer) - 1);
-        allocator->free(header.raw, header.requested);
-        release(header.charged);
-    }
-    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override { return this == &other; }
-};
-
-// Only default construction needs the scoped resource. Each allocator instance
-// captures its owner, including multiprecision rebound/temporary allocations;
-// later frees never consult this TLS variable. No simultaneous mutable use of a
-// partition is allowed, but sequential movement between workers is supported.
-thread_local std::pmr::memory_resource* construction_memory = nullptr;
-struct MemoryScope {
-    std::pmr::memory_resource* previous;
-    explicit MemoryScope(Memory& memory) : previous(construction_memory) { construction_memory = &memory; }
-    ~MemoryScope() { construction_memory = previous; }
-};
-template <class T>
-struct Alloc {
-    using value_type = T;
-    std::pmr::memory_resource* memory = construction_memory;
-    Alloc() = default;
-    explicit Alloc(std::pmr::memory_resource* m) : memory(m) {}
-    template <class U>
-    Alloc(const Alloc<U>& other) : memory(other.memory) {}
-    T* allocate(size_t n) {
-        if (!memory || n > std::numeric_limits<size_t>::max() / sizeof(T)) throw std::bad_alloc();
-        return static_cast<T*>(memory->allocate(n * sizeof(T), alignof(T)));
-    }
-    void deallocate(T* pointer, size_t n) { memory->deallocate(pointer, n * sizeof(T), alignof(T)); }
-    template <class U>
-    bool operator==(const Alloc<U>& other) const {
-        return memory == other.memory;
-    }
-    template <class U>
-    bool operator!=(const Alloc<U>& other) const {
-        return !(*this == other);
-    }
-};
 // Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
 // ring sums with native WKB positions <4219. 16384 checked bits also cover
-// tolerance^2 and doubled midpoint samples. Dynamic limbs use the tracked allocator.
+// tolerance^2 and doubled midpoint samples. Dynamic limbs use the standard allocator.
 using DynamicInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
-                                               boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
+                                               boost::multiprecision::checked,
+                                               std::allocator<boost::multiprecision::limb_type>>,
         boost::multiprecision::et_off>;
 using FixedInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::signed_magnitude,
@@ -230,9 +125,9 @@ Key key(uint32_t a, uint32_t b) {
 using BoxPoint = bg::model::d2::point_xy<long double>;
 using Box = bg::model::box<BoxPoint>;
 using Item = std::pair<Box, uint32_t>;
-using Tree = bgi::rtree<Item, bgi::quadratic<16>, bgi::indexable<Item>, bgi::equal_to<Item>, Alloc<Item>>;
-// query() traverses recursively with stack storage. qbegin() in Boost 1.80
-// instead owns an uncustomizable std::vector path stack, so it is not used.
+using Tree = bgi::rtree<Item, bgi::quadratic<16>>;
+// query() traverses recursively with stack storage; qbegin() in Boost 1.80
+// instead owns a std::vector path stack.
 template <class F>
 struct QueryOutput {
     F* visitor;
@@ -311,17 +206,16 @@ struct RingIndex {
     uint32_t first, xmin, xmax, ymin, ymax;
 };
 struct LocationIndex {
-    std::pmr::vector<EdgeInterval> edges;
-    std::pmr::vector<RingIndex> rings;
-    explicit LocationIndex(Memory& memory) : edges(&memory), rings(&memory) {}
+    std::vector<EdgeInterval> edges;
+    std::vector<RingIndex> rings;
 };
 template <class Integer>
 struct NumericNode {
     NumericPoint<Integer> point;
-    std::pmr::vector<uint32_t> occurrences;
+    std::vector<uint32_t> occurrences;
     uint32_t version = 0;
     bool fixed = false, active = true;
-    NumericNode(NumericPoint<Integer> p, Memory& m) : point(std::move(p)), occurrences(&m) {}
+    explicit NumericNode(NumericPoint<Integer> p) : point(std::move(p)) {}
 };
 struct Edge {
     uint32_t a, b;
@@ -330,11 +224,10 @@ struct Edge {
     bool active = true;
 };
 struct Row {
-    std::pmr::vector<uint8_t> bytes;
+    std::vector<uint8_t> bytes;
     size_t output_first = 0, output_size = 0;
     uint32_t first = 0, count = 0;
     bool null = false, multi = false;
-    explicit Row(Memory& m) : bytes(&m) {}
 };
 template <class Integer>
 struct NumericCandidate {
@@ -378,7 +271,7 @@ public:
     size_t components = 0;
 };
 template <class T>
-void write(std::pmr::vector<uint8_t>& output, T value) {
+void write(std::vector<uint8_t>& output, T value) {
     if constexpr (std::endian::native != std::endian::little) {
         auto* raw = reinterpret_cast<uint8_t*>(&value);
         std::reverse(raw, raw + sizeof(T));
@@ -387,17 +280,13 @@ void write(std::pmr::vector<uint8_t>& output, T value) {
     output.insert(output.end(), bytes, bytes + sizeof(T));
 }
 struct Partition {
-    Memory memory;
     GeoCoverageCheckpoint checkpoint;
-    std::pmr::vector<Row> rows;
-    std::pmr::vector<uint8_t> output_bytes;
-    size_t input_bytes = 0, calls = 0, external = 0, since_check = 0;
+    std::vector<Row> rows;
+    std::vector<uint8_t> output_bytes;
+    size_t input_bytes = 0, calls = 0, since_check = 0;
     bool finished = false, failed = false, null_parameter = false;
     ArithmeticBounds arithmetic;
-    Partition(memory::Allocator* allocator, GeoCoverageCheckpoint checkpoint, size_t metadata)
-            : memory(allocator), checkpoint(std::move(checkpoint)), rows(&memory), output_bytes(&memory) {
-        memory.retain(metadata);
-    }
+    explicit Partition(GeoCoverageCheckpoint checkpoint) : checkpoint(std::move(checkpoint)) {}
     void check() {
         since_check = 0;
         if (checkpoint.check) {
@@ -464,39 +353,27 @@ struct Kernel {
     using Candidate = NumericCandidate<Integer>;
     using CandidateLess = NumericCandidateLess<Integer>;
     Partition& partition;
-    Memory& memory;
-    std::pmr::vector<Row>& rows;
-    std::pmr::vector<uint8_t>& output_bytes;
+    std::vector<Row>& rows;
+    std::vector<uint8_t>& output_bytes;
     size_t& input_bytes;
     size_t& calls;
     unsigned shift;
-    std::pmr::vector<Node> nodes;
-    std::pmr::vector<Occurrence> occurrences;
-    std::pmr::vector<Ring> rings;
-    std::pmr::vector<Component> components;
-    std::pmr::map<std::pair<double, double>, uint32_t> node_map;
-    std::pmr::map<Key, uint32_t> edge_map;
-    std::pmr::vector<Edge> edges;
-    std::pmr::vector<Candidate> heap;
+    std::vector<Node> nodes;
+    std::vector<Occurrence> occurrences;
+    std::vector<Ring> rings;
+    std::vector<Component> components;
+    std::map<std::pair<double, double>, uint32_t> node_map;
+    std::map<Key, uint32_t> edge_map;
+    std::vector<Edge> edges;
+    std::vector<Candidate> heap;
     Tree edge_tree, node_tree;
     Kernel(Partition& partition, unsigned shift)
             : partition(partition),
-              memory(partition.memory),
               rows(partition.rows),
               output_bytes(partition.output_bytes),
               input_bytes(partition.input_bytes),
               calls(partition.calls),
-              shift(shift),
-              nodes(&memory),
-              occurrences(&memory),
-              rings(&memory),
-              components(&memory),
-              node_map(&memory),
-              edge_map(&memory),
-              edges(&memory),
-              heap(&memory),
-              edge_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)),
-              node_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)) {}
+              shift(shift) {}
     void check() { partition.check(); }
     void tick(size_t count = 1) { partition.tick(count); }
     Integer scaled(double value) const {
@@ -520,7 +397,7 @@ struct Kernel {
         auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
         if (fresh) {
             it->second = index(nodes.size());
-            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)}, memory);
+            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)});
         }
         return it->second;
     }
@@ -628,7 +505,7 @@ struct Kernel {
     }
     void graph() {
         for (uint32_t o = 0; o < occurrences.size(); ++o) add_edge(o);
-        std::pmr::vector<unsigned> degree(nodes.size(), 0, &memory);
+        std::vector<unsigned> degree(nodes.size(), 0);
         for (const auto& edge : edges) {
             tick();
             ++degree[edge.a];
@@ -640,7 +517,7 @@ struct Kernel {
         }
     }
     LocationIndex prepare_locations() {
-        LocationIndex result(memory);
+        LocationIndex result;
         size_t count = 0;
         for (const auto& ring : rings) {
             tick();
@@ -751,10 +628,10 @@ struct Kernel {
         check();
         // Contact incidence forest detects disconnected interiors (e.g. a hole
         // touching its shell twice) without a quadratic ring-pair allocation.
-        std::pmr::vector<uint32_t> parent(rings.size(), &memory);
+        std::vector<uint32_t> parent(rings.size());
         std::iota(parent.begin(), parent.end(), 0);
-        std::pmr::map<Key, uint32_t> contacts(&memory);
-        std::pmr::map<Key, bool> links(&memory);
+        std::map<Key, uint32_t> contacts;
+        std::map<Key, bool> links;
         auto root = [&](uint32_t id) {
             while (parent[id] != id) {
                 tick();
@@ -813,7 +690,7 @@ struct Kernel {
             });
         }
         const auto locations = prepare_locations();
-        Tree polygons{bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)};
+        Tree polygons;
         for (uint32_t c = 0; c < components.size(); ++c) {
             const auto& component = components[c];
             if (component.count == 0) continue;
@@ -959,7 +836,7 @@ struct Kernel {
         }
         validate();
     }
-    void emit_polygon(std::pmr::vector<uint8_t>& output, const Component& component) {
+    void emit_polygon(std::vector<uint8_t>& output, const Component& component) {
         write<uint8_t>(output, 1);
         write<uint32_t>(output, 3);
         write<uint32_t>(output, component.count);
@@ -1007,8 +884,7 @@ struct Kernel {
 
 struct GeoCoverageSimplify::Impl : Partition {
     using Partition::Partition;
-    // Destroy numerical storage before its captured resource. Dispatch once,
-    // only after every row and tolerance have contributed to the same bound.
+    // Dispatch once, after every row and tolerance have contributed to the same bound.
     std::variant<std::monostate, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
     void run(double tolerance, bool boundary) {
         arithmetic.include(tolerance);
@@ -1019,52 +895,24 @@ struct GeoCoverageSimplify::Impl : Partition {
     }
 };
 
-StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memory::Allocator* allocator,
-                                                                           GeoCoverageCheckpoint checkpoint) {
-    if (!allocator) return Status::InvalidArgument("ST_CoverageSimplify requires an allocator");
-    const size_t request = sizeof(StateAllocation) + sizeof(GeoCoverageSimplify) + sizeof(Impl) +
-                           alignof(StateAllocation) + alignof(Impl);
-    const int64_t metadata = allocator->nallox(request);
-    void* raw = nullptr;
-    Impl* impl = nullptr;
+GeoCoverageSimplify::GeoCoverageSimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
+GeoCoverageSimplify::~GeoCoverageSimplify() = default;
+
+StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(GeoCoverageCheckpoint checkpoint) {
     try {
-        raw = allocator->alloc(request);
-        if (!raw) throw std::bad_alloc();
-        void* public_location = static_cast<char*>(raw) + sizeof(StateAllocation);
-        size_t space = request - sizeof(StateAllocation);
-        std::align(alignof(StateAllocation), sizeof(GeoCoverageSimplify), public_location, space);
-        new (static_cast<char*>(public_location) - sizeof(StateAllocation)) StateAllocation{allocator, raw, request};
-        void* impl_location = static_cast<char*>(public_location) + sizeof(GeoCoverageSimplify);
-        space = request - (static_cast<char*>(impl_location) - static_cast<char*>(raw));
-        std::align(alignof(Impl), sizeof(Impl), impl_location, space);
-        impl = new (impl_location) Impl(allocator, checkpoint, metadata);
+        auto impl = std::make_unique<Impl>(checkpoint);
         impl->check();
-        auto* result = new (public_location) GeoCoverageSimplify(impl);
-        return std::unique_ptr<GeoCoverageSimplify>(result);
+        return std::unique_ptr<GeoCoverageSimplify>(new GeoCoverageSimplify(std::move(impl)));
     } catch (const Stop& stop) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
         return stop.status;
     } catch (const std::bad_alloc&) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
         return Status::MemoryLimitExceeded("ST_CoverageSimplify state allocation failed");
     }
-}
-GeoCoverageSimplify::~GeoCoverageSimplify() {
-    _impl->~Impl();
-}
-void GeoCoverageSimplify::operator delete(void* pointer) noexcept {
-    auto* header = reinterpret_cast<StateAllocation*>(static_cast<char*>(pointer) - sizeof(StateAllocation));
-    auto allocation = *header;
-    header->~StateAllocation();
-    allocation.allocator->free(allocation.raw, allocation.bytes);
 }
 Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
         s.check();
         index(s.rows.size());
         if (wkb) {
@@ -1072,7 +920,7 @@ Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
             s.preflight(reader, false);
             reader.done();
         }
-        s.rows.emplace_back(s.memory);
+        s.rows.emplace_back();
         auto& row = s.rows.back();
         row.null = !wkb;
         if (wkb) {
@@ -1096,7 +944,6 @@ Status GeoCoverageSimplify::finish(std::optional<double> tolerance, std::optiona
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
         s.check();
         s.null_parameter = !tolerance || !boundary;
         if (!s.null_parameter) {
@@ -1131,32 +978,8 @@ StatusOr<Slice> GeoCoverageSimplify::result_buffer() const {
     if (!_impl->finished || _impl->failed) return Status::InvalidArgument("ST_CoverageSimplify result unavailable");
     return Slice(reinterpret_cast<const char*>(_impl->output_bytes.data()), _impl->output_bytes.size());
 }
-std::pmr::memory_resource* GeoCoverageSimplify::resource() {
-    return &_impl->memory;
-}
-Status GeoCoverageSimplify::retain_external(size_t bytes) {
-    try {
-        _impl->memory.retain(bytes);
-        _impl->external += bytes;
-        return Status::OK();
-    } catch (const Stop& stop) {
-        _impl->failed = true;
-        return stop.status;
-    }
-}
-void GeoCoverageSimplify::release_external(size_t bytes) {
-    const size_t release = std::min(bytes, _impl->external);
-    _impl->external -= release;
-    _impl->memory.release(release);
-}
 size_t GeoCoverageSimplify::rows() const {
     return _impl->rows.size();
-}
-size_t GeoCoverageSimplify::memory_usage() const {
-    return _impl->memory.used;
-}
-size_t GeoCoverageSimplify::peak_memory_usage() const {
-    return _impl->memory.peak;
 }
 size_t GeoCoverageSimplify::kernel_calls() const {
     return _impl->calls;

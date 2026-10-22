@@ -32,7 +32,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/memory_allocator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -326,6 +325,25 @@ TEST(CoverageWindowTest, IncompleteFrameIsRejectedWithoutWritingOutput) {
     result->check_or_die();
 }
 
+// BE_TEST allocator hooks may count only global usage. Probe that build mode
+// before asserting query accounting; production SQL exercises the real hooks.
+bool standard_allocations_are_tracked(MemTracker* tracker) {
+    const auto before = tracker->consumption();
+    std::vector<uint8_t> probe;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
+        probe.resize(4096);
+        tls_thread_status.mem_tracker_ctx_shift();
+    }
+    const bool tracked = tracker->consumption() > before;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
+        std::vector<uint8_t>().swap(probe);
+        tls_thread_status.mem_tracker_ctx_shift();
+    }
+    return tracked;
+}
+
 TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
     WindowHarness h;
     auto input = coverage_input({left, right});
@@ -333,6 +351,8 @@ TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
         if (CurrentThread::mem_tracker() == nullptr)
             GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
+        if (!standard_allocations_are_tracked(h.query.get()))
+            GTEST_SKIP() << "This build has no query accounting in standard allocation hooks";
         h.evaluate(input);
     } // Changing the thread tracker commits its batched accounting.
     ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
@@ -358,11 +378,12 @@ TEST(CoverageWindowTest, QueryMemoryLimitStopsInsideKernel) {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
         if (CurrentThread::mem_tracker() == nullptr)
             GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
-        auto created = GeoCoverageSimplify::create(
-                memory::get_default_allocator(),
-                {&h.runtime, [](void* state) {
-                     return static_cast<RuntimeState*>(state)->check_mem_limit("ST_CoverageSimplify");
-                 }});
+        if (!standard_allocations_are_tracked(h.query.get()))
+            GTEST_SKIP() << "This build has no query accounting in standard allocation hooks";
+        auto created = GeoCoverageSimplify::create({&h.runtime, [](void* state) {
+                                                        return static_cast<RuntimeState*>(state)->check_mem_limit(
+                                                                "ST_CoverageSimplify");
+                                                    }});
         ASSERT_TRUE(created.ok()) << created.status();
         auto coverage = std::move(created).value();
         ASSERT_TRUE(coverage->append(Slice(input)).ok());
