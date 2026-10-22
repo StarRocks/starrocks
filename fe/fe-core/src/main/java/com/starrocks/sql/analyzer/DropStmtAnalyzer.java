@@ -120,7 +120,7 @@ public class DropStmtAnalyzer {
                 }
             }
             // Check mv dependency
-            if (context.getSessionVariable().isEnableDropTableCheckMvDependency()) {
+            if (!statement.isForceDrop() && context.getSessionVariable().isEnableDropTableCheckMvDependency()) {
                 Set<MvId> relatedMvIds = table.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();

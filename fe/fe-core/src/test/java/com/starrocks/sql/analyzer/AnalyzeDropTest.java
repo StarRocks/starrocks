@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,6 +51,45 @@ public class AnalyzeDropTest {
         Assertions.assertEquals("t0", stmt.getTableName());
         Assertions.assertFalse(stmt.isSetIfExists());
         Assertions.assertFalse(stmt.isForceDrop());
+    }
+
+    @Test
+    public void testForceDropTableWithMvDependency() throws Exception {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        SessionVariable session = AnalyzeTestUtil.getConnectContext().getSessionVariable();
+        boolean previous = session.isEnableDropTableCheckMvDependency();
+        starRocksAssert.withTable("create table test.force_drop_base (k int) " +
+                "distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        try {
+            starRocksAssert.withMaterializedView("create materialized view test.force_drop_mv " +
+                    "distributed by hash(k) buckets 1 refresh manual as select k from test.force_drop_base");
+            try {
+                session.setEnableDropTableCheckMvDependency(true);
+                analyzeFail("drop table test.force_drop_base", "exists mv dependencies");
+                analyzeFail("drop table if exists test.force_drop_base", "exists mv dependencies");
+
+                DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table test.force_drop_base force");
+                Assertions.assertTrue(stmt.isForceDrop());
+                analyzeSuccess("drop table if exists test.force_drop_base force");
+                Assertions.assertTrue(session.isEnableDropTableCheckMvDependency());
+                analyzeFail("drop table test.force_drop_base", "exists mv dependencies");
+
+                // FORCE bypasses only the dependency guard, not existence or object-type checks.
+                analyzeFail("drop table test.force_drop_missing force");
+                analyzeSuccess("drop table if exists test.force_drop_missing force");
+                analyzeFail("drop table test.view_to_drop force");
+                analyzeFail("drop table test.force_drop_mv force", "use 'drop materialized view");
+                analyzeSuccess("drop table test.t0");
+
+                session.setEnableDropTableCheckMvDependency(false);
+                analyzeSuccess("drop table test.force_drop_base");
+            } finally {
+                starRocksAssert.dropMaterializedView("test.force_drop_mv");
+            }
+        } finally {
+            session.setEnableDropTableCheckMvDependency(previous);
+            starRocksAssert.dropTable("test.force_drop_base");
+        }
     }
 
     @Test
