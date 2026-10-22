@@ -491,8 +491,9 @@ public class ArrowFlightSqlSessionManagerTest {
             String sessionToken = sessionManager.initializeSessionWithJwt(jwt(exp), "0.0.0.0");
             assertDoesNotThrow(() -> sessionManager.validateToken(sessionToken));
             Thread.sleep(Math.max(0, exp.getTime() - System.currentTimeMillis()) + 200);
-            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+            FlightRuntimeException e = assertThrows(FlightRuntimeException.class,
                     () -> sessionManager.validateToken(sessionToken));
+            assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
             assertTrue(e.getMessage().contains("expired"), e.getMessage());
             // and it is gone for good, not just refused once
             assertThrows(IllegalArgumentException.class, () -> sessionManager.validateToken(sessionToken));
