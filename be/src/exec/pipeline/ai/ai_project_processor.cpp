@@ -273,7 +273,9 @@ Status AIProjectProcessor::try_process(RuntimeState* state, int32_t driver_seque
         return lane->terminal_status;
     }
     const size_t rows = std::min(static_cast<size_t>(_config.sub_chunk_size), total_rows - offset);
-    ChunkPtr slice = input->clone_empty_with_slot(rows);
+    // The scan's empty last chunk has no slot map, so clone by the chunk's own layout.
+    // Non-empty chunks are slot-mapped and still take the slot path.
+    ChunkPtr slice = input->clone_empty(rows);
     if (rows > 0) {
         slice->append(*input, offset, rows);
     }
