@@ -148,6 +148,23 @@ public class DefaultSharedDataWorkerProviderTest {
                 WarehouseManager.DEFAULT_RESOURCE);
     }
 
+    private WorkerProvider newWorkerProviderWithMissingNodeId(long missingId,
+                                                              BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+        List<Long> nodeIds = Lists.newArrayList(id2AllNodes.keySet());
+        nodeIds.add(missingId);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return nodeIds;
+            }
+        };
+        return newWorkerProvider(blacklistBackupRoutingPolicy);
+    }
+
+    private WorkerProvider newWorkerProviderWithMissingNodeId(long missingId) {
+        return newWorkerProviderWithMissingNodeId(missingId, BlacklistBackupRoutingPolicy.getDefault());
+    }
+
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
         Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
         Assertions.assertTrue(workerProvider.getSelectedWorkerIds().contains(workerId));
@@ -210,6 +227,104 @@ public class DefaultSharedDataWorkerProviderTest {
                     Assertions.assertFalse(worker instanceof Backend);
                 }
             }
+        }
+    }
+
+    @Test
+    public void testCaptureAvailableWorkersSkipsMissingNodeIds() {
+        List<Long> nodeIds = Lists.newArrayList(id2AllNodes.keySet());
+        nodeIds.add(99999L);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return nodeIds;
+            }
+        };
+
+        WorkerProvider workerProvider = newWorkerProvider();
+        Assertions.assertNull(workerProvider.getWorkerById(99999L));
+        Assertions.assertFalse(workerProvider.getAllAvailableNodes().contains(99999L));
+        Assertions.assertEquals(id2AllNodes.size(), workerProvider.getAllAvailableNodes().size());
+        Assertions.assertEquals(1L, workerProvider.getWorkerById(1L).getId());
+    }
+
+    @Test
+    public void testSelectBackupWorkerCircularForMissingWarehouseNodeId() {
+        long missingId = 99999L;
+        WorkerProvider workerProvider = newWorkerProviderWithMissingNodeId(missingId, BlacklistBackupRoutingPolicy.CIRCULAR);
+
+        Assertions.assertFalse(workerProvider.isDataNodeAvailable(missingId));
+        long backupId = workerProvider.selectBackupWorker(missingId);
+        Assertions.assertTrue(backupId > 0);
+        Assertions.assertNotEquals(missingId, backupId);
+        Assertions.assertTrue(workerProvider.isDataNodeAvailable(backupId));
+        // stable: repeated calls for the same missing primary return the same buddy
+        Assertions.assertEquals(backupId, workerProvider.selectBackupWorker(missingId));
+        // a workerId that isn't part of the warehouse snapshot at all still yields no backup
+        Assertions.assertEquals(-1, workerProvider.selectBackupWorker(15678));
+    }
+
+    @Test
+    public void testSelectBackupWorkerRandomForMissingWarehouseNodeId() {
+        long missingId = 99999L;
+        WorkerProvider workerProvider = newWorkerProviderWithMissingNodeId(missingId, BlacklistBackupRoutingPolicy.RANDOM);
+
+        Assertions.assertFalse(workerProvider.isDataNodeAvailable(missingId));
+        for (int i = 0; i < 20; ++i) {
+            long backupId = workerProvider.selectBackupWorker(missingId);
+            Assertions.assertTrue(backupId > 0);
+            Assertions.assertNotEquals(missingId, backupId);
+            Assertions.assertTrue(id2AllNodes.containsKey(backupId));
+            Assertions.assertTrue(workerProvider.isDataNodeAvailable(backupId));
+        }
+        Assertions.assertEquals(-1, workerProvider.selectBackupWorker(15678));
+    }
+
+    @Test
+    public void testNormalBackendSelectorBackupFromMissingWarehouseNodeId() {
+        long missingId = 99999L;
+        WorkerProvider workerProvider = newWorkerProviderWithMissingNodeId(missingId);
+
+        OlapScanNode scanNode = newOlapScanNode(1, 1);
+        TScanRangeLocations locations = new TScanRangeLocations();
+        locations.setScan_range(new TScanRange().setInternal_scan_range(new TInternalScanRange().setRow_count(1)));
+        TScanRangeLocation location = new TScanRangeLocation();
+        location.setBackend_id(missingId);
+        locations.addToLocations(location);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        NormalBackendSelector selector = new NormalBackendSelector(scanNode, Collections.singletonList(locations),
+                assignment, workerProvider, false);
+        ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+        Assertions.assertFalse(assignment.isEmpty());
+        for (long id : assignment.keySet()) {
+            Assertions.assertNotEquals(missingId, id);
+            Assertions.assertTrue(workerProvider.isDataNodeAvailable(id));
+        }
+    }
+
+    @Test
+    public void testCollocationBackendSelectorBackupFromMissingWarehouseNodeId() {
+        long missingId = 99999L;
+        WorkerProvider workerProvider = newWorkerProviderWithMissingNodeId(missingId);
+
+        OlapScanNode scanNode = newOlapScanNode(10, 1);
+        scanNode.getBucketSeqToLocations().putAll(
+                genBucketSeq2Locations(ImmutableMap.of(0, ImmutableList.of(missingId)), 1));
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ColocatedBackendSelector.Assignment colAssignment =
+                new ColocatedBackendSelector.Assignment(scanNode.getBucketNums(), 1, Optional.empty());
+        ColocatedBackendSelector selector =
+                new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, workerProvider, 1);
+        ExceptionChecker.expectThrowsNoException(selector::computeScanRangeAssignment);
+
+        Assertions.assertFalse(assignment.isEmpty());
+        for (long id : assignment.keySet()) {
+            Assertions.assertNotEquals(missingId, id);
+            Assertions.assertTrue(workerProvider.isDataNodeAvailable(id));
         }
     }
 
