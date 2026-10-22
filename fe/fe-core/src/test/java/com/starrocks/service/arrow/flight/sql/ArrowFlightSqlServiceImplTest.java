@@ -91,6 +91,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -390,8 +391,10 @@ public class ArrowFlightSqlServiceImplTest {
                 .build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
+        when(listener.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener);
 
+        verify(mockBeStream, timeout(5000)).close();
         verify(listener).start(mockRoot);
         verify(listener).putNext();
         verify(listener).completed();
@@ -401,7 +404,7 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testGetStreamStatementCancelHandler() {
+    public void testGetStreamStatementCancelHandler() throws Exception {
         FlightClient mockBeClient = mock(FlightClient.class);
         FlightStream mockBeStream = mock(FlightStream.class);
         VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
@@ -419,15 +422,25 @@ public class ArrowFlightSqlServiceImplTest {
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
         ArgumentCaptor<Runnable> cancelHandlerCaptor = ArgumentCaptor.forClass(Runnable.class);
-
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch cancelled = new CountDownLatch(1);
+        when(listener.isReady()).thenReturn(true);
+        when(mockBeStream.next()).thenAnswer(invocation -> {
+            reading.countDown();
+            assertTrue(cancelled.await(5, TimeUnit.SECONDS));
+            return false;
+        });
         service.getStreamStatement(ticket, mockCallContext, listener);
-
+        assertTrue(reading.await(5, TimeUnit.SECONDS));
         verify(listener).setOnCancelHandler(cancelHandlerCaptor.capture());
         verify(listener).start(mockRoot);
-        verify(listener).completed();
 
         // Invoke the captured cancel handler to verify it calls beStream.cancel()
+        when(listener.isCancelled()).thenReturn(true);
         cancelHandlerCaptor.getValue().run();
+        cancelled.countDown();
+        verify(mockBeStream, timeout(5000)).close();
+        verify(listener, never()).completed();
         verify(mockBeStream).cancel("Client cancelled request", null);
 
         assertEquals(service.getClientFromCacheForTesting("127.0.0.1:9400"), mockBeClient);
@@ -452,8 +465,10 @@ public class ArrowFlightSqlServiceImplTest {
                 .build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
+        when(listener.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener);
 
+        verify(mockBeStream, timeout(5000)).close();
         verify(mockBeStream).cancel("Error during streaming", streamError);
         ArgumentCaptor<Throwable> errorCaptor = ArgumentCaptor.forClass(Throwable.class);
         verify(listener).error(errorCaptor.capture());
@@ -488,9 +503,11 @@ public class ArrowFlightSqlServiceImplTest {
                 .build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
+        when(listener.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener);
 
         // Verify success after retry
+        verify(mockBeStream, timeout(5000)).close();
         verify(listener).start(mockRoot);
         verify(listener).putNext();
         verify(listener).completed();
@@ -801,9 +818,11 @@ public class ArrowFlightSqlServiceImplTest {
                 .setStatementHandle(ByteString.copyFromUtf8(remoteFeTicket)).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
+        when(listener.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener);
 
         // Should have forwarded to remote FE
+        verify(mockFeStream, timeout(5000)).close();
         verify(mockFeClient).getStream(any(Ticket.class), any());
         verify(listener).start(mockRoot);
         verify(listener).putNext();
@@ -953,16 +972,23 @@ public class ArrowFlightSqlServiceImplTest {
 
         FlightProducer.ServerStreamListener listener1 = mock(FlightProducer.ServerStreamListener.class);
         ArgumentCaptor<Runnable> cancelCaptor = ArgumentCaptor.forClass(Runnable.class);
-
+        when(listener1.isReady()).thenReturn(true);
+        when(mockBeStream.next()).thenAnswer(invocation -> {
+            verify(listener1).setOnCancelHandler(cancelCaptor.capture());
+            cancelCaptor.getValue().run();
+            return false;
+        });
         service.getStreamStatement(ticket, mockCallContext, listener1);
-        verify(listener1).setOnCancelHandler(cancelCaptor.capture());
-        cancelCaptor.getValue().run(); // Should handle exception gracefully
+        verify(listener1, timeout(5000)).completed();
+        verify(mockBeStream, timeout(5000)).close();
 
         doThrow(new RuntimeException("Close failed")).when(mockBeStream).close();
         when(mockBeStream.next()).thenReturn(true).thenReturn(false);
 
         FlightProducer.ServerStreamListener listener2 = mock(FlightProducer.ServerStreamListener.class);
+        when(listener2.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener2);
+        verify(mockBeStream, timeout(5000).times(2)).close();
         verify(listener2).completed();
 
         RuntimeException streamError = new RuntimeException("Connection lost");
@@ -970,7 +996,9 @@ public class ArrowFlightSqlServiceImplTest {
         doThrow(new RuntimeException("Cancel also failed")).when(mockBeStream).cancel(anyString(), any(Throwable.class));
 
         FlightProducer.ServerStreamListener listener3 = mock(FlightProducer.ServerStreamListener.class);
+        when(listener3.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener3);
+        verify(mockBeStream, timeout(5000).times(3)).close();
         verify(listener3).error(any(FlightRuntimeException.class));
     }
 
@@ -996,8 +1024,10 @@ public class ArrowFlightSqlServiceImplTest {
                 .setStatementHandle(ByteString.copyFromUtf8(remoteFeTicket)).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
+        when(listener.isReady()).thenReturn(true);
         service.getStreamStatement(ticket, mockCallContext, listener);
 
+        verify(mockFeStream, timeout(5000)).close();
         verify(mockFeClient, org.mockito.Mockito.times(2)).getStream(any(Ticket.class), any());
         verify(mockCache).invalidate(anyString());
         verify(listener).completed();
