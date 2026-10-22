@@ -64,7 +64,7 @@ public class SessionVariableTest {
         variables.setBroadcastMemThreshold(1024);
         Assertions.assertEquals(1024L,
                 variables.getNonDefaultVariables().get(SessionVariable.BROADCAST_MEM_THRESHOLD).actualValue);
-        SessionVariable clone = variables.clone();
+        SessionVariable clone = (SessionVariable) variables.clone();
         SessionVariable restored = new SessionVariable();
         restored.replayFromJson(variables.getJsonString());
         Assertions.assertEquals(1024L, clone.getBroadcastMemThreshold());

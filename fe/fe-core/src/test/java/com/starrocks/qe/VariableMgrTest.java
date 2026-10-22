@@ -63,7 +63,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -162,7 +161,7 @@ public class VariableMgrTest {
             }
         }
 
-        variableMgr.applySessionVariable(Map.of(name, "1024"), session);
+        variableMgr.setSystemVariable(session, new SystemVariable(name, new StringLiteral("1024")), true);
         Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
         for (String value : List.of("-1", "9223372036854775808", "invalid")) {
             for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
@@ -171,7 +170,8 @@ public class VariableMgrTest {
                         () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
             }
             Assertions.assertThrows(DdlException.class,
-                    () -> variableMgr.applySessionVariable(Map.of(name, value), session));
+                    () -> variableMgr.setSystemVariable(session,
+                            new SystemVariable(name, new StringLiteral(value)), true));
             Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
         }
     }
