@@ -1205,6 +1205,18 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
 - Introduced in: v3.3
 
+<<<<<<< HEAD
+=======
+### `enable_mv_startup_activation_gate`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE waits for startup materialized view activation tasks to finish before opening service ports. The default is `false`: the FE opens its ports once the catalog is ready while MV activation continues in the background. Queries may not benefit from MV rewrite until the MVs and their plans are ready. Setting this item to `true` delays service startup until the activation tasks finish; a stalled activation task can delay startup indefinitely. The wait covers activation only, not plan cache building. Disabling this item does not disable MV activation. Although this item is mutable, changing it at runtime takes effect only at the next restart. This item has no effect when `enable_mv_post_image_reload_cache` is `false`, because MV reload is then synchronous.
+- Introduced in: v4.2.0
+
+>>>>>>> 6e7150849f4... [Enhancement] Disable the MV startup activation gate by default (#66626)
 ### `enable_trace_historical_node`
 
 - Default: false

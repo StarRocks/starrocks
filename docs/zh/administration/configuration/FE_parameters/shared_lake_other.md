@@ -1241,6 +1241,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否在物化视图刷新期间启用重写查询，以便查询可以直接使用重写的物化视图而不是基表来提高查询性能。
 - 引入版本: v3.3
 
+<<<<<<< HEAD
+=======
+### `enable_mv_startup_activation_gate`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 在开放服务端口前，是否等待启动期的物化视图激活任务执行完毕。默认值为 `false`：元数据就绪后 FE 即开放端口，物化视图激活在后台继续执行。在物化视图及其计划就绪前，查询可能无法使用物化视图改写。设置为 `true` 时，FE 等待激活任务结束后才开放端口；如果激活任务停滞，启动可能被无限期延迟。该等待仅覆盖激活，不包括计划缓存构建。关闭该参数不会关闭物化视图激活。该参数虽然可以动态修改，但运行时修改仅在下次重启时生效。当 `enable_mv_post_image_reload_cache` 为 `false` 时，物化视图 reload 同步执行，该参数不生效。
+- 引入版本: v4.2.0
+
+>>>>>>> 6e7150849f4... [Enhancement] Disable the MV startup activation gate by default (#66626)
 ### `enable_trace_historical_node`
 
 - 默认值: false
