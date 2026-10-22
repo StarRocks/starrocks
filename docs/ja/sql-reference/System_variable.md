@@ -265,6 +265,21 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **有効な値**: `CIRCULAR`, `RANDOM`
 * **導入バージョン**: -
 
+### broadcast_mem_exceeded_penalty_factor
+
+* **説明**: 各 BE/CN のビルド側の推定サイズがブロードキャストのメモリしきい値を超えた場合に、CPU、メモリ、ネットワークコストへ適用する倍率。`1.0` に設定すると、このペナルティを無効にします。
+* **スコープ**: Session, Global
+* **デフォルト**: `1000.0`
+* **データ型**: Double
+* **有効な値**: `[1.0, 1000000.0]` の範囲内の有限数値。この範囲外の値、数値でない値、`NaN`、無限大は拒否されます。
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定できます。例：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
 ### catalog
 
 * **説明**: セッションが属するカタログを指定するために使用されます。
@@ -605,11 +620,23 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v2.5
 
+### enable_exchange_sink_buffer_flush
+
+* **説明**: Exchange Sink がシャッフル時に送信前の行をバッファリングするために使用するメモリを制限するかどうか。Exchange Sink は宛先のパイプラインドライバーごとに未満のチャンクを 1 つ保持し、通常はチャンクが満杯になった時点でのみ送信します。この変数が `true` で、1 つのドライバーのこれらのチャンクが BE 設定項目 `exchange_sink_buffer_flush_threshold_bytes` を超えるメモリを保持している場合、直ちに送信されます。`false` に設定すると、そのセッションでは以前の動作に戻ります。
+* **デフォルト**: true
+* **導入バージョン**: -
+
 ### enable_force_rule_based_mv_rewrite
 
 * **説明**: オプティマイザのルールベース最適化フェーズで複数テーブルに対するクエリの書き換えを有効にするかどうか。この機能を有効にすると、クエリ書き換えの堅牢性が向上します。ただし、クエリがマテリアライズドビューを見逃した場合、時間消費が増加します。
 * **デフォルト**: true
 * **導入バージョン**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment がクエリの他の部分で使用されていない BE に配置されることを防ぎます。ただし、このパラメータ自体はラベル分離を保証しません。クエリの他の Fragment がラベル範囲外で実行される場合、Gather Fragment もそこで実行される可能性があります。既知のケースには、外部カタログテーブル（Hive や Iceberg など）のスキャン、`LOCALITY` 以外の `choose_execute_instances_mode`、`prefer_compute_node=true`、およびバケットプルーニングを伴う Right/Full Bucket Shuffle Join が含まれます。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
+* **デフォルト**: false
+* **導入バージョン**: v4.2
 
 ### enable_gin_filter
 
@@ -1460,7 +1487,7 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **説明**: BE 上のメモリ使用率の上限。`0` より大きい値に設定された場合にのみ有効です。`0` に設定すると、制限が課されないことを示します。
+* **説明**: BE 上のメモリ使用率の上限。`0` より大きい値に設定された場合にのみ有効です。`0` に設定すると、制限が課されないことを示します。Query Queue v1 では、クラスター内のすべての BE および CN ノードに適用されます。Query Queue v2 では、いずれかの稼働中のノードが上限に達している間、新しいクエリは待機します。[メモリアドミッション](../administration/management/resource_management/query_queues.md#メモリアドミッション) を参照してください。
 * **値の範囲**: [0, 1]
 * **デフォルト**: 0
 

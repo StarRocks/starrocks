@@ -963,6 +963,7 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
     Status st;
     {
+        TEST_SYNC_POINT("TabletReader::refine_initial_coarse_split::before_pruning");
         // Time the seed-only prepared-scan-range preparation (zonemap/bloom page-filter folding + seek-range
         // resolution). This otherwise hides inside IOTaskExecTime with no dedicated counter; for highly
         // selective scans over a big tablet it can dominate the whole scan.
@@ -1001,6 +1002,12 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
                                  std::make_shared<SparseRange<>>(std::move(seed_scan_range)),
                                  seed_split.is_first_split_of_segment);
                 *local_rowid_range = std::move(rowid_range);
+            } else if (seed_split.is_first_split_of_segment) {
+                // The segment survives, but its statistics owner has no rows to read. Account for
+                // the first-split contributions without opening an empty iterator. Other splits
+                // subtract their row counts from rows_key_range_filtered as usual.
+                _stats.phy_segments_count++;
+                _stats.rows_key_range_filtered += segment->num_rows();
             }
         }
     }

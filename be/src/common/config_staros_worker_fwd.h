@@ -175,10 +175,13 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
 #endif
-// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
-// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
-// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
-// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
-CONF_mBool(lake_enable_tablet_location_handoff, "true");
+// Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
+// the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
+// to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
+// txn logs, which then writes each partition's combined txn log without asking. An owner gets storage
+// updates pushed by starmgr; a kept copy only picks them up when it expires, so this also bounds how
+// long such a node may use outdated storage settings. 0 disables both: nothing is handed over or kept,
+// and every such touch asks starmgr.
+CONF_mInt64(lake_shard_info_cache_ttl_sec, "60");
 
 } // namespace starrocks::config

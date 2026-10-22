@@ -47,6 +47,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -241,6 +242,42 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("catalog_type",
                     () -> new LongCounterMetric("catalog_slow_query", MetricUnit.REQUESTS,
                             "total slow query by catalog type"));
+
+    // Authentication observability: HTTP Bearer does a full authentication on every request, so
+    // these track auth volume and failures. Two independent labels rather than one flattened value:
+    // `channel` is which way the credential came in (mysql / http / arrow_flight / thrift_load /
+    // thrift_gateway) and `kind` is how it had to be read (mysql_handshake / plain_password /
+    // bearer_token). Keeping them apart is what lets an alert sum by one dimension - "is HTTP
+    // failing or is it Arrow Flight" and "is Bearer healthy overall" are different questions.
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_SUCCESS =
+            new MetricWithLabelGroup<>("channel", "kind",
+                    () -> new LongCounterMetric("authentication_success_total", MetricUnit.REQUESTS,
+                            "total successful authentications by access channel and credential kind"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_FAILURE =
+            new MetricWithLabelGroup<>("channel", "kind",
+                    () -> new LongCounterMetric("authentication_failure_total", MetricUnit.REQUESTS,
+                            "total failed authentications by access channel and credential kind"));
+    // Failure detail lives in its own metric, not as a third label on the counters above: a reason
+    // only exists for a failure, and folding it in would leave every success carrying an empty one.
+    // This is also the only place the reason is visible - the HTTP response deliberately says
+    // nothing beyond "invalid_token".
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_AUTH_FAILURE_REASON =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("authentication_failure_reason_total", MetricUnit.REQUESTS,
+                            "total failed authentications by failure reason"));
+    // JWKS health, taken at the HTTP fetch itself (JwkMgr's resource retriever): one sample and one
+    // increment per fetch, whatever triggered it - a cache miss, a background refresh-ahead, an
+    // unknown kid, a retry. Not derived from the Nimbus refresh events on purpose: a background
+    // refresh raises both the caching layer's RefreshCompleted and the scheduler's
+    // ScheduledRefreshCompleted, and an outage answered from stale keys raises OutageEvent and
+    // RefreshCompleted together, so counting events either double-counts or calls a failed fetch a
+    // success.
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_JWKS_REFRESH =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric("jwks_refresh_total", MetricUnit.REQUESTS,
+                            "total JWKS fetches from the identity provider by result"));
+    public static final Histogram HISTO_JWKS_FETCH_LATENCY_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("jwks_fetch_latency_ms"));
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
@@ -508,6 +545,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
     public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
     public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
+    public static LongCounterMetric COUNTER_THRIFT_CLIENT_RETRIES;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -554,6 +592,11 @@ public final class MetricRepo {
                 "total connections the thrift server closed unserved because they waited in the pending "
                         + "queue longer than thrift_server_queue_timeout_ms");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
+
+        COUNTER_THRIFT_CLIENT_RETRIES = new LongCounterMetric(
+                "thrift_client_retries_total", MetricUnit.REQUESTS,
+                "total requests FE thrift rpc calls resent on a reopened connection after the previous one broke");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_CLIENT_RETRIES);
 
         // 1. gauge
         // build info
@@ -862,6 +905,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+
+        // Per-FE: each FE initializes Ranger audit in its own process.
+        STARROCKS_METRIC_REGISTER.addMetric(new GaugeMetric<Long>("ranger_audit_init_failed", MetricUnit.NOUNIT,
+                "1 if this FE failed to initialize Ranger audit and writes no Ranger audit event, otherwise 0") {
+            @Override
+            public Long getValue() {
+                return RangerAccessController.isAuditInitFailed() ? 1L : 0L;
+            }
+        });
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");

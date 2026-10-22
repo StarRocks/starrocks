@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.OperationType;
@@ -33,6 +34,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -42,6 +46,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
@@ -49,6 +54,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -199,6 +205,32 @@ public class MergePartitionJobTest extends DDLTestBase {
     }
 
     @Test
+    public void testFollowerReplayOfFinishedJobKeepsLiveTabletsUnmarked() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_follower_force_delete");
+        // The follower starts from the catalog as it was before the merge.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        MergePartitionJob finishedEntry =
+                (MergePartitionJob) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        // The swap already made the merged temp partition of the entry a live partition of the table.
+        assertMergedPartitionReplacedDailyOnes(followerTable, finishedEntry);
+        List<Long> liveTabletIds = tabletIds(followerTable.getPartitions());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
     public void testFollowerReplayDropsTempPartitionsOfCancelledJob() throws Exception {
         OlapTable table = createDailyPartitionedTable("t_merge_follower_cancelled");
         // The follower starts from the catalog as it was before the merge.
@@ -256,6 +288,97 @@ public class MergePartitionJobTest extends DDLTestBase {
         restored.getInfo(restoredRows);
         Assertions.assertFalse(expectedRows.isEmpty());
         Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
+
+    @Test
+    public void testRewriteTasksOutliveJobDeadline() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_task_expiry");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        // Read the names now: a done job drops its rewrite task list.
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(1, taskNames.size());
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.removeExpiredTasks();
+        long deadline = job.createTimeMs + job.getTimeoutMs();
+        Map<String, Long> expireTimes = new HashMap<>();
+        for (String taskName : taskNames) {
+            Task task = taskManager.getTask(taskName);
+            Assertions.assertNotNull(task, taskName);
+            Assertions.assertTrue(task.getExpireTime() >= deadline + Config.task_ttl_second * 1000L,
+                    taskName + " expires at " + task.getExpireTime() + ", less than a task TTL after the job deadline "
+                            + deadline);
+            expireTimes.put(taskName, task.getExpireTime());
+        }
+        assertExpireTimesPersisted(expireTimes);
+    }
+
+    @Test
+    public void testExpiredRewriteTasksAreRemoved() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_task_expired");
+        MergePartitionJob job = submitMerge(table);
+        try (MockedStatic<TaskBuilder> ignored = backdateRewriteTasks(job.getTimeoutMs())) {
+            runToRunning(job);
+        }
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(1, taskNames.size());
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        for (String taskName : taskNames) {
+            Assertions.assertNotNull(taskManager.getTask(taskName), taskName);
+        }
+
+        taskManager.removeExpiredTasks();
+
+        for (String taskName : taskNames) {
+            Assertions.assertNull(taskManager.getTask(taskName), taskName);
+        }
+    }
+
+    private static List<String> rewriteTaskNames(MergePartitionJob job) {
+        return job.getOptimizeTasks().stream().map(Task::getName).collect(Collectors.toList());
+    }
+
+    /**
+     * Makes the rewrite tasks built in the calling thread look as if they were created so long ago that the job
+     * timeout and the task TTL have both elapsed since.
+     */
+    private static MockedStatic<TaskBuilder> backdateRewriteTasks(long timeoutMs) {
+        long ageMs = timeoutMs + Config.task_ttl_second * 1000L + 1000L;
+        return Mockito.mockStatic(TaskBuilder.class, invocation -> {
+            Object result = invocation.callRealMethod();
+            if (result instanceof OptimizeTask) {
+                OptimizeTask task = (OptimizeTask) result;
+                task.setCreateTime(task.getCreateTime() - ageMs);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * A follower gets the expiry of each task from the task creation journal entry, and keeps it across an image
+     * save and load.
+     */
+    private static void assertExpireTimesPersisted(Map<String, Long> expireTimes) throws Exception {
+        TaskManager follower = new TaskManager();
+        for (int i = 0; i < expireTimes.size(); i++) {
+            follower.replayCreateTask(
+                    (Task) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TASK));
+        }
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        follower.saveTasksV2(image.getImageWriter());
+        TaskManager restored = new TaskManager();
+        restored.loadTasksV2(image.getMetaBlockReader());
+
+        for (Map.Entry<String, Long> entry : expireTimes.entrySet()) {
+            for (TaskManager taskManager : List.of(follower, restored)) {
+                Task task = taskManager.getTask(entry.getKey());
+                Assertions.assertNotNull(task, entry.getKey());
+                Assertions.assertEquals(entry.getValue(), task.getExpireTime(), entry.getKey());
+            }
+        }
     }
 
     /**
@@ -458,6 +581,14 @@ public class MergePartitionJobTest extends DDLTestBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : tabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
+        }
+    }
+
+    private static void assertNotMarkedForceDelete(List<Long> tabletIds) {
+        Assertions.assertFalse(tabletIds.isEmpty());
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (long tabletId : tabletIds) {
+            Assertions.assertFalse(invertedIndex.getForceDeleteTablets().containsKey(tabletId), "tablet " + tabletId);
         }
     }
 

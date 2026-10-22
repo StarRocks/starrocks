@@ -626,7 +626,7 @@ protected:
 
     // Simulate a prior publish attempt that advanced the primary index to |version|.
     void set_primary_index_data_version(int64_t tablet_id, int64_t version) {
-        auto& index_cache = _update_mgr->index_cache();
+        auto& index_cache = _primary_key_mgr->index_cache();
         auto* entry = index_cache.get_or_create(tablet_id);
         entry->value().update_data_version(version);
         index_cache.release(entry);
@@ -655,7 +655,7 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted) {
     ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
     // The index referencing the non-durable version must have been removed so
     // it gets rebuilt from the durable base.
-    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+    ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 }
 
 // Same as above but with the partition marked as using bundled metadata, so
@@ -672,7 +672,7 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_bundled_metadata
 
     auto txns = make_txns();
     ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
-    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+    ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 }
 
 // Counterpart: when the index version IS durably persisted (plain metadata
@@ -689,7 +689,7 @@ TEST_F(CalNewBaseVersionTest, durable_version_adopted) {
 
     auto txns = make_txns();
     ASSERT_EQ(2, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
-    ASSERT_EQ(2, _update_mgr->get_primary_index_data_version(tablet_id));
+    ASSERT_EQ(2, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 }
 
 // Counterpart on the file-bundling path: a durable BUNDLE at the index
@@ -709,7 +709,7 @@ TEST_F(CalNewBaseVersionTest, durable_bundle_version_adopted) {
 
     auto txns = make_txns();
     ASSERT_EQ(2, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
-    ASSERT_EQ(2, _update_mgr->get_primary_index_data_version(tablet_id));
+    ASSERT_EQ(2, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 }
 
 // Pre-existing contract: an index version beyond new_version is unusable for
@@ -720,7 +720,7 @@ TEST_F(CalNewBaseVersionTest, index_version_beyond_new_version_unloads_index) {
 
     auto txns = make_txns();
     ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
-    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+    ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 }
 
 } // namespace starrocks::lake

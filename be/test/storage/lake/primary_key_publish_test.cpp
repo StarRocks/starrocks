@@ -38,6 +38,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs.h"
@@ -67,6 +68,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/storage_env.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
@@ -123,7 +125,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         (void)fs::remove_all(kTestGroupPath);
         config::enable_transparent_data_encryption = false;
     }
@@ -289,16 +291,16 @@ public:
 
         Tablet tablet(_tablet_mgr.get(), metadata->id());
         MetaFileBuilder builder(tablet, metadata);
-        _update_mgr->lock_shard_pk_index_shard(metadata->id());
+        _primary_key_mgr->lock_shard_pk_index_shard(metadata->id());
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
-        ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
+        ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
         CHECK_EQ(2, entry->get_ref());
         CHECK_OK(entry->value().sync_flush_all_memtables(10'000'000));
         CHECK_OK(entry->value().commit(&builder));
         write_guard.reset();
-        _update_mgr->release_primary_index_cache(entry);
-        _update_mgr->unlock_shard_pk_index_shard(metadata->id());
-        CHECK(_update_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
+        _primary_key_mgr->release_primary_index_cache(entry);
+        _primary_key_mgr->unlock_shard_pk_index_shard(metadata->id());
+        CHECK(_primary_key_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
         CHECK_GT(metadata->sstable_meta().sstables_size(), 0);
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
@@ -366,10 +368,10 @@ public:
         Tablet tablet(_tablet_mgr.get(), metadata->id());
         auto mutable_metadata = std::make_shared<TabletMetadata>(*metadata);
         MetaFileBuilder builder(tablet, mutable_metadata);
-        _update_mgr->lock_shard_pk_index_shard(metadata->id());
+        _primary_key_mgr->lock_shard_pk_index_shard(metadata->id());
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
         ASSIGN_OR_ABORT(auto* entry,
-                        _update_mgr->prepare_primary_index(metadata, &builder, version, version, write_guard));
+                        _primary_key_mgr->prepare_primary_index(metadata, &builder, version, version, write_guard));
         EXPECT_EQ(2, entry->get_ref());
         auto keys = Int32Column::create();
         keys->append(key);
@@ -378,14 +380,25 @@ public:
         EXPECT_EQ(1, values.size());
         const IndexValue result(values.empty() ? NullIndexValue : values[0]);
         write_guard.reset();
-        _update_mgr->release_primary_index_cache(entry);
-        _update_mgr->unlock_shard_pk_index_shard(metadata->id());
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
+        _primary_key_mgr->release_primary_index_cache(entry);
+        _primary_key_mgr->unlock_shard_pk_index_shard(metadata->id());
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
         return result;
     }
 
+    // Put |num| unused indexes of |entry_size| bytes each into the primary index cache, keyed after the tablet
+    // under test, oldest first.
+    void fill_index_cache(int num, size_t entry_size) {
+        auto& index_cache = _primary_key_mgr->index_cache();
+        for (int i = 0; i < num; i++) {
+            auto* entry = index_cache.get_or_create(_tablet_metadata->id() + 1 + i);
+            index_cache.update_object_size(entry, entry_size);
+            index_cache.release(entry);
+        }
+    }
+
     IndexValue cached_point_get(int64_t tablet_id, int32_t key) {
-        auto* entry = _update_mgr->index_cache().get(tablet_id);
+        auto* entry = _primary_key_mgr->index_cache().get(tablet_id);
         CHECK(entry != nullptr);
         CHECK_EQ(2, entry->get_ref());
         auto guard = entry->value().fetch_guard();
@@ -396,8 +409,8 @@ public:
         CHECK_EQ(1, values.size());
         const IndexValue result(values[0]);
         guard.reset();
-        _update_mgr->release_primary_index_cache(entry);
-        CHECK(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        _primary_key_mgr->release_primary_index_cache(entry);
+        CHECK(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
         return result;
     }
 
@@ -522,8 +535,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
 
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
     // update memory usage, should large than zero
-    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
-    EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(_tablet_metadata->id(), txn_id));
+    EXPECT_TRUE(_primary_key_mgr->mem_tracker()->consumption() > 0);
+    EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(_tablet_metadata->id(), txn_id));
 
     // read at version 2
     ASSIGN_OR_ABORT(auto metadata_v2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), 2));
@@ -540,7 +553,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
         EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 // A separate-sort-key spill load leaves duplicate-primary-key loser rows physically in a segment (the
@@ -665,11 +678,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // update memory usage, should large than zero
-    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    EXPECT_TRUE(_primary_key_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     _tablet_mgr->prune_metacache();
     // fill delvec cache again
@@ -680,7 +693,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
@@ -713,7 +726,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // write failed
@@ -743,7 +756,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         delta_writer->close();
         // Publish version
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     // write success
     for (int i = 3; i < 5; i++) {
@@ -763,7 +776,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize * 5, read_rows(tablet_id, version));
@@ -803,14 +816,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // update memory usage, should large than zero
-    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    EXPECT_TRUE(_primary_key_mgr->mem_tracker()->consumption() > 0);
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 // Within a single transaction, a key may be deleted and then re-upserted across different memtable
@@ -1859,7 +1872,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
         txns.push_back(txn_id);
     }
@@ -1876,7 +1889,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
@@ -1884,9 +1897,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
     auto txns = std::vector<int64_t>();
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
-    const int64_t old_limit = _update_mgr->mem_tracker()->limit();
-    _update_mgr->mem_tracker()->set_limit(1);
-    ASSERT_TRUE(_update_mgr->mem_tracker()->any_limit_exceeded_precheck(2));
+    const int64_t old_limit = _primary_key_mgr->mem_tracker()->limit();
+    _primary_key_mgr->mem_tracker()->set_limit(1);
+    ASSERT_TRUE(_primary_key_mgr->mem_tracker()->any_limit_exceeded_precheck(2));
     for (int i = 0; i < 3; i++) {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -1904,9 +1917,170 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         delta_writer->close();
         // Publish version fail because of oom
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
-    _update_mgr->mem_tracker()->set_limit(old_limit);
+    _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_evict_cache_to_percent) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(10 * kEntrySize);
+    fill_index_cache(10, kEntrySize);
+    ASSERT_EQ(10 * kEntrySize, index_cache.size());
+
+    // At or below the target there is nothing to evict.
+    _primary_key_mgr->evict_cache(100);
+    EXPECT_EQ(10 * kEntrySize, index_cache.size());
+
+    // The least recently used indexes go first.
+    _primary_key_mgr->evict_cache(85);
+    EXPECT_EQ(8 * kEntrySize, index_cache.size());
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 1));
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 2));
+
+    _primary_key_mgr->evict_cache(50);
+    EXPECT_EQ(5 * kEntrySize, index_cache.size());
+
+    // An index in use stays, even when that leaves the cache above the target.
+    auto* pinned = index_cache.get(_tablet_metadata->id() + 10);
+    ASSERT_NE(nullptr, pinned);
+    _primary_key_mgr->evict_cache(0);
+    EXPECT_EQ(kEntrySize, index_cache.size());
+    index_cache.release(pinned);
+    _primary_key_mgr->evict_cache(0);
+    EXPECT_EQ(0, index_cache.size());
+}
+
+// A publish that fails on the update memory limit shrinks the primary index cache to
+// primary_key_index_memory_middle_percent of its capacity, so that the retry has room. A publish that fails
+// for any other reason leaves the cache alone.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_limit_exceeded_evicts_index_cache) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(20 * kEntrySize);
+    ASSERT_EQ(50, config::primary_key_index_memory_middle_percent);
+    const size_t middle_size = 10 * kEntrySize;
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Call publish_version itself: publish_single_version turns every error into InternalError.
+    auto publish = [&]() {
+        auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr))};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns, false).status();
+    };
+    // Publish with the primary index load failing with |error|.
+    auto publish_with_index_load_error = [&](const Status& error) {
+        SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) { *(Status*)arg = error; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        return publish();
+    };
+
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+
+    {
+        auto st = publish_with_index_load_error(Status::InternalError("ut_test"));
+        ASSERT_FALSE(st.ok());
+        ASSERT_FALSE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(16 * kEntrySize, index_cache.size());
+
+    // The publish runs past the update memory limit.
+    {
+        const int64_t old_limit = _primary_key_mgr->mem_tracker()->limit();
+        _primary_key_mgr->mem_tracker()->set_limit(1);
+        auto st = publish();
+        _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+        ASSERT_TRUE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(middle_size, index_cache.size());
+
+    // Loading the primary index runs out of memory.
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+    {
+        auto st = publish_with_index_load_error(Status::MemoryLimitExceeded("ut_test"));
+        ASSERT_TRUE(st.is_mem_limit_exceeded()) << st;
+    }
+    EXPECT_EQ(middle_size, index_cache.size());
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, 2));
+}
+
+// A publish that succeeds trims the primary index cache back to primary_key_index_memory_urgent_percent right
+// away, instead of leaving it above that level until the background evict thread runs. Like that thread, it
+// does nothing while enable_auto_evict_update_cache is off.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_trims_index_cache_to_urgent_percent) {
+    constexpr size_t kEntrySize = 100 * 1024;
+    auto& index_cache = _primary_key_mgr->index_cache();
+    index_cache.set_capacity(20 * kEntrySize);
+    const int32_t old_urgent = config::primary_key_index_memory_urgent_percent;
+    const bool old_auto_evict = config::enable_auto_evict_update_cache;
+    config::primary_key_index_memory_urgent_percent = 50;
+    DeferOp restore([&]() {
+        config::primary_key_index_memory_urgent_percent = old_urgent;
+        config::enable_auto_evict_update_cache = old_auto_evict;
+    });
+
+    auto tablet_id = _tablet_metadata->id();
+    auto write_txn = [&](int shift) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, shift, true, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+    const int64_t txn1 = write_txn(0);
+    const int64_t txn2 = write_txn(1);
+
+    fill_index_cache(16, kEntrySize);
+    ASSERT_EQ(16 * kEntrySize, index_cache.size());
+
+    config::enable_auto_evict_update_cache = false;
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn1).status());
+    EXPECT_GE(index_cache.size(), 16 * kEntrySize);
+
+    config::enable_auto_evict_update_cache = true;
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn2).status());
+    EXPECT_LE(index_cache.size(), 10 * kEntrySize);
+    // The least recently used indexes go first; the one this publish just used stays.
+    EXPECT_EQ(nullptr, index_cache.get(_tablet_metadata->id() + 1));
+    auto* entry = index_cache.get(tablet_id);
+    ASSERT_NE(nullptr, entry);
+    index_cache.release(entry);
+    ASSERT_EQ(2 * kChunkSize, read_rows(tablet_id, 3));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
@@ -1996,7 +2170,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     // publish in order
     for (int64_t txn_id : txn_ids) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // check result
@@ -2009,7 +2183,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(4).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(5).num_dels(), 0);
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
@@ -2045,7 +2219,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
             w->close();
             // Publish version
             ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-            EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+            EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         }
         version++;
     }
@@ -2081,7 +2255,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize * N, read_rows(tablet_id, version));
@@ -2126,9 +2300,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
     }
     SyncPoint::GetInstance()->ClearCallBack(sync_point);
@@ -2176,9 +2350,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
         SyncPoint::GetInstance()->ClearCallBack(sync_point);
         SyncPoint::GetInstance()->DisableProcessing();
@@ -2232,9 +2406,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
     }
     SyncPoint::GetInstance()->ClearCallBack(sync_point);
@@ -2300,9 +2474,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
     }
     SyncPoint::GetInstance()->ClearCallBack(sync_point);
@@ -2315,6 +2489,73 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
     }
     ASSERT_EQ(0, read_rows(tablet_id, version));
     config::enable_primary_key_recover = false;
+}
+
+// Recover rebuilds the delvecs through a temporary in-memory primary index. The fixture's key is a single INT
+// column, which V1 keeps as a native integer column but V2 encodes into a binary string, so that index must be
+// built for the tablet's encoding. Every publish below fails its index load once and recovers, which replays the
+// earlier rowsets: their segments as upserts and their del files as deletes.
+TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, true, false);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::string sync_point = "lake_index_load.1";
+    bool ingest_failure = true;
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        if (ingest_failure) {
+            *(Status*)arg = Status::AlreadyExist("ut_test");
+            ingest_failure = false;
+        } else {
+            ingest_failure = true;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack(sync_point);
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    for (int i = 0; i < 6; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        if (i % 2 == 0) {
+            // upsert
+            ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        } else {
+            // delete
+            ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+        version++;
+    }
+    ASSERT_EQ(0, read_rows(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2, new_tablet_metadata->schema().primary_key_encoding_type());
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+    for (int i = 0; i < 6; i++) {
+        EXPECT_EQ(new_tablet_metadata->rowsets(i).del_files_size(), i % 2);
+    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
@@ -2352,9 +2593,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
         // Publish version
         ASSERT_FALSE(publish_single_version(tablet_id, version + 1, txn_id).ok());
         ASSERT_TRUE(publish_single_version(tablet_id, version + 1, txn_id).ok());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         version++;
     }
     SyncPoint::GetInstance()->ClearCallBack(sync_point);
@@ -2393,10 +2634,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
         // clear persistent index path
-        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
         std::string path = strings::Substitute(
                 "$0/$1/", StorageEngine::instance()->get_persistent_index_store(tablet_id)->get_persistent_index_path(),
                 tablet_id);
@@ -2409,6 +2650,84 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// A publish that finds the tablet's index in the cache counts a hit; one that has to build it counts a load. The
+// memory gauges follow the cache entry: they rise by exactly what the entry is charged, follow it through a reshard
+// flush and an unload, and fall back once the entry leaves the cache.
+TEST_P(LakePrimaryKeyPublishTest, test_index_cache_metrics) {
+    auto* metrics = StorageMetrics::instance();
+    auto charged_gauges = [&]() {
+        return metrics->lake_pk_index_cache_memtable_bytes.value() +
+               metrics->lake_pk_index_cache_index_block_bytes.value() +
+               metrics->lake_pk_index_cache_filter_bytes.value();
+    };
+    const int64_t hits_before = metrics->lake_pk_index_cache_hit_total.value();
+    const int64_t loads_before = metrics->lake_pk_index_load_total.value();
+    const int64_t load_us_before = metrics->lake_pk_index_load_duration_us.value();
+    const int64_t charged_before = charged_gauges();
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    auto write_and_publish = [&, &chunk0 = chunk0, &indexes = indexes]() {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    };
+
+    // The first publish builds the index, the second finds it.
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 1, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before, metrics->lake_pk_index_cache_hit_total.value());
+    EXPECT_GT(metrics->lake_pk_index_load_duration_us.value(), load_us_before);
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 1, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before + 1, metrics->lake_pk_index_cache_hit_total.value());
+
+    const int64_t charged = _primary_key_mgr->get_index_memory_size(tablet_id);
+    EXPECT_GT(charged, 0);
+    EXPECT_EQ(charged_before + charged, charged_gauges());
+
+    // A reshard flush moves the memtable into sstables; the entry is recharged at what the index holds now.
+    // Preparing the already loaded index for the flush counts as a hit.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_OK(_primary_key_mgr->flush_pk_memtable(metadata, version).status());
+    EXPECT_EQ(hits_before + 2, metrics->lake_pk_index_cache_hit_total.value());
+    auto* entry = _primary_key_mgr->index_cache().get(tablet_id);
+    ASSERT_NE(nullptr, entry);
+    const int64_t flushed_usage = entry->value().memory_usage();
+    _primary_key_mgr->index_cache().release(entry);
+    EXPECT_EQ(flushed_usage, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before + flushed_usage, charged_gauges());
+
+    // Unloading keeps the entry but frees the index, so neither the entry nor the gauges charge for it.
+    _primary_key_mgr->unload_primary_index(tablet_id);
+    EXPECT_EQ(0, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before, charged_gauges());
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 2, metrics->lake_pk_index_load_total.value());
+
+    // Evicting the entry takes its bytes back out, and the next publish has to load the index again.
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_EQ(0, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before, charged_gauges());
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 3, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before + 2, metrics->lake_pk_index_cache_hit_total.value());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
@@ -2461,7 +2780,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(0, read_rows(tablet_id, new_version));
     _tablet_mgr->prune_metacache();
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
@@ -2617,9 +2936,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(10 * 1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
-              _update_mgr->compaction_state_mem_tracker()->limit());
+              _primary_key_mgr->compaction_state_mem_tracker()->limit());
     EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
-              _update_mgr->update_state_mem_tracker()->limit());
+              _primary_key_mgr->update_state_mem_tracker()->limit());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
@@ -2646,7 +2965,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
@@ -2702,7 +3021,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_cloud_native_index_rebuild) {
     config::l0_max_mem_usage = old_val;
     ASSERT_EQ(kChunkSize * 3 * 4, read_rows(tablet_id, version));
     // 2. release persistent index and rebuild index
-    _update_mgr->unload_and_remove_primary_index(tablet_id);
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
     // 3. second time
     do_load_func();
     ASSERT_EQ(kChunkSize * 3 * 4, read_rows(tablet_id, version));
@@ -2794,7 +3113,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
     EXPECT_EQ(new_tablet_metadata->rowsets(2).del_files_size(), 1);
     EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
     // clear index, and then rebuild
-    EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     {
         // re write chunk0
         int64_t txn_id = next_id();
@@ -2839,7 +3158,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(kChunkSize + kChunkSize / 2, read_rows(tablet_id, version));
     // clear index, and then rebuild
-    EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     {
         // re write chunk0
         int64_t txn_id = next_id();
@@ -2913,7 +3232,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
     EXPECT_EQ(0, read_rows(tablet_id, version));
     // clear index, and then rebuild
-    EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     {
         // re write chunk0
         int64_t txn_id = next_id();
@@ -3080,7 +3399,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
         config::lake_pk_compaction_min_input_segments = old_val;
     }
     // clear index, and then rebuild
-    EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     {
         // re write chunk0
         int64_t txn_id = next_id();
@@ -3507,11 +3826,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // update memory usage, should large than zero
-    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    EXPECT_TRUE(_primary_key_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     _tablet_mgr->prune_metacache();
     // read with delvec corrupt
@@ -3546,11 +3865,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // update memory usage, should large than zero
-    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    EXPECT_TRUE(_primary_key_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
     // reset configs
@@ -3612,7 +3931,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
 // publish shapes with an error-injected (physically deleted) lost output segment:
 //   1. light publish, NO loss    -> normal SST ingest + conflict resolver
 //   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
-//   3. non-light publish, lost   -> CompactionState empty PK column
+//   3. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
 // and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
 // + SST ingest) persistent index via the param list.
 TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
@@ -3676,7 +3995,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
 
-    // 3. Non-light publish, lost output segment: CompactionState empty PK column path.
+    // 3. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
     config::enable_light_pk_compaction_publish = false;
     DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
     write_rowsets(3);
@@ -3927,7 +4246,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
         const auto tablet_id = metadata->id();
         ASSERT_EQ(kBaseVersion, metadata->version());
         ASSERT_GT(metadata->next_rowset_id(), 102);
-        _update_mgr->unload_and_remove_primary_index(tablet_id);
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
 
         std::atomic<int> parallel_callbacks = 0;
         std::atomic<int> serial_callbacks = 0;
@@ -3940,7 +4259,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
             SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
             SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
             SyncPoint::GetInstance()->DisableProcessing();
-            _update_mgr->unload_and_remove_primary_index(tablet_id);
+            _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
         });
 
         const auto old_value = prepare_and_point_get(metadata, kBaseVersion, kLowKey);
@@ -3955,7 +4274,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
         ASSERT_EQ(kNewRssid, published->rowsets(published->rowsets_size() - 1).id());
 
         DelVector dv;
-        ASSERT_OK(_update_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true, &dv));
+        ASSERT_OK(_primary_key_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true,
+                                                        &dv));
         EXPECT_EQ(1, dv.cardinality());
         EXPECT_NE(nullptr, dv.roaring());
         EXPECT_TRUE(dv.roaring() != nullptr && dv.roaring()->contains(kOldRowid));
@@ -3968,7 +4288,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
         EXPECT_EQ(std::optional<int32_t>(kNewLowValue), visible.target_value);
         EXPECT_EQ(expected_new_rss_rowid, cached_point_get(tablet_id, kLowKey));
 
-        _update_mgr->unload_and_remove_primary_index(tablet_id);
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
         ASSIGN_OR_ABORT(auto latest, _tablet_mgr->get_tablet_metadata(tablet_id, kPublishVersion));
         const auto cold_point_value = prepare_and_point_get(latest, kPublishVersion, kLowKey);
         EXPECT_EQ(expected_new_rss_rowid, cold_point_value);
@@ -3995,7 +4315,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     auto metadata = build_non_monotonic_cache_only_history();
     const auto tablet_id = metadata->id();
-    DeferOp cleanup([&]() { _update_mgr->unload_and_remove_primary_index(tablet_id); });
+    DeferOp cleanup([&]() { _primary_key_mgr->unload_and_remove_primary_index(tablet_id); });
     ASSERT_EQ(expected_old_value, prepare_and_point_get(metadata, kBaseVersion, kLowKey));
 
     ASSERT_OK(publish_single_version(tablet_id, kPublishVersion,
@@ -4004,7 +4324,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, kPublishVersion));
     ASSERT_EQ(kNewRssid, published->rowsets(published->rowsets_size() - 1).id());
     DelVector dv;
-    ASSERT_OK(_update_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true, &dv));
+    ASSERT_OK(_primary_key_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true, &dv));
     EXPECT_EQ(1, dv.cardinality());
     ASSERT_NE(nullptr, dv.roaring());
     EXPECT_TRUE(dv.roaring()->contains(kOldRowid));
@@ -4334,7 +4654,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_rebuild_persistent_index_skip_covered_row
     }
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
 
-    _update_mgr->unload_and_remove_primary_index(tablet_id);
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
 
     auto [chunk_new, indexes_new] = gen_data_and_index(kChunkSize, 3, true, true);
     {
@@ -4393,7 +4713,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_rebuild_persistent_index_skip_covered_row
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
 
-    _update_mgr->unload_and_remove_primary_index(tablet_id);
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
 
     auto [chunk_new, indexes_new] = gen_data_and_index(kChunkSize, 0, true, true);
     {
@@ -4451,7 +4771,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_sstable_open_on_index_init) {
     }
     ASSERT_EQ(kChunkSize * 5, read_rows(tablet_id, version));
 
-    _update_mgr->unload_and_remove_primary_index(tablet_id);
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
 
     auto [chunk_new, indexes_new] = gen_data_and_index(kChunkSize, 5, true, true);
     {

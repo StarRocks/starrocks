@@ -274,6 +274,21 @@ Used for MySQL client compatibility. No practical usage.
 * **Valid values**: `CIRCULAR`, `RANDOM`
 * **Introduced in**: -
 
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
 ### broadcast_row_limit
 
 * **Scope**: Session
@@ -716,6 +731,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.3.8, v3.4.0, v3.5.0
 
+### enable_exchange_sink_buffer_flush
+
+* **Description**: Whether to limit the memory that an exchange sink uses to buffer rows for a shuffle before they are sent. The exchange sink keeps one partial chunk per destination pipeline driver and normally sends it only when the chunk is full; when this variable is `true` and the partial chunks of a driver retain more memory than the BE configuration item `exchange_sink_buffer_flush_threshold_bytes`, they are sent immediately. Set it to `false` to restore the previous behavior for a session.
+* **Default**: true
+* **Introduced in**: -
+
 ### enable_filter_unused_columns_in_scan_stage
 
 * **Description**: Controls pruning of columns produced by Scan nodes so the scan stage only outputs columns that are actually needed downstream (either as outputs or for non-pushable predicates). When enabled, PlanFragmentBuilder.setUnUsedOutputColumns will mark scan output columns that are exclusively used in pushdownable predicates and not required later, allowing the scan to trim those columns and reduce I/O and network transfer. The pruning is guarded: it will not apply for aggregation-family indexes in the non-skip-aggregation (non-skip-aggr) scan stage (keys/value columns must be retained to merge/aggregate), and the planner always ensures at least one column is returned from a scan. See `isEnableFilterUnusedColumnsInScanStage()` and the enable/disable helpers `enableTrimOnlyFilteredColumnsInScanStage()` / `disableTrimOnlyFilteredColumnsInScanStage()` in SessionVariable.
@@ -729,6 +750,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this prevents the gather fragment from being placed on a BE that the rest of the query does not use. It does not guarantee label isolation by itself: if any other fragment of the query runs outside the label, the gather fragment may also run there. Known cases include scans of external catalog tables (such as Hive or Iceberg), `choose_execute_instances_mode` values other than `LOCALITY`, `prefer_compute_node=true`, and right or full bucket-shuffle joins with pruned buckets. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
 
 ### enable_gin_filter
 
@@ -1750,7 +1777,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 

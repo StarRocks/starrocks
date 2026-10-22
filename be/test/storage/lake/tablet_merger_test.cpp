@@ -98,7 +98,7 @@ protected:
             const int32_t upsert_key = 40 + cycle;
             const int32_t upsert_value = 4000 + cycle;
             const int32_t delete_key = cycle < 3 ? 10 + cycle * 100 : 40;
-            _update_manager->unload_and_remove_primary_index(current->id());
+            _primary_key_manager->unload_and_remove_primary_index(current->id());
             ASSIGN_OR_RETURN(current, publish_followup_upsert_delete(current->id(), current->version(), upsert_key,
                                                                      upsert_value, delete_key));
             expected[upsert_key] = upsert_value;
@@ -113,13 +113,13 @@ protected:
                 auto child = children[child_index];
                 const int32_t key = child_index * 100 + 20 + cycle;
                 const int32_t value = (cycle + 1) * 10000 + key;
-                _update_manager->unload_and_remove_primary_index(child->id());
+                _primary_key_manager->unload_and_remove_primary_index(child->id());
                 ASSIGN_OR_RETURN(child, publish_followup_upsert_delete(child->id(), child->version(), key, value,
                                                                        /*delete_key=*/0, /*include_delete=*/false));
                 expected[key] = value;
                 deleted.erase(key);
                 if (enable_tde) {
-                    ASSIGN_OR_RETURN(child, _update_manager->flush_pk_memtable(child, child->version()));
+                    ASSIGN_OR_RETURN(child, _primary_key_manager->flush_pk_memtable(child, child->version()));
                     RETURN_IF_ERROR(put_tablet_metadata(child));
                     if (child->sstable_meta().sstables_size() == 0) {
                         return Status::InternalError("TDE repeated lifecycle source flush emitted no SST");
@@ -139,7 +139,7 @@ protected:
                     sstable.clear_shared_version();
                 }
                 add_repeated_sparse_sidecars(mutable_child.get(), cycle, child_index, value, enable_tde);
-                _update_manager->unload_and_remove_primary_index(child->id());
+                _primary_key_manager->unload_and_remove_primary_index(child->id());
                 merge_sources.emplace_back(std::move(mutable_child));
             }
 
@@ -192,7 +192,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_interval_projection_repeated_td
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
-    _update_manager->unload_and_remove_primary_index(result.metadata->id());
+    _primary_key_manager->unload_and_remove_primary_index(result.metadata->id());
     ASSIGN_OR_ABORT(auto reopened,
                     _tablet_manager->get_tablet_metadata(result.metadata->id(), result.metadata->version()));
     expect_lifecycle_oracle(reopened, repeated_expected_rows(result.expected), result.deleted_keys);
@@ -206,7 +206,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_interval_projection_repeated_td
     result.deleted_keys.push_back(kTailDeleteKey);
     expect_lifecycle_oracle(after_dml, repeated_expected_rows(result.expected), result.deleted_keys);
 
-    _update_manager->unload_and_remove_primary_index(after_dml->id());
+    _primary_key_manager->unload_and_remove_primary_index(after_dml->id());
     ASSIGN_OR_ABORT(auto reopened_after_dml,
                     _tablet_manager->get_tablet_metadata(after_dml->id(), after_dml->version()));
     expect_lifecycle_oracle(reopened_after_dml, repeated_expected_rows(result.expected), result.deleted_keys);
@@ -218,7 +218,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_interval_projection_repeated_td
     }
     expect_lifecycle_oracle(compacted, repeated_expected_rows(result.expected), result.deleted_keys);
 
-    _update_manager->unload_and_remove_primary_index(compacted->id());
+    _primary_key_manager->unload_and_remove_primary_index(compacted->id());
     ASSIGN_OR_ABORT(auto reopened_compacted,
                     _tablet_manager->get_tablet_metadata(compacted->id(), compacted->version()));
     expect_lifecycle_oracle(reopened_compacted, repeated_expected_rows(result.expected), result.deleted_keys);
@@ -606,9 +606,9 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_rejects_projected_target_domain
     EXPECT_EQ(target_segment_root_before, target_segment_root_after);
     EXPECT_EQ(target_metadata_root_before, target_metadata_root_after);
     expect_target_version_not_published(target_id, target_version);
-    auto* target_cache_entry = _update_manager->index_cache().get(target_id);
+    auto* target_cache_entry = _primary_key_manager->index_cache().get(target_id);
     EXPECT_EQ(nullptr, target_cache_entry);
-    if (target_cache_entry != nullptr) _update_manager->index_cache().release(target_cache_entry);
+    if (target_cache_entry != nullptr) _primary_key_manager->index_cache().release(target_cache_entry);
 }
 
 TEST_F(LakeTabletMergerTest, test_tablet_merging_metadata_only_identical_divergence_falls_back) {
@@ -1088,7 +1088,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_metadata_only_source_range_part
             continue; // Keep unsafe range-proof mutations from entering the DML recovery oracle.
         }
 
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         ASSIGN_OR_ABORT(auto published_after_dml,
                         publish_followup_upsert_delete(result.target_tablet_id, result.target_version,
                                                        /*upsert_key=*/50, /*upsert_value=*/5050, /*delete_key=*/60));
@@ -1100,7 +1100,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_metadata_only_source_range_part
         DeferOp restore_index_flush(
                 [&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
         ASSIGN_OR_ABORT(auto after_dml,
-                        _update_manager->flush_pk_memtable(published_after_dml, published_after_dml->version()));
+                        _primary_key_manager->flush_pk_memtable(published_after_dml, published_after_dml->version()));
         ASSERT_OK(put_tablet_metadata(after_dml));
         EXPECT_GT(after_dml->sstable_meta().sstables_size(), 0) << "explicitly flushed classifier-stage snapshot";
         ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
@@ -1113,7 +1113,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_metadata_only_source_range_part
         EXPECT_NE(IndexValue(NullIndexValue), values[1]);
         EXPECT_EQ(IndexValue(NullIndexValue), values[2]);
 
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         ASSIGN_OR_ABORT(auto reopened,
                         _tablet_manager->get_tablet_metadata(result.target_tablet_id, result.target_version + 1));
         ASSIGN_OR_ABORT(auto reopened_rows, read_two_column_rows(reopened));
@@ -1200,7 +1200,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_allocation_covers_pru
     EXPECT_GT(target.next_rowset_id(), origin_ceiling);
     EXPECT_EQ(0, target.sstable_meta().sstables_size());
 
-    _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+    _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
     ASSIGN_OR_ABORT(auto after_dml,
                     publish_followup_upsert_delete(result.target_tablet_id, result.target_version,
                                                    /*upsert_key=*/10, /*upsert_value=*/1010, /*delete_key=*/60));
@@ -1221,7 +1221,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_allocation_covers_pru
     ASSERT_EQ(2, values.size());
     EXPECT_EQ(allocated_rssid, values[0].get_value() >> 32);
     EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
-    _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+    _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
     ASSIGN_OR_ABORT(auto reopened,
                     _tablet_manager->get_tablet_metadata(result.target_tablet_id, result.target_version + 1));
     ASSIGN_OR_ABORT(auto reopened_rows, read_two_column_rows(reopened));
@@ -1349,7 +1349,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_issue11935_falls_back_then_dml_
     auto writable_target = std::make_shared<TabletMetadataPB>(*target);
     writable_target->clear_range();
     ASSERT_OK(put_tablet_metadata(writable_target));
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(target_id, fixture.new_version, /*upsert_key=*/1,
                                                                    /*upsert_value=*/111, /*delete_key=*/60));
     expect_issue11935_oracle(after_dml);
@@ -1359,7 +1359,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_issue11935_falls_back_then_dml_
     ASSERT_GT(compacted->rowsets_size(), 0);
     expect_issue11935_oracle(compacted);
 
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target_id, compacted->version()));
     expect_issue11935_oracle(reopened);
 }
@@ -1408,7 +1408,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_issue11939_falls_back_then_dml_
         }
         EXPECT_EQ(1, orphan_count);
 
-        _update_manager->unload_and_remove_primary_index(fixture.merged_tablet);
+        _primary_key_manager->unload_and_remove_primary_index(fixture.merged_tablet);
         ASSIGN_OR_ABORT(auto after_dml,
                         publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
                                                        /*upsert_key=*/10,
@@ -1421,7 +1421,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_issue11939_falls_back_then_dml_
         ASSERT_GT(compacted->rowsets_size(), 0);
         expect_lifecycle_oracle(compacted, {{10, 1010}}, {20});
 
-        _update_manager->unload_and_remove_primary_index(fixture.merged_tablet);
+        _primary_key_manager->unload_and_remove_primary_index(fixture.merged_tablet);
         ASSIGN_OR_ABORT(auto reopened,
                         _tablet_manager->get_tablet_metadata(fixture.merged_tablet, compacted->version()));
         expect_lifecycle_oracle(reopened, {{10, 1010}}, {20});
@@ -1509,8 +1509,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
 
         // Drain the real source writers before constructing the classifier
         // shape. MERGE will flush once more at its own mandatory boundary.
-        ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-        ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+        ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+        ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
 
         auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
         auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
@@ -1574,8 +1574,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
             if (classifier_active) ++classifier_opens;
         });
         sync->EnableProcessing();
-        _update_manager->unload_and_remove_primary_index(left_id);
-        _update_manager->unload_and_remove_primary_index(right_id);
+        _primary_key_manager->unload_and_remove_primary_index(left_id);
+        _primary_key_manager->unload_and_remove_primary_index(right_id);
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         const Status merge_status = publish_resharding_merge({mutable_left, mutable_right}, target_id, left->version(),
                                                              left->version() + 1, next_id(), published);
@@ -1627,7 +1627,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
             EXPECT_EQ(1, actual_handoff_counts[filename]) << "omitted source SST handoff missing: " << filename;
         }
 
-        _update_manager->unload_and_remove_primary_index(target_id);
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened_merge, _tablet_manager->get_tablet_metadata(target_id, merged->version()));
         ASSIGN_OR_ABORT(auto merge_rows, read_two_column_rows(reopened_merge));
         EXPECT_EQ(expected.size(), merge_rows.size());
@@ -1640,13 +1640,13 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
         expect_lifecycle_oracle(after_first_upsert, expected_rows, {});
         EXPECT_EQ(0, after_first_upsert->sstable_meta().sstables_size());
 
-        _update_manager->unload_and_remove_primary_index(target_id);
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto after_delete, publish_followup_delete(target_id, after_first_upsert->version(), 60));
         expected.erase(60);
         expected_rows.assign(expected.begin(), expected.end());
         expect_lifecycle_oracle(after_delete, expected_rows, {60});
 
-        _update_manager->unload_and_remove_primary_index(target_id);
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened_after_delete,
                         _tablet_manager->get_tablet_metadata(target_id, after_delete->version()));
         expect_lifecycle_oracle(reopened_after_delete, expected_rows, {60});
@@ -1658,7 +1658,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
         expected_rows.assign(expected.begin(), expected.end());
         expect_lifecycle_oracle(after_second_upsert, expected_rows, {60});
 
-        _update_manager->unload_and_remove_primary_index(target_id);
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target_id, after_second_upsert->version()));
         expect_lifecycle_oracle(reopened, expected_rows, {60});
 
@@ -1667,7 +1667,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_lifecycle_ma
         ASSERT_GT(compacted->rowsets_size(), 0);
         expect_lifecycle_oracle(compacted, expected_rows, {60});
 
-        _update_manager->unload_and_remove_primary_index(target_id);
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened_compacted, _tablet_manager->get_tablet_metadata(target_id, compacted->version()));
         expect_lifecycle_oracle(reopened_compacted, expected_rows, {60});
     }
@@ -1690,8 +1690,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_uses_native_
     prepare_tablet_dirs(target_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
@@ -1703,8 +1703,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_uses_native_
         }
     }
 
-    _update_manager->unload_and_remove_primary_index(left_id);
-    _update_manager->unload_and_remove_primary_index(right_id);
+    _primary_key_manager->unload_and_remove_primary_index(left_id);
+    _primary_key_manager->unload_and_remove_primary_index(right_id);
     std::unordered_map<int64_t, TabletMetadataPtr> published;
     ASSERT_OK(publish_resharding_merge({mutable_left, mutable_right}, target_id, left->version(), left->version() + 1,
                                        next_id(), published));
@@ -1722,7 +1722,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_uses_native_
         EXPECT_EQ(1, orphan_counts[filename]) << filename;
     }
 
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto after_first_upsert,
                     publish_followup_upsert_delete(target_id, merged->version(), /*upsert_key=*/20,
                                                    /*upsert_value=*/2000, /*delete_key=*/0,
@@ -1730,11 +1730,11 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_uses_native_
     expect_lifecycle_oracle(after_first_upsert, {{10, 100}, {20, 2000}, {60, 600}}, {});
     ASSERT_EQ(0, after_first_upsert->sstable_meta().sstables_size());
 
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto after_delete, publish_followup_delete(target_id, after_first_upsert->version(), 60));
     expect_lifecycle_oracle(after_delete, {{10, 100}, {20, 2000}}, {60});
 
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto reopened_after_delete,
                     _tablet_manager->get_tablet_metadata(target_id, after_delete->version()));
     expect_lifecycle_oracle(reopened_after_delete, {{10, 100}, {20, 2000}}, {60});
@@ -1745,7 +1745,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_fallback_uses_native_
                                                    /*include_delete=*/false));
     expect_lifecycle_oracle(after_second_upsert, {{10, 100}, {20, 2000}, {70, 7000}}, {60});
 
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto final_metadata,
                     _tablet_manager->get_tablet_metadata(target_id, after_second_upsert->version()));
     expect_lifecycle_oracle(final_metadata, {{10, 100}, {20, 2000}, {70, 7000}}, {60});
@@ -1761,20 +1761,20 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_divergent_layou
     prepare_tablet_dirs(merged_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
-    _update_manager->unload_and_remove_primary_index(left_id);
-    _update_manager->unload_and_remove_primary_index(right_id);
+    _primary_key_manager->unload_and_remove_primary_index(left_id);
+    _primary_key_manager->unload_and_remove_primary_index(right_id);
     std::unordered_map<int64_t, TabletMetadataPtr> merge_published;
     ASSERT_OK(publish_resharding_merge({mutable_left, mutable_right}, merged_id, left->version(), left->version() + 1,
                                        next_id(), merge_published));
     auto indexless = merge_published.at(merged_id);
     ASSERT_EQ(0, indexless->sstable_meta().sstables_size());
 
-    _update_manager->unload_and_remove_primary_index(merged_id);
+    _primary_key_manager->unload_and_remove_primary_index(merged_id);
     ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 20, 2000,
                                                                    /*delete_key=*/0, /*include_delete=*/false));
     const std::vector<std::pair<int32_t, int32_t>> expected = {{10, 100}, {20, 2000}, {60, 600}};
@@ -1847,8 +1847,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_divergent_layou
         EXPECT_EQ(normalized_first.SerializeAsString(), normalized_second.SerializeAsString())
                 << "SST cohorts must differ only in allowed fileset grouping";
     }
-    _update_manager->unload_and_remove_primary_index(child_a);
-    _update_manager->unload_and_remove_primary_index(child_b);
+    _primary_key_manager->unload_and_remove_primary_index(child_a);
+    _primary_key_manager->unload_and_remove_primary_index(child_b);
 
     const int64_t final_id = next_id();
     prepare_tablet_dirs(final_id);
@@ -1878,7 +1878,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_divergent_layou
     }
     EXPECT_EQ(omitted_sstables, handed_off_sstables);
     expect_lifecycle_oracle(final_metadata, expected, {});
-    _update_manager->unload_and_remove_primary_index(final_id);
+    _primary_key_manager->unload_and_remove_primary_index(final_id);
     ASSIGN_OR_ABORT(auto restarted, _tablet_manager->get_tablet_metadata(final_id, final_metadata->version()));
     expect_lifecycle_oracle(restarted, expected, {});
 }
@@ -1896,20 +1896,20 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_identical_layou
     prepare_tablet_dirs(merged_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
-    _update_manager->unload_and_remove_primary_index(left_id);
-    _update_manager->unload_and_remove_primary_index(right_id);
+    _primary_key_manager->unload_and_remove_primary_index(left_id);
+    _primary_key_manager->unload_and_remove_primary_index(right_id);
     std::unordered_map<int64_t, TabletMetadataPtr> merge_published;
     ASSERT_OK(publish_resharding_merge({mutable_left, mutable_right}, merged_id, left->version(), left->version() + 1,
                                        next_id(), merge_published));
     auto indexless = merge_published.at(merged_id);
     ASSERT_EQ(0, indexless->sstable_meta().sstables_size());
 
-    _update_manager->unload_and_remove_primary_index(merged_id);
+    _primary_key_manager->unload_and_remove_primary_index(merged_id);
     ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 10, 2000,
                                                                    /*delete_key=*/0, /*include_delete=*/false));
     const std::vector<std::pair<int32_t, int32_t>> expected = {{10, 2000}, {60, 600}};
@@ -1917,7 +1917,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_identical_layou
 
     // The writer is allowed to keep its rebuilt index cache-only. Persist it explicitly because the rest of this
     // fixture needs one physical SST cohort to prove identical metadata reuse after compaction and SPLIT.
-    ASSIGN_OR_ABORT(auto persisted_index, _update_manager->flush_pk_memtable(recovered, recovered->version()));
+    ASSIGN_OR_ABORT(auto persisted_index, _primary_key_manager->flush_pk_memtable(recovered, recovered->version()));
     ASSERT_OK(put_tablet_metadata(persisted_index));
     ASSERT_GT(persisted_index->sstable_meta().sstables_size(), 0);
 
@@ -2018,7 +2018,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_split_identical_layou
     ASSIGN_OR_ABORT(auto inventory_after_merge, sst_inventory(final_id));
     EXPECT_EQ(inventory_before_merge, inventory_after_merge) << "metadata-only reuse must write no SST";
     expect_lifecycle_oracle(final_metadata, expected, {});
-    _update_manager->unload_and_remove_primary_index(final_id);
+    _primary_key_manager->unload_and_remove_primary_index(final_id);
     ASSIGN_OR_ABORT(auto restarted, _tablet_manager->get_tablet_metadata(final_id, final_metadata->version()));
     expect_lifecycle_oracle(restarted, expected, {});
 }
@@ -2032,8 +2032,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_read_only_skip_stays_indexless_
     prepare_tablet_dirs(target_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
 
     MergingTabletInfoPB merging;
     merging.add_old_tablet_ids(left_id);
@@ -2082,7 +2082,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_tde_failure_retry_mat
         ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
         const std::string baseline_metadata = target->SerializeAsString();
         ASSIGN_OR_ABORT(auto baseline_inventory, sst_inventory(result->target_tablet_id));
-        _update_manager->unload_and_remove_primary_index(result->target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result->target_tablet_id);
 
         const Status injected = Status::InternalError(
                 fmt::format("injected {} native index load failure", enable_tde ? "TDE" : "plaintext"));
@@ -2093,9 +2093,9 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_tde_failure_retry_mat
         sync->DisableProcessing();
         ASSERT_FALSE(failed.ok());
         EXPECT_NE(std::string::npos, failed.status().to_string().find(std::string(injected.message())));
-        auto* failed_entry = _update_manager->index_cache().get(result->target_tablet_id);
+        auto* failed_entry = _primary_key_manager->index_cache().get(result->target_tablet_id);
         EXPECT_EQ(nullptr, failed_entry);
-        if (failed_entry != nullptr) _update_manager->index_cache().release(failed_entry);
+        if (failed_entry != nullptr) _primary_key_manager->index_cache().release(failed_entry);
         ASSIGN_OR_ABORT(auto metadata_after_failure,
                         _tablet_manager->get_tablet_metadata(result->target_tablet_id, result->target_version));
         EXPECT_EQ(baseline_metadata, metadata_after_failure->SerializeAsString());
@@ -2108,7 +2108,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_indexless_tde_failure_retry_mat
                         publish_followup_upsert_delete(result->target_tablet_id, result->target_version, 20, 2000, 10));
         EXPECT_EQ(0, recovered->sstable_meta().sstables_size());
         expect_lifecycle_oracle(recovered, {{20, 2000}, {60, 600}}, {10});
-        _update_manager->unload_and_remove_primary_index(result->target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result->target_tablet_id);
         ASSIGN_OR_ABORT(auto restarted,
                         _tablet_manager->get_tablet_metadata(result->target_tablet_id, recovered->version()));
         expect_lifecycle_oracle(restarted, {{20, 2000}, {60, 600}}, {10});
@@ -6844,7 +6844,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_same_physical_sst_allows_logica
             EXPECT_EQ(1, classifier_entries);
             EXPECT_EQ(attachment.reuse_when_ranges_ordered && !reverse_sources ? 1 : 0,
                       merged->sstable_meta().sstables_size());
-            _update_manager->unload_and_remove_primary_index(target);
+            _primary_key_manager->unload_and_remove_primary_index(target);
             expect_lifecycle_oracle(merged, expected_rows, {});
         }
     }
@@ -8522,18 +8522,18 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_rejoins_independently_remapped_
     EXPECT_EQ(1, merged->rowsets(0).del_files(0).origin_rowset_id());
     EXPECT_EQ(3, merged->next_rowset_id());
     ASSERT_EQ(0, merged->sstable_meta().sstables_size());
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     expect_lifecycle_oracle(merged, {{10, 100}}, {});
 
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(merged->id(), merged->version(), 10, 1010, 60));
     expect_lifecycle_oracle(after_dml, {{10, 1010}}, {60});
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     ASSIGN_OR_ABORT(auto reopened_after_dml, _tablet_manager->get_tablet_metadata(merged->id(), after_dml->version()));
     expect_lifecycle_oracle(reopened_after_dml, {{10, 1010}}, {60});
     ASSIGN_OR_ABORT(auto compacted, compact_tablet(merged->id(), reopened_after_dml->version(), /*force_base=*/true));
     expect_lifecycle_oracle(compacted, {{10, 1010}}, {60});
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     ASSIGN_OR_ABORT(auto reopened_compacted, _tablet_manager->get_tablet_metadata(merged->id(), compacted->version()));
     expect_lifecycle_oracle(reopened_compacted, {{10, 1010}}, {60});
 }
@@ -8668,7 +8668,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_transferred_inherited_del_survi
     EXPECT_NE(carrier->id(), carrier->del_files(0).origin_rowset_id());
     EXPECT_EQ(static_cast<int64_t>(compacted->rowsets(0).id()) - original_del.origin_rowset_id(),
               static_cast<int64_t>(carrier->id()) - carrier->del_files(0).origin_rowset_id());
-    _update_manager->unload_and_remove_primary_index(target);
+    _primary_key_manager->unload_and_remove_primary_index(target);
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target, merged->version()));
     expect_lifecycle_oracle(reopened, {{110, 1100}, {310, 3100}, {320, 3200}}, {10});
@@ -9025,7 +9025,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_preserves_equal_recovery_key_eq
     EXPECT_EQ(merged->rowsets(0).max_compact_input_rowset_id(), merged->rowsets(1).max_compact_input_rowset_id());
     ASSIGN_OR_ABORT(auto rows, read_two_column_rows(merged));
     EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 100}, {20, 200}}), rows);
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(20)};
     ASSIGN_OR_ABORT(auto values, load_index_values(merged, merged->id(), keys));
     ASSERT_EQ(2, values.size());
@@ -9087,7 +9087,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_preserves_strict_recovery_order
     EXPECT_EQ(3, merged->next_rowset_id());
     ASSIGN_OR_ABORT(auto rows, read_two_column_rows(merged));
     EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 100}, {60, 600}}), rows);
-    _update_manager->unload_and_remove_primary_index(merged->id());
+    _primary_key_manager->unload_and_remove_primary_index(merged->id());
     const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(60)};
     ASSIGN_OR_ABORT(auto values, load_index_values(merged, merged->id(), keys));
     ASSERT_EQ(2, values.size());
@@ -9194,7 +9194,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_affine_legacy_raw_zero_reuses) 
     EXPECT_EQ(4, target.next_rowset_id());
 
     auto target_ptr = std::make_shared<TabletMetadataPB>(target);
-    _update_manager->unload_and_remove_primary_index(target.id());
+    _primary_key_manager->unload_and_remove_primary_index(target.id());
     ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/60)}));
     ASSERT_EQ(1, values.size());
     EXPECT_EQ(2, values[0].get_value() >> 32) << "stored raw RSSID 0 must use the accumulated output offset";
@@ -9390,7 +9390,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_affine_identical_common_nonzero
     EXPECT_EQ(2, target.next_rowset_id());
 
     auto target_ptr = std::make_shared<TabletMetadataPB>(target);
-    _update_manager->unload_and_remove_primary_index(target.id());
+    _primary_key_manager->unload_and_remove_primary_index(target.id());
     ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/10)}));
     ASSERT_EQ(1, values.size());
     EXPECT_EQ(1, values[0].get_value() >> 32);
@@ -9483,7 +9483,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_affine_identical_prior_offset_r
     EXPECT_EQ(static_cast<uint64_t>(5) << 32, output.max_rss_rowid());
 
     auto target_ptr = std::make_shared<TabletMetadataPB>(target);
-    _update_manager->unload_and_remove_primary_index(target.id());
+    _primary_key_manager->unload_and_remove_primary_index(target.id());
     ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/10)}));
     ASSERT_EQ(1, values.size());
     EXPECT_EQ(5, values[0].get_value() >> 32);
@@ -10602,7 +10602,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_synthesized_delvec_survives_laz
 
     // A real first writer must rebuild from both physical rowsets while honoring the synthesized delvec, then
     // apply its upsert/delete. Reopen both the row reader and persistent index to prove no stale rows return.
-    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _primary_key_manager->unload_and_remove_primary_index(merged_tablet);
     ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(merged_tablet, new_version, /*upsert_key=*/20,
                                                                    /*upsert_value=*/2020, /*delete_key=*/0));
     std::vector<std::pair<int32_t, int32_t>> expected_rows;
@@ -10610,7 +10610,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_synthesized_delvec_survives_laz
     expected_rows.emplace_back(20, 2020);
     expect_lifecycle_oracle(after_dml, expected_rows, /*deleted_keys=*/{0});
 
-    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _primary_key_manager->unload_and_remove_primary_index(merged_tablet);
     ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(merged_tablet, after_dml->version()));
     expect_lifecycle_oracle(reopened, expected_rows, /*deleted_keys=*/{0});
 }

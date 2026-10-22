@@ -1,0 +1,68 @@
+-- name: test_ai_privileges @no_arrow_flight_sql
+-- EXPLAIN checks authorization without making external AI requests.
+-- Keep the fixture suffix available to CLEANUP even if an assertion fails.
+fixture_suffix=SELECT '${uuid0}';
+CREATE USER ai_user_${uuid0};
+GRANT IMPERSONATE ON USER root TO ai_user_${uuid0};
+CREATE AI PROVIDER ai_provider_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions', 'model' = 'test-model');
+
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON AI FUNCTION ai_custom_query TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+
+-- Named and wildcard grants both take effect, and both can be revoked.
+EXECUTE AS root WITH NO REVERT;
+REVOKE USAGE ON AI FUNCTION ai_custom_query FROM ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON ALL AI FUNCTIONS TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+EXECUTE AS root WITH NO REVERT;
+REVOKE USAGE ON AI PROVIDER ai_provider_${uuid0} FROM ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON ALL AI PROVIDERS TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+EXECUTE AS root WITH NO REVERT;
+REVOKE USAGE ON ALL AI FUNCTIONS FROM ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI FUNCTION ai_custom_query")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON AI FUNCTION ai_custom_query TO ai_user_${uuid0};
+REVOKE USAGE ON ALL AI PROVIDERS FROM ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+
+-- A named grant belongs to the provider identity, not a reused name.
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+EXECUTE AS root WITH NO REVERT;
+DROP AI PROVIDER ai_provider_${uuid0};
+CREATE AI PROVIDER ai_provider_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions', 'model' = 'test-model');
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+function: assert_query_error_contains("EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt')", "Access denied", "USAGE privilege(s) on AI PROVIDER ai_provider_${uuid0}")
+EXECUTE AS root WITH NO REVERT;
+GRANT USAGE ON AI PROVIDER ai_provider_${uuid0} TO ai_user_${uuid0};
+EXECUTE AS ai_user_${uuid0} WITH NO REVERT;
+EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
+
+CLEANUP {
+    EXECUTE AS root WITH NO REVERT;
+    DROP USER IF EXISTS ai_user_${fixture_suffix};
+    DROP AI PROVIDER IF EXISTS ai_provider_${fixture_suffix};
+} END CLEANUP

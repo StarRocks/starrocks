@@ -19,6 +19,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.Config;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -44,6 +45,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
+import java.util.Map;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -192,16 +194,25 @@ public class AIFunctionAnalyzerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"ai_custom_query", "ai_custom_embedding"})
-    public void testAIProviderSelectorRequiresConstant(String function) {
+    public void testAIProviderSelectorRequiresConstant(String function) throws Exception {
         analyzeFail("select " + function + "(ta, 'prompt') from tall", "constant AI provider name");
         analyzeFail("select " + function + "(NULL, 'prompt')", "constant AI provider name");
         for (String provider : new String[] {"cast(NULL as varchar)", "''", "'  '", "concat(' ', ' ')"}) {
             analyzeFail("select " + function + "(" + provider + ", 'prompt')", "nonblank constant AI provider name");
         }
-        // Existence and capability are checked for emitted physical calls, not per function during analysis.
-        for (String provider : new String[] {"'provider_bound_after_analysis'", "concat('provider_', 'after_analysis')"}) {
-            analyzeSuccess("select " + function + "(" + provider + ", 'prompt')");
-            analyzeSuccess("select " + function + "(" + provider + ", 'prompt', map{})");
+        analyzeFail("select " + function + "('missing_provider', 'prompt')", "does not exist");
+        // Analysis resolves the provider for authorization; execution configuration is still bound later.
+        String name = "provider_for_analysis";
+        AIProviderType type = function.equals("ai_custom_embedding") ? AIProviderType.EMBEDDING : AIProviderType.CHAT;
+        GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider(name, type,
+                Map.of("endpoint", "https://models.example.test/v1/inference", "model", "provider-model"), "");
+        try {
+            for (String provider : new String[] {"'provider_for_analysis'", "concat('provider_', 'for_analysis')"}) {
+                analyzeSuccess("select " + function + "(" + provider + ", 'prompt')");
+                analyzeSuccess("select " + function + "(" + provider + ", 'prompt', map{})");
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider(name, true);
         }
     }
 

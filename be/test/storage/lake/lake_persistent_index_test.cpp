@@ -989,6 +989,80 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_lower_tail_watermark) 
     EXPECT_EQ(IndexValue(kTailValue), values[1]);
 }
 
+// memory_stats() splits memory_usage() into memtables, sstable index blocks and bloom filters, and also reports
+// the sstable delete vectors that memory_usage() leaves out. refresh_cache_memory_metrics() adds that split to the
+// lake_pk_index_cache_* gauges, and destroying the index takes it back out.
+TEST_F(LakePersistentIndexTest, test_memory_stats_add_up_to_memory_usage) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const std::string filename = "memory-stats.sst";
+    constexpr int kNumKeys = 100;
+
+    // An sstable to ingest, carrying a delete vector the way a compaction output does.
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> entries;
+    for (int i = 0; i < kNumKeys; i++) {
+        entries.emplace(fmt::format("sst-key-{:04d}", i), std::make_pair(int64_t{1}, IndexValue(i)));
+    }
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(tablet_id, filename)));
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(entries, wf.get(), &filesize, &range));
+    ASSERT_OK(wf->close());
+    FileMetaPB sst_meta;
+    sst_meta.set_name(filename);
+    sst_meta.set_size(filesize);
+    // Any non-empty page makes the sstable keep the delete vector passed in with it.
+    DelvecPagePB delvec_page;
+    delvec_page.set_size(1);
+    DelVector empty_delvec;
+    empty_delvec.set_empty();
+    DelVectorPtr delvec;
+    empty_delvec.add_dels_as_new_version({1, 3, 5}, /*version=*/1, &delvec);
+
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    ASSERT_OK(index->ingest_sst(sst_meta, range, /*rssid=*/100, /*version=*/1, delvec_page, delvec));
+    // Plus keys that are still in the memtable.
+    std::vector<std::string> mem_keys;
+    std::vector<Slice> mem_key_slices;
+    std::vector<IndexValue> mem_values;
+    mem_keys.reserve(kNumKeys);
+    for (int i = 0; i < kNumKeys; i++) {
+        mem_keys.emplace_back(fmt::format("mem-key-{:04d}", i));
+        mem_key_slices.emplace_back(mem_keys.back());
+        mem_values.emplace_back(i);
+    }
+    ASSERT_OK(index->insert(kNumKeys, mem_key_slices.data(), mem_values.data(), /*version=*/2));
+
+    const auto stats = index->memory_stats();
+    EXPECT_GT(stats.memtable_bytes, 0);
+    EXPECT_GT(stats.index_block_bytes, 0);
+    EXPECT_GT(stats.filter_bytes, 0);
+    EXPECT_GT(stats.delvec_bytes, 0);
+    EXPECT_EQ(delvec->memory_usage(), stats.delvec_bytes);
+    EXPECT_EQ(index->memory_usage(), stats.charged_bytes());
+
+    auto* metrics = StorageMetrics::instance();
+    auto gauges = [&]() {
+        return std::array<int64_t, 4>{metrics->lake_pk_index_cache_memtable_bytes.value(),
+                                      metrics->lake_pk_index_cache_index_block_bytes.value(),
+                                      metrics->lake_pk_index_cache_filter_bytes.value(),
+                                      metrics->lake_pk_index_cache_delvec_bytes.value()};
+    };
+    const auto before = gauges();
+    EXPECT_EQ(index->memory_usage(), index->refresh_cache_memory_metrics());
+    const auto after = gauges();
+    EXPECT_EQ(before[0] + static_cast<int64_t>(stats.memtable_bytes), after[0]);
+    EXPECT_EQ(before[1] + static_cast<int64_t>(stats.index_block_bytes), after[1]);
+    EXPECT_EQ(before[2] + static_cast<int64_t>(stats.filter_bytes), after[2]);
+    EXPECT_EQ(before[3] + static_cast<int64_t>(stats.delvec_bytes), after[3]);
+    // A second refresh with nothing changed must not count the index twice.
+    index->refresh_cache_memory_metrics();
+    EXPECT_EQ(after, gauges());
+
+    index.reset();
+    EXPECT_EQ(before, gauges());
+}
+
 // bulk_erase also directly appends an SST. Its tombstone watermark must advance the empty tail memtable
 // so a later lower-RSSID live key can commit and cold-reload behind the tombstone.
 TEST_F(LakePersistentIndexTest, test_bulk_erase_preserves_lower_tail_watermark) {

@@ -661,6 +661,10 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
 // (offset-based) key size that never matched the length-keyed immutable shard info, so it always
 // returned OK.
 TEST_P(PersistentIndexTest, test_insert_existing_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_key_in_l1";
     const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
@@ -724,6 +728,10 @@ TEST_P(PersistentIndexTest, test_insert_existing_key_in_l1) {
 // entirely for var-len primary keys (_fixed_key_size == 0). The keys here span a range of lengths
 // (including > kSliceMaxFixLength) so both the fixlen and var-len immutable shards are exercised.
 TEST_P(PersistentIndexTest, test_insert_existing_varlen_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_varlen_key_in_l1";
     const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
@@ -797,6 +805,90 @@ TEST_P(PersistentIndexTest, test_insert_existing_varlen_key_in_l1) {
     ASSERT_OK(index.prepare(EditVersion(3, 0), dup_n));
     auto st = index.insert(dup_n, key_slices.data(), values.data(), true);
     ASSERT_TRUE(st.is_already_exist()) << "insert() should reject var-len keys already present in L1, but got: " << st;
+}
+
+TEST_P(PersistentIndexTest, test_insert_immutable_check_config) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    const int64_t old_max_mem_usage = config::l0_max_mem_usage;
+    DeferOp restore_config([&]() {
+        config::skip_pindex_l1_l2_check_in_insert = old_skip_check;
+        config::l0_max_mem_usage = old_max_mem_usage;
+    });
+    ASSERT_TRUE(config::skip_pindex_l1_l2_check_in_insert); // default: check only the memtable
+    config::l0_max_mem_usage = 104857600;
+
+    for (size_t key_size : {size_t(8), size_t(0)}) {
+        // The variable-length case exercises both fixed-length and variable-length immutable shards.
+        std::vector<std::string> keys = key_size == 0 ? std::vector<std::string>{"short", std::string(100, 'a')}
+                                                      : std::vector<std::string>{"key_0001", "key_0002"};
+        std::vector<Slice> key_slices;
+        for (const auto& key : keys) {
+            key_slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values{IndexValue(1), IndexValue(2)};
+        std::vector<IndexValue> new_values{IndexValue(3), IndexValue(4)};
+        for (const std::string level : {"l0", "l1", "tmp_l1", "l2"}) {
+            for (bool skip_check : {true, false}) {
+                for (bool check_l1 : {true, false}) {
+                    SCOPED_TRACE(testing::Message() << "key_size=" << key_size << " level=" << level
+                                                    << " skip_check=" << skip_check << " check_l1=" << check_l1);
+                    config::skip_pindex_l1_l2_check_in_insert = skip_check;
+                    const std::string dir = "./PersistentIndexTest_test_insert_immutable_check_config";
+                    auto* fs = FileSystem::Default();
+                    ASSERT_OK(fs->create_dir(dir));
+                    DeferOp cleanup([&]() { (void)fs::remove_all(dir); });
+                    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(dir + "/index.l0.0.0"));
+                    ASSERT_OK(wfile->close());
+
+                    PersistentIndexMetaPB meta;
+                    meta.set_key_size(key_size);
+                    meta.set_size(0);
+                    EditVersion(0, 0).to_pb(meta.mutable_version());
+                    auto* l0_meta = meta.mutable_l0_meta();
+                    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+                    EditVersion(0, 0).to_pb(l0_meta->mutable_snapshot()->mutable_version());
+                    if (level == "l1" || level == "l2") {
+                        // Build an immutable index with an empty L0 so rejection cannot come from the memtable.
+                        ASSIGN_OR_ABORT(auto builder, ShardByLengthMutableIndex::create(key_size, dir));
+                        ASSERT_OK(builder->insert(keys.size(), key_slices.data(), values.data()));
+                        ASSERT_OK(builder->flush_to_immutable_index(dir + "/index." + level + ".1.0", EditVersion(1, 0),
+                                                                    true, true));
+                        meta.set_size(keys.size());
+                        EditVersion(1, 0).to_pb(meta.mutable_version());
+                        if (level == "l1") {
+                            EditVersion(1, 0).to_pb(meta.mutable_l1_version());
+                        } else {
+                            EditVersion(1, 0).to_pb(meta.add_l2_versions());
+                            meta.add_l2_version_merged(false);
+                        }
+                    }
+                    PersistentIndex index(dir);
+                    ASSERT_OK(index.load(meta));
+                    ASSERT_OK(index.prepare(EditVersion(2, 0), keys.size()));
+                    if (level == "l0" || level == "tmp_l1") {
+                        ASSERT_OK(index.insert(keys.size(), key_slices.data(), values.data(), check_l1));
+                        if (level == "tmp_l1") {
+                            ASSERT_OK(index.flush_advance());
+                        }
+                    }
+
+                    auto st = index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1);
+                    const bool reject = level == "l0" || (!skip_check && (level != "l1" || check_l1));
+                    if (reject) {
+                        ASSERT_TRUE(st.is_already_exist()) << st;
+                    } else {
+                        ASSERT_OK(st);
+                        std::vector<IndexValue> actual(keys.size());
+                        ASSERT_OK(index.get(keys.size(), key_slices.data(), actual.data()));
+                        ASSERT_EQ(new_values, actual);
+                        // Skipping immutable files must never skip duplicate detection in L0.
+                        ASSERT_TRUE(index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1)
+                                            .is_already_exist());
+                    }
+                }
+            }
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_file_size) {

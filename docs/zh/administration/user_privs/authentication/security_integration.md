@@ -204,6 +204,38 @@ ADMIN SET FRONTEND CONFIG (
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 ```
 
+## 通过 HTTP 和 Arrow Flight 连接
+
+加入 `authentication_chain` 的安全集成用户可以从 StarRocks 的所有入口登录，而不仅是 MySQL 协议：HTTP SQL API、Stream Load（经 FE 或直接访问 BE）、FE Web UI 以及 Arrow Flight SQL。客户端需要发送的凭据取决于安全集成的类型。
+
+| 安全集成类型 | HTTP | Arrow Flight SQL |
+| --- | --- | --- |
+| LDAP（`authentication_ldap_simple`） | HTTP Basic：`-u <username>:<password>` | 用户名和密码 |
+| JWT（`authentication_jwt`）、<br />OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` 请求头，<br />例如 ADBC 的 `adbc.flight.sql.authorization_header` 选项 |
+
+使用 Bearer token 时不需要提供用户名。StarRocks 从 `principal_field` 指定的 claim 中读取用户名，用 `jwks_url` 校验签名，并把 token 交给链上每一个 `required_issuer` 和 `required_audience`（如设置）与之匹配的 JWT 或 OAuth 2.0 安全集成。多个安全集成共用同一个 issuer 时，请为每个安全集成设置不同的 `required_audience`：token 的 `aud` claim 决定命中哪个安全集成，进而决定使用哪个 Group Provider 和哪些角色。强烈建议为每个安全集成都设置 `required_issuer`。
+
+示例：
+
+```Bash
+# 以 LDAP 安全集成用户调用 SQL API
+curl -u alice:alice_password -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+
+# 使用 JWT 直接向 BE 发起 Stream Load（BE 需开启 enable_http_auth = true）
+curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:," \
+    -T data.csv -XPUT http://<be_host>:<be_http_port>/api/<db>/<table>/_stream_load
+```
+
+请注意以下几点：
+
+- 安全集成用户的权限只能通过 [Group Provider](../group_provider.md) 和 `GRANT ... TO EXTERNAL GROUP` 获得；用户解析出的组在所有入口上都生效。
+- 在 Arrow Flight SQL 上，JWT 的认证方式与用户名密码完全一致：服务端返回自己颁发的 session token，客户端在该连接后续的请求中使用它。该 session 不会比 JWT 活得更久；token 的 `exp` 一过，连接即被拒绝，客户端需要用新的 JWT 重新认证。
+- FE 配置项 `enable_rest_bearer_authentication`（默认 `true`）用于关闭 HTTP 和 Arrow Flight 入口的 Bearer 认证。它不影响 MySQL 协议；MySQL 协议下的 token 登录仍使用 `authentication_openid_connect_client` 和 `authentication_oauth2_client` 插件。
+- MySQL 协议同一时刻只能向客户端提供一种 token 插件，由 `authentication_chain` 中排在最前面的 JWT 或 OAuth 2.0 安全集成决定。HTTP 和 Arrow Flight 没有这个限制，因为 token 本身会按 issuer 和 audience 路由。
+- 所有 HTTP 认证失败都返回 `401`，`WWW-Authenticate` 中同时带 `Basic` 和 `Bearer` 两个 challenge，且不说明是哪个安全集成拒绝、为何拒绝。排查时请使用 FE 的 `authentication_failure_total` 和 `authentication_failure_reason_total` 指标。
+
 ## 管理安全集成
 
 ### 修改安全集成

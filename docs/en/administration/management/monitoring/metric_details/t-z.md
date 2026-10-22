@@ -119,6 +119,12 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
 
+## `thrift_client_retries_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of retries that FE Thrift RPC calls made after their connection broke. Before each retry, the FE waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms), then reopens the connection and resends the request. Calls that time out are not retried and are not counted. The number of retries per call is bounded by `thrift_rpc_retry_times`. A rising value means the FE keeps losing its Thrift connections to other nodes, for example because the Thrift worker pool of the Leader FE is saturated and closing new connections; read it together with `thrift_server_rejected_connections_total` on that node.
+
 ## `thrift_connections_total`
 
 - Unit: Count
