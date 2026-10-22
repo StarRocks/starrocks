@@ -326,9 +326,6 @@ class StatisticUtilsTest extends PlanTestBase {
         Assertions.assertThrows(SemanticException.class,
                 () -> StatisticUtils.getQueryStatisticsColumnType(table, "nonexistent"));
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     void testFilterOnColumnWithoutStatisticType() throws Exception {
@@ -345,4 +342,3 @@ class StatisticUtilsTest extends PlanTestBase {
         }
     }
 }
->>>>>>> fd2c1839fc6... [BugFix][RB-545] Do not fail planning on an equality filter over a VARBINARY column (#66435)
