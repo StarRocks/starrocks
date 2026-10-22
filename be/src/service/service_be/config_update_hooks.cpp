@@ -22,6 +22,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"
@@ -345,6 +346,16 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
             primary_key_mgr->refresh_preload_mem_limit();
             LOG(INFO) << "Set lake_pk_preload_memory_limit_percent: " << config::lake_pk_preload_memory_limit_percent
                       << ", preload mem limit: " << primary_key_mgr->update_state_mem_tracker()->limit();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_index_block_cache_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_block_cache_mem_limit();
+            LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                      << config::lake_pk_index_block_cache_limit_percent
+                      << ", block cache capacity: " << primary_key_mgr->block_cache()->cache()->get_capacity();
         }
         return Status::OK();
     });
