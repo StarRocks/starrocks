@@ -289,7 +289,7 @@ SET broadcast_mem_exceeded_penalty_factor = 10.0;
 SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 ```
 
-### broadcast_mem_exceed_threshold
+### broadcast_mem_threshold
 
 * **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
 * **Scope**: Session, Global

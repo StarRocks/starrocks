@@ -173,8 +173,8 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_MEM_LIMIT, 0L, null);
         }
 
-        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_EXCEED_THRESHOLD)) {
-            checkRangeLongVariable(resolvedExpression, SessionVariable.BROADCAST_MEM_EXCEED_THRESHOLD, 0L, null);
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.BROADCAST_MEM_THRESHOLD, 0L, null);
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)) {

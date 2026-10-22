@@ -280,7 +280,7 @@ SET broadcast_mem_exceeded_penalty_factor = 10.0;
 SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 ```
 
-### broadcast_mem_exceed_threshold
+### broadcast_mem_threshold
 
 * **説明**: オプティマイザがブロードキャストプランにペナルティを適用するビルド側の推定サイズのしきい値。このしきい値は各 BE に送信される推定バイト数に適用され、その値がしきい値を超えるとペナルティを適用します。推定サイズがしきい値と等しい場合はペナルティを適用しません。これはオプティマイザのしきい値であり、実行時のメモリ制限ではありません。`exec_mem_limit` とは独立しており、`broadcast_row_limit` は引き続きブロードキャスト選択の行数チェックを制御します。`0` に設定すると、推定サイズが正のすべてのブロードキャストにペナルティを適用します。
 * **スコープ**: Session, Global

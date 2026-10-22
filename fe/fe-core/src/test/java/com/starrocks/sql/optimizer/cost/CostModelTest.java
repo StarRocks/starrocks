@@ -60,7 +60,7 @@ public class CostModelTest {
 
     @Test
     public void testBroadcastThresholdIndependentOfExecMemLimit() {
-        sessionVariable.setBroadcastMemExceedThreshold(4096);
+        sessionVariable.setBroadcastMemThreshold(4096);
         for (long execMemLimit : new long[] {SessionVariable.MIN_EXEC_MEM_LIMIT, 4294967296L, Long.MAX_VALUE}) {
             sessionVariable.setMaxExecMemByte(execMemLimit);
             assertBroadcastCost(4095, 1);
@@ -68,14 +68,14 @@ public class CostModelTest {
             assertBroadcastCost(4097, 1000);
         }
         // A low exec_mem_limit must not penalize a broadcast below the dedicated threshold.
-        sessionVariable.setBroadcastMemExceedThreshold(4294967296L);
+        sessionVariable.setBroadcastMemThreshold(4294967296L);
         sessionVariable.setMaxExecMemByte(SessionVariable.MIN_EXEC_MEM_LIMIT);
         assertBroadcastCost(2147483648L, 1);
     }
 
     @Test
     public void testThresholdComparedWithPerBackendSize() {
-        sessionVariable.setBroadcastMemExceedThreshold(4096);
+        sessionVariable.setBroadcastMemThreshold(4096);
         for (int backendCount : new int[] {0, 1, 3}) {
             when(connectContext.getAliveBackendNumber()).thenReturn(backendCount);
             assertBroadcastCost(4096, 1);
@@ -85,7 +85,7 @@ public class CostModelTest {
 
     @Test
     public void testZeroBroadcastThresholdAndGatherCost() {
-        sessionVariable.setBroadcastMemExceedThreshold(0);
+        sessionVariable.setBroadcastMemThreshold(0);
         assertBroadcastCost(0, 1);
         assertBroadcastCost(1, 1000);
         CostEstimate gather = distributionCost(DistributionSpec.createGatherDistributionSpec(), 4096);

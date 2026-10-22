@@ -123,10 +123,10 @@ public class VariableMgrTest {
     }
 
     @Test
-    public void testBroadcastMemExceedThresholdSettings() throws Exception {
+    public void testBroadcastMemThresholdSettings() throws Exception {
         VariableMgr variableMgr = new VariableMgr();
         SessionVariable session = variableMgr.newSessionVariable();
-        String name = SessionVariable.BROADCAST_MEM_EXCEED_THRESHOLD;
+        String name = SessionVariable.BROADCAST_MEM_THRESHOLD;
         Assertions.assertTrue(variableMgr.dump(SetType.SESSION, session, null).stream()
                 .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("2147483648")));
         for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
@@ -134,15 +134,15 @@ public class VariableMgrTest {
                 SystemVariable variable = new SystemVariable(scope, name, new IntLiteral(value));
                 SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
                 variableMgr.setSystemVariable(session, variable, false);
-                Assertions.assertEquals(value, session.getBroadcastMemExceedThreshold());
+                Assertions.assertEquals(value, session.getBroadcastMemThreshold());
                 Assertions.assertEquals(scope == SetType.GLOBAL ? value : 2147483648L,
-                        variableMgr.newSessionVariable().getBroadcastMemExceedThreshold());
+                        variableMgr.newSessionVariable().getBroadcastMemThreshold());
                 Assertions.assertEquals(SessionVariable.DEFAULT_EXEC_MEM_LIMIT, session.getMaxExecMemByte());
             }
         }
 
         variableMgr.applySessionVariable(Map.of(name, "1024"), session);
-        Assertions.assertEquals(1024L, session.getBroadcastMemExceedThreshold());
+        Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
         for (String value : List.of("-1", "9223372036854775808", "invalid")) {
             for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
                 SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
@@ -151,7 +151,7 @@ public class VariableMgrTest {
             }
             Assertions.assertThrows(DdlException.class,
                     () -> variableMgr.applySessionVariable(Map.of(name, value), session));
-            Assertions.assertEquals(1024L, session.getBroadcastMemExceedThreshold());
+            Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
         }
     }
 
