@@ -57,7 +57,7 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
                 auto raw_key = arg_key_column.get_slice(i);
                 KeyType key(raw_key);
                 if (!hash_map.contains(key)) {
-                    uint8_t* pos = mem_pool->allocate(key.size);
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     auto value = arg_value_column.get(i);
                     value_column->append_datum(value);

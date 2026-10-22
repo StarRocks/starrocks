@@ -672,7 +672,7 @@ void ScalarColumnIterator::_do_dict_lookup_batch(const std::vector<Datum>& words
     const size_t dict_sz = static_cast<size_t>(dict->dict_size());
 
     if (words.size() <= dict_sz) {
-        phmap::flat_hash_set<Slice, SliceHash, SliceEqual> values;
+        phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual> values;
         values.reserve(words.size());
         for (const auto& word : words) {
             values.emplace(word.get_slice());
@@ -685,7 +685,7 @@ void ScalarColumnIterator::_do_dict_lookup_batch(const std::vector<Datum>& words
             }
         }
     } else {
-        phmap::flat_hash_map<Slice, int, SliceHash, SliceEqual> dict_map;
+        phmap::flat_hash_map<Slice, int, SliceHash, SliceNormalEqual> dict_map;
         dict_map.reserve(dict_sz);
         for (uint32_t i = 0; i < dict_sz; i++) {
             dict_map.emplace(dict->string_at_index(i), i);
