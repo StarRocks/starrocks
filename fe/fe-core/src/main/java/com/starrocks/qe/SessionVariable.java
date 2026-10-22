@@ -3894,12 +3894,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setBroadcastMemThreshold(long broadcastMemThreshold) {
-        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        // Validate direct Java callers; SET_VAR hints are validated in VariableMgr on this branch.
+        this.broadcastMemThreshold = checkBroadcastMemThreshold(broadcastMemThreshold);
+    }
+
+    public static long checkBroadcastMemThreshold(long broadcastMemThreshold) {
         if (broadcastMemThreshold < 0) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
                     BROADCAST_MEM_THRESHOLD, broadcastMemThreshold, "a non-negative integer");
         }
-        this.broadcastMemThreshold = broadcastMemThreshold;
+        return broadcastMemThreshold;
     }
 
     public double getBroadcastRightTableScaleFactor() {

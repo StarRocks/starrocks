@@ -229,7 +229,16 @@ public class VariableMgr {
                     field.setInt(obj, Integer.parseInt(convertedVal));
                     break;
                 case "long":
-                    field.setLong(obj, Long.parseLong(convertedVal));
+                    long longValue = Long.parseLong(convertedVal);
+                    if (SessionVariable.BROADCAST_MEM_THRESHOLD.equals(variableName)) {
+                        // SET_VAR hints use reflective assignment on this branch and bypass the session setter.
+                        try {
+                            longValue = SessionVariable.checkBroadcastMemThreshold(longValue);
+                        } catch (SemanticException e) {
+                            throw new DdlException(e.getMessage(), e);
+                        }
+                    }
+                    field.setLong(obj, longValue);
                     break;
                 case "float":
                     field.setFloat(obj, Float.parseFloat(convertedVal));
