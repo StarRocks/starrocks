@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
@@ -35,19 +36,12 @@ public class MVRefreshProcessorFactory {
         MaterializedView.RefreshMode refreshMode = mv.getCurrentRefreshMode();
         switch (refreshMode) {
             case INCREMENTAL:
-<<<<<<< HEAD
                 // Route through the hybrid processor when any base table lacks a TVR baseline so
                 // PCT can rebuild it. Otherwise run pure IVM with strict semantics (no fallback).
-                if (needsPctBaselineRebuild(mv)) {
-=======
-                // Route through the hybrid processor for a FORCE rebuild, or when any base table lacks a TVR
-                // baseline so PCT can rebuild it. Otherwise run pure IVM with strict semantics (no fallback).
                 // A queued batch of a rebuild goes there too: once another refresh has recorded the baseline, only
                 // the pct path can tell the batch its job was superseded.
-                if (Boolean.parseBoolean(mvContext.getProperties().get(TaskRun.FORCE))
-                        || mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) != null
+                if (mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) != null
                         || needsPctBaselineRebuild(mv)) {
->>>>>>> 57561e8cf05... [BugFix][RB-597] Skip a superseded batch of an incremental MV rebuild instead of failing it (#66217)
                     return new MVHybridRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
                 }
                 return new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity, refreshMode);
