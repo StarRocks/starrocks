@@ -59,6 +59,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private Set<Long> dirtyPartitionSet;
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
+    private Map<ColumnId, Long> dictContentIdentities;
     private final CompactionMgr compactionMgr;
 
     public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
@@ -88,6 +89,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         dirtyPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
+        dictContentIdentities = Maps.newHashMap();
 
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
@@ -111,6 +113,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
+            finishedTablets.get(i).mergeDictContentIdentities(
+                    dictContentIdentities, invalidDictCacheColumns);
 
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
@@ -128,13 +132,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     this.validDictCacheColumns.put(validDictCacheColumns.get(j), version);
                 }
             }
-            if (i == tabletMetaList.size() - 1) {
-                validDictCacheColumns.entrySet().removeIf(entry -> invalidDictCacheColumns.contains(entry.getKey()));
-            }
 
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
+<<<<<<< HEAD
         if (enableIngestSlowdown()) {
             long currentTimeMs = System.currentTimeMillis();
             Set<Long> partitionIds = Sets.newHashSet();
@@ -144,6 +146,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             }
             new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
         }
+=======
+        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
@@ -180,16 +185,21 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (isFirstPartition) {
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
+                List<Long> validDictContentIdentities = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
+                    if (!dictContentIdentities.isEmpty()) {
+                        validDictContentIdentities.add(dictContentIdentities.get(name));
+                    }
                 });
 
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0,
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
+                partitionCommitInfo.setDictContentIdentities(validDictContentIdentities);
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }

@@ -23,7 +23,12 @@ import java.util.Optional;
 public interface IDictManager {
     boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
 
+<<<<<<< HEAD
     void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime);
+=======
+    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                          long versionTime, Long contentIdentity);
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 
     boolean hasGlobalDict(long tableId, ColumnId columnName);
 

@@ -70,6 +70,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         }
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
+        List<Long> dictContentIdentities = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
@@ -119,6 +120,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
                 validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+                dictContentIdentities = partitionCommitInfo.getDictContentIdentities();
             }
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
@@ -127,11 +129,18 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         }
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            boolean hasContentIdentities = !dictContentIdentities.isEmpty();
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 ColumnId columnName = validDictCacheColumns.get(i);
+<<<<<<< HEAD
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+=======
+                Long contentIdentity = hasContentIdentities ? dictContentIdentities.get(i) : null;
+                IDictManager.getInstance().updateGlobalDict(table, columnName, dictCollectedVersions.get(i),
+                        maxPartitionVersionTime, contentIdentity);
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
             }
         }
     }

@@ -43,7 +43,12 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
+<<<<<<< HEAD
     public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime) {
+=======
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                                 long versionTime, Long contentIdentity) {
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
     }
 
     @Override
