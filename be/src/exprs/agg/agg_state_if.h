@@ -38,6 +38,13 @@ public:
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
 
+    // The states belong to the wrapped function. The inherited version would judge them by the combinator's own
+    // empty State, find it trivially destructible and destroy nothing.
+    void batch_destroy_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                      size_t state_offset, const Filter& selection) const override {
+        _function->batch_destroy_with_selection(ctx, chunk_size, states, state_offset, selection);
+    }
+
     size_t size() const override { return _function->size(); }
 
     size_t alignof_size() const override { return _function->alignof_size(); }
