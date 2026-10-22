@@ -54,16 +54,16 @@ public class BroadcastCostMultiplierTest {
     }
 
     @Test
-    public void testDefaultPenaltyAndMemoryBoundary() {
-        long limit = sessionVariable.getMaxExecMemByte();
+    public void testDefaultPenaltyAndThresholdBoundary() {
+        long limit = sessionVariable.getBroadcastMemThreshold();
         assertBroadcastCost(limit - 1, 3.0 * (limit - 1));
         assertBroadcastCost(limit, 3.0 * limit);
         assertBroadcastCost(limit + 1, 3000.0 * (limit + 1));
     }
 
     @Test
-    public void testConfiguredPenaltyOnlyAboveMemoryLimit() {
-        sessionVariable.setMaxExecMemByte(4096);
+    public void testConfiguredPenaltyOnlyAboveThreshold() {
+        sessionVariable.setBroadcastMemThreshold(4096);
         sessionVariable.setBroadcastMemExceededPenaltyFactor(2.5);
         assertBroadcastCost(4095, 12285);
         assertBroadcastCost(4096, 12288);
@@ -74,13 +74,13 @@ public class BroadcastCostMultiplierTest {
         sessionVariable.setBroadcastMemExceededPenaltyFactor(10.0);
         assertBroadcastCost(4097, 122910);
 
-        sessionVariable.setMaxExecMemByte(8192);
+        sessionVariable.setBroadcastMemThreshold(8192);
         assertBroadcastCost(4097, 12291);
     }
 
     @Test
     public void testBroadcastCostRemainsFiniteAtMaximumPenaltyFactor() {
-        sessionVariable.setMaxExecMemByte(4096);
+        sessionVariable.setBroadcastMemThreshold(4096);
         double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
         sessionVariable.setBroadcastMemExceededPenaltyFactor(maxMultiplier);
         assertBroadcastCost(4096, 12288);
@@ -97,10 +97,10 @@ public class BroadcastCostMultiplierTest {
     }
 
     @Test
-    public void testMemoryLimitUsesPerBackendSize() {
-        sessionVariable.setMaxExecMemByte(4096);
+    public void testThresholdUsesPerBackendSize() {
+        sessionVariable.setBroadcastMemThreshold(4096);
         sessionVariable.setBroadcastMemExceededPenaltyFactor(2.5);
-        // Replication to three backends exceeds the limit, but each backend's input does not.
+        // Replication to three backends exceeds the threshold, but each backend's input does not.
         assertBroadcastCost(2048, 6144);
         when(connectContext.getAliveBackendNumber()).thenReturn(1);
         assertBroadcastCost(4097, 10242.5);
@@ -111,7 +111,7 @@ public class BroadcastCostMultiplierTest {
 
     @Test
     public void testOtherDistributionsAreUnaffected() {
-        sessionVariable.setMaxExecMemByte(1);
+        sessionVariable.setBroadcastMemThreshold(1);
         sessionVariable.setBroadcastMemExceededPenaltyFactor(1000.0);
         assertCost(distributionCost(DistributionSpec.createGatherDistributionSpec(), 4096), 4096, 0, 4096);
         assertCost(distributionCost(DistributionSpec.createAnyDistributionSpec(), 4096), 4096, 0, 0);

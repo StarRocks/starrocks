@@ -54,6 +54,29 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testBroadcastMemThresholdState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+        variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
+        Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemThreshold());
+
+        variables.setBroadcastMemThreshold(1024);
+        Assertions.assertEquals(1024L,
+                variables.getNonDefaultVariables().get(SessionVariable.BROADCAST_MEM_THRESHOLD).actualValue);
+        SessionVariable clone = (SessionVariable) variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertEquals(1024L, clone.getBroadcastMemThreshold());
+        Assertions.assertEquals(1024L, restored.getBroadcastMemThreshold());
+        clone.setBroadcastMemThreshold(Long.MAX_VALUE);
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getBroadcastMemThreshold());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setBroadcastMemThreshold(-1));
+        Assertions.assertEquals(1024L, variables.getBroadcastMemThreshold());
+    }
+
+    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();
