@@ -48,6 +48,7 @@ struct OrcMappingOptions {
 // For a complex type, it contains orc_mapping and orc_type both
 struct OrcMappingOrcType {
     const OrcMappingPtr orc_mapping = nullptr;
+    // nullptr for an Iceberg struct subfield missing from the file: it reads NULL.
     const orc::Type* orc_type = nullptr;
 };
 
@@ -120,8 +121,8 @@ public:
 private:
     std::unordered_map<size_t, const OrcMappingOrcType> _mapping;
 
-    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
-                                         std::list<uint64_t>* column_id_list);
+    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const orc::Type* orc_type,
+                                         const TypeDescriptor& desc, std::list<uint64_t>* column_id_list);
 };
 
 class OrcMappingFactory {
