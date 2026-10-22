@@ -39,6 +39,7 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -190,7 +191,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
                 if (item == null || item.equals(FeConstants.NULL_STRING)) {
                     dataFields.get(colIdx).setNull(rowIdx);
                 } else {
-                    ((VarCharVector) dataFields.get(colIdx)).setSafe(rowIdx, item.getBytes());
+                    ((VarCharVector) dataFields.get(colIdx)).setSafe(rowIdx, item.getBytes(StandardCharsets.UTF_8));
                 }
             }
         }
@@ -211,7 +212,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
         int rowIdx = 0;
         for (String item : explainString.split("\n")) {
-            varCharVector.setSafe(rowIdx, item.getBytes());
+            varCharVector.setSafe(rowIdx, item.getBytes(StandardCharsets.UTF_8));
             rowIdx++;
         }
 
