@@ -1744,6 +1744,63 @@ public class LakeTableSchemaChangeJobTest {
         }
     }
 
+    /**
+     * With lake_enable_tablet_creation_optimization set, the job created the shadow tablets of a table without
+     * `file_bundling` from one partition-shared version-1 object, named like the base index's one in the same
+     * partition path, and overwrote it. The config is retired: every shadow tablet gets its own version-1 metadata.
+     */
+    @Test
+    public void testShadowTabletsAlwaysGetPerTabletMetadata() throws Exception {
+        boolean oldOptimization = Config.lake_enable_tablet_creation_optimization;
+        boolean oldFastSchemaEvolution = Config.enable_fast_schema_evolution_in_share_data_mode;
+        Config.lake_enable_tablet_creation_optimization = true;
+        // Fast schema evolution would turn the type change into a metadata-only job.
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        try {
+            LakeTable hashTable = createTable(connectContext, "CREATE TABLE h1 (k1 INT, v INT) "
+                    + "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS " + NUM_BUCKETS + " "
+                    + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'false', "
+                    + "'light_weight_tablet_creation' = 'false')");
+            Assertions.assertFalse(hashTable.isFileBundling());
+            Assertions.assertFalse(hashTable.isRangeDistribution());
+
+            List<CreateReplicaTask> built = new ArrayList<>();
+            new MockUp<CreateReplicaTask.Builder>() {
+                @Mock
+                public CreateReplicaTask build(Invocation inv) {
+                    CreateReplicaTask task = inv.proceed();
+                    built.add(task);
+                    return task;
+                }
+            };
+
+            // A value-column type change rewrites data, so it runs as a LakeTableSchemaChangeJob.
+            alterTable(connectContext, "ALTER TABLE h1 MODIFY COLUMN v BIGINT");
+            LakeTableSchemaChangeJob job = getAlterJob(hashTable);
+            drivePendingJob(job);
+
+            TreeSet<Long> shadowTabletIds = hashTable.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
+                    .filter(index -> index.getState() == MaterializedIndex.IndexState.SHADOW)
+                    .flatMap(index -> index.getTablets().stream())
+                    .map(Tablet::getId)
+                    .collect(Collectors.toCollection(TreeSet::new));
+            List<CreateReplicaTask> shadowTasks = built.stream()
+                    .filter(task -> task.getTableId() == hashTable.getId())
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(NUM_BUCKETS, shadowTabletIds.size());
+            Assertions.assertEquals(NUM_BUCKETS, shadowTasks.size(), "every shadow tablet must get its own create task");
+            Assertions.assertEquals(shadowTabletIds, shadowTasks.stream().map(CreateReplicaTask::getTabletId)
+                    .collect(Collectors.toCollection(TreeSet::new)));
+            for (CreateReplicaTask task : shadowTasks) {
+                Assertions.assertFalse(task.toThrift().isEnable_tablet_creation_optimization());
+            }
+        } finally {
+            Config.lake_enable_tablet_creation_optimization = oldOptimization;
+            Config.enable_fast_schema_evolution_in_share_data_mode = oldFastSchemaEvolution;
+        }
+    }
+
     @Test
     public void testLeaderPrunesFinishedJob() throws Exception {
         completeTasksAndPublishOnSend();

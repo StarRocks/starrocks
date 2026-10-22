@@ -1008,9 +1008,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     if (metadata_or.status().is_not_found() && wants_initial_version && !shared_initial_attempted) {
         // Last-resort: this tablet has no version-1 key of its own, so try the partition-shared
         // object. Reached on any read that carries no hint, and on a partition whose shared layout FE
-        // does not hint: one built under Config.lake_enable_tablet_creation_optimization rather than
-        // `file_bundling`, or a range-distribution partition created before FE stopped giving those
-        // tables the shared layout.
+        // does not hint: one built by an older FE under Config.lake_enable_tablet_creation_optimization
+        // rather than `file_bundling`, or a range-distribution partition created before FE stopped giving
+        // those tables the shared layout. FE has since retired that config, but nothing else identifies
+        // the partitions it built -- they are not `file_bundling` -- so this fallback is the only way their
+        // version 1 resolves. Do not remove it while such partitions may still exist.
         //
         // Reached only after the tablet's own key missed, which is what the ordering invariant above
         // requires, and it memoizes nothing about the layout: the object itself is cached (see
