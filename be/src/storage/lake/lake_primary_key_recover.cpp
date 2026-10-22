@@ -31,16 +31,14 @@ namespace starrocks::lake {
 Status LakePrimaryKeyRecover::pre_cleanup() {
     // 1. reset delvec & sst in metadata and clean delvec in builder.
     // Nothing refers to the dropped delvec files and sstables any more, hand them to vacuum.
-    for (auto& [version, file] : *_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
-        file.set_version(version);
-        _metadata->mutable_orphan_files()->Add(std::move(file));
+    for (auto& item : *_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
+        _metadata->mutable_orphan_files()->Add(std::move(item.second));
     }
     for (const auto& sst : _metadata->sstable_meta().sstables()) {
         FileMetaPB file_meta;
         file_meta.set_name(sst.filename());
         file_meta.set_size(sst.filesize());
         file_meta.set_shared(sst.shared());
-        file_meta.set_version(sst.generation_version());
         _metadata->mutable_orphan_files()->Add(std::move(file_meta));
     }
     _metadata->clear_delvec_meta();
@@ -139,7 +137,7 @@ Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& ne
         auto* rowset = _metadata->mutable_rowsets(i);
         rowset->set_num_dels(0);
         for (int j = 0; j < rowset->segment_metas_size(); j++) {
-            rssid_to_rowset[get_rssid(*rowset, j)] = rowset;
+            rssid_to_rowset[rowset->id() + j] = rowset;
         }
     }
     for (auto& new_delete : new_deletes) {
