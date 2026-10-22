@@ -1099,6 +1099,15 @@ This topic introduces the following types of BE configurations:
 - Description: The data size of the minimum level in the Size-tiered Compaction policy. Rowsets smaller than this value immediately trigger the data compaction.
 - Introduced in: -
 
+### skip_pindex_l1_l2_check_in_insert
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to skip duplicate-key checks in immutable L1/L2 files when inserting into the local persistent primary key index in shared-nothing clusters. The default `true` checks only the L0 memtable, avoiding disk reads for these checks and aligning with the cloud-native primary key index in shared-data clusters. Set this to `false` to restore immutable-index checks. This controls an internal index consistency check, not the update semantics of SQL INSERT statements on Primary Key tables.
+- Introduced in: -
+
 ### small_dictionary_page_size
 
 - Default: 4096
