@@ -50,7 +50,12 @@ under the License.
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.18.1</parquet.version>
         <ranger.version>2.9.0</ranger.version>
+<<<<<<< HEAD
         <zookeeper.version>3.9.5</zookeeper.version>
+=======
+        <zookeeper.version>3.9.6</zookeeper.version>
+        <orc.version>1.9.1</orc.version>
+>>>>>>> 28d8ac2 ([BugFix] Bump FE ZooKeeper to 3.9.6 for CVE-2026-59739, CVE-2026-59969 and CVE-2026-79993 (#81292))
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>

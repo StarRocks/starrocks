@@ -76,8 +76,14 @@ subprojects {
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.18.1")
         set("ranger.version", "2.9.0")
+<<<<<<< HEAD
         set("zookeeper.version", "3.9.5")
         set("protobuf-java.version", "3.25.5")
+=======
+        set("zookeeper.version", "3.9.6")
+        set("orc.version", "1.9.1")
+        set("protobuf-java.version", "3.25.9")
+>>>>>>> 28d8ac2 ([BugFix] Bump FE ZooKeeper to 3.9.6 for CVE-2026-59739, CVE-2026-59969 and CVE-2026-79993 (#81292))
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
         set("staros.version", "4.0.9")
