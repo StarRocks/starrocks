@@ -136,7 +136,7 @@ Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& ne
     for (int i = 0; i < _metadata->rowsets_size(); i++) {
         auto* rowset = _metadata->mutable_rowsets(i);
         rowset->set_num_dels(0);
-        for (int j = 0; j < rowset->segment_metas_size(); j++) {
+        for (int j = 0; j < rowset->segments_size(); j++) {
             rssid_to_rowset[rowset->id() + j] = rowset;
         }
     }
