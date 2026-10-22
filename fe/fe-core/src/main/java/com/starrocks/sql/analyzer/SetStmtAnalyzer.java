@@ -163,6 +163,10 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_MEM_LIMIT, 0L, null);
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.BROADCAST_MEM_THRESHOLD, 0L, null);
+        }
+
         try {
             // Check variable time_zone value is valid
             if (variable.equalsIgnoreCase(SessionVariable.TIME_ZONE)) {

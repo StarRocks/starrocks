@@ -364,23 +364,46 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void testBroadcastHintExceedMaxExecMemByte() throws Exception {
-        long maxMemExec = connectContext.getSessionVariable().getMaxExecMemByte();
-        connectContext.getSessionVariable().setMaxExecMemByte(200);
-        String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "join op: INNER JOIN (BROADCAST)");
-        connectContext.getSessionVariable().setMaxExecMemByte(maxMemExec);
+    public void testBroadcastHintExceedThreshold() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+        }
+    }
+
+    @Test
+    public void testBroadcastThresholdIndependentOfExecMemLimit() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        // Nation has only 25 rows and remains cheaper to broadcast even with the penalty.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(2147483648L);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            Assertions.assertEquals(plan, getFragmentPlan(sql));
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+        }
     }
 
     @Test
     public void testBroadcastCostMultiplierSelectionAndHint() throws Exception {
-        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
         double multiplier = connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor();
         // The build side needs enough rows for the penalty to change the chosen distribution.
         String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
         try {
-            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            connectContext.getSessionVariable().setBroadcastMemThreshold(1);
             connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
             assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
             connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1.0);
@@ -393,7 +416,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
             Assertions.assertEquals(1000.0,
                     connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
         } finally {
-            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
             connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(multiplier);
         }
     }
@@ -420,10 +443,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     private String assertBroadcastOnlyJoinAtMaximumPenaltyFactor(String sql, String joinType) throws Exception {
         SessionVariable session = connectContext.getSessionVariable();
         double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
-        long execMemLimit = session.getMaxExecMemByte();
+        long threshold = session.getBroadcastMemThreshold();
         double multiplier = session.getBroadcastMemExceededPenaltyFactor();
         try {
-            session.setMaxExecMemByte(4096);
+            session.setBroadcastMemThreshold(4096);
             // Establish that the same broadcast-only query plans with the default multiplier.
             session.setBroadcastMemExceededPenaltyFactor(1000.0);
             String baseline = getFragmentPlan(sql);
@@ -449,7 +472,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
             Assertions.assertEquals(1000.0, connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
             return plan;
         } finally {
-            session.setMaxExecMemByte(execMemLimit);
+            session.setBroadcastMemThreshold(threshold);
             session.setBroadcastMemExceededPenaltyFactor(multiplier);
         }
     }

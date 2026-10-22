@@ -63,6 +63,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -139,6 +140,39 @@ public class VariableMgrTest {
             SetStmtAnalyzer.analyze(new SetStmt(List.of(reset)), null);
             variableMgr.setSystemVariable(session, reset, false);
             Assertions.assertEquals(1000.0, session.getBroadcastMemExceededPenaltyFactor());
+        }
+    }
+
+    @Test
+    public void testBroadcastMemThresholdSettings() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable session = variableMgr.newSessionVariable();
+        String name = SessionVariable.BROADCAST_MEM_THRESHOLD;
+        Assertions.assertTrue(variableMgr.dump(SetType.SESSION, session, null).stream()
+                .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("2147483648")));
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            for (long value : new long[] {0, 1024, 4294967296L, Long.MAX_VALUE}) {
+                SystemVariable variable = new SystemVariable(scope, name, new IntLiteral(value));
+                SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
+                variableMgr.setSystemVariable(session, variable, false);
+                Assertions.assertEquals(value, session.getBroadcastMemThreshold());
+                Assertions.assertEquals(scope == SetType.GLOBAL ? value : 2147483648L,
+                        variableMgr.newSessionVariable().getBroadcastMemThreshold());
+                Assertions.assertEquals(SessionVariable.DEFAULT_EXEC_MEM_LIMIT, session.getMaxExecMemByte());
+            }
+        }
+
+        variableMgr.applySessionVariable(Map.of(name, "1024"), session);
+        Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
+        for (String value : List.of("-1", "9223372036854775808", "invalid")) {
+            for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+                SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
+                Assertions.assertThrows(SemanticException.class,
+                        () -> SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null));
+            }
+            Assertions.assertThrows(DdlException.class,
+                    () -> variableMgr.applySessionVariable(Map.of(name, value), session));
+            Assertions.assertEquals(1024L, session.getBroadcastMemThreshold());
         }
     }
 
