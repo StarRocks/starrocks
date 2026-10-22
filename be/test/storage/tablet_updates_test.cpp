@@ -15,11 +15,7 @@
 #include "storage/tablet_updates_test.h"
 
 #include <random>
-<<<<<<< HEAD
-=======
 #include <set>
-#include <tuple>
->>>>>>> b777ef0 ([BugFix] Bound level -1 rowset selection in PK compaction (#80471))
 
 #include "rapidjson/document.h"
 #include "script/script.h"
