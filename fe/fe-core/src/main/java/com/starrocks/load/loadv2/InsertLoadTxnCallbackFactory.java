@@ -21,7 +21,7 @@ import com.starrocks.transaction.TransactionState;
 public class InsertLoadTxnCallbackFactory {
     public static IVMInsertLoadTxnCallback of(ConnectContext context, long dbId, Table targetTable) {
         if (context.getSessionVariable().isEnableIVMRefresh() && targetTable.isMaterializedView()) {
-            return new IVMInsertLoadTxnCallback(dbId, targetTable.getId());
+            return new IVMInsertLoadTxnCallback(dbId, targetTable.getId(), context.getTvrStagingOwner());
         } else {
             return null;
         }

@@ -1,0 +1,49 @@
+-- name: test_ivm_explain_refresh_leaves_refresh_state_alone @cloud
+-- EXPLAIN / TRACE REFRESH only plans: the view keeps exactly its committed bookmark reference, no explain reference
+-- is left behind, and the view's staged-window owner stays empty. Each view has a base table of its own, so the
+-- reference counts are per view.
+CREATE TABLE er_inc_base_${uuid0} (dt DATE NOT NULL, k INT NOT NULL, v BIGINT) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (START ('2024-01-01') END ('2024-01-04') EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE TABLE er_auto_base_${uuid0} (dt DATE NOT NULL, k INT NOT NULL, v BIGINT) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (START ('2024-01-01') END ('2024-01-04') EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO er_inc_base_${uuid0} SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(1, 300)) AS g(x);
+INSERT INTO er_auto_base_${uuid0} SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(1, 300)) AS g(x);
+CREATE MATERIALIZED VIEW er_inc_${uuid0} PARTITION BY dt DISTRIBUTED BY RANDOM BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='incremental')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM er_inc_base_${uuid0} GROUP BY dt, k;
+CREATE MATERIALIZED VIEW er_auto_${uuid0} PARTITION BY dt DISTRIBUTED BY RANDOM BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='auto')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM er_auto_base_${uuid0} GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW er_inc_${uuid0} WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW er_auto_${uuid0} WITH SYNC MODE;
+[UC]DB=SELECT database();
+[UC]INC_BASE_ID=SELECT TABLE_ID FROM information_schema.tables_config WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'er_inc_base_${uuid0}';
+[UC]AUTO_BASE_ID=SELECT TABLE_ID FROM information_schema.tables_config WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'er_auto_base_${uuid0}';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${INC_BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${AUTO_BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+INSERT INTO er_inc_base_${uuid0} SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(301, 400)) AS g(x);
+INSERT INTO er_auto_base_${uuid0} SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(301, 400)) AS g(x);
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW er_inc_${uuid0};
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW er_inc_${uuid0} FORCE;
+[UC]TRACE TIMES REFRESH MATERIALIZED VIEW er_inc_${uuid0};
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW er_auto_${uuid0};
+[UC]EXPLAIN REFRESH MATERIALIZED VIEW er_auto_${uuid0} FORCE;
+[UC]TRACE TIMES REFRESH MATERIALIZED VIEW er_auto_${uuid0} FORCE;
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${INC_BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${AUTO_BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID IN (${INC_BASE_ID}, ${AUTO_BASE_ID}) AND HOLDER_ID LIKE 'mv-explain:%';
+SELECT get_json_string(inspect_mv_meta('${DB}.er_inc_${uuid0}'), '$.refreshScheme.asyncRefreshContext.tempTvrOwnerStartTaskRunId') IS NULL;
+SELECT get_json_string(inspect_mv_meta('${DB}.er_auto_${uuid0}'), '$.refreshScheme.asyncRefreshContext.tempTvrOwnerStartTaskRunId') IS NULL;
+REFRESH MATERIALIZED VIEW er_inc_${uuid0} WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW er_auto_${uuid0} WITH SYNC MODE;
+SELECT COUNT(*) AS diff FROM (SELECT dt, k, s, c FROM er_inc_${uuid0} EXCEPT SELECT dt, k, SUM(v), COUNT(*) FROM er_inc_base_${uuid0} GROUP BY dt, k) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, k, SUM(v), COUNT(*) FROM er_inc_base_${uuid0} GROUP BY dt, k EXCEPT SELECT dt, k, s, c FROM er_inc_${uuid0}) t;
+SELECT COUNT(*) AS diff FROM (SELECT dt, k, s, c FROM er_auto_${uuid0} EXCEPT SELECT dt, k, SUM(v), COUNT(*) FROM er_auto_base_${uuid0} GROUP BY dt, k) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, k, SUM(v), COUNT(*) FROM er_auto_base_${uuid0} GROUP BY dt, k EXCEPT SELECT dt, k, s, c FROM er_auto_${uuid0}) t;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'er_inc_${uuid0}';
+DROP MATERIALIZED VIEW er_inc_${uuid0};
+DROP MATERIALIZED VIEW er_auto_${uuid0};
+DROP TABLE er_inc_base_${uuid0};
+DROP TABLE er_auto_base_${uuid0};

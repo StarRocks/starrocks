@@ -171,6 +171,9 @@ public abstract class MVRefreshProcessor {
         this.db = db;
         this.mv = mv;
         this.mvContext = mvContext;
+        if (mvContext.getPinState() == null) {
+            mvContext.setPinState(MVRefreshPinState.of(mv));
+        }
         this.refreshRuntimeState = mvContext.getRefreshRuntimeState();
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
@@ -334,22 +337,40 @@ public abstract class MVRefreshProcessor {
         return mvContext.getStatus() != null ? mvContext.getStatus().getStartTaskRunId() : null;
     }
 
-    // True when this task run owns the persistent pinning record — the fallback first batch right
-    // after afterSyncHook installs us, and every subsequent batch of the same job.
-    public boolean isPinnedMode() {
-        String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
-        return owner != null && owner.equals(getStartTaskRunId());
+    protected MVRefreshPinState pinState() {
+        return mvContext.getPinState();
     }
 
+    // True when this task run owns the pinning record — the fallback first batch right
+    // after afterSyncHook installs us, and every subsequent batch of the same job.
+    public boolean isPinnedMode() {
+        return pinState().isPinnedBy(getStartTaskRunId());
+    }
+
+<<<<<<< HEAD
     // Hydrate pinnedTvrMap and each PCTTableSnapshotInfo.pinnedRange from the persistent temp
     // TVR map. Must run after syncAndCheckPCTPartitions (snapshotBaseTables ready) and after
     // afterSyncHook (owner installed, if any). No-op for non-pinned runs.
+=======
+    /**
+     * Freeze the base-table snapshot the scan will read, before partitions are aligned against it.
+     * Only the PCT path pins: the temp TVR map is also written by an in-flight IVM execution, so
+     * hydrating it here unconditionally would let a failed IVM attempt's staged delta be retried as
+     * a pin.
+     */
+    public void freezeSnapshotBeforePartitionAlign() {
+    }
+
+    // Hydrate pinnedTvrMap and each PCTTableSnapshotInfo.pinnedRange from the run's frozen TVR map.
+    // Must run after the base-table snapshots are collected (snapshotBaseTables ready) and
+    // after the freeze hook (owner installed, if any), and before partitions are aligned against the
+    // pinned ranges. No-op for non-pinned runs.
+>>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
     protected void setupPinnedRangesIfNeeded() {
         if (!isPinnedMode()) {
             return;
         }
-        final Map<BaseTableInfo, TvrVersionRange> frozen =
-                mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        final Map<BaseTableInfo, TvrVersionRange> frozen = pinState().getFrozenTvrMap();
         final Map<String, TvrVersionRange> pinnedMap = refreshRuntimeState.getPinnedTvrMap();
         pinnedMap.clear();
         // Reported on the task run's extra message, and from there in the IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP
@@ -378,8 +399,8 @@ public abstract class MVRefreshProcessor {
                 ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);
             }
         }
-        logger.info("setup pinned context for {} base tables, owner={}",
-                pinnedMap.size(), mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId());
+        logger.info("setup pinned context for {} base tables, owner={}, explain={}",
+                pinnedMap.size(), pinState().getOwner(), mvContext.isExplain());
 
         if (!snapshotIds.isEmpty()) {
             updateTaskRunStatus(status ->

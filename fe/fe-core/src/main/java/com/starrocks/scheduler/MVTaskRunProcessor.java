@@ -40,6 +40,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshPinState;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshProcessorFactory;
 import com.starrocks.scheduler.mv.MVTraceUtils;
@@ -189,12 +190,29 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // get exec plan
         mvTaskRunContext.getRefreshRuntimeState().reset();
         mvTaskRunContext.setIsExplain(true);
+<<<<<<< HEAD
         MVRefreshProcessor.ProcessExecPlan processExecPlan =
                 mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
         if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
             logger.info("No refresh plan for mv: {}, state: {}, skip reason: {}", mv.getName(),
                     processExecPlan == null ? null : processExecPlan.state(),
                     processExecPlan == null ? null : processExecPlan.skipReason());
+=======
+        MVRefreshPinState explainPinState = MVRefreshPinState.forExplain(mv);
+        mvTaskRunContext.setPinState(explainPinState);
+        try {
+            MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                    mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
+            if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
+                logger.info("No refresh plan for mv: {}, state: {}, skip reason: {}", mv.getName(),
+                        processExecPlan == null ? null : processExecPlan.state(),
+                        processExecPlan == null ? null : processExecPlan.skipReason());
+            }
+            return processExecPlan;
+        } finally {
+            clearStagedPinnedBookmarks();
+            explainPinState.release();
+>>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
         }
         return processExecPlan;
     }
