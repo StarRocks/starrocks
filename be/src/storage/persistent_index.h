@@ -734,11 +734,13 @@ public:
     virtual Status replace(size_t n, const Slice* keys, const IndexValue* values,
                            const std::vector<uint32_t>& replace_indexes);
 
-    // batch insert, return error if key already exists
+    // Batch insert. Always reject duplicates in L0; check immutable indexes only when
+    // skip_pindex_l1_l2_check_in_insert is false.
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
+    // |check_l1|: also check the base L1 when immutable-index checks are enabled; temporary L1 and L2
+    // are always checked in that mode. May imply heavy IO costs.
     Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase

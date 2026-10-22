@@ -832,6 +832,7 @@
         "l0_max_mem_usage",
         "max_tmp_l1_num",
         "enable_parallel_get_and_bf",
+        "skip_pindex_l1_l2_check_in_insert",
         "enable_pindex_minor_compaction",
         "max_allow_pindex_l2_num",
         "pindex_major_compaction_num_threads",
