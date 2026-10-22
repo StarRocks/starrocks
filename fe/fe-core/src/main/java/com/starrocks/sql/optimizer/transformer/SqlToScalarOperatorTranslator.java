@@ -542,7 +542,8 @@ public final class SqlToScalarOperatorTranslator {
                 ScalarOperator left = visit(node.getChild(0), context.clone(node));
                 ScalarOperator right = visit(node.getChild(1), context.clone(node));
 
-                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(left, right), arithmeticFn);
+                return new CallOperator(arithmeticFn.getFunctionName().getFunction(), node.getType(),
+                        Lists.newArrayList(left, right), arithmeticFn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
                 ScalarOperator child = visit(node.getChild(0), context.clone(node));
                 return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(child), arithmeticFn);
