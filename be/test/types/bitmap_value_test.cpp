@@ -1218,7 +1218,7 @@ TEST(BitmapValueTest1, Roaring64Map) {
     }
     ASSERT_EQ(r1_sum, sum);
 }
-TEST(BitmapValueTest1, croaring_5_3_2_unaligned_deserialize_and_simd_containers) {
+TEST_F(BitmapValueTest, croaring_5_3_2_unaligned_deserialize_and_simd_containers) {
     ASSERT_STREQ("5.3.2", ROARING_VERSION);
 
     // 1. Odd-aligned (buf + 1) deserialisation across Array, Bitset, and Run containers
