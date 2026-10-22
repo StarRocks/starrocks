@@ -76,7 +76,14 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
-            this.conf.set(METASTOREWAREHOUSE.varname, METASTOREWAREHOUSE.getDefaultValue());
+            // The Configuration comes from HdfsEnvironment, which only applies cloud-storage
+            // credentials to it — catalog properties are not propagated. So "absent from the
+            // Configuration" does not mean "the user did not configure it": fall back to the default
+            // only after the catalog properties have been consulted, otherwise a configured
+            // warehouse dir is silently replaced and CREATE DATABASE fails against a path nobody asked for.
+            String warehouseDir = properties.get(METASTOREWAREHOUSE.varname);
+            this.conf.set(METASTOREWAREHOUSE.varname,
+                    warehouseDir != null ? warehouseDir : METASTOREWAREHOUSE.getDefaultValue());
         }
 
         Map<String, String> copiedProperties = Maps.newHashMap(properties);

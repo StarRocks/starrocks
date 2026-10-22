@@ -183,6 +183,11 @@ Iceberg catalog 的描述。此参数是可选的。
 必需：是
 描述：Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。<br />如果 Hive metastore 启用了高可用性（HA），您可以指定多个 metastore URI，并用逗号（`,`）分隔，例如 `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
 
+##### hive.metastore.warehouse.dir
+
+必需：否
+描述：未显式指定 location 时，StarRocks 在该 Catalog 中创建数据库和表所使用的 warehouse 目录。如果 Hive metastore 使用的不是默认的 `/user/hive/warehouse`，请指定该参数，例如 `"hive.metastore.warehouse.dir" = "s3://my-bucket/warehouse"`。<br />优先级：`CREATE DATABASE` 中显式给出的 `location` 属性高于该参数，该参数高于内置默认值。该取值从 Catalog 属性中读取，因此无需出现在 `hive-site.xml` 中。
+
 </TabItem>
 
 <TabItem value="GLUE" label="AWS Glue">
