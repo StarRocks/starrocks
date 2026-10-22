@@ -218,6 +218,10 @@ CONF_mInt64(max_tmp_l1_num, "10");
 
 CONF_mBool(enable_parallel_get_and_bf, "false");
 
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
+
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 
