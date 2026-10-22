@@ -238,6 +238,7 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.summary.AuditLoaderMgr;
 import com.starrocks.summary.QueryHistoryMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -582,6 +583,7 @@ public class GlobalStateMgr {
     private final TabletCollector tabletCollector;
     private final SQLPlanStorage sqlPlanStorage;
     private final QueryHistoryMgr queryHistoryMgr;
+    private final AuditLoaderMgr auditLoaderMgr;
     private final SPMAutoCapturer spmAutoCapturer;
 
     private JwkMgr jwkMgr;
@@ -759,6 +761,7 @@ public class GlobalStateMgr {
         this.statisticStorage = new CachedStatisticStorage();
         this.sqlPlanStorage = SQLPlanStorage.create(true);
         this.queryHistoryMgr = new QueryHistoryMgr();
+        this.auditLoaderMgr = new AuditLoaderMgr();
         this.spmAutoCapturer = new SPMAutoCapturer();
 
         this.replayedJournalId = new AtomicLong(0L);
@@ -1035,6 +1038,10 @@ public class GlobalStateMgr {
 
     public QueryHistoryMgr getQueryHistoryMgr() {
         return queryHistoryMgr;
+    }
+
+    public AuditLoaderMgr getAuditLoaderMgr() {
+        return auditLoaderMgr;
     }
 
     public AuthenticationMgr getAuthenticationMgr() {
@@ -2001,6 +2008,9 @@ public class GlobalStateMgr {
         }
 
         connectorTableMetadataProcessor.start();
+
+        // builtin audit loader (runs on every FE; inert unless enabled)
+        auditLoaderMgr.start();
 
         // domain resolver
         domainResolver.start();
