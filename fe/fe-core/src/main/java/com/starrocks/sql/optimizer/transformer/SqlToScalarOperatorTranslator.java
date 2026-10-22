@@ -109,12 +109,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.DateType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.JsonType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -563,7 +567,82 @@ public final class SqlToScalarOperatorTranslator {
 
             Function fn = ExprUtils.getTimestampArithmeticFunction(node);
             Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
-            return new CallOperator(fn.getFunctionName().getFunction(), node.getType(), arguments, fn);
+            String fnName = fn.getFunctionName().getFunction();
+            ScalarOperator fractionalSeconds = splitFractionalSeconds(fnName, node.getType(), arguments);
+            if (fractionalSeconds != null) {
+                return fractionalSeconds;
+            }
+            return new CallOperator(fnName, node.getType(), arguments, fn);
+        }
+
+        // seconds_add and seconds_sub take the amount as an INT, so `ts + INTERVAL '0.5' SECOND` would add NULL and
+        // `ts + INTERVAL 1.5 SECOND` one second. A constant amount that is a decimal, a floating point number or a
+        // string is added as whole seconds and microseconds instead:
+        // `ts + INTERVAL 1.5 SECOND` is `microseconds_add(seconds_add(ts, 1), 500000)`.
+        // Returns null if the call is not such an interval, and then it is built as it is.
+        private static ScalarOperator splitFractionalSeconds(String fnName, Type returnType,
+                                                             List<ScalarOperator> arguments) {
+            boolean add = FunctionSet.SECONDS_ADD.equals(fnName);
+            if (!add && !FunctionSet.SECONDS_SUB.equals(fnName)) {
+                return null;
+            }
+            BigDecimal seconds = constantSeconds(arguments.get(1));
+            if (seconds == null) {
+                return null;
+            }
+
+            BigDecimal[] wholeAndFraction = seconds.divideAndRemainder(BigDecimal.ONE);
+            BigDecimal microseconds = wholeAndFraction[1].movePointRight(6);
+            if (microseconds.stripTrailingZeros().scale() > 0) {
+                throw new SemanticException("The amount of an INTERVAL in SECOND can have at most 6 decimals "
+                        + "because a datetime has no digits below microseconds: " + seconds.toPlainString());
+            }
+            int wholeSeconds;
+            int wholeMicroseconds;
+            try {
+                wholeSeconds = wholeAndFraction[0].intValueExact();
+                wholeMicroseconds = microseconds.intValueExact();
+            } catch (ArithmeticException e) {
+                // doesn't fit in an INT, which is what the function takes
+                return null;
+            }
+
+            String microsecondsFn = add ? FunctionSet.MICROSECONDS_ADD : FunctionSet.MICROSECONDS_SUB;
+            Type[] argTypes = {DateType.DATETIME, IntegerType.INT};
+            ScalarOperator result = arguments.get(0);
+            if (wholeSeconds != 0 || wholeMicroseconds == 0) {
+                result = new CallOperator(fnName, returnType,
+                        Lists.newArrayList(result, ConstantOperator.createInt(wholeSeconds)),
+                        ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_IDENTICAL));
+            }
+            if (wholeMicroseconds != 0) {
+                result = new CallOperator(microsecondsFn, returnType,
+                        Lists.newArrayList(result, ConstantOperator.createInt(wholeMicroseconds)),
+                        ExprUtils.getBuiltinFunction(microsecondsFn, argTypes, Function.CompareMode.IS_IDENTICAL));
+            }
+            return result;
+        }
+
+        // The value of a constant decimal, floating point or string amount, or null for any other amount (also for a
+        // string that is not a number, which is left to the cast to INT of the function argument)
+        private static BigDecimal constantSeconds(ScalarOperator amount) {
+            if (!(amount instanceof ConstantOperator) || ((ConstantOperator) amount).isNull()) {
+                return null;
+            }
+            ConstantOperator constant = (ConstantOperator) amount;
+            Type type = constant.getType();
+            try {
+                if (type.isDecimalOfAnyVersion()) {
+                    return constant.getDecimal();
+                } else if (type.isStringType()) {
+                    return new BigDecimal(constant.getVarchar().trim());
+                } else if (type.isFloatingPointType()) {
+                    return BigDecimal.valueOf(constant.getDouble());
+                }
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            return null;
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {
