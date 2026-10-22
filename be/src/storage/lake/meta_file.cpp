@@ -691,7 +691,19 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
                                          iter->second.size()));
         return true;
     }
+    if (_delvecs_reset_by_recover) {
+        (*pdelvec) = std::make_shared<DelVector>();
+        return true;
+    }
     return false;
+}
+
+void MetaFileBuilder::reset_delvecs_for_recover() {
+    _buf.clear();
+    _delvecs.clear();
+    _segmentid_to_delvec.clear();
+    _cache_key_to_segment_id.clear();
+    _delvecs_reset_by_recover = true;
 }
 
 void MetaFileBuilder::_fill_delvec_cache() {
