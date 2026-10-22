@@ -340,7 +340,7 @@ void ExecStateReporter::report_exec_state(QueryContext* query_ctx, FragmentConte
     // and is retried as much as possible to ensure success.
     // Otherwise, it may result in the ingestion status getting stuck.
     bool priority = done && fragment_ctx->runtime_state()->query_options().query_type == TQueryType::LOAD;
-    submit(std::move(report_task), priority);
+    submit(std::move(report_task), priority, done);
     VLOG(2) << "[Driver] Submit exec state report task. fragment_instance_id=" << print_id(instance_id)
             << ", query_id=" << print_id(query_id) << ", is_done=" << done;
 }
@@ -380,11 +380,28 @@ ExecStateReporter::~ExecStateReporter() {
     _metrics->unmonitor_priority_reporter(_priority_thread_pool.get());
 }
 
-void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
+void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority, bool is_done_report) {
     if (priority) {
         (void)_priority_thread_pool->submit_func(std::move(report_task));
+        return;
+    }
+    Status st = _thread_pool->submit_func(report_task);
+    if (st.ok()) {
+        return;
+    }
+    if (is_done_report) {
+        // A dropped final (done) report leaves the FE coordinator unaware that the fragment
+        // instance has finished: the query stays RUNNING and keeps holding its query queue
+        // slots until the query timeout expires. This was fixed for ingestion by routing done
+        // reports to the priority thread pool (#36688), but done reports of non-LOAD queries
+        // went back to the discardable bounded pool later (#63132). Never drop a done report:
+        // escalate it to the priority thread pool (unbounded queue) only when the bounded pool
+        // rejects it, so the priority pool is not flooded in the common case.
+        LOG(WARNING) << "exec state report thread pool is full, escalate the done report to "
+                     << "the priority thread pool: " << st.to_string();
+        (void)_priority_thread_pool->submit_func(std::move(report_task));
     } else {
-        (void)_thread_pool->submit_func(std::move(report_task));
+        VLOG(1) << "exec state report thread pool is full, discard the non-done report: " << st.to_string();
     }
 }
 
