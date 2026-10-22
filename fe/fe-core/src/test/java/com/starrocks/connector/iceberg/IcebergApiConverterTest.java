@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
@@ -747,6 +748,35 @@ public class IcebergApiConverterTest {
         Types.NestedField rawBinary = Types.NestedField.optional("c_raw").withId(3).ofType(Types.BinaryType.get())
                 .withInitialDefault(ByteBuffer.wrap(new byte[] {(byte) 0xff, (byte) 0xfe})).build();
         Assertions.assertNull(IcebergApiConverter.toInitialDefaultValueString(rawBinary));
+    }
+
+    @Test
+    public void testReadInitialDefaultForTimestampTzUsesSessionTimeZone() {
+        // BE reads TIMESTAMPTZ in the session time zone, so the default is sent in that zone.
+        Types.NestedField tz = Types.NestedField.optional("tz").withId(1).ofType(Types.TimestampType.withZone())
+                .withInitialDefault(1_700_000_000_000_000L).build();
+        Types.NestedField ntz = Types.NestedField.optional("ntz").withId(2).ofType(Types.TimestampType.withoutZone())
+                .withInitialDefault(1_700_000_000_000_000L).build();
+        ConnectContext context = new ConnectContext();
+        context.getSessionVariable().setTimeZone("Asia/Shanghai");
+        ConnectContext.set(context);
+        try {
+            // 1700000000 s = 2023-11-14 22:13:20 UTC
+            assertEquals("2023-11-15 06:13:20.000000", IcebergApiConverter.toReadInitialDefaultValueString(tz));
+            assertEquals("2023-11-14 22:13:20", IcebergApiConverter.toReadInitialDefaultValueString(ntz));
+            // the cached schema keeps the session-independent value
+            assertEquals("2023-11-14 22:13:20", IcebergApiConverter.toInitialDefaultValueString(tz));
+
+            // year 0 stays year 0 (a year-of-era pattern would print 0001)
+            context.getSessionVariable().setTimeZone("UTC");
+            long yearZeroMicros = java.time.LocalDateTime.of(0, 6, 15, 1, 2, 3)
+                    .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
+            Types.NestedField yearZero = Types.NestedField.optional("y0").withId(3)
+                    .ofType(Types.TimestampType.withZone()).withInitialDefault(yearZeroMicros).build();
+            assertEquals("0000-06-15 01:02:03.000000", IcebergApiConverter.toReadInitialDefaultValueString(yearZero));
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     @Test

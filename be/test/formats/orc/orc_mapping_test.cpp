@@ -86,4 +86,62 @@ TEST(OrcMappingTest, IcebergFieldIdMapping) {
     EXPECT_FALSE(OrcMappingFactory::iceberg_column_names(*no_ids, schema).has_value());
 }
 
+// A struct subfield added to an Iceberg table after the file was written is missing from the file: it maps to no
+// ORC type and reads NULL, instead of failing the scan.
+TEST(OrcMappingTest, IcebergMissingStructSubfield) {
+    std::unique_ptr<orc::Type> root = orc::Type::buildTypeFromString("struct<s:struct<x:string,a:int>>");
+    const_cast<orc::Type*>(root->getSubtype(0))->setAttribute("iceberg.id", "3");
+    const_cast<orc::Type*>(root->getSubtype(0)->getSubtype(0))->setAttribute("iceberg.id", "7");
+    const_cast<orc::Type*>(root->getSubtype(0)->getSubtype(1))->setAttribute("iceberg.id", "4");
+    const orc::Type* orc_a = root->getSubtype(0)->getSubtype(1);
+
+    TIcebergSchema schema;
+    schema.__set_fields({make_iceberg_field(
+            3, "s", {make_iceberg_field(7, "x"), make_iceberg_field(4, "a"), make_iceberg_field(5, "b")})});
+    std::vector<std::string> names{"s"};
+
+    auto struct_of = [](const std::vector<std::string>& fields) {
+        TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        for (const auto& name : fields) {
+            type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+            type.field_names.emplace_back(name);
+        }
+        return type;
+    };
+    OrcMappingOptions options{"test.orc", false, true};
+    options.iceberg_schema = &schema;
+
+    {
+        SlotDescriptor s(0, "s", struct_of({"a", "b"}));
+        std::vector<SlotDescriptor*> slots{&s};
+        auto mapping = OrcMappingFactory::build_mapping(slots, *root, false, &names, options);
+        ASSERT_OK(mapping.status());
+        const auto& struct_mapping = (*mapping)->get_orc_type_child_mapping(0).orc_mapping;
+        EXPECT_EQ(orc_a, struct_mapping->get_orc_type_child_mapping(0).orc_type);
+        EXPECT_EQ(nullptr, struct_mapping->get_orc_type_child_mapping(1).orc_type);
+
+        std::list<uint64_t> column_ids;
+        ASSERT_OK((*mapping)->set_include_column_id(0, s.type(), &column_ids));
+        EXPECT_EQ((std::list<uint64_t>{orc_a->getColumnId()}), column_ids);
+    }
+    {
+        // Only the missing subfield is used: the fixed-width stored subfield `a`, not the string `x` nor the whole
+        // struct, is read for the struct's nulls.
+        SlotDescriptor s(0, "s", struct_of({"b"}));
+        std::vector<SlotDescriptor*> slots{&s};
+        auto mapping = OrcMappingFactory::build_mapping(slots, *root, false, &names, options);
+        ASSERT_OK(mapping.status());
+        std::list<uint64_t> column_ids;
+        ASSERT_OK((*mapping)->set_include_column_id(0, s.type(), &column_ids));
+        EXPECT_EQ((std::list<uint64_t>{orc_a->getColumnId()}), column_ids);
+    }
+    {
+        // Without the Iceberg schema a missing subfield is still an error.
+        options.iceberg_schema = nullptr;
+        SlotDescriptor s(0, "s", struct_of({"a", "b"}));
+        std::vector<SlotDescriptor*> slots{&s};
+        EXPECT_FALSE(OrcMappingFactory::build_mapping(slots, *root, false, &names, options).ok());
+    }
+}
+
 } // namespace starrocks

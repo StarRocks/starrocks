@@ -415,6 +415,12 @@ struct HdfsScannerContext {
     // ===== methods =====
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
+    // A one-row column of `type` holding an Iceberg initial-default as FE serializes it, for a column missing from
+    // a data file. TIME arrives as "HH:MM[:SS[.ffffff]]" and is stored as whole seconds, like the file readers do.
+    // NotSupported for a type the value cannot be parsed into.
+    static StatusOr<MutableColumnPtr> create_initial_default_column(const TypeDescriptor& type, bool nullable,
+                                                                    const std::string& value);
+
     std::string formatted_name(const std::string& name) const {
         return options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
