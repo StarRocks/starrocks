@@ -37,9 +37,8 @@ void OrcMapping::clear() {
 }
 
 void OrcMapping::add_mapping(size_t original_pos_in_table_definition, const OrcMappingPtr& child_mapping,
-                             const orc::Type* orc_type, std::optional<std::string> initial_default) {
-    _mapping.emplace(original_pos_in_table_definition,
-                     OrcMappingOrcType{child_mapping, orc_type, std::move(initial_default)});
+                             const orc::Type* orc_type) {
+    _mapping.emplace(original_pos_in_table_definition, OrcMappingOrcType{child_mapping, orc_type});
 }
 
 Status OrcMapping::set_lazy_load_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list) {
@@ -91,7 +90,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             const TypeDescriptor& child_type = desc.children[i];
             const OrcMappingOrcType& child = mapping->get_orc_type_child_mapping(i);
             if (child.orc_type == nullptr) {
-                // missing from the file, read as its default
+                // missing from the file, read as NULL
                 continue;
             }
             if (child_type.is_complex_type()) {
@@ -372,13 +371,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             }
             auto it = tmp_orc_fieldname_2_pos.find(key);
             if (it == tmp_orc_fieldname_2_pos.end() && lake_field != nullptr) {
-                // An Iceberg subfield added after the file was written: read its initial-default, or NULL.
-                std::optional<std::string> initial_default;
-                if (child_lake_field != nullptr && child_lake_field->__isset.initial_default &&
-                    !origin_type.children[index].is_complex_type()) {
-                    initial_default = child_lake_field->initial_default;
-                }
-                mapping->add_mapping(index, nullptr, nullptr, std::move(initial_default));
+                // An Iceberg subfield added after the file was written: read NULL.
+                mapping->add_mapping(index, nullptr, nullptr);
                 continue;
             }
             if (it == tmp_orc_fieldname_2_pos.end()) {

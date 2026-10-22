@@ -17,7 +17,6 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
-#include "formats/scan_context.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -85,8 +84,8 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
             const OrcMappingOrcType& child = orc_mapping->get_orc_type_child_mapping(i);
             std::unique_ptr<ORCColumnReader> child_reader;
             if (child.orc_type == nullptr) {
-                ASSIGN_OR_RETURN(child_reader,
-                                 create_default_column_reader(child_type, true, reader, child.initial_default));
+                // an Iceberg struct subfield missing from the file reads NULL
+                ASSIGN_OR_RETURN(child_reader, create_default_column_reader(child_type, true, reader));
             } else {
                 ASSIGN_OR_RETURN(child_reader,
                                  ORCColumnReader::create(child_type, child.orc_type, true, child.orc_mapping, reader));
@@ -135,28 +134,14 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(
-        const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
-        const std::optional<std::string>& initial_default) {
-    ColumnPtr default_column = nullptr;
-    if (initial_default.has_value()) {
-        auto column = FormatScanContext::create_initial_default_column(type, nullable, *initial_default);
-        // A type the default parser does not support keeps reading NULL; any other failure fails the scan.
-        if (column.ok()) {
-            default_column = std::move(column).value();
-        } else if (!column.status().is_not_supported()) {
-            return column.status();
-        }
-    }
-    return std::make_unique<DefaultColumnReader>(type, nullable, reader, std::move(default_column));
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(const TypeDescriptor& type,
+                                                                                         bool nullable,
+                                                                                         OrcChunkReader* reader) {
+    return std::make_unique<DefaultColumnReader>(type, nullable, reader);
 }
 
 Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) {
-    if (_default_column != nullptr) {
-        col->append_value_multiple_times(*_default_column, 0, size);
-    } else {
-        col->append_default(size);
-    }
+    col->append_default(size);
     return Status::OK();
 }
 

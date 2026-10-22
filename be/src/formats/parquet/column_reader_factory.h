@@ -46,29 +46,7 @@ private:
             const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
 
     static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
-<<<<<<< HEAD
                                                                   const ParquetField* variant_field);
-=======
-                                                                  const ParquetField* variant_field,
-                                                                  const VariantShreddedReadHints& hints = {});
-
-    // Resolve which parquet child each child of the struct column type `col_type` reads. The single matching rule
-    // used by the reader factory and the meta helpers:
-    // - Iceberg path (lake_schema_field != nullptr): the Iceberg child by table field name; then the parquet child
-    //   by its Iceberg field id if the file has field ids, else by physical name (if any) or table field name.
-    // - Otherwise: by field id if the type carries field ids, else by physical name, else by field name. An entry
-    //   without an id (-1) or physical name ("") falls back to the field name.
-    // Names are compared after Utils::format_name(case_sensitive).
-    static StructSubfieldMapping resolve_struct_subfields(const ParquetField& field, const TypeDescriptor& col_type,
-                                                          bool case_sensitive,
-                                                          const TIcebergSchemaField* lake_schema_field,
-                                                          bool parquet_has_field_id);
-
-    // For an Iceberg struct none of whose used subfields is in the file: a stored scalar column read only for the
-    // struct's levels (a direct subfield, else a leaf under a struct subfield), or nullptr if there is none. The
-    // reader factory and LakeMetaHelper use the same choice.
-    static const ParquetField* find_struct_level_source(const ParquetField& field);
->>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
 };
 
 } // namespace starrocks::parquet

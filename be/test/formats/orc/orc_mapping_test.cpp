@@ -87,7 +87,7 @@ TEST(OrcMappingTest, IcebergFieldIdMapping) {
 }
 
 // A struct subfield added to an Iceberg table after the file was written is missing from the file: it maps to no
-// ORC type and carries its initial-default, instead of failing the scan.
+// ORC type and reads NULL, instead of failing the scan.
 TEST(OrcMappingTest, IcebergMissingStructSubfield) {
     std::unique_ptr<orc::Type> root = orc::Type::buildTypeFromString("struct<s:struct<x:string,a:int>>");
     const_cast<orc::Type*>(root->getSubtype(0))->setAttribute("iceberg.id", "3");
@@ -95,10 +95,9 @@ TEST(OrcMappingTest, IcebergMissingStructSubfield) {
     const_cast<orc::Type*>(root->getSubtype(0)->getSubtype(1))->setAttribute("iceberg.id", "4");
     const orc::Type* orc_a = root->getSubtype(0)->getSubtype(1);
 
-    TIcebergSchemaField b = make_iceberg_field(5, "b");
-    b.__set_initial_default("7");
     TIcebergSchema schema;
-    schema.__set_fields({make_iceberg_field(3, "s", {make_iceberg_field(7, "x"), make_iceberg_field(4, "a"), b})});
+    schema.__set_fields({make_iceberg_field(
+            3, "s", {make_iceberg_field(7, "x"), make_iceberg_field(4, "a"), make_iceberg_field(5, "b")})});
     std::vector<std::string> names{"s"};
 
     auto struct_of = [](const std::vector<std::string>& fields) {
@@ -120,7 +119,6 @@ TEST(OrcMappingTest, IcebergMissingStructSubfield) {
         const auto& struct_mapping = (*mapping)->get_orc_type_child_mapping(0).orc_mapping;
         EXPECT_EQ(orc_a, struct_mapping->get_orc_type_child_mapping(0).orc_type);
         EXPECT_EQ(nullptr, struct_mapping->get_orc_type_child_mapping(1).orc_type);
-        EXPECT_EQ("7", struct_mapping->get_orc_type_child_mapping(1).initial_default.value_or(""));
 
         std::list<uint64_t> column_ids;
         ASSERT_OK((*mapping)->set_include_column_id(0, s.type(), &column_ids));
