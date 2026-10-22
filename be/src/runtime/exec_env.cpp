@@ -125,6 +125,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
+int64_t GlobalEnv::calc_max_update_memory(int64_t process_mem_limit) {
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    return process_mem_limit * update_mem_percent / 100;
+}
+
+void GlobalEnv::refresh_update_mem_limit() {
+    if (_update_mem_tracker != nullptr) {
+        _update_mem_tracker->set_limit(calc_max_update_memory(process_mem_limit()));
+    }
+}
+
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
@@ -309,8 +320,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _schema_change_mem_tracker = regist_tracker(MemTrackerType::SCHEMA_CHANGE, -1, process_mem_tracker());
     _page_cache_mem_tracker = regist_tracker(MemTrackerType::PAGE_CACHE, -1, process_mem_tracker());
     _jit_cache_mem_tracker = regist_tracker(MemTrackerType::JIT_CACHE, -1, process_mem_tracker());
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
+    _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, calc_max_update_memory(bytes_limit), nullptr);
     _update_mem_tracker->set_level(2);
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);

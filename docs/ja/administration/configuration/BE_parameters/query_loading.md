@@ -680,13 +680,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 60
 - タイプ: Int
 - 単位: パーセント
-<<<<<<< HEAD
-- 変更可能: いいえ
-- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `GlobalEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
-=======
 - 変更可能: はい
-- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `RuntimeEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。実行時にこの値を変更すると、更新用 `MemTracker` の上限、プライマリインデックスキャッシュの容量、およびそこから派生する update state、compaction state、プライマリインデックスブロックキャッシュの上限が再計算されます。この値を小さくすると、使用されていないプライマリインデックスキャッシュのエントリは即座に削除されますが、使用中のメモリは実行中のロードとコンパクションが完了した後に解放されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118))
+- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `GlobalEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。実行時にこの値を変更すると、更新用 `MemTracker` の上限、プライマリインデックスキャッシュの容量、およびそこから派生する update state、compaction state、プライマリインデックスブロックキャッシュの上限が再計算されます。この値を小さくすると、使用されていないプライマリインデックスキャッシュのエントリは即座に削除されますが、使用中のメモリは実行中のロードとコンパクションが完了した後に解放されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
 - 導入バージョン: v3.2.0
 
 ### vector_chunk_size

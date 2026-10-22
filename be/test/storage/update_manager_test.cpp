@@ -18,15 +18,6 @@
 
 #include <memory>
 
-<<<<<<< HEAD
-=======
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/scoped_updater.h"
-#include "column/chunk_factory.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/storage_define.h"
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118))
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -41,6 +32,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/assert.h"
+#include "testutil/scoped_updater.h"
 #include "util/failpoint/fail_point.h"
 
 using namespace std;
@@ -283,13 +275,8 @@ TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
     ASSERT_EQ(0, _root_mem_tracker->consumption());
 }
 
-<<<<<<< HEAD
-TEST_F(UpdateManagerTest, test_update_primary_index_memory_limit) {
-    const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
-=======
 TEST_F(UpdateManagerTest, test_refresh_mem_limits) {
-    const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118))
+    const int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     ASSERT_GT(process_mem_limit, 0);
     SCOPED_UPDATE(int32_t, config::update_memory_limit_percent, 60);
     MemTracker update_tracker(1000, "update");

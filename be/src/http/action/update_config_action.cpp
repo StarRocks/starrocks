@@ -216,13 +216,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() -> Status {
-            Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
-                    config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-            st = _exec_env->lake_update_manager()->update_primary_index_memory_limit(
-                    config::update_memory_limit_percent);
-#endif
-            return st;
+            GlobalEnv::GetInstance()->refresh_update_mem_limit();
+            StorageEngine::instance()->update_manager()->refresh_mem_limits();
+            auto* update_mgr = _exec_env->lake_update_manager();
+            if (update_mgr != nullptr) {
+                update_mgr->refresh_mem_limits();
+            }
+            LOG(INFO) << "Set update_memory_limit_percent: " << config::update_memory_limit_percent
+                      << ", update mem limit: " << GlobalEnv::GetInstance()->update_mem_tracker()->limit();
+            return Status::OK();
         });
         _config_callback.emplace("lake_pk_preload_memory_limit_percent", [&]() -> Status {
             auto* update_mgr = _exec_env->lake_update_manager();

@@ -189,18 +189,9 @@ public:
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-<<<<<<< HEAD:be/src/storage/lake/update_manager.h
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
-        return Status::OK();
-    }
-=======
     // Re-derive the index cache capacity, the block cache capacity and the update/compaction state tracker
     // limits from the current primary key mem tracker limit, after it changed.
     void refresh_mem_limits();
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118)):be/src/storage/lake/primary_key_manager.h
 
     // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
     void refresh_preload_mem_limit();

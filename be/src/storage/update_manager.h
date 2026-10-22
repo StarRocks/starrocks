@@ -144,17 +144,8 @@ public:
 
     string topn_memory_stats(size_t topn);
 
-<<<<<<< HEAD
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
-        return Status::OK();
-    }
-=======
     // Re-derive the index cache capacity from update_memory_limit_percent.
     void refresh_mem_limits();
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118))
 
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }

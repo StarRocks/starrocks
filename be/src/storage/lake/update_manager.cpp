@@ -63,12 +63,7 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_cache(std::numeric_limits<size_t>::max()),
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
-<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
     _update_mem_tracker = mem_tracker;
-    const int64_t update_mem_limit = _update_mem_tracker->limit();
-=======
-    _primary_key_mem_tracker = mem_tracker;
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118)):be/src/storage/lake/primary_key_manager.cpp
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
@@ -78,11 +73,6 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
-    _index_cache.set_capacity(update_mem_limit);
-
-=======
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118)):be/src/storage/lake/primary_key_manager.cpp
     _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
 
     refresh_mem_limits();
@@ -2359,17 +2349,13 @@ void UpdateManager::refresh_preload_mem_limit() {
     _compaction_state_mem_tracker->set_limit(preload_mem_limit);
 }
 
-<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
-void UpdateManager::_print_memory_stats() {
-=======
-void PrimaryKeyManager::refresh_mem_limits() {
+void UpdateManager::refresh_mem_limits() {
     refresh_preload_mem_limit();
-    _index_cache.set_capacity(_primary_key_mem_tracker->limit());
+    _index_cache.set_capacity(_update_mem_tracker->limit());
     refresh_block_cache_mem_limit();
 }
 
-void PrimaryKeyManager::_print_memory_stats() {
->>>>>>> b73acfe ([Enhancement] Make update_memory_limit_percent mutable (#81118)):be/src/storage/lake/primary_key_manager.cpp
+void UpdateManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
         LOG(INFO) << strings::Substitute(
