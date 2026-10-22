@@ -672,6 +672,74 @@ TEST(GeoCoverageTest, DensePointCellRetainsNodeInsideRemovalTriangle) {
     }
 }
 
+TEST(GeoCoverageTest, LongChordsAfterSubdivisionKeepBytes) {
+    // Initially short edges fit the grid. Removing collinear vertices creates
+    // chords spanning more than 64 cells and repeatedly replaces overflow edges.
+    constexpr size_t count = 64, segments = 16 * count, vertical = 8;
+    std::vector<std::string> inputs, expected;
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    for (size_t i = 0; i < count; ++i) {
+        const double x = (39 * i) % count, y = 3 * i;
+        std::vector<WkbCoordinate> ring{{x, y}};
+        ring.reserve(2 * segments + 2 * vertical + 1);
+        for (size_t j = 1; j <= vertical; ++j) ring.push_back({x, y + 2.0 * j / vertical});
+        for (size_t j = 1; j <= segments; ++j) ring.push_back({x + double(count) * j / segments, y + 2});
+        for (size_t j = 1; j <= vertical; ++j) ring.push_back({x + count, y + 2 - 2.0 * j / vertical});
+        for (size_t j = 1; j <= segments; ++j) ring.push_back({x + count - double(count) * j / segments, y});
+        polygon.rings = {std::move(ring)};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+        polygon.rings = {{{x, y}, {x, y + 2}, {x + count, y + 2}, {x + count, y}, {x, y}}};
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        expected.push_back(std::move(bytes));
+    }
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < count; ++i)
+            EXPECT_EQ(c->result(i)->value().to_string(), form == 0 ? inputs[i] : expected[i]);
+    }
+}
+
+TEST(GeoCoverageTest, SparseWideRectanglesKeepBytes) {
+    // Disjoint staggered rectangles with split vertical sides: long-edge
+    // queries cross many sparsely occupied short-edge cells (Copilot case).
+    constexpr size_t count = 64000, step = 39553; // floor(0.61803 * count).
+    std::vector<std::string> inputs;
+    inputs.reserve(count);
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    for (size_t i = 0; i < count; ++i) {
+        const double x = (step * i) % count, y = 3 * i;
+        polygon.rings = {
+                {{x, y}, {x, y + 1}, {x, y + 2}, {x + count, y + 2}, {x + count, y + 1}, {x + count, y}, {x, y}}};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+    }
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < count; ++i) {
+            auto expected = decoded(Slice(inputs[i]));
+            if (form != 0) {
+                auto& ring = expected.rings[0];
+                ring.erase(ring.begin() + 4);
+                ring.erase(ring.begin() + 1);
+            }
+            std::string bytes;
+            ASSERT_TRUE(WkbCodec::to_wkb(expected, &bytes, kCartesian).ok());
+            EXPECT_EQ(c->result(i)->value().to_string(), bytes);
+        }
+    }
+}
+
 TEST(GeoCoverageTest, LongEdgeOverflowKeepsStripCoverage) {
     // N horizontal strips tile an N x N square. Their N+1 horizontal edges
     // overflow the short-edge grid; cover both sides of the linear-list limit.

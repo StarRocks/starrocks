@@ -183,6 +183,12 @@ using BoxPoint = bg::model::d2::point_xy<long double>;
 using Box = bg::model::box<BoxPoint>;
 using Item = std::pair<Box, uint32_t>;
 using Tree = bgi::rtree<Item, bgi::quadratic<16>>;
+Tree insertion_tree(const std::vector<Item>& items) {
+    Tree tree;
+    for (const auto& item : items) tree.insert(item);
+    return tree;
+}
+
 // query() traverses recursively with stack storage. qbegin() in Boost 1.80
 // instead owns an uncustomizable std::vector path stack, so it is not used.
 template <class F>
@@ -192,7 +198,7 @@ struct QueryOutput {
     QueryOutput& operator++() { return *this; }
     QueryOutput operator++(int) { return *this; }
     QueryOutput& operator=(const Item& item) {
-        (*visitor)(item);
+        (*visitor)(item.second);
         return *this;
     }
 };
@@ -201,31 +207,119 @@ void query(const Tree& tree, const Box& box, F&& visitor) {
     tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
 }
 
-// Bound a cell scan to four 16-entry R-tree leaves. Dense partitions use the
-// packed tree rather than paying for the entire cluster on each local query.
+// A cell scan is at most four 16-entry R-tree leaves; linear overflow is
+// limited to one leaf. 64 cells per item leaves about 3x the observed query
+// work on large rings, while rejecting sparse, wide-query partitions.
 constexpr size_t kMaxGridCellEntries = 64;
+constexpr size_t kMaxGridOverflow = 16;
+constexpr size_t kGridQueryCellsPerItem = 64;
+// Measured maxima are 6 cells on coverage_10k and 40 on the 2048-edge rings.
+// A single wider query promotes the index, without a running work counter.
+constexpr size_t kMaxGridQueryCells = 64;
 
 template <class F>
-void query_ordered(const Tree& tree, const Box& box, std::vector<Item>& candidates, F&& visitor) {
+void query_ordered(const Tree& tree, const Box& box, std::vector<uint32_t>& candidates, F&& visitor) {
     candidates.clear();
-    query(tree, box, [&](const Item& item) { candidates.push_back(item); });
-    std::sort(candidates.begin(), candidates.end(), [](const Item& a, const Item& b) { return a.second < b.second; });
-    for (const auto& item : candidates) visitor(item);
+    query(tree, box, [&](uint32_t id) { candidates.push_back(id); });
+    std::sort(candidates.begin(), candidates.end());
+    for (uint32_t id : candidates) visitor(id);
 }
+
+struct CellRange {
+    size_t x0, y0, x1, y1;
+    size_t size() const { return (x1 - x0 + 1) * (y1 - y0 + 1); }
+    bool short_box() const { return x1 - x0 <= 1 && y1 - y0 <= 1; }
+};
+
+// Rounded monotone cell assignment selects candidates only; topology stays exact.
+// The span term bounds cell storage by O(N), including thin partitions.
+struct Grid {
+    double xmin = 0, ymin = 0, inverse = 0;
+    size_t nx = 0, ny = 0, links = 0;
+    std::vector<size_t> counts;
+    static Grid layout(const std::vector<Item>& items, bool edges) {
+        Grid result;
+        if (items.empty()) return result;
+        double xmin = std::numeric_limits<double>::infinity(), ymin = xmin;
+        double xmax = -xmin, ymax = -xmin;
+        std::vector<double> lengths;
+        if (edges) lengths.reserve(items.size());
+        for (const auto& item : items) {
+            const double x0 = bg::get<bg::min_corner, 0>(item.first), y0 = bg::get<bg::min_corner, 1>(item.first);
+            const double x1 = bg::get<bg::max_corner, 0>(item.first), y1 = bg::get<bg::max_corner, 1>(item.first);
+            xmin = std::min(xmin, x0);
+            ymin = std::min(ymin, y0);
+            xmax = std::max(xmax, x1);
+            ymax = std::max(ymax, y1);
+            if (edges) lengths.push_back(std::max(x1 - x0, y1 - y0));
+        }
+        const double dx = xmax - xmin, dy = ymax - ymin;
+        double width = std::max(dx, dy) / std::sqrt(double(items.size()));
+        if (edges) {
+            auto middle = lengths.begin() + lengths.size() / 2;
+            std::nth_element(lengths.begin(), middle, lengths.end());
+            width = std::max(width, *middle);
+        }
+        const double scale = 1 / width;
+        if (std::isfinite(dx) && std::isfinite(dy) && width > 0 && std::isfinite(width) && scale > 0 &&
+            std::isfinite(scale)) {
+            result.xmin = xmin;
+            result.ymin = ymin;
+            result.inverse = scale;
+            result.nx = size_t(dx * scale) + 1;
+            result.ny = size_t(dy * scale) + 1;
+        }
+        return result;
+    }
+    CellRange range(double x0, double y0, double x1, double y1) const {
+        auto cell = [&](double value, double origin, size_t count) {
+            return size_t(std::clamp((value - origin) * inverse, 0.0, double(count - 1)));
+        };
+        return {cell(x0, xmin, nx), cell(y0, ymin, ny), cell(x1, xmin, nx), cell(y1, ymin, ny)};
+    }
+    bool fits(const std::vector<Item>& items, const std::vector<Item>& edges, size_t nodes) {
+        if (!nx) return false;
+        counts.assign(nx * ny + 1, 0);
+        size_t overflow = 0;
+        size_t remaining = kGridQueryCellsPerItem * items.size(), width = 1, height = 1;
+        const auto cell_range = [&](const Item& item) {
+            return range(bg::get<bg::min_corner, 0>(item.first), bg::get<bg::min_corner, 1>(item.first),
+                         bg::get<bg::max_corner, 0>(item.first), bg::get<bg::max_corner, 1>(item.first));
+        };
+        const auto query_work = [&](const CellRange& r) {
+            if (r.size() > remaining) return false;
+            remaining -= r.size();
+            width = std::max(width, r.x1 - r.x0 + 1);
+            height = std::max(height, r.y1 - r.y0 + 1);
+            return true;
+        };
+        for (const auto& item : items) {
+            const auto r = cell_range(item);
+            if (&items == &edges && !query_work(r)) return false;
+            if (!r.short_box()) {
+                if (++overflow > kMaxGridOverflow) return false;
+            } else {
+                links += r.size();
+                for (size_t y = r.y0; y <= r.y1; ++y)
+                    for (size_t x = r.x0; x <= r.x1; ++x)
+                        if (++counts[y * nx + x + 1] > kMaxGridCellEntries) return false;
+            }
+        }
+        if (&items != &edges)
+            for (const auto& edge : edges)
+                if (!query_work(cell_range(edge))) return false;
+        // A first removal triangle spans two adjacent original edges. Their
+        // cell spans bound each triangle by (2*width-1)*(2*height-1), without
+        // another pass over the graph's node/occurrence adjacency.
+        return (2 * width - 1) * (2 * height - 1) <= remaining / nodes;
+    }
+};
 
 size_t grid_cell(double value, double origin, double inverse, size_t count) {
     return size_t(std::clamp((value - origin) * inverse, 0.0, double(count - 1)));
 }
 
-// A uniform candidate grid for short edges. Each short box occupies at most
-// four cells; long boxes use a bounded list or R-tree, so storage remains O(E).
-// Cell assignment is monotone in each coordinate. Applying the same rounded
-// assignment to both closed boxes cannot miss an intersection. Original bounds
-// filter candidates before the exact predicates; cell arithmetic decides no
-// topology. Extreme/degenerate ranges retain the wide R-tree.
 class EdgeGrid {
-    // Bound linear overflow work to one 16-entry R-tree leaf per grid query.
-    static constexpr size_t kMaxLinearOverflowEdges = 16;
     static constexpr size_t absent = std::numeric_limits<size_t>::max();
     struct Entry {
         double xmin, ymin, xmax, ymax;
@@ -240,7 +334,6 @@ class EdgeGrid {
         uint32_t edge;
     };
     Tree fallback;
-    std::vector<Item> tree_candidates;
     std::vector<Entry> entries;
     std::vector<Link> links;
     std::vector<size_t> heads;
@@ -295,71 +388,49 @@ class EdgeGrid {
     }
 
 public:
-    void build(const std::vector<Item>& items) {
-        if (!items.empty()) {
-            std::vector<double> lengths;
-            lengths.reserve(items.size());
-            Entry all = entry(items.front().first);
-            for (const auto& item : items) {
-                const Entry e = entry(item.first);
-                all.xmin = std::min(all.xmin, e.xmin);
-                all.ymin = std::min(all.ymin, e.ymin);
-                all.xmax = std::max(all.xmax, e.xmax);
-                all.ymax = std::max(all.ymax, e.ymax);
-                lengths.push_back(std::max(e.xmax - e.xmin, e.ymax - e.ymin));
-            }
-            auto middle = lengths.begin() + lengths.size() / 2;
-            std::nth_element(lengths.begin(), middle, lengths.end());
-            const double dx = all.xmax - all.xmin, dy = all.ymax - all.ymin;
-            // The partition-span term bounds the number of cells by O(E),
-            // including thin partitions and very small median edge lengths.
-            const double width = std::max(*middle, std::max(dx, dy) / std::sqrt(double(items.size())));
-            const double scale = 1 / width;
-            if (std::isfinite(dx) && std::isfinite(dy) && width > 0 && std::isfinite(width) && scale > 0 &&
-                std::isfinite(scale)) {
-                xmin = all.xmin;
-                ymin = all.ymin;
-                inverse = scale;
-                nx = size_t(dx * scale) + 1;
-                ny = size_t(dy * scale) + 1;
-                heads.assign(nx * ny, absent);
-                entries.reserve(items.size());
-                links.reserve(items.size());
-                for (const auto& item : items) {
-                    append(item);
-                }
-                for (size_t head : heads) {
-                    size_t count = 0;
-                    for (size_t id = head; id != absent; id = links[id].next) {
-                        if (++count > kMaxGridCellEntries) {
-                            nx = ny = 0;
-                            entries.clear();
-                            links.clear();
-                            heads.clear();
-                            overflow.clear();
-                            fallback = Tree(items.begin(), items.end());
-                            return;
-                        }
-                    }
-                }
-                if (overflow.size() > kMaxLinearOverflowEdges) index_overflow();
-                return;
-            }
+    void build(const std::vector<Item>& items, Grid layout, size_t nodes) {
+        xmin = layout.xmin;
+        ymin = layout.ymin;
+        inverse = layout.inverse;
+        nx = layout.nx;
+        ny = layout.ny;
+        if (!nx) {
+            fallback = insertion_tree(items);
+            return;
         }
-        fallback = Tree(items.begin(), items.end());
+        heads = std::move(layout.counts);
+        heads.pop_back();
+        std::fill(heads.begin(), heads.end(), absent);
+        // Each removed node creates at most one fresh chord. Admission also
+        // counted the initial links, so neither array needs a guessed capacity.
+        entries.reserve(items.size() + nodes);
+        links.reserve(layout.links);
+        for (const auto& item : items) append(item);
     }
-    size_t size() const { return nx ? entries.size() : fallback.size(); }
+    bool is_grid() const { return nx != 0; }
+    void use_tree() {
+        std::vector<Item> items;
+        items.reserve(entries.size());
+        for (uint32_t i = 0; i < entries.size(); ++i)
+            if (entries[i].active) items.push_back({box(entries[i]), i});
+        fallback = insertion_tree(items);
+        nx = ny = 0;
+        entries.clear();
+        links.clear();
+        heads.clear();
+        overflow.clear();
+    }
+    void erase_tree(const Item& item) { fallback.remove(item); }
     void insert(const Item& item) {
         if (nx) {
             append(item);
             // A runtime promotion copies at most 17 entries.
-            if (!overflow_indexed && overflow.size() > kMaxLinearOverflowEdges) index_overflow();
+            if (!overflow_indexed && overflow.size() > kMaxGridOverflow) index_overflow();
         } else {
             fallback.insert(item);
         }
     }
     void erase(uint32_t id) {
-        if (!nx) return; // The legacy tree filters inactive historical edges.
         auto& e = entries[id];
         for (unsigned i = 0; i < e.count; ++i) {
             const size_t id = e.links[i];
@@ -373,6 +444,7 @@ public:
             free = id;
         }
         if (e.overflow != absent) {
+            // The grid filters stale overflow entries; full-tree mode removes them.
             const uint32_t last = overflow.back();
             overflow[e.overflow] = last;
             entries[last].overflow = e.overflow;
@@ -383,7 +455,7 @@ public:
     template <class F>
     void visit(const Box& query_box, F&& visitor) {
         if (!nx) {
-            query_ordered(fallback, query_box, tree_candidates, visitor);
+            query_ordered(fallback, query_box, candidates, visitor);
             return;
         }
         const Entry q = entry(query_box);
@@ -398,19 +470,20 @@ public:
         };
         const size_t x0 = cell(q.xmin, xmin, nx), x1 = cell(q.xmax, xmin, nx);
         const size_t y0 = cell(q.ymin, ymin, ny), y1 = cell(q.ymax, ymin, ny);
-        if ((x1 - x0 + 1) * (y1 - y0 + 1) > entries.size()) {
-            for (uint32_t i = 0; i < entries.size(); ++i) collect(i);
-        } else {
-            for (size_t y = y0; y <= y1; ++y)
-                for (size_t x = x0; x <= x1; ++x)
-                    for (size_t id = heads[y * nx + x]; id != absent; id = links[id].next) collect(links[id].edge);
-            if (overflow_indexed)
-                query(fallback, query_box, [&](const Item& item) { collect(item.second); });
-            else
-                for (uint32_t id : overflow) collect(id);
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > kMaxGridQueryCells) {
+            use_tree();
+            query_ordered(fallback, query_box, candidates, visitor);
+            return;
         }
+        for (size_t y = y0; y <= y1; ++y)
+            for (size_t x = x0; x <= x1; ++x)
+                for (size_t id = heads[y * nx + x]; id != absent; id = links[id].next) collect(links[id].edge);
+        if (overflow_indexed)
+            query(fallback, query_box, collect);
+        else
+            for (uint32_t id : overflow) collect(id);
         std::sort(candidates.begin(), candidates.end());
-        for (uint32_t id : candidates) visitor(Item{box(entries[id]), id});
+        for (uint32_t id : candidates) visitor(id);
     }
 };
 template <class F>
@@ -418,16 +491,14 @@ void query(EdgeGrid& grid, const Box& box, F&& visitor) {
     grid.visit(box, std::forward<F>(visitor));
 }
 
-// Immutable point index: one compact entry per node and contiguous cell ranges.
-// Query order cannot affect the boolean triangle-safety decision. Removed nodes
-// remain indexed and are filtered by the caller, as in the original node tree.
+// Point cells are immutable; the kernel filters inactive nodes. Promotion
+// copies only active nodes, and subsequent removals update the R-tree.
 class PointGrid {
     struct Point {
         double x, y;
         uint32_t id;
     };
     Tree fallback;
-    mutable std::vector<Item> tree_candidates;
     std::vector<Point> points;
     std::vector<size_t> offsets;
     double xmin = 0, ymin = 0, inverse = 0;
@@ -436,39 +507,17 @@ class PointGrid {
     size_t ycell(double y) const { return grid_cell(y, ymin, inverse, ny); }
 
 public:
-    void build(const std::vector<Item>& items) {
-        if (items.empty()) return;
-        xmin = ymin = std::numeric_limits<double>::infinity();
-        double xmax = -xmin, ymax = -ymin;
-        for (const auto& item : items) {
-            const double x = bg::get<bg::min_corner, 0>(item.first), y = bg::get<bg::min_corner, 1>(item.first);
-            xmin = std::min(xmin, x);
-            ymin = std::min(ymin, y);
-            xmax = std::max(xmax, x);
-            ymax = std::max(ymax, y);
-        }
-        const double dx = xmax - xmin, dy = ymax - ymin;
-        // The span term bounds cell count by O(N), including thin partitions.
-        const double width = std::max(dx, dy) / std::sqrt(double(items.size()));
-        inverse = 1 / width;
-        if (!std::isfinite(dx) || !std::isfinite(dy) || !(width > 0) || !std::isfinite(width) || !(inverse > 0) ||
-            !std::isfinite(inverse)) {
-            fallback = Tree(items.begin(), items.end());
+    void build(const std::vector<Item>& items, Grid layout) {
+        xmin = layout.xmin;
+        ymin = layout.ymin;
+        inverse = layout.inverse;
+        nx = layout.nx;
+        ny = layout.ny;
+        if (!nx) {
+            fallback = insertion_tree(items);
             return;
         }
-        nx = size_t(dx * inverse) + 1;
-        ny = size_t(dy * inverse) + 1;
-        offsets.assign(nx * ny + 1, 0);
-        for (const auto& item : items) {
-            const double x = bg::get<bg::min_corner, 0>(item.first), y = bg::get<bg::min_corner, 1>(item.first);
-            ++offsets[ycell(y) * nx + xcell(x) + 1];
-        }
-        if (*std::max_element(offsets.begin(), offsets.end()) > kMaxGridCellEntries) {
-            nx = ny = 0;
-            offsets.clear();
-            fallback = Tree(items.begin(), items.end());
-            return;
-        }
+        offsets = std::move(layout.counts);
         std::partial_sum(offsets.begin(), offsets.end(), offsets.begin());
         std::vector<size_t> next(offsets);
         points.resize(items.size());
@@ -477,28 +526,44 @@ public:
             points[next[ycell(y) * nx + xcell(x)]++] = {x, y, item.second};
         }
     }
-    template <class F>
-    void visit(const Box& box, F&& visitor) const {
+    template <class Active>
+    void use_tree(Active&& active) {
+        std::vector<Item> items;
+        items.reserve(points.size());
+        for (const auto& p : points)
+            if (active(p.id)) items.push_back({{{p.x, p.y}, {p.x, p.y}}, p.id});
+        fallback = insertion_tree(items);
+        nx = ny = 0;
+        points.clear();
+        offsets.clear();
+    }
+    void erase(uint32_t id, double x, double y) {
+        if (!nx) fallback.remove({{{x, y}, {x, y}}, id});
+    }
+    template <class F, class Active>
+    void visit(const Box& box, F&& visitor, Active&& active) {
         if (!nx) {
-            query_ordered(fallback, box, tree_candidates, visitor);
+            query(fallback, box, visitor);
             return;
         }
         const double x0 = bg::get<bg::min_corner, 0>(box), y0 = bg::get<bg::min_corner, 1>(box);
         const double x1 = bg::get<bg::max_corner, 0>(box), y1 = bg::get<bg::max_corner, 1>(box);
-        for (size_t y = ycell(y0); y <= ycell(y1); ++y)
-            for (size_t x = xcell(x0); x <= xcell(x1); ++x) {
+        const size_t cx0 = xcell(x0), cy0 = ycell(y0), cx1 = xcell(x1), cy1 = ycell(y1);
+        if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > kMaxGridQueryCells) {
+            use_tree(active);
+            query(fallback, box, visitor);
+            return;
+        }
+        for (size_t y = cy0; y <= cy1; ++y)
+            for (size_t x = cx0; x <= cx1; ++x) {
                 const size_t cell = y * nx + x;
                 for (size_t i = offsets[cell]; i < offsets[cell + 1]; ++i) {
                     const auto& p = points[i];
-                    if (x0 <= p.x && p.x <= x1 && y0 <= p.y && p.y <= y1) visitor(Item{{{p.x, p.y}, {p.x, p.y}}, p.id});
+                    if (x0 <= p.x && p.x <= x1 && y0 <= p.y && p.y <= y1) visitor(p.id);
                 }
             }
     }
 };
-template <class F>
-void query(const PointGrid& grid, const Box& box, F&& visitor) {
-    grid.visit(box, std::forward<F>(visitor));
-}
 
 template <class Integer>
 Box bounds(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
@@ -848,12 +913,6 @@ struct Kernel {
             auto& node = nodes[occurrences[o].node];
             node_occurrence_ids[node.first + node.count++] = o;
         }
-        std::vector<Item> items;
-        items.reserve(nodes.size());
-        for (uint32_t n = 0; n < nodes.size(); ++n) {
-            items.push_back({bounds(nodes[n].point, nodes[n].point), n});
-        }
-        node_tree.build(items);
     }
     void add_edge(uint32_t occurrence, bool indexed = true) {
         uint32_t a = occurrences[occurrence].node, b = occurrences[occurrences[occurrence].next].node;
@@ -869,10 +928,10 @@ struct Kernel {
     }
     void erase_edge(uint32_t id) {
         auto& edge = edges[id];
-        // The grid unlinks the entry. Its wide-tree fallback keeps historical
-        // entries and filters inactive edges: Boost 1.80 remove() uses an
-        // uncustomizable underflow std::vector outside the captured allocator.
-        edge_tree.erase(id);
+        if (edge_tree.is_grid())
+            edge_tree.erase(id);
+        else
+            edge_tree.erase_tree({bounds(nodes[edge.a].point, nodes[edge.b].point), id});
         edge_map.erase(key(edge.a, edge.b));
         edge.active = false;
     }
@@ -884,7 +943,14 @@ struct Kernel {
         for (uint32_t i = 0; i < edges.size(); ++i) {
             items.push_back({bounds(nodes[edges[i].a].point, nodes[edges[i].b].point), i});
         }
-        edge_tree.build(items);
+        std::vector<Item> points;
+        points.reserve(nodes.size());
+        for (uint32_t n = 0; n < nodes.size(); ++n) points.push_back({bounds(nodes[n].point, nodes[n].point), n});
+        auto edges_grid = Grid::layout(items, true), points_grid = Grid::layout(points, false);
+        const bool use_grid =
+                edges_grid.fits(items, items, nodes.size()) && points_grid.fits(points, items, nodes.size());
+        edge_tree.build(items, use_grid ? std::move(edges_grid) : Grid{}, nodes.size());
+        node_tree.build(points, use_grid ? std::move(points_grid) : Grid{});
         std::vector<unsigned> degree(nodes.size(), 0);
         for (const auto& edge : edges) {
             ++degree[edge.a];
@@ -1046,8 +1112,7 @@ struct Kernel {
                     side(edge.owners[0], edge) == side(edge.owners[1], edge))
                     invalid("ST_CoverageSimplify overlapping polygon boundary owners");
             }
-            query(spatial_edges, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](const Item& item) {
-                uint32_t j = item.second;
+            query(spatial_edges, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](uint32_t j) {
                 if (j <= i || !edges[j].active) return;
                 const auto& other = edges[j];
                 Contact c =
@@ -1088,8 +1153,8 @@ struct Kernel {
             const auto& bounds = locations.rings[component.first];
             Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
                     {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
-            query(polygons, box, [&](const Item& item) {
-                const auto& other = components[item.second];
+            query(polygons, box, [&](uint32_t other_id) {
+                const auto& other = components[other_id];
                 for (uint32_t r = 0; r < component.count; ++r)
                     if (relation(rings[component.first + r], other, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
@@ -1138,8 +1203,7 @@ struct Kernel {
         const auto& r = nodes[c].point;
         uint32_t left = edge_map.at(key(a, n)), right = edge_map.at(key(n, c));
         bool safe = true;
-        query(edge_tree, bounds(p, r), [&](const Item& item) {
-            uint32_t id = item.second;
+        query(edge_tree, bounds(p, r), [&](uint32_t id) {
             if (id == left || id == right || !edges[id].active || !safe) return;
             const auto& e = edges[id];
             auto kind = contact(p, r, nodes[e.a].point, nodes[e.b].point);
@@ -1151,14 +1215,16 @@ struct Kernel {
         if (area != 0) {
             Box box{{std::min({p.x, q.x, r.x}), std::min({p.y, q.y, r.y})},
                     {std::max({p.x, q.x, r.x}), std::max({p.y, q.y, r.y})}};
-            query(node_tree, box, [&](const Item& item) {
-                uint32_t id = item.second;
-                if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
-                const auto& point = nodes[id].point;
-                int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
-                    z = sign(orientation(r, p, point));
-                if ((x >= 0 && y >= 0 && z >= 0) || (x <= 0 && y <= 0 && z <= 0)) safe = false;
-            });
+            node_tree.visit(
+                    box,
+                    [&](uint32_t id) {
+                        if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
+                        const auto& point = nodes[id].point;
+                        int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
+                            z = sign(orientation(r, p, point));
+                        if ((x >= 0 && y >= 0 && z >= 0) || (x <= 0 && y <= 0 && z <= 0)) safe = false;
+                    },
+                    [&](uint32_t id) { return nodes[id].active; });
             if (!safe) return false;
         }
         for (uint32_t o : node_occurrences(n)) {
@@ -1186,6 +1252,7 @@ struct Kernel {
             occurrence.active = false;
             add_edge(occurrence.previous);
         }
+        node_tree.erase(n, nodes[n].point.x, nodes[n].point.y);
         nodes[n].active = false;
         ++nodes[a].version;
         ++nodes[c].version;
