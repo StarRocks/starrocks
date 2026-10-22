@@ -564,21 +564,25 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
         return Status::OK();
     };
 
+    // Build the update-file iterators once for the whole pass. get_each_segment_iterator() loads every
+    // update segment and constructs one iterator per segment, so calling it inside the loop below
+    // would construct and close num_upt squared iterators while consuming only one per iteration.
+    OlapReaderStatistics stats;
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    RETURN_ERROR_IF_FALSE(segment_iters.size() == num_upt);
+    DeferOp close_iters([&]() {
+        for (auto& iter : segment_iters) {
+            if (iter != nullptr) {
+                iter->close();
+            }
+        }
+    });
+
     for (uint32_t upt_id = 0; upt_id < num_upt; upt_id++) {
         auto& entries = per_upt[upt_id];
         if (entries.empty()) {
             continue;
         }
-        OlapReaderStatistics stats;
-        ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
-        RETURN_ERROR_IF_FALSE(segment_iters.size() == num_upt);
-        DeferOp close_iters([&]() {
-            for (auto& iter : segment_iters) {
-                if (iter != nullptr) {
-                    iter->close();
-                }
-            }
-        });
         if (segment_iters[upt_id] == nullptr) {
             // A lost update-file segment ignored via experimental_lake_ignore_lost_segment produces
             // no rowid pairs, so this should not happen; keep the old behaviour of skipping it.
