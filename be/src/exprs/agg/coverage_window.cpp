@@ -21,7 +21,6 @@
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "exprs/function_context.h"
-#include "runtime/memory/memory_allocator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -120,8 +119,7 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
                                                  int64_t start, int64_t end) const {
     if (!input || start < 0 || end < start || (!input->is_constant() && uint64_t(end) > input->size()))
         return Status::InvalidArgument("ST_CoverageSimplify invalid input partition");
-    ASSIGN_OR_RETURN(state.core,
-                     GeoCoverageSimplify::create(memory::get_default_allocator(), {}, {ctx->state(), checkpoint}));
+    ASSIGN_OR_RETURN(state.core, GeoCoverageSimplify::create({ctx->state(), checkpoint}));
     const bool skip = !state.tolerance || !state.boundary;
     for (int64_t row = start; row < end; ++row) {
         if ((row - start) % 128 == 0) RETURN_IF_ERROR(checkpoint(ctx->state()));

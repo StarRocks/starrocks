@@ -63,6 +63,15 @@ public abstract class SecurityIntegration {
 
     public abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
+    /**
+     * The issuers (iss) this integration accepts, used to route an HTTP/Arrow Flight Bearer token
+     * to the right integration. Only token-based integrations (JWT / OAuth2) participate; the
+     * default empty array means "never matched by Bearer routing" (e.g. LDAP).
+     */
+    public String[] getRequiredIssuer() {
+        return new String[0];
+    }
+
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
     }
@@ -71,6 +80,15 @@ public abstract class SecurityIntegration {
         if (!propertyMap.containsKey(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY)) {
             throw new SemanticException("missing required property: " + SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
         }
+    }
+
+    /**
+     * Validate the properties an {@code ALTER SECURITY INTEGRATION} sets, before they are merged
+     * into this integration's. ALTER does not go through {@link #checkProperty()}, and must not:
+     * only what the statement mentions is checked, so an integration created before a validation
+     * existed can still be altered. Types with no per-property rules keep this no-op.
+     */
+    public void checkAlteredProperties(Map<String, String> alteredProperties) throws SemanticException {
     }
 
     public List<String> getGroupProviderName() {
@@ -87,7 +105,7 @@ public abstract class SecurityIntegration {
      * only removed whitespace that followed a comma, which left a trailing blank on items such as "a "
      * and made them compare unequal to everything.
      */
-    private static List<String> splitCommaSeparated(String property) {
+    protected static List<String> splitCommaSeparated(String property) {
         if (property == null || property.isBlank()) {
             return List.of();
         }

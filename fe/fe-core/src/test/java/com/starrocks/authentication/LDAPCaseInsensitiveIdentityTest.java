@@ -16,6 +16,8 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -184,7 +186,9 @@ public class LDAPCaseInsensitiveIdentityTest {
 
         for (String typed : new String[] {"ldap_user", "LDAP_USER", "Ldap_User"}) {
             ConnectContext context = newLdapClientContext();
-            AuthenticationHandler.authenticate(context, typed, "%", AUTH_RESPONSE);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials(typed, AUTH_RESPONSE,
+                            AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
 
             Assertions.assertEquals("ldap_user", context.getQualifiedUser(),
                     "login as '" + typed + "' must resolve to the stored user");
@@ -202,9 +206,13 @@ public class LDAPCaseInsensitiveIdentityTest {
         Config.authentication_ldap_case_insensitive = false;
         createLdapUser("ldap_user");
 
-        AuthenticationHandler.authenticate(newLdapClientContext(), "ldap_user", "%", AUTH_RESPONSE);
+        AuthenticationHandler.authenticate(newLdapClientContext(),
+                MysqlProto.handshakeCredentials("ldap_user", AUTH_RESPONSE,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         Assertions.assertThrows(AuthenticationException.class,
-                () -> AuthenticationHandler.authenticate(newLdapClientContext(), "LDAP_USER", "%", AUTH_RESPONSE));
+                () -> AuthenticationHandler.authenticate(newLdapClientContext(),
+                        MysqlProto.handshakeCredentials("LDAP_USER", AUTH_RESPONSE,
+                                AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%")));
     }
 
     /**
@@ -217,11 +225,13 @@ public class LDAPCaseInsensitiveIdentityTest {
         Config.authentication_ldap_case_insensitive = true;
         createNativeUser("native_user");
 
-        AuthenticationHandler.authenticate(new ConnectContext(), "native_user", "%",
-                "\0".getBytes(StandardCharsets.UTF_8));
+        AuthenticationHandler.authenticate(new ConnectContext(),
+                MysqlProto.handshakeCredentials("native_user", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
         Assertions.assertThrows(AuthenticationException.class,
-                () -> AuthenticationHandler.authenticate(new ConnectContext(), "Native_User", "%",
-                        "\0".getBytes(StandardCharsets.UTF_8)));
+                () -> AuthenticationHandler.authenticate(new ConnectContext(),
+                        MysqlProto.handshakeCredentials("Native_User", MysqlPassword.EMPTY_PASSWORD,
+                                AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%")));
     }
 
     /**
@@ -241,7 +251,9 @@ public class LDAPCaseInsensitiveIdentityTest {
         // one directory account, so typing 'Allen' must not be a way to select its privilege set.
         for (String typed : new String[] {"ALLEN", "Allen", "allen"}) {
             AuthenticationException e = Assertions.assertThrows(AuthenticationException.class,
-                    () -> AuthenticationHandler.authenticate(newLdapClientContext(), typed, "%", AUTH_RESPONSE),
+                    () -> AuthenticationHandler.authenticate(newLdapClientContext(),
+                            MysqlProto.handshakeCredentials(typed, AUTH_RESPONSE,
+                                    AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%")),
                     "login as '" + typed + "' is ambiguous and must be refused");
             Assertions.assertFalse(e.getMessage().contains("'Allen'") || e.getMessage().contains("'allen'"),
                     "the message must not disclose the stored user names, got: " + e.getMessage());
@@ -261,7 +273,9 @@ public class LDAPCaseInsensitiveIdentityTest {
         Config.authentication_ldap_case_insensitive = true;
 
         ConnectContext context = new ConnectContext();
-        AuthenticationHandler.authenticate(context, "allen", "%", "\0".getBytes(StandardCharsets.UTF_8));
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("allen", MysqlPassword.EMPTY_PASSWORD,
+                        AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
         Assertions.assertEquals("allen", context.getQualifiedUser());
     }
 
@@ -347,7 +361,9 @@ public class LDAPCaseInsensitiveIdentityTest {
 
         for (String typed : new String[] {"Allen", "aLLEN", "ALLEN", "allen"}) {
             ConnectContext context = newLdapClientContext();
-            AuthenticationHandler.authenticate(context, typed, "%", AUTH_RESPONSE);
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials(typed, AUTH_RESPONSE,
+                            AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
 
             Assertions.assertEquals(DIRECTORY_SPELLING, context.getQualifiedUser(),
                     "login as '" + typed + "' must collapse to the directory's spelling");
@@ -368,7 +384,9 @@ public class LDAPCaseInsensitiveIdentityTest {
                 "uid=${USER},ou=people,dc=example,dc=com"));
 
         ConnectContext context = newLdapClientContext();
-        AuthenticationHandler.authenticate(context, "aLLEN", "%", AUTH_RESPONSE);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("aLLEN", AUTH_RESPONSE,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         Assertions.assertEquals("allen", context.getQualifiedUser());
     }
 
@@ -396,7 +414,9 @@ public class LDAPCaseInsensitiveIdentityTest {
         };
 
         ConnectContext context = newLdapClientContext();
-        AuthenticationHandler.authenticate(context, "aLLEN", "%", AUTH_RESPONSE);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("aLLEN", AUTH_RESPONSE,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         Assertions.assertEquals("allen", context.getQualifiedUser());
     }
 
@@ -411,7 +431,9 @@ public class LDAPCaseInsensitiveIdentityTest {
         createLdapSecurityIntegration(Map.of());
 
         ConnectContext context = newLdapClientContext();
-        AuthenticationHandler.authenticate(context, "aLLEN", "%", AUTH_RESPONSE);
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("aLLEN", AUTH_RESPONSE,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         Assertions.assertEquals("aLLEN", context.getQualifiedUser());
     }
 
@@ -428,7 +450,9 @@ public class LDAPCaseInsensitiveIdentityTest {
                 SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, LDAP_GROUP_PROVIDER,
                 SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "  finance , ENGINEERING ,ops "));
 
-        AuthenticationHandler.authenticate(newLdapClientContext(), "Allen", "%", AUTH_RESPONSE);
+        AuthenticationHandler.authenticate(newLdapClientContext(),
+                MysqlProto.handshakeCredentials("Allen", AUTH_RESPONSE,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
     }
 
     /**
@@ -444,7 +468,9 @@ public class LDAPCaseInsensitiveIdentityTest {
                 SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "finance"));
 
         AuthenticationException e = Assertions.assertThrows(AuthenticationException.class,
-                () -> AuthenticationHandler.authenticate(newLdapClientContext(), "Allen", "%", AUTH_RESPONSE));
+                () -> AuthenticationHandler.authenticate(newLdapClientContext(),
+                        MysqlProto.handshakeCredentials("Allen", AUTH_RESPONSE,
+                                AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%")));
         Assertions.assertTrue(e.getMessage().contains("Engineering"),
                 "the message must show the groups the directory returned, got: " + e.getMessage());
         Assertions.assertTrue(e.getMessage().contains("permitted_groups[finance]"),

@@ -42,6 +42,10 @@ public:
     const GlobalDictMaps& load_global_dicts() const { return _load_global_dicts; }
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const { return _load_dict_versions; }
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_content_identities() const {
+        return _load_dict_content_identities;
+    }
+
     DictOptimizeParser* mutable_dict_optimize_parser();
 
     Status init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list);
@@ -52,11 +56,13 @@ public:
 
 private:
     Status _build_global_dict(MemPool* mem_pool, const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version);
+                              phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version,
+                              phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_identity = nullptr);
 
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_content_identities;
     std::unique_ptr<DictOptimizeParser> _dict_optimize_parser;
 };
 

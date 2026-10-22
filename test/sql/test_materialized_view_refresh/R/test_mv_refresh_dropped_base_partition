@@ -314,3 +314,120 @@ drop materialized view mv_list;
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_mv_refresh_dropped_base_partition_across_batches
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_f VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-07-11 00:00:00', 2, 20),
+                          ('2026-08-10 00:00:00', 3, 30), ('2026-08-11 00:00:00', 4, 40);
+-- result:
+-- !result
+create materialized view mv_batched
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1", "partition_refresh_number" = "1", "partition_refresh_strategy" = "strict")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+refresh materialized view mv_batched;
+function: wait_mv_refresh_count("db_${uuid0}", "mv_batched", 2)
+-- result:
+None
+-- !result
+ALTER TABLE base_f DROP PARTITION p20260710;
+-- result:
+-- !result
+ALTER TABLE base_f DROP PARTITION p20260810;
+-- result:
+-- !result
+refresh materialized view mv_batched;
+function: wait_mv_refresh_count("db_${uuid0}", "mv_batched", 4)
+-- result:
+None
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select date_trunc('month', event_day) as m, sum(imp) from base_f group by m order by m;
+-- result:
+2026-07-01 00:00:00	20
+2026-08-01 00:00:00	40
+-- !result
+select date_trunc('month', event_day) as m, sum(imp) from mv_batched group by m order by m;
+-- result:
+2026-07-01 00:00:00	20
+2026-08-01 00:00:00	40
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_mv_refresh_dropped_base_partition_across_partial_refresh
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_f VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-07-11 00:00:00', 2, 20),
+                          ('2026-08-10 00:00:00', 3, 30);
+-- result:
+-- !result
+create materialized view mv_partial
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1", "partition_refresh_number" = "-1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- result:
+-- !result
+refresh materialized view mv_partial with sync mode;
+ALTER TABLE base_f DROP PARTITION p20260710;
+-- result:
+-- !result
+INSERT INTO base_f VALUES ('2026-08-10 00:00:00', 3, 5);
+-- result:
+-- !result
+refresh materialized view mv_partial partition start ('2026-08-01') end ('2026-09-01') with sync mode;
+refresh materialized view mv_partial with sync mode;
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select date_trunc('month', event_day) as m, sum(imp) from base_f group by m order by m;
+-- result:
+2026-07-01 00:00:00	20
+2026-08-01 00:00:00	35
+-- !result
+select date_trunc('month', event_day) as m, sum(imp) from mv_partial group by m order by m;
+-- result:
+2026-07-01 00:00:00	20
+2026-08-01 00:00:00	35
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

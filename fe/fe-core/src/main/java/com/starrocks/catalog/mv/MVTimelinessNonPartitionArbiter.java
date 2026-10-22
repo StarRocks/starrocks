@@ -32,6 +32,7 @@ import java.util.List;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
+import static com.starrocks.catalog.MvRefreshArbiter.hasUntrackedRows;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
@@ -81,6 +82,10 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
 
             if (hasDeletedPartitions(mv, table, /* pinnedVersionRange */ null)) {
                 logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+
+            if (hasUntrackedRows(mv, table)) {
                 return MvUpdateInfo.fullRefresh(mv);
             }
         }

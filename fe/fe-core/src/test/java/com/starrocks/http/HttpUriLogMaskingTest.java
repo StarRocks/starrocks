@@ -114,11 +114,8 @@ public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
             }
         });
 
-        // HttpServerHandler logs every request at DEBUG, BaseAction the missing auth information at INFO, and
-        // RestBaseAction the rejected request at WARN.
+        // HttpServerHandler logs every request at DEBUG, and RestBaseAction the rejected request at WARN.
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("request: url:[/api/show_proc?")
-                && m.contains("token=*")), messages.toString());
-        assertTrue(messages.stream().anyMatch(m -> m.startsWith("parse auth info failed, url /api/show_proc?")
                 && m.contains("token=*")), messages.toString());
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("failed to process url: /api/show_proc?")
                 && m.contains("token=*")), messages.toString());

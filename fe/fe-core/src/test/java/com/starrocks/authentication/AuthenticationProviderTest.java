@@ -80,7 +80,8 @@ public class AuthenticationProviderTest {
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, scramble);
+            provider.authenticate(ctx.getAccessControlContext(), testUserIdentity,
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), scramble, null));
         }
 
         // no password
@@ -88,13 +89,14 @@ public class AuthenticationProviderTest {
         UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, new byte[0]);
+        provider.authenticate(ctx.getAccessControlContext(), testUserIdentity,
+                AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), new byte[0], null));
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    "xx".getBytes(StandardCharsets.UTF_8));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), "xx".getBytes(StandardCharsets.UTF_8), null));
             Assertions.fail();
         } catch (AuthenticationException e) {
             Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
@@ -112,7 +114,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    MysqlPassword.scramble(seed, "xx"));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), MysqlPassword.scramble(seed, "xx"), null));
             Assertions.fail();
         } catch (AuthenticationException e) {
             Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL, e.getErrorCode());
@@ -123,7 +125,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    MysqlPassword.scramble(seed, "bb"));
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), MysqlPassword.scramble(seed, "bb"), null));
 
         } catch (AuthenticationException e) {
             Assertions.fail();
@@ -135,7 +137,7 @@ public class AuthenticationProviderTest {
             provider.authenticate(
                     ctx.getAccessControlContext(),
                     testUserIdentity,
-                    remotePassword);
+                    AuthCredentials.ofNativeScramble(testUserIdentity.getUser(), remotePassword, null));
 
         } catch (AuthenticationException e) {
             Assertions.fail();

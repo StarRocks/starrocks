@@ -1,0 +1,230 @@
+-- name: test_iceberg_eq_delete_partition_scope
+create external catalog iceberg_eq_scope_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create external catalog hive_eq_scope_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+-- result:
+-- !result
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b'), (1, 'c1', 'c');
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes values (1, 'a'), (2, 'b');
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id order by p, id;
+-- result:
+2	a2	a
+1	b1	b
+1	c1	c
+-- !result
+select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id;
+-- result:
+3
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where p = 'b' order by id;
+-- result:
+1	b1	b
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where id = 1 order by p;
+-- result:
+1	b1	b
+1	c1	c
+-- !result
+function: assert_explain_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
+-- result:
+None
+-- !result
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b');
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes(
+    id int,
+    p string
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_p_deletes/p=a");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes values (1, 'a');
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/by_id_p_deletes", file_format="parquet", equality_columns="id,p");
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p order by p, id;
+-- result:
+2	a2	a
+1	b1	b
+2	b2	b
+-- !result
+function: assert_explain_not_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p', '$partition_key')
+-- result:
+None
+-- !result
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed values (1, 'a1', 'a'), (2, 'a2', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b');
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed drop partition column p;
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_global_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes values (1);
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_global_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed add partition column p;
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes values (2, 'a');
+-- result:
+-- !result
+set enable_read_iceberg_equality_delete_with_partition_evolution = true;
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed order by p, id;
+-- result:
+2	b2	b
+-- !result
+set enable_read_iceberg_equality_delete_with_partition_evolution = false;
+-- result:
+-- !result
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys(
+    a int,
+    b int,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys values (null, 20, 'x'), (1, 10, 'x'), (2, 30, 'x'), (3, 40, 'x');
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes(
+    a int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_a_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes values (1, 'x');
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes(
+    b int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_b_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes values (40, 'x');
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_a_deletes", file_format="parquet", equality_columns="a");
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/two_keys_b_deletes", file_format="parquet", equality_columns="b");
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys order by b;
+-- result:
+None	20	x
+2	30	x
+-- !result
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_a_deletes force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys_b_deletes force;
+-- result:
+-- !result
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id force;
+-- result:
+-- !result
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes force;
+-- result:
+-- !result
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_deletes force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id_p_deletes force;
+-- result:
+-- !result
+drop database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_eq_scope_${uuid0};
+-- result:
+-- !result
+drop catalog hive_eq_scope_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/eq_scope_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

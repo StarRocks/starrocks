@@ -327,6 +327,60 @@ ALTER TABLE iceberg.sales.order
 EXECUTE add_files(location = 's3://bucket/data/order/data.parquet', file_format = 'parquet');
 ```
 
+### 添加 Equality Delete 文件
+
+将已有文件作为 Equality Delete 文件添加到 Iceberg 表。文件中的每一行会删除表中 Equality 列取值相同的行。这些文件在一个新快照中提交，因此会作用于表中已有的数据。此过程支持 Parquet 和 ORC 文件格式，要求 Iceberg 表的格式版本为 2 或更高。
+
+文件发现方式与 `add_files` 相同。对于分区表，每个文件的分区取自其路径中的 `<column>=<value>` 目录，删除只作用于该分区的数据文件。如果文件路径中缺少任一分区列的目录，该文件会被拒绝。仅支持 Identity 分区转换。对于非分区表，删除作用于整张表。如果当前分区规范是分区的，而表中仍有按旧分区规范写入的数据文件，该过程会报错，因为删除不会作用于这些文件。如果表中仍有按非当前分区规范写入的 Equality Delete 文件，该过程同样会报错，因为查询引擎默认不支持读取跨多个分区规范的 Equality Delete。如果会话变量 `enable_read_iceberg_equality_delete_with_partition_evolution` 为 `true`，则跳过该检查。如果文件中有任意一列带有 Iceberg 字段 ID，那么该文件的每个 Equality 列都必须带有与表一致的字段 ID，否则该文件会被拒绝。如果 Equality 列在文件中的类型无法无损地按表中该列的类型读取（例如表列为 `INT`，文件中为字符串列），该文件同样会被拒绝。不带字段 ID 的文件按列名与表匹配，因此添加文件后不要重命名其 Equality 列，否则删除将不再生效。此过程不支持 `WHERE` 子句。
+
+#### `add_equality_delete_files` 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE add_equality_delete_files(
+    location = '<location>',
+    file_format = '<format>',
+    equality_columns = '<column>[, <column> ...]'
+    [, recursive = <boolean>]
+)
+```
+
+#### 参数
+
+##### `location`
+
+- 描述：从中添加 Equality Delete 文件的目录路径或文件路径。
+- 类型：String
+- 是否必须：是
+
+##### `file_format`
+
+- 描述：Equality Delete 文件的格式。支持 'parquet'、'orc' 格式。
+- 类型：String
+- 是否必须：是
+
+##### `equality_columns`
+
+- 描述：删除时用于匹配的表列，多个列用逗号分隔。每一列都必须是类型为 `INT`、`BIGINT`、`STRING` 或 `DATE` 的顶层列，并且每个文件都必须包含所有这些列。
+- 类型：String
+- 是否必须：是
+
+##### `recursive`
+
+- 描述：是否递归扫描 `location` 的子目录。
+- 类型：Boolean
+- 默认值：true
+- 是否必须：否
+
+#### 示例
+
+删除 `id` 与 `s3://bucket/deletes/order/` 下文件（例如 `s3://bucket/deletes/order/dt=2024-01-01/delete.parquet`）中某一行相同的行：
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE add_equality_delete_files(location = 's3://bucket/deletes/order/', file_format = 'parquet', equality_columns = 'id');
+```
+
 ### 注册表
 
 使用元数据文件注册 Iceberg 表。此过程允许您将现有的 Iceberg 表添加到 catalog 中，而无需迁移数据。
