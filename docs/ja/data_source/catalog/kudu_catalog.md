@@ -82,6 +82,8 @@ StarRocks が Kudu クラスターのメタデータにアクセスする方法�
 | hive.metastore.uris | いいえ       | Hive メタストアの URI です。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 | kudu.schema-emulation.enabled | いいえ       | `schema` エミュレーションを有効または無効にするオプションです。デフォルトではオフ (false) になっており、すべてのテーブルは `default` `schema` に属します。                                                                                                                                                                                                                                                                 |
 | kudu.schema-emulation.prefix | いいえ       | `kudu.schema-emulation.enabled` = `true` の場合にのみ設定する `schema` エミュレーションのプレフィックスです。デフォルトのプレフィックスは空文字列です: ` `。                                                                                                                                                                                                                                                                       |
+| kudu.client.default-operation-timeout-ms | いいえ       | Kudu クライアントが通常の (管理系ではない) 操作、主にデータスキャンに使用するタイムアウトです。単位はミリ秒です。StarRocks はこの値を BE に送るスキャントークンにも反映するため、BE が Kudu tablet server をスキャンする際のリクエストごとのタイムアウトも制限します。値は正の整数である必要があります。デフォルトは `30000` (30 秒) で、kudu-client の組み込みデフォルトと同じです。 |
+| kudu.client.default-admin-operation-timeout-ms | いいえ       | Kudu クライアントが Kudu Master に対する管理系操作、たとえばテーブルの一覧取得、テーブルのオープン、テーブルスキーマや統計情報の取得に使用するタイムアウトです。単位はミリ秒です。これは FE 側のメタデータリクエストにのみ適用されます。値は正の整数である必要があります。デフォルトは `30000` (30 秒) で、kudu-client の組み込みデフォルトと同じです。 |
 
 > **NOTE**
 >
