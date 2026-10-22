@@ -818,6 +818,37 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testDescPrintsParamsInSortedKeyOrder() throws DdlException {
+        // The HashMap iteration order of these keys differs between JDK 17 and JDK 21 (JDK-8281631).
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_REGION, "us-west-2");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        StorageVolume volume = new StorageVolume("1", "sv", "s3", Collections.singletonList("s3://xxx"),
+                params, false, "comment");
+        BaseProcResult result = new BaseProcResult();
+        volume.getProcNodeData(result);
+        Assertions.assertEquals("{\"aws.s3.endpoint\":\"endpoint\",\"aws.s3.region\":\"us-west-2\"," +
+                "\"aws.s3.use_aws_sdk_default_behavior\":\"true\"}", result.getRows().get(0).get(4));
+
+        params = new HashMap<>();
+        params.put(AWS_S3_ACCESS_KEY, "access_key");
+        params.put(AWS_S3_SECRET_KEY, "secret_key");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_REGION, "us-west-2");
+        params.put(AWS_S3_USE_INSTANCE_PROFILE, "false");
+        params.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+        volume = new StorageVolume("2", "sv", "s3", Collections.singletonList("s3://xxx"), params, false, "comment");
+        result = new BaseProcResult();
+        volume.getProcNodeData(result);
+        Assertions.assertEquals("{\"aws.s3.access_key\":\"******\",\"aws.s3.endpoint\":\"endpoint\"," +
+                "\"aws.s3.region\":\"us-west-2\",\"aws.s3.secret_key\":\"******\"," +
+                "\"aws.s3.use_aws_sdk_default_behavior\":\"false\",\"aws.s3.use_instance_profile\":\"false\"," +
+                "\"aws.s3.use_web_identity_token_file\":\"false\"}", result.getRows().get(0).get(4));
+    }
+
+    @Test
     public void testInvalidAdls2ConfigurationMasksClientSecret() throws DdlException {
         Map<String, String> params = Map.of(
                 AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net",
