@@ -103,8 +103,13 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
         // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
+<<<<<<< HEAD
             mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
             pctProcessor.setAfterSyncHook(() -> {
+=======
+            pinState().clear();
+            pctProcessor.setBeforePartitionAlignHook(() -> {
+>>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
                 MaterializedView.AsyncRefreshContext refreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
                 final Map<BaseTableInfo, TvrVersionRange> committedMap =
@@ -117,7 +122,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
                             snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
                     frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 }
-                refreshContext.replaceTempBaseTableInfoTvrDeltaMap(getStartTaskRunId(), frozen);
+                pinState().freeze(getStartTaskRunId(), frozen);
             });
         }
 

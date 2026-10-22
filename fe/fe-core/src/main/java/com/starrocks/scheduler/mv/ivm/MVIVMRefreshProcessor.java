@@ -224,14 +224,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // InsertLoadTxnCallbackFactory registers the TVR-persistence callback.
         boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
         String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
+        String prevTvrStagingOwner = ctx.getTvrStagingOwner();
+        String owner = mvContext.getStatus().getStartTaskRunId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
         ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
+        ctx.setTvrStagingOwner(owner);
         try {
             try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
                 MaterializedView.AsyncRefreshContext mvRefreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
                 logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
-                String owner = mvContext.getStatus().getStartTaskRunId();
                 mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
                 executor.executePlan(execPlan, insertStmt);
             }
@@ -244,6 +246,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         } finally {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
+            ctx.setTvrStagingOwner(prevTvrStagingOwner);
         }
     }
 
@@ -368,8 +371,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
         // For now, we always refresh the latest snapshot from the last refresh.
         // current tvr snapshot
-        TvrVersionRange currentTvrSnapshot = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .acquireTvrSnapshot(baseTableInfo.getDbName(), snapshotTable, mv.getMvId());
+        TvrVersionRange currentTvrSnapshot = pinState().acquireSnapshot(baseTableInfo, snapshotTable);
         if (currentTvrSnapshot == null || !(currentTvrSnapshot instanceof TvrTableSnapshot)) {
             logger.warn("Current tvr snapshot is null for base table: {}, db: {}",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName());

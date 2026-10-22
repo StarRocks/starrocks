@@ -154,9 +154,7 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             }
             // In pinned mode, we're locked to a specific snapshot — partition-level DDL at newer
             // snapshots is irrelevant to what we'll scan. Skip the comparison entirely.
-            TvrVersionRange frozen = mv.getRefreshScheme().getAsyncRefreshContext()
-                    .getTempBaseTableInfoTvrDeltaMap().get(baseTableInfo);
-            if (frozen != null) {
+            if (pinnedRange != null) {
                 return false;
             }
             List<Column> partitionColumns = partitionTableAndColumns.get(baseTable);

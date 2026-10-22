@@ -14,23 +14,38 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+>>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -148,7 +163,52 @@ class PCTTableSnapshotInfoTest {
                 "an unchanged live table must not be reported as changed");
     }
 
-    private static void mockLiveTable(OlapTable live) {
+    /**
+     * An EXPLAIN that falls back to PCT pins only its own snapshot infos and leaves the MV's temp map
+     * empty, so a partition committed to an external base table after its freeze is not drift.
+     */
+    @Test
+    void testExplainPinnedExternalTableSkipsTheDriftCheck() throws AnalysisException {
+        Table snapshot = mock(Table.class);
+        when(snapshot.getType()).thenReturn(Table.TableType.ICEBERG);
+        Table live = mock(Table.class);
+        when(live.getType()).thenReturn(Table.TableType.ICEBERG);
+        PartitionInfo mvPartitionInfo = mock(PartitionInfo.class);
+        when(mvPartitionInfo.isRangePartition()).thenReturn(true);
+        MaterializedView mv = mock(MaterializedView.class);
+        when(mv.getPartitionInfo()).thenReturn(mvPartitionInfo);
+        when(mv.getRefBaseTablePartitionColumns()).thenReturn(Map.of(snapshot, List.of(mock(Column.class))));
+        when(mv.getRangePartitionFirstExpr()).thenReturn(Optional.of(mock(Expr.class)));
+        when(mv.getRefreshScheme()).thenReturn(new MaterializedView.MvRefreshScheme());
+        mockLiveTable(live);
+        Map<Table, PCellSortedSet> cellsByTable = Map.of(snapshot, dayCells(1), live, dayCells(2));
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionKeyRange(Table table, Column partitionColumn,
+                                                                 Expr partitionExpr) {
+                return BaseToMVPartitionMapping.of(cellsByTable.get(table));
+            }
+        };
+
+        Assertions.assertTrue(new PCTTableSnapshotInfo(mock(BaseTableInfo.class), snapshot).hasBaseTableChanged(mv),
+                "an unpinned refresh must see the partition added after its snapshot");
+        PCTTableSnapshotInfo pinned = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), snapshot);
+        pinned.setPinnedRange(TvrTableSnapshot.of(42L));
+        Assertions.assertFalse(pinned.hasBaseTableChanged(mv),
+                "a refresh pinned to its snapshot must not report the newer partition as drift");
+    }
+
+    private static PCellSortedSet dayCells(int days) throws AnalysisException {
+        List<PCellWithName> cells = new ArrayList<>();
+        for (int i = 0; i < days; i++) {
+            LocalDate day = LocalDate.of(2026, 1, 1).plusDays(i);
+            cells.add(PCellWithName.of("p" + i, new PRangeCell(
+                    Range.closedOpen(PartitionKey.ofDate(day), PartitionKey.ofDate(day.plusDays(1))))));
+        }
+        return PCellSortedSet.of(cells);
+    }
+
+    private static void mockLiveTable(Table live) {
         new MockUp<MvUtils>() {
             @Mock
             public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
