@@ -14,6 +14,15 @@
 
 #pragma once
 
+<<<<<<< HEAD:be/src/runtime/global_dict/types_fwd_decl.h
+=======
+#include <cstdint>
+#include <optional>
+
+#include "base/phmap/phmap_fwd_decl.h"
+#include "base/phmap/phmap_hash.h"
+#include "base/string/slice.h"
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511)):be/src/column/global_dict/types_fwd_decl.h
 #include "column/column_hash.h"
 #include "runtime/global_dict/config.h"
 #include "types/logical_type.h"
@@ -38,6 +47,7 @@ template <class GlobalDictType>
 struct GlobalDictsWithVersion {
     GlobalDictType dict;
     long version;
+    std::optional<int64_t> content_identity = std::nullopt;
 };
 
 using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictsWithVersion<GlobalDictMap>>;
