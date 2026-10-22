@@ -85,6 +85,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
+        ./exec/pipeline/local_shuffle_alignment_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
