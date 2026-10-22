@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
@@ -732,6 +733,47 @@ public class IcebergApiConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testTIcebergSchemaCarriesNestedInitialDefault() {
+        // BE fills a struct subfield missing from a data file with its initial-default.
+        Types.NestedField a = Types.NestedField.optional("a").withId(2).ofType(Types.IntegerType.get()).build();
+        Types.NestedField b = Types.NestedField.optional("b").withId(3).ofType(Types.IntegerType.get())
+                .withInitialDefault(7).build();
+        // BE reads TIMESTAMPTZ in the session time zone, so the default is sent in that zone.
+        Types.NestedField tz = Types.NestedField.optional("tz").withId(4).ofType(Types.TimestampType.withZone())
+                .withInitialDefault(1_700_000_000_000_000L).build();
+        Types.NestedField ntz = Types.NestedField.optional("ntz").withId(5).ofType(Types.TimestampType.withoutZone())
+                .withInitialDefault(1_700_000_000_000_000L).build();
+        Schema schema = new Schema(Types.NestedField.optional(1, "s", Types.StructType.of(a, b, tz, ntz)));
+        ConnectContext context = new ConnectContext();
+        context.getSessionVariable().setTimeZone("Asia/Shanghai");
+        ConnectContext.set(context);
+        try {
+            TIcebergSchema tSchema = IcebergApiConverter.getTIcebergSchema(schema);
+            List<TIcebergSchemaField> children = tSchema.getFields().get(0).getChildren();
+            Assertions.assertFalse(children.get(0).isSetInitial_default());
+            assertEquals("7", children.get(1).getInitial_default());
+            // 1700000000 s = 2023-11-14 22:13:20 UTC
+            assertEquals("2023-11-15 06:13:20.000000", children.get(2).getInitial_default());
+            assertEquals("2023-11-14 22:13:20", children.get(3).getInitial_default());
+            // the cached schema keeps the session-independent value
+            assertEquals("2023-11-14 22:13:20", IcebergApiConverter.toInitialDefaultValueString(tz));
+
+            // year 0 stays year 0 (a year-of-era pattern would print 0001)
+            context.getSessionVariable().setTimeZone("UTC");
+            long yearZeroMicros = java.time.LocalDateTime.of(0, 6, 15, 1, 2, 3)
+                    .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
+            Types.NestedField yearZero = Types.NestedField.optional("y0").withId(6)
+                    .ofType(Types.TimestampType.withZone()).withInitialDefault(yearZeroMicros).build();
+            assertEquals("0000-06-15 01:02:03.000000", IcebergApiConverter.toReadInitialDefaultValueString(yearZero));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
     public void testInitialDefaultForBinaryAndUuid() {
         // BINARY and UUID initial-defaults used to read as NULL silently.
         java.util.UUID uuid = java.util.UUID.fromString("f79c3e09-677c-4bbd-a479-3f349cb785e7");

@@ -257,6 +257,14 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         }
     }
 
+    if (first_read && _level_source_reader != nullptr) {
+        // No used subfield is in the file: read the level source only for the row count and the struct's nulls.
+        ColumnPtr level_source_column = ColumnHelper::create_column(*_level_source_type, true);
+        RETURN_IF_ERROR(_level_source_reader->read_range(range, filter, level_source_column));
+        real_read = level_source_column->size();
+        first_read = false;
+    }
+
     if (UNLIKELY(first_read)) {
         return Status::InternalError(strings::Substitute("All used subfield of struct type $0 is not exist",
                                                          get_column_parquet_field()->name));

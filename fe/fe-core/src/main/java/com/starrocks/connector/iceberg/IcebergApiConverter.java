@@ -23,6 +23,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -87,6 +88,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -388,6 +390,24 @@ public class IcebergApiConverter {
         return toDefaultValueString(field, false);
     }
 
+    private static final DateTimeFormatter READ_DEFAULT_DATETIME_FORMATTER =
+            // uuuu is the proleptic year: yyyy (year of era) would print year 0 as 0001.
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSS");
+
+    // The initial-default sent to BE to fill a column or subfield missing from a data file. BE reads a
+    // TIMESTAMPTZ value from a file in the session time zone, so its default is formatted in that zone too.
+    // Call it only when the plan is built, not for a cached schema.
+    public static String toReadInitialDefaultValueString(Types.NestedField field) {
+        if (field.type() instanceof Types.TimestampType timestampType && timestampType.shouldAdjustToUTC() &&
+                field.initialDefault() != null) {
+            long micros = ((Number) field.initialDefault()).longValue();
+            return DateTimeUtil.timestamptzFromMicros(micros)
+                    .atZoneSameInstant(TimeUtils.getTimeZone().toZoneId())
+                    .format(READ_DEFAULT_DATETIME_FORMATTER);
+        }
+        return toInitialDefaultValueString(field);
+    }
+
 
     public static String toWriteDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, true);
@@ -579,6 +599,26 @@ public class IcebergApiConverter {
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
+<<<<<<< HEAD
+=======
+        String initialDefault = toReadInitialDefaultValueString(nestedField);
+        if (initialDefault != null) {
+            tIcebergSchemaField.setInitial_default(initialDefault);
+        }
+        // Preserve external semantics independently of SQL type conversion.
+        // Do not infer these parameters from WKB or map these fields to VARBINARY.
+        if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
+            Types.GeographyType geography = (Types.GeographyType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOGRAPHY).setCrs(geography.crs() == null ? "OGC:CRS84" : geography.crs())
+                    .setEdge_algorithm(geography.algorithm() == null ? "SPHERICAL" : geography.algorithm().name()));
+        } else if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOMETRY) {
+            Types.GeometryType geometry = (Types.GeometryType) nestedField.type();
+            tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
+                    .setKind(TIcebergGeoKind.GEOMETRY).setCrs(geometry.crs() == null ? "OGC:CRS84" : geometry.crs())
+                    .setEdge_algorithm("PLANAR"));
+        }
+>>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
         if (nestedField.type().isNestedType()) {
             List<TIcebergSchemaField> children = new ArrayList<>(nestedField.type().asNestedType().fields().size());
             for (Types.NestedField child : nestedField.type().asNestedType().fields()) {
@@ -899,7 +939,9 @@ public class IcebergApiConverter {
             return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
-        throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+        // An unknown transform is shown as is (SHOW CREATE TABLE, ALTER TABLE lookups). Reads skip it
+        // (readSchemaPartitionFields) and writes reject it (checkPartitionTransformsWritable).
+        return prefix + format("%s(%s)", transform, escapedName);
     }
 
     public static List<StructField> getPartitionColumns(List<PartitionField> fields, Schema schema) {
