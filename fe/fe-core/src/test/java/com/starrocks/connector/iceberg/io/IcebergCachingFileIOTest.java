@@ -18,12 +18,15 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.util.SerializableSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -77,6 +80,46 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    public void testFsIsolationSchemesStayOnHadoopFileIO() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+
+        // gs:// must stay on HadoopFileIO even though iceberg-gcp puts GCSFileIO on the classpath:
+        // StarRocks maps GCS credentials into fs.gs.* Hadoop keys that GCSFileIO would ignore
+        FileIO gsDelegate = Deencapsulation.invoke(cachingFileIO, "delegateFileIO",
+                "gs://bucket/metadata/v1.metadata.json");
+        Assertions.assertTrue(gsDelegate instanceof HadoopFileIO);
+
+        FileIO azureDelegate = Deencapsulation.invoke(cachingFileIO, "delegateFileIO",
+                "abfss://container@account.dfs.core.windows.net/metadata/v1.metadata.json");
+        Assertions.assertTrue(azureDelegate instanceof HadoopFileIO);
+
+        FileIO defaultDelegate = Deencapsulation.invoke(cachingFileIO, "delegateFileIO",
+                "file:/tmp/0001.metadata.json");
+        Assertions.assertTrue(defaultDelegate instanceof ResolvingFileIO);
+    }
+
+    @Test
+    public void testSerializedWrappedIOKeepsVendedGcsToken() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put(GCS_ACCESS_TOKEN, "vended-token");
+        cachingFileIO.initialize(icebergProperties);
+
+        Deencapsulation.invoke(cachingFileIO, "delegateFileIO", "gs://bucket/metadata/v1.metadata.json");
+
+        // getWrappedIO() is serialized for BE/JNI metadata-table scans, so its conf must carry the
+        // mapped credential keys even though the FE-side read goes through the pinned HadoopFileIO
+        Configuration wrappedConf = ((ResolvingFileIO) cachingFileIO.getWrappedIO()).getConf();
+        Assertions.assertEquals("vended-token",
+                wrappedConf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
+        Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
+                wrappedConf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
     }
 
     @Test

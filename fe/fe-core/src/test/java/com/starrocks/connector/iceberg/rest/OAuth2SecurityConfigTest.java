@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.rest;
 
+import org.apache.iceberg.rest.auth.AuthProperties;
 import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.GOOGLE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
@@ -66,6 +68,24 @@ public class OAuth2SecurityConfigTest {
         config = OAuth2SecurityConfigBuilder.build(properties);
         Assertions.assertEquals(JWT, config.getSecurity());
         Assertions.assertEquals("jwt-token-value", config.getToken().get());
+
+        // Test GOOGLE security: needs neither a credential nor a token (case-insensitive)
+        properties = new HashMap<>();
+        properties.put("security", "GoOgLe");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertEquals(GOOGLE, config.getSecurity());
+        Assertions.assertFalse(config.getCredential().isPresent());
+        Assertions.assertFalse(config.getToken().isPresent());
+
+        // stray oauth2 properties are ignored for GOOGLE and do not downgrade it to NONE
+        properties = new HashMap<>();
+        properties.put("security", "google");
+        properties.put("oauth2.credential", "smith:cruise");
+        properties.put("oauth2.token", "123456");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertEquals(GOOGLE, config.getSecurity());
+        Assertions.assertFalse(config.getCredential().isPresent());
+        Assertions.assertFalse(config.getToken().isPresent());
     }
 
     @Test
@@ -97,5 +117,14 @@ public class OAuth2SecurityConfigTest {
         Assertions.assertEquals("test-audience", oauth2Properties.get().get(OAuth2Properties.AUDIENCE));
         // check token refresh disabled for JWT
         Assertions.assertEquals("false", oauth2Properties.get().get(OAuth2Properties.TOKEN_REFRESH_ENABLED));
+
+        // Test GOOGLE properties: only rest.auth.type=google is emitted
+        properties = new HashMap<>();
+        properties.put("security", "google");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        oauth2Properties = new OAuth2SecurityProperties(config);
+        Assertions.assertEquals(1, oauth2Properties.get().size());
+        Assertions.assertEquals(AuthProperties.AUTH_TYPE_GOOGLE, oauth2Properties.get().get(AuthProperties.AUTH_TYPE));
+        Assertions.assertFalse(oauth2Properties.get().containsKey(OAuth2Properties.TOKEN_REFRESH_ENABLED));
     }
 }
