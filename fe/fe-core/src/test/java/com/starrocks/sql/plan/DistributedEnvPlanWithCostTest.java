@@ -388,7 +388,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testBroadcastThresholdIndependentOfExecMemLimit() throws Exception {
         long threshold = connectContext.getSessionVariable().getBroadcastMemExceedThreshold();
         long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
-        String sql = "select l_orderkey from lineitem join nation on l_suppkey = n_nationkey";
+        // Nation has only 25 rows and remains cheaper to broadcast even with the penalty.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
         try {
             connectContext.getSessionVariable().setBroadcastMemExceedThreshold(2147483648L);
             String plan = getFragmentPlan(sql);
