@@ -565,7 +565,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
      *         light-weight path turned tablet creation into a no-op and the job can go straight on
      */
     private boolean createShadowTablets() throws AlterCancelException {
-        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
@@ -582,17 +581,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
                     && !hasZstdCompressionChange;
 
-            // disable tablet creation optimization to avoid overwriting files with the same name, and for a
-            // range-distribution table, whose tablets each carry their own range.
-            if (table.isFileBundling() || table.isRangeDistribution()) {
-                enableTabletCreationOptimization = false;
-            }
-            if (enableTabletCreationOptimization) {
-                numTablets = physicalPartitionIndexMap.size();
-            } else {
-                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
-                        .mapToLong(List::size).sum();
-            }
+            numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                    .mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
@@ -664,7 +654,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
-                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                // Never the partition-shared version-1 object: it is named after tablet id 0, so the
+                                // shadow index would overwrite the base index's one in the same partition path, and
+                                // it carries a single range where each tablet of a range-distribution table has its own.
+                                .setEnableTabletCreationOptimization(false)
                                 .setGtid(gtid)
                                 .setCompactionStrategy(table.getCompactionStrategy())
                                 .setRange(table.isRangeDistribution() ? shadowTablet.getRange() : null)
@@ -672,10 +665,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
-
-                        if (enableTabletCreationOptimization) {
-                            break;
-                        }
                     }
                 }
             }

@@ -280,6 +280,15 @@ SET broadcast_mem_exceeded_penalty_factor = 10.0;
 SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 ```
 
+### broadcast_mem_threshold
+
+* **描述**：设置构建侧预估大小阈值，超过此阈值时优化器会惩罚广播计划。此阈值适用于预估发送到每个 BE 的字节数。预估大小等于阈值时不会受到惩罚。此变量是优化器阈值，而非运行时内存限制。它独立于 `exec_mem_limit`；`broadcast_row_limit` 仍控制广播选择的行数检查。设置为 `0` 时，所有预估大小大于零的广播都会受到惩罚。
+* **范围**：Session、Global
+* **默认值**：`2147483648`（2 GiB）
+* **单位**：字节
+* **类型**：long
+* **合法取值**：[0, 9223372036854775807]
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。

@@ -1436,7 +1436,16 @@ public class Config extends ConfigBase {
             "is ever suspected of regressing.")
     public static boolean lake_enable_per_partition_coordinator_txn_log = true;
 
+    /**
+     * @deprecated No effect. Whether the tablets of a shared-data partition share one version-1 tablet
+     * metadata object is decided by the table property {@code file_bundling} alone, and the rollup and
+     * schema-change jobs always create per-tablet version-1 metadata. As a switch of its own this item was
+     * unsafe: on a table without {@code file_bundling}, a rollup or schema-change job wrote the shared object
+     * of its new index to the same name as the base index's and overwrote it. Kept, and still mutable, only
+     * so that an existing fe.conf entry or ADMIN SET FRONTEND CONFIG on it keeps working.
+     */
     @ConfField(mutable = true)
+    @Deprecated
     public static boolean lake_enable_tablet_creation_optimization = false;
 
     @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
