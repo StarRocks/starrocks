@@ -260,6 +260,8 @@ public class UpdatePlanner {
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         org.apache.iceberg.expressions.Expression filterExpr =
                 IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
