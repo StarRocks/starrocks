@@ -1303,7 +1303,7 @@ verify_croaringbitmap_install() {
     installed_version="$(croaringbitmap_version "${prefix}" || true)"
     [[ -s "${prefix}/lib/libroaring.a" && "${installed_version}" == "${expected_version}" ]] || return 1
     local hdr
-    for hdr in roaring.h roaring64.h roaring.hh roaring64map.hh roaring_version.h; do
+    for hdr in roaring.h roaring64.h roaring.hh roaring64.hh roaring64map.hh roaring_version.h; do
         [[ -s "${prefix}/include/roaring/${hdr}" ]] || return 1
     done
     return 0
@@ -1369,14 +1369,13 @@ build_croaringbitmap() {
 
         mkdir -p "${TP_INSTALL_DIR}/lib" "${TP_INCLUDE_DIR}/roaring"
         cp -R include/roaring/* "${TP_INCLUDE_DIR}/roaring/"
-        cp cpp/*.hh "${TP_INCLUDE_DIR}/roaring/"
+        cp cpp/roaring/*.hh "${TP_INCLUDE_DIR}/roaring/"
         "${AR}" rcs "${TP_INSTALL_DIR}/lib/libroaring.a" "${object_files[@]}"
         "${RANLIB}" "${TP_INSTALL_DIR}/lib/libroaring.a" >/dev/null 2>&1 || true
     else
         rm -rf "${TP_INSTALL_DIR}/lib/libroaring.a" "${TP_INCLUDE_DIR}/roaring"
         "${CMAKE_CMD}" --build . -j "${PARALLEL}"
         "${CMAKE_CMD}" --install .
-        cp ../cpp/*.hh "${TP_INCLUDE_DIR}/roaring/"
         cd ..
     fi
 
