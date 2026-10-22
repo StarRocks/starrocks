@@ -27,7 +27,6 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
 #include "exprs/geo_functions.h"
-#include "geo/geo_coverage_simplify.h"
 #include "geo/wkb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -283,11 +282,7 @@ TEST(CoverageWindowTest, EmptyInputStillChecksParametersAndTypes) {
     valid.fn.destroy(arity.get(), state.data());
 }
 
-TEST(CoverageWindowTest, CancellationAndOutputOwnershipUseTheNormalLifecycle) {
-    WindowHarness cancelled;
-    cancelled.runtime.set_is_cancelled(true);
-    cancelled.evaluate(coverage_input({left}));
-    EXPECT_TRUE(cancelled.ctx->has_error());
+TEST(CoverageWindowTest, OutputOwnershipUsesTheNormalLifecycle) {
     WindowHarness h;
     h.evaluate(coverage_input({left, right}));
     auto result = h.result(2);
@@ -360,37 +355,6 @@ TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
         h.fn.reset(h.ctx.get(), {}, h.storage.data());
-    }
-    EXPECT_EQ(h.query->consumption(), 0);
-}
-
-TEST(CoverageWindowTest, QueryMemoryLimitStopsInsideKernel) {
-    WkbGeometry polygon;
-    polygon.type = WkbGeometryType::POLYGON;
-    auto& ring = polygon.rings.emplace_back();
-    // Allocation or a memory poll must stop decoding before the zero-area ring error.
-    for (int i = 0; i < 20000; ++i) ring.push_back({double(i), 0});
-    ring.push_back({0, 0});
-    std::string input;
-    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &input, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
-    WindowHarness h(1, false, true, 1024 * 1024);
-    {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
-        if (CurrentThread::mem_tracker() == nullptr)
-            GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
-        if (!standard_allocations_are_tracked(h.query.get()))
-            GTEST_SKIP() << "This build has no query accounting in standard allocation hooks";
-        auto created = GeoCoverageSimplify::create({&h.runtime, [](void* state) {
-                                                        return static_cast<RuntimeState*>(state)->check_mem_limit(
-                                                                "ST_CoverageSimplify");
-                                                    }});
-        ASSERT_TRUE(created.ok()) << created.status();
-        auto coverage = std::move(created).value();
-        ASSERT_TRUE(coverage->append(Slice(input)).ok());
-        ASSERT_TRUE(h.runtime.check_mem_limit("before kernel").ok());
-        const auto status = coverage->finish(1, false);
-        EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
-        EXPECT_FALSE(coverage->result(0).ok());
     }
     EXPECT_EQ(h.query->consumption(), 0);
 }
