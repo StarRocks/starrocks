@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.SystemInfoService;
@@ -93,5 +94,20 @@ class StatisticUtilsTest extends PlanTestBase {
                 "d6cfa1ed-0000-0000-0000-000000000000";
         Assertions.assertNotEquals(hash1, StatisticUtils.hashTableUuidForPkStorage(otherTableUuid),
                 "different table_uuid values must not collide for realistic inputs");
+    }
+
+    @Test
+    void testFilterOnColumnWithoutStatisticType() throws Exception {
+        Assertions.assertTrue(StatisticUtils.convertStatisticsToDouble(Type.VARBINARY, "abc").isEmpty());
+
+        // Planning an equality filter on a VARBINARY column used to fail with "Error statistic type : varbinary".
+        starRocksAssert.withTable("CREATE TABLE test.varbinary_filter (id INT, bin VARBINARY) " +
+                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        try {
+            String plan = getFragmentPlan("SELECT id FROM test.varbinary_filter WHERE bin = X'616263'");
+            assertContains(plan, "PREDICATES: 2: bin = '616263'");
+        } finally {
+            starRocksAssert.dropTable("test.varbinary_filter");
+        }
     }
 }
