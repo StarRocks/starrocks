@@ -278,11 +278,13 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend or compute node alive.");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        RedirectTarget target = resolveRedirectTarget(node.getHttpPort(),
+                request.getRequest().headers().get("X-Forwarded-Proto"));
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), target.port);
 
-        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
-                redirectAddr.toString(), dbName, tableName, label, warehouseName);
-        redirectTo(request, response, redirectAddr);
+        LOG.info("redirect load action to destination={}, scheme: {}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), target.scheme, dbName, tableName, label, warehouseName);
+        redirectTo(request, response, redirectAddr, target.scheme, target.port);
     }
 
     private void processBatchWriteStreamLoad(
@@ -304,9 +306,12 @@ public class LoadAction extends RestBaseAction {
         List<ComputeNode> nodes = result.getValue();
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
-        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
-        redirectTo(request, response, redirectAddr);
+        RedirectTarget target = resolveRedirectTarget(node.getHttpPort(),
+                request.getRequest().headers().get("X-Forwarded-Proto"));
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), target.port);
+        LOG.info("redirect batch write to destination={}, scheme: {}, db: {}, tbl: {}",
+                redirectAddr, target.scheme, dbName, tableName);
+        redirectTo(request, response, redirectAddr, target.scheme, target.port);
     }
 
     public static class BatchWriteResponseResult extends RestBaseResult {

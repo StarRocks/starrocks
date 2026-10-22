@@ -1544,6 +1544,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：完了またはキャンセルされた Stream Load タスクの保持ウィンドウ。タスクが最終状態に達し、その終了タイムスタンプがこのしきい値 (`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`) より古い場合、`StreamLoadMgr.cleanOldStreamLoadTasks` による削除の対象となり、永続化された状態のロード時に破棄されます。`StreamLoadTask` と `StreamLoadMultiStmtTask` の両方に適用されます。合計タスク数が `stream_load_task_keep_max_num` を超える場合、クリーンアップが早期にトリガーされる可能性があります (同期タスクは `cleanSyncStreamLoadTasks` によって優先されます)。履歴/デバッグ可能性とメモリ使用量のバランスを取るためにこれを設定します。
 - 導入時期：v3.2.0
 
+### `stream_load_redirect_scheme`
+
+- デフォルト：http
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用される URI スキーム。クライアントを BE/CN ノードに誘導します。デフォルトの `http` は従来の動作を維持します。`https` に設定すると、クライアントを TLS エンドポイント（例：BE/CN HTTP サーバーの前段で TLS を終端するサイドカーやリバースプロキシ）にリダイレクトでき、BE/CN HTTP サーバー自体が TLS を提供しなくても Stream Load のデータ経路を暗号化できます。`http` と `https` のみ（大文字小文字を区別しない）が有効で、それ以外または空の値は無効として扱われ、FE は `http` + BE の実際の `be_http_port` にフォールバックします（スキームとポートがまとめて降格するため、平文 `http` でカスタム TLS ポートが使用されることはありません）。このパラメータは変更可能で、リダイレクトごとに適用され、FE の再起動は不要です。このパラメータは Stream Load のリダイレクトにのみ影響し、FE リーダーのリダイレクトには影響しません。通常は `stream_load_redirect_port` と併用します。
+- 導入時期：-
+
+### `stream_load_redirect_port`
+
+- デフォルト：0
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用されるポート。デフォルトの `0` は、FE が BE の実際の `be_http_port` を使用することを意味します（従来の動作）。`1`〜`65535` の範囲の有効な TCP ポートを設定すると、TLS を終端して BE/CN HTTP ポートに転送するサイドカー/プロキシのポートにクライアントをリダイレクトできます。範囲外の値（負の値または `65535` を超える値）は無効として扱われ、FE はスキームとポートをまとめて `http` + BE の実際の `be_http_port` にフォールバックします（そのため、明文の BE ポートに対して HTTPS を送信することはありません）。通常は `stream_load_redirect_scheme = https` と併用します。
+- 導入時期：-
+
+### `stream_load_redirect_honor_forwarded_proto`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` に設定すると、入力リクエストに `X-Forwarded-Proto` ヘッダーが存在する場合、FE はそのヘッダーから Stream Load リダイレクトのスキームを導出し、リクエストごとに `stream_load_redirect_scheme` を上書きします。これによりリダイレクトは「スキーム保持」になります。TLS 終端プロキシ（`X-Forwarded-Proto: https` を設定）経由で HTTPS により FE に到達したクライアントは `https` にリダイレクトされ、平文クライアントは `http` にリダイレクトされるため、クラスター全体の設定なしに両者が共存できます。`false`（デフォルト）の場合、またはヘッダーが存在しない場合は、従来どおり `stream_load_redirect_scheme` が使用されます（完全な後方互換）。`http`/`https`（大文字小文字を区別しない）のみが有効で、カンマ区切りのチェーンの場合は最も左（元のクライアント）の値が使用されます。ポートの解決ロジックは変更されません。
+- 導入時期：-
+
 ### `transaction_clean_interval_second`
 
 - デフォルト：30
