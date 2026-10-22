@@ -312,7 +312,7 @@ public final class ExprToThrift {
                 AnalyzerUtils.replaceNullType2Boolean(expr.getType())),
                 "NULL_TYPE is illegal in thrift stage");
 
-        msg.type = TypeSerializer.toThrift(expr.getType());
+        msg.type = TypeDescSharingScope.toThrift(expr.getType());
         List<Expr> children = expr.getChildren();
         msg.num_children = children.size();
         msg.setHas_nullable_child(expr.hasNullableChild());
@@ -575,7 +575,7 @@ public final class ExprToThrift {
             Type childType = node.getChild(0).getType();
             if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()
                     || childType.isVarchar()) {
-                msg.setChild_type_desc(TypeSerializer.toThrift(childType));
+                msg.setChild_type_desc(TypeDescSharingScope.toThrift(childType));
             }
             if (!childType.isComplexType()) {
                 msg.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
@@ -622,7 +622,7 @@ public final class ExprToThrift {
             msg.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(node.getOp()));
             msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
             if (node.getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
+                msg.setChild_type_desc(TypeDescSharingScope.toThrift(node.getChild(0).getType()));
             } else {
                 msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
             }
@@ -657,7 +657,7 @@ public final class ExprToThrift {
             msg.setOpcode(ExprOpcodeRegistry.getInPredicateOpcode(node.isNotIn()));
             msg.setVector_opcode(TExprOpcode.INVALID_OPCODE);
             if (node.getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
+                msg.setChild_type_desc(TypeDescSharingScope.toThrift(node.getChild(0).getType()));
             } else {
                 msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
             }
