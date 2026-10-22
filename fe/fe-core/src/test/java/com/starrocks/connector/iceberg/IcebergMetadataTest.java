@@ -2057,13 +2057,18 @@ public class IcebergMetadataTest extends TableTestBase {
 
     private double manifestPrunedRowCount(IcebergMetadata metadata, IcebergTable icebergTable,
                                           TestTables.TestTable table, ScalarOperator predicate) {
+        return manifestPrunedRowCount(metadata, icebergTable, table.currentSnapshot().snapshotId(), predicate);
+    }
+
+    private double manifestPrunedRowCount(IcebergMetadata metadata, IcebergTable icebergTable,
+                                          long snapshotId, ScalarOperator predicate) {
         Map<ColumnRefOperator, Column> colMap = new HashMap<>();
         colMap.put(new ColumnRefOperator(3, VARCHAR, "k2", true), new Column("k2", VARCHAR));
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         // Force the manifest-statistics path (Path C) explicitly, so the test does not depend on the
         // default of enableIcebergColumnStatistics staying false.
         context.getSessionVariable().setEnableIcebergColumnStatistics(false);
-        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(snapshotId));
         return metadata.getTableStatistics(context, icebergTable, colMap, null, predicate, -1, versionRange)
                 .getOutputRowCount();
     }
@@ -2163,6 +2168,176 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(7.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2020, 6, 14)), 0.001);
         // Const outside the whole range -> pruned -> floor of 1.
         Assertions.assertEquals(1.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2019, 1, 1)), 0.001);
+    }
+
+    // Two data files (k2=2020-06-14: 10 rows, k2=2020-06-15: 6 rows) committed separately, so each partition
+    // has its own data manifest, then the given delete files.
+    private TestTables.TestTable tableWithDeletes(String name, int formatVersion, DeleteFile... deletes) {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, name, formatVersion);
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/" + name + "-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(10).build()).commit();
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/" + name + "-0615.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-15").withRecordCount(6).build()).commit();
+        if (deletes.length > 0) {
+            org.apache.iceberg.RowDelta rowDelta = table.newRowDelta();
+            for (DeleteFile delete : deletes) {
+                rowDelta.addDeletes(delete);
+            }
+            rowDelta.commit();
+        }
+        table.refresh();
+        return table;
+    }
+
+    private DeleteFile dvOn0614(String name, long deletedRows) {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        return FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/" + name + "-dv.puffin").withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100).withRecordCount(deletedRows)
+                .withReferencedDataFile("/path/to/" + name + "-0614.parquet")
+                .withContentOffset(4).withContentSizeInBytes(40)
+                .withPartitionPath("k2=2020-06-14").build();
+    }
+
+    private IcebergTable icebergTableJ(TestTables.TestTable table) {
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        return new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountSubtractsDeletionVectors() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        TestTables.TestTable table = tableWithDeletes("tbDvRowCount", 3, dvOn0614("tbDvRowCount", 4));
+        IcebergTable icebergTable = icebergTableJ(table);
+
+        // Whole snapshot: 10 + 6 - 4 deleted by the DV.
+        Assertions.assertEquals(12.0, manifestPrunedRowCount(metadata, icebergTable, table, null), 0.001);
+        // A pruned manifest: the snapshot-wide delete total cannot be split by partition, so nothing is
+        // subtracted (the 2020-06-15 manifest alone, 6 rows, and the 2020-06-14 one, 10 rows).
+        Assertions.assertEquals(6.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2020, 6, 15)), 0.001);
+        Assertions.assertEquals(10.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2020, 6, 14)), 0.001);
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountIgnoresManifestWithOnlyDeletedFiles() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = tableWithDeletes("tbDvDeletedManifest", 3, dvOn0614("tbDvDeletedManifest", 4));
+        // A third file in its own manifest, then removed: that manifest keeps only a DELETED entry.
+        DataFile removed = DataFiles.builder(spec).withPath("/path/to/tbDvDeletedManifest-0616.parquet")
+                .withFileSizeInBytes(20).withPartitionPath("k2=2020-06-16").withRecordCount(5).build();
+        table.newFastAppend().appendFile(removed).commit();
+        table.newDelete().deleteFile(removed).commit();
+        table.refresh();
+        Assertions.assertTrue(table.currentSnapshot().dataManifests(table.io()).stream()
+                .anyMatch(m -> !m.hasAddedFiles() && !m.hasExistingFiles() && m.hasDeletedFiles()));
+
+        // Still a whole-snapshot count: 10 + 6 - 4.
+        Assertions.assertEquals(12.0, manifestPrunedRowCount(metadata, icebergTableJ(table), table, null), 0.001);
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountKeepsOtherDeletes() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+
+        // v2 position-delete file: its record count is only an upper bound, nothing is subtracted.
+        DeleteFile posDelete = FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/tbPosRowCount-pos.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(4).withPartitionPath("k2=2020-06-14").build();
+        TestTables.TestTable v2Table = tableWithDeletes("tbPosRowCount", 2, posDelete);
+        Assertions.assertEquals(16.0, manifestPrunedRowCount(metadata, icebergTableJ(v2Table), v2Table, null), 0.001);
+
+        // v3 equality delete next to a DV: only the DV is subtracted.
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(spec).ofEqualityDeletes(1)
+                .withPath("/path/to/tbEqDvRowCount-eq.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(3).withPartitionPath("k2=2020-06-15").build();
+        TestTables.TestTable v3Table = tableWithDeletes("tbEqDvRowCount", 3,
+                dvOn0614("tbEqDvRowCount", 4), eqDelete);
+        Assertions.assertEquals(12.0, manifestPrunedRowCount(metadata, icebergTableJ(v3Table), v3Table, null), 0.001);
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountUpgradedTableSubtractsOnlyDeletionVectors() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        // Two v2 position-delete files on the same 4 positions of the 2020-06-14 file: 8 recorded, 4 deleted.
+        DeleteFile pos1 = FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/tbUpgraded-pos1.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(4).withPartitionPath("k2=2020-06-14").build();
+        DeleteFile pos2 = FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/tbUpgraded-pos2.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(4).withPartitionPath("k2=2020-06-14").build();
+        TestTables.TestTable table = tableWithDeletes("tbUpgraded", 2, pos1, pos2);
+        long v2SnapshotId = table.currentSnapshot().snapshotId();
+        table.updateProperties().set(TableProperties.FORMAT_VERSION, "3").commit();
+        table.refresh();
+        IcebergTable icebergTable = icebergTableJ(table);
+
+        // Upgraded, no DV yet: the legacy position deletes are not subtracted, at either snapshot.
+        Assertions.assertEquals(16.0, manifestPrunedRowCount(metadata, icebergTable, table, null), 0.001);
+
+        // A DV on the 2020-06-15 file: only its 2 rows are subtracted.
+        DeleteFile dv = FileMetadata.deleteFileBuilder(spec).ofPositionDeletes()
+                .withPath("/path/to/tbUpgraded-dv.puffin").withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100).withRecordCount(2)
+                .withReferencedDataFile("/path/to/tbUpgraded-0615.parquet")
+                .withContentOffset(4).withContentSizeInBytes(40)
+                .withPartitionPath("k2=2020-06-15").build();
+        table.newRowDelta().addDeletes(dv).commit();
+        table.refresh();
+        Assertions.assertEquals(14.0, manifestPrunedRowCount(metadata, icebergTable, table, null), 0.001);
+        // The pre-upgrade snapshot of the now-v3 table holds only position-delete files.
+        Assertions.assertEquals(16.0, manifestPrunedRowCount(metadata, icebergTable, v2SnapshotId, null), 0.001);
+    }
+
+    @Test
+    public void testColumnStatisticsRowCountSubtractsDeletionVectors() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        TestTables.TestTable table = tableWithDeletes("tbDvColumnStats", 3, dvOn0614("tbDvColumnStats", 4));
+        Map<ColumnRefOperator, Column> colMap = new HashMap<>();
+        colMap.put(new ColumnRefOperator(3, VARCHAR, "k2", true), new Column("k2", VARCHAR));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTableJ(table), colMap, null, null, -1, versionRange);
+        // 10 + 6 rows, 4 of them deleted by the DV.
+        Assertions.assertEquals(12.0, statistics.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testColumnStatisticsNdvCappedAtLiveRowCount() throws Exception {
+        IcebergMetadata metadata = newStatsMetadata();
+        // 16 raw rows, 9 deleted by the DV: 7 live.
+        TestTables.TestTable table = tableWithDeletes("tbDvNdvCap", 3, dvOn0614("tbDvNdvCap", 9));
+        ColumnRefOperator id = new ColumnRefOperator(1, INT, "id", true);
+        Map<ColumnRefOperator, Column> colMap = new HashMap<>();
+        colMap.put(id, new Column("id", INT));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTableJ(table), colMap, null, null, -1, versionRange);
+        Assertions.assertEquals(7.0, statistics.getOutputRowCount(), 0.001);
+        // With no bounds, the fallback NDV is 0.3 of the rows for an integer: of the 7 live rows, not the 16 raw.
+        Assertions.assertEquals(2.1, statistics.getColumnStatistic(id).getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testCardinalityFromPlanFilesSubtractsDeletionVectors() throws Exception {
+        TestTables.TestTable table = tableWithDeletes("tbDvPlanFiles", 3, dvOn0614("tbDvPlanFiles", 4));
+        List<FileScanTask> tasks = Lists.newArrayList(table.newScan().planFiles());
+        Map<ColumnRefOperator, Column> colMap = new HashMap<>();
+        colMap.put(new ColumnRefOperator(3, VARCHAR, "k2", true), new Column("k2", VARCHAR));
+        Statistics statistics = new com.starrocks.connector.iceberg.cost.IcebergStatisticProvider()
+                .getCardinalityStats(colMap, tasks);
+        Assertions.assertEquals(12.0, statistics.getOutputRowCount(), 0.001);
     }
 
     @Test

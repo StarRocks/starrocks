@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
@@ -38,6 +39,7 @@ import org.apache.iceberg.puffin.StandardBlobTypes;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,13 +92,27 @@ public class IcebergStatisticProvider {
             }
 
             currentFiles.add(filePath);
-            cardinality += dataFile.recordCount();
+            cardinality += liveRecordCount(scanTask);
         }
 
         statisticsBuilder.setOutputRowCount(cardinality);
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
         statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         return statisticsBuilder.build();
+    }
+
+    // Rows of the task's data file that its deletion vector leaves, the DV cardinality being exact. A
+    // v2 position-delete file is not subtracted, as it can cover other data files, nor are equality
+    // deletes, whose overlap with the data is unknown.
+    @VisibleForTesting
+    static long liveRecordCount(FileScanTask scanTask) {
+        long rows = scanTask.file().recordCount();
+        for (DeleteFile deleteFile : scanTask.deletes()) {
+            if (ContentFileUtil.isDV(deleteFile)) {
+                return Math.max(rows - deleteFile.recordCount(), 0);
+            }
+        }
+        return rows;
     }
 
     // Build row-count-only statistics from a pre-computed cardinality (e.g. manifest-pruned row count),
@@ -149,7 +165,7 @@ public class IcebergStatisticProvider {
                 icebergFileStats = icebergFileStatistics.get(key);
             }
 
-            statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
+            statisticsBuilder.setOutputRowCount(Math.max(icebergFileStats.getLiveRecordCount(), 1));
             statisticsBuilder.addColumnStatistics(buildColumnStatistics(
                     nativeTable, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
             statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
@@ -237,6 +253,7 @@ public class IcebergStatisticProvider {
             icebergFileStats.updateNullCount(dataFile.nullValueCounts());
             updateColumnSizes(icebergFileStats, dataFile.columnSizes(), dataFile.recordCount());
         }
+        icebergFileStats.incrementDeletionVectorRowCount(dataFile.recordCount() - liveRecordCount(fileScanTask));
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
@@ -321,7 +338,8 @@ public class IcebergStatisticProvider {
 
         Long ndv = colIdToNdv.get(fieldId);
         if (ndv != null) {
-            builder.setDistinctValuesCount(Math.max(Math.min(ndv, icebergStats.getRecordCount()), 1));
+            // Capped at the row count this scan publishes, i.e. after deletion vectors.
+            builder.setDistinctValuesCount(Math.max(Math.min(ndv, icebergStats.getLiveRecordCount()), 1));
             builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
         } else {
             double estimatedNdv = estimateNdvFallback(fieldId, icebergStats);
@@ -348,9 +366,11 @@ public class IcebergStatisticProvider {
         long colSizeRcnt = icebergStats.getColumnSizeRecordCount(fieldId);
 
         int typeWidthHint = icebergTypeWidthBytes(fieldId, icebergStats);
+        // The size tier pairs the raw column size with its raw record count; the NDV itself is bounded by the
+        // published row count, i.e. after deletion vectors.
         return ConnectorNdvEstimator.estimate(
                 category, minDouble, maxDouble, colSizeBytes, colSizeRcnt,
-                icebergStats.getRecordCount(), typeWidthHint);
+                Math.max(icebergStats.getLiveRecordCount(), 1), typeWidthHint);
     }
 
     /**

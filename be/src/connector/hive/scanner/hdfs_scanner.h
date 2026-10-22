@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,18 @@ public:
     Status open(RuntimeState* runtime_state);
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     void close() noexcept;
+
+    // Live row count of the data file behind `scan_range`, from metadata only: the file's
+    // record_count when it has no delete files, or record_count minus the cardinality of its
+    // single Iceberg deletion vector (exact by spec). Empty when deletes must be applied by
+    // reading the file, including a DV that deletes every row, so the scan still drops the
+    // file instead of emitting a zero count.
+    static std::optional<int64_t> live_record_count_from_metadata(const THdfsScanRange& scan_range);
+    // True when get_next() will answer ___count___ from metadata alone, so no row and no delete file is read.
+    bool counts_from_metadata() const {
+        return _scanner_ctx->format_scan_context.options.use_count_opt &&
+               live_record_count_from_metadata(*_scanner_ctx->scan_range).has_value();
+    }
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }

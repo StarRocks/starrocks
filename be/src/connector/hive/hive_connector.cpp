@@ -501,7 +501,8 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // So checks are:
     // 1. only one materialized slot
     // 2. besides that, all slots are partition slots or extended slots, all of them are constant value.
-    // 3. scan iceberg data file without delete files.
+    // 3. scan iceberg data file without delete files. Count optimization also accepts a file
+    //    whose only delete is a deletion vector, as its live row count is known from metadata.
     auto check_partition_opt = [&]() {
         if ((_scanner_ctx.partition_slots.size() + _scanner_ctx.extended_col_slots.size() + 1) != slots.size()) {
             return false;
@@ -509,13 +510,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         if (_scanner_ctx.materialize_slots.size() != 1) {
             return false;
         }
-        if (!_scan_range.delete_files.empty()) {
-            return false;
-        }
         return true;
     };
-    if (!check_partition_opt()) {
+    bool partition_opt = check_partition_opt();
+    if (!partition_opt || !_scan_range.delete_files.empty()) {
         _scanner_ctx.format_scan_context.options.use_partition_column_value_only = false;
+    }
+    if (!partition_opt ||
+        (!_scan_range.delete_files.empty() && !HdfsScanner::live_record_count_from_metadata(_scan_range).has_value())) {
         _scanner_ctx.format_scan_context.options.use_count_opt = false;
     }
 

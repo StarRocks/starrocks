@@ -24,6 +24,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.iceberg.TableTestBase;
+import com.starrocks.connector.iceberg.TestTables;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -32,6 +33,10 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileMetadata;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -59,6 +64,27 @@ public class IcebergStatisticProviderTest extends TableTestBase {
                 "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withCatalog(createCatalog);
+    }
+
+    @Test
+    public void testLiveRecordCountSubtractsOnlyDeletionVectors() {
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_live_record_count", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_2).commit();
+        // FILE_A (2 rows) gets a DV deleting 1 row; FILE_A_2 (2 rows) has no delete.
+        DeleteFile dv = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath("/path/to/data-a.dv.puffin").withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100).withRecordCount(1)
+                .withReferencedDataFile(FILE_A.location())
+                .withContentOffset(4).withContentSizeInBytes(40)
+                .withPartitionPath("data_bucket=0").build();
+        v3Table.newRowDelta().addDeletes(dv).commit();
+        List<FileScanTask> tasks = Lists.newArrayList(v3Table.newScan().planFiles());
+        for (FileScanTask task : tasks) {
+            long expected = task.file().location().equals(FILE_A.location()) ? 1 : 2;
+            Assertions.assertEquals(expected, IcebergStatisticProvider.liveRecordCount(task));
+        }
+        Statistics statistics = new IcebergStatisticProvider().getCardinalityStats(new HashMap<>(), tasks);
+        Assertions.assertEquals(3.0, statistics.getOutputRowCount(), 0.001);
     }
 
     @Test

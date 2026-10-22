@@ -34,8 +34,17 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         return Status::OK();
     }
 
+<<<<<<< HEAD
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+=======
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty() &&
+        _scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
+        return Status::InternalError("Both Delta and Iceberg delete files are set on one scan range");
+    }
+
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty() && !counts_from_metadata()) {
+>>>>>>> 443b5dcdaac... [Enhancement][RB-225] Use Iceberg deletion vectors in COUNT(*) and row-count estimates (#66456)
         formats::IcebergDeleteBuilder iceberg_delete_builder(formats::IcebergDeleteBuilderContext{
                 .scan_context = &_scanner_ctx->format_scan_context,
                 .fs = _scanner_ctx->fs,

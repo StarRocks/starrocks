@@ -187,9 +187,9 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     ctx.format_scan_context.update_return_count_columns();
-    if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
+    if (auto live_count = live_record_count_from_metadata(*ctx.scan_range); live_count.has_value()) {
         ctx.format_scan_context.has_file_record_count = true;
-        ctx.format_scan_context.file_record_count = ctx.scan_range->record_count;
+        ctx.format_scan_context.file_record_count = *live_count;
     }
     if (ctx.scan_range->__isset.is_first_split) {
         ctx.format_scan_context.is_first_split = ctx.scan_range->is_first_split;
@@ -197,6 +197,27 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.format_scan_context.update_min_max_columns();
     return Status::OK();
+}
+
+std::optional<int64_t> HdfsScanner::live_record_count_from_metadata(const THdfsScanRange& scan_range) {
+    if (!scan_range.__isset.record_count) {
+        return std::nullopt;
+    }
+    const auto& deletes = scan_range.delete_files;
+    if (deletes.empty()) {
+        return scan_range.record_count;
+    }
+    // A v3 data file has at most one DV and no other positional deletes; equality deletes are
+    // planned as a separate anti join and never reach delete_files.
+    if (deletes.size() != 1 || !deletes[0].__isset.deletion_vector ||
+        !deletes[0].deletion_vector.__isset.record_count) {
+        return std::nullopt;
+    }
+    int64_t deleted = deletes[0].deletion_vector.record_count;
+    if (deleted < 0 || deleted >= scan_range.record_count) {
+        return std::nullopt;
+    }
+    return scan_range.record_count - deleted;
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {

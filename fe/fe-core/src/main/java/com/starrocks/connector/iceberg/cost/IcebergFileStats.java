@@ -40,6 +40,9 @@ public class IcebergFileStats {
     private Map<Integer, Type.PrimitiveType> idToTypeMapping;
     private List<Types.NestedField> nonPartitionPrimitiveColumns;
     private long recordCount;
+    // Rows of the counted data files deleted by their deletion vectors. recordCount stays the raw file total,
+    // as the per-column null counts and sizes it is compared with are raw too.
+    private long deletionVectorRowCount;
     private long fileCount;
     private long size;
     private Map<Integer, Object> minValues;
@@ -108,6 +111,11 @@ public class IcebergFileStats {
         return recordCount;
     }
 
+    // Rows left after deletion vectors.
+    public long getLiveRecordCount() {
+        return Math.max(recordCount - deletionVectorRowCount, 0);
+    }
+
     public long getSize() {
         return size;
     }
@@ -167,6 +175,10 @@ public class IcebergFileStats {
 
     public void incrementRecordCount(long count) {
         this.recordCount += count;
+    }
+
+    public void incrementDeletionVectorRowCount(long count) {
+        this.deletionVectorRowCount += count;
     }
 
     public void incrementColumnSizeRecordCounts(Set<Integer> fieldIds, long recordCount) {

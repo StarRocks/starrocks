@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -115,6 +116,7 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.IsolationLevel;
@@ -142,6 +144,7 @@ import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.TableUtil;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -163,6 +166,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.iceberg.util.TableScanUtil;
@@ -223,6 +227,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Bounds the commit-time manifest reads that share the planning executor with scans.
     private static final int MAX_OTHER_SPEC_MANIFEST_READERS = 8;
     private static final long CLOSE_WARN_DELAY_SECONDS = 60;
+    // Delete-manifest columns the DV row count needs: content and format identify a DV.
+    private static final List<String> DV_ROW_COUNT_PROJECTION =
+            List.of("content", "file_path", "file_format", "record_count");
 
     public static final String LOCATION_PROPERTY = "location";
     public static final String FILE_FORMAT = "file_format";
@@ -240,6 +247,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<TableIdentifier, org.apache.iceberg.Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
+    // Per query: the statistics of one scan are derived several times while planning, and each would
+    // otherwise re-read the same snapshot's delete manifests. Key: "<table uuid>@<snapshot id>".
+    private final Map<String, Long> deletionVectorRowsBySnapshot = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final Set<PredicateSearchKey> preparedTables = ConcurrentHashMap.newKeySet();
 
@@ -1394,6 +1404,27 @@ public class IcebergMetadata implements ConnectorMetadata {
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
+        // The table schema and spec do not change across files, so the column maps for file statistics are
+        // built once per scan.
+        Map<Integer, Type.PrimitiveType> idToTypeMapping = null;
+        List<Types.NestedField> nonPartitionPrimitiveColumns = null;
+        if (enableCollectColumnStatistics) {
+            List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+            idToTypeMapping = fullColumns.stream()
+                    .filter(column -> column.type().isPrimitiveType())
+                    .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+            Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                    .filter(x -> x.transform().isIdentity())
+                    .map(PartitionField::sourceId)
+                    .collect(Collectors.toSet());
+
+            nonPartitionPrimitiveColumns = fullColumns.stream()
+                    .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                            column.type().isPrimitiveType())
+                    .collect(toImmutableList());
+        }
+
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
                      maybeApplyScanBudget(
@@ -1412,21 +1443,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                     try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
                         icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
                     }
-
-                    List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-                    Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                            .filter(column -> column.type().isPrimitiveType())
-                            .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-                    Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                            .filter(x -> x.transform().isIdentity())
-                            .map(PartitionField::sourceId)
-                            .collect(Collectors.toSet());
-
-                    List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                            .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                                    column.type().isPrimitiveType())
-                            .collect(toImmutableList());
 
                     try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
                         statisticProvider.updateIcebergFileStats(
@@ -2254,8 +2270,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    write style.  In the vast majority of cases (all modern Iceberg writers: StarRocks,
         //    Spark, Trino, Flink) manifests carry the row-count fields needed; partition-aware
         //    pruning via filterManifests at manifest-granularity yields a safe over-estimate.
-        //    Cost: O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration — splitTasks
-        //    never populated, incremental scan range delivery stays unlocked.
+        //    Cost: O(manifests), ZERO data-manifest opens (a v3 table with DVs also reads its delete
+        //    manifests), ZERO DataFile enumeration — splitTasks never populated, incremental scan
+        //    range delivery stays unlocked.
         //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
         //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
         return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
@@ -2267,8 +2284,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Trade-off: manifest-level partition pruning (filterManifests) is coarser than file-level
     // — a matching manifest contributes its FULL row count even if the predicate doesn't match
     // every file within it. Typical over-estimate: <5x (safe direction for CBO).  Cost is
-    // O(manifests) with ZERO manifest-file opens and ZERO DataFile enumeration, so splitTasks is
-    // never populated and incremental scan range delivery stays lazy/streaming.
+    // O(manifests) with ZERO data-manifest opens (a v3 table with DVs also reads its delete
+    // manifests) and ZERO DataFile enumeration, so splitTasks is never populated and incremental
+    // scan range delivery stays lazy/streaming.
     //
     // Fallback: if any matching manifest has files but is missing both addedRowsCount and
     // existingRowsCount (e.g. older or upgraded Iceberg metadata with v1 manifest list), the
@@ -2350,13 +2368,15 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     // -------------------------------------------------------------------------
     // Whole-table row count from manifest metadata with partition-aware manifest pruning.
-    // O(manifests), ZERO manifest-file opens, ZERO DataFile enumeration.
+    // O(manifests), ZERO data-manifest opens, ZERO DataFile enumeration.
     //
     // Accuracy: for a whole-table snapshot, the sum of (addedRowsCount + existingRowsCount)
     // across all matching data manifests is EXACTLY the total live file row count — regardless
     // of write style (fastAppend / MergeAppend / compaction / MOR). The manifest list is a
-    // complete, consistent catalogue of all live data files at that snapshot. Delete files are
-    // ignored (over-count not undercount; consistent with getCardinalityStats).
+    // complete, consistent catalogue of all live data files at that snapshot. On a format v3
+    // table with no manifest pruned, the rows deleted by deletion vectors are subtracted, which
+    // reads the delete manifests (see deletionVectorRows); other delete files are ignored
+    // (over-count not undercount).
     //
     // Partition pruning: filterManifests uses ManifestEvaluator against inline manifest partition
     // summaries (from the manifest LIST; no manifest-file open). A matching manifest contributes
@@ -2394,9 +2414,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<ManifestFile> matchingManifests = filterManifests(dataManifests, nativeTbl, icebergPredicate);
 
         long rowCount = 0;
+        // filterManifests also drops manifests with no live file, so compare against the live ones only.
+        long liveDataManifests = dataManifests.stream()
+                .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
+                .count();
+        boolean countsWholeSnapshot = matchingManifests.size() == liveDataManifests;
         for (ManifestFile manifest : matchingManifests) {
             if (residual.hasResidual() && !PartitionCastPredicatePruner.rangeMayMatch(
                     residual.residual, manifestPartitionDateRanges(manifest, icebergTable, stringPartitionColumns))) {
+                countsWholeSnapshot = false;
                 continue;
             }
             if (!canCountRowsFromManifest(manifest)) {
@@ -2404,7 +2430,50 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
         }
+        // The snapshot-wide delete total cannot be split by partition, so it is only subtracted when no
+        // data manifest was pruned; otherwise deletes of pruned partitions would cut the kept ones.
+        // Only a format v3 table can hold DVs (and always has a uuid); older ones keep the plain count.
+        if (countsWholeSnapshot && canHoldDeletionVectors(nativeTbl)) {
+            String key = nativeTbl.uuid() + "@" + snapshot.snapshotId();
+            rowCount -= deletionVectorRowsBySnapshot.computeIfAbsent(key, k -> deletionVectorRows(nativeTbl, snapshot));
+        }
         return Math.max(rowCount, 1);
+    }
+
+    private static boolean canHoldDeletionVectors(org.apache.iceberg.Table table) {
+        return table instanceof HasTableOperations && TableUtil.formatVersion(table) >= 3;
+    }
+
+    // Rows deleted by the live deletion vectors of this snapshot of a format v3 table, whose cardinality is
+    // exact. A snapshot whose summary reports no position deletes returns 0 without reading metadata.
+    // Otherwise the snapshot's delete manifests are read and only DV entries are summed: a v2
+    // position-delete file (still live in a table upgraded to v3, or in its pre-upgrade snapshots) can
+    // repeat a position or outlive its data file, and equality deletes have an unknown overlap with the
+    // data. Returns 0 when a manifest cannot be read, keeping the undeducted count.
+    @VisibleForTesting
+    static long deletionVectorRows(org.apache.iceberg.Table table, Snapshot snapshot) {
+        Map<String, String> summary = snapshot.summary();
+        if (summary != null && "0".equals(summary.get(SnapshotSummary.TOTAL_POS_DELETES_PROP))) {
+            return 0;
+        }
+        long rows = 0;
+        for (ManifestFile manifest : snapshot.deleteManifests(table.io())) {
+            if (!manifest.hasAddedFiles() && !manifest.hasExistingFiles()) {
+                continue;
+            }
+            try (ManifestReader<DeleteFile> reader = ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs())
+                    .select(DV_ROW_COUNT_PROJECTION)) {
+                for (DeleteFile deleteFile : reader) {
+                    if (ContentFileUtil.isDV(deleteFile)) {
+                        rows += deleteFile.recordCount();
+                    }
+                }
+            } catch (IOException | RuntimeException e) {
+                LOG.warn("Failed to read delete manifest {} for the row-count estimate", manifest.path(), e);
+                return 0;
+            }
+        }
+        return rows;
     }
 
     // Per identity string partition column, the manifest's [min, max] partition value parsed into the DATETIME
@@ -3298,6 +3367,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         splitTasks.clear();
+        deletionVectorRowsBySnapshot.clear();
         databases.clear();
         tables.clear();
         scannedTables.clear();

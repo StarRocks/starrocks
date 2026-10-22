@@ -221,7 +221,20 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
+<<<<<<< HEAD
                 checkFileFormatSupportedDelete(fileScanTask, usedForDelete, usedForDelete && readsRowLineage());
+=======
+                checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
+                // A plain read of a data file whose deletion vector deletes every row returns nothing; DELETE,
+                // UPDATE and MERGE (usedForDelete), rewrites (recordScanFiles) and the equality-delete scan, which
+                // reads the task's delete files rather than its data file, keep it.
+                if (!usedForDelete && !recordScanFiles &&
+                        morParams.getScanTaskType() != IcebergMORParams.ScanTaskType.EQ_DELETE &&
+                        isFullyDeletedByDeletionVector(fileScanTask)) {
+                    Tracers.count(EXTERNAL, "ICEBERG.skippedFullyDeletedDataFiles", 1);
+                    continue;
+                }
+>>>>>>> 443b5dcdaac... [Enhancement][RB-225] Use Iceberg deletion vectors in COUNT(*) and row-count estimates (#66456)
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -236,6 +249,16 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
             return res;
         }
+    }
+
+    // A DV's cardinality is exact, so a DV with as many rows as its data file deletes all of them.
+    private static boolean isFullyDeletedByDeletionVector(FileScanTask fileScanTask) {
+        for (DeleteFile deleteFile : fileScanTask.deletes()) {
+            if (ContentFileUtil.isDV(deleteFile)) {
+                return deleteFile.recordCount() >= fileScanTask.file().recordCount();
+            }
+        }
+        return false;
     }
 
     // Note: unlike getSourceOutputs(), this path does not call addPartition(), so scan_lake_partition_num_limit is

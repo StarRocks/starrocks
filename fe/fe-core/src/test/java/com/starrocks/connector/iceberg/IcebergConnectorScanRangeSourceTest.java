@@ -146,6 +146,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         }
     }
 
+<<<<<<< HEAD
     // A position delete file is sent with its own format, which may differ from its data file's.
     @Test
     public void testPositionDeleteFileFormat() {
@@ -229,6 +230,53 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
         // the partition count still counts every (k2, bucket) combination
         Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
+=======
+    private static DeleteFile dvOn(DataFile dataFile, String partitionPath, long deletedRows) {
+        return FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath(dataFile.location() + ".dv.puffin").withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100).withRecordCount(deletedRows)
+                .withReferencedDataFile(dataFile.location())
+                .withContentOffset(4).withContentSizeInBytes(40)
+                .withPartitionPath(partitionPath).build();
+    }
+
+    private List<String> scannedPaths(IcebergTable icebergTable, List<FileScanTask> tasks, boolean recordScanFiles,
+                                      boolean usedForDelete) {
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        tasks.forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), recordScanFiles, false, usedForDelete);
+        List<String> paths = new ArrayList<>();
+        for (TScanRangeLocations locations : source.getSourceOutputs(100)) {
+            paths.add(locations.getScan_range().getHdfs_scan_range().getFull_path());
+        }
+        paths.sort(String::compareTo);
+        return paths;
+    }
+
+    @Test
+    public void testSkipDataFileFullyDeletedByDeletionVector() {
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_fully_deleted", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_2).commit();
+        // FILE_A (2 rows) loses both rows, FILE_A_2 (2 rows) only one.
+        v3Table.newRowDelta()
+                .addDeletes(dvOn(FILE_A, "data_bucket=0", 2))
+                .addDeletes(dvOn(FILE_A_2, "data_bucket=1", 1))
+                .commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v3Table,
+                Maps.newHashMap());
+        List<FileScanTask> tasks = Lists.newArrayList(v3Table.newScan().planFiles());
+        Assertions.assertEquals(2, tasks.size());
+
+        // A plain read skips the fully deleted file.
+        Assertions.assertEquals(List.of(FILE_A_2.location()), scannedPaths(icebergTable, tasks, false, false));
+        // DELETE / UPDATE / MERGE and rewrites keep it.
+        List<String> both = List.of(FILE_A.location(), FILE_A_2.location());
+        Assertions.assertEquals(both, scannedPaths(icebergTable, tasks, false, true));
+        Assertions.assertEquals(both, scannedPaths(icebergTable, tasks, true, false));
+>>>>>>> 443b5dcdaac... [Enhancement][RB-225] Use Iceberg deletion vectors in COUNT(*) and row-count estimates (#66456)
     }
 
     @Test
