@@ -120,7 +120,7 @@ public class IvmOpUtils {
             // per row in the chunk and never in the others, so that key overflows primary_key_limit_size and
             // every other row silently loses it.
             if (child.isConstant()) {
-                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT_V2;
             }
             Type type = child.getType();
             if (type == null || !type.isValid() || !type.isScalarType()) {
