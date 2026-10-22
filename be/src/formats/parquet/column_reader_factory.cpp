@@ -22,27 +22,13 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
+#include "formats/scan_context.h"
 #include "formats/utils.h"
 #include "runtime/mem_pool.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {
-
-// A one-row nullable column holding an Iceberg initial-default, parsed with the subfield's type.
-static StatusOr<ColumnPtr> create_default_column(const TypeDescriptor& type, const std::string& default_value) {
-    auto type_info = get_type_info(type);
-    if (type_info == nullptr) {
-        return Status::NotSupported(fmt::format("unsupported initial-default type {}", type.debug_string()));
-    }
-    MemPool mem_pool;
-    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
-    Datum datum;
-    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
-    auto column = ColumnHelper::create_column(type, true);
-    column->append_datum(datum);
-    return column;
-}
 
 DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
@@ -384,6 +370,58 @@ bool any_reader_not_null(const std::map<std::string, std::unique_ptr<ColumnReade
 
 } // anonymous namespace
 
+static bool is_readable_level_source(const ParquetField& field) {
+    return field.type == ColumnType::SCALAR && variant_typed_desc_from_parquet_field(&field).type != TYPE_VARIANT;
+}
+
+// The first readable scalar leaf under `field` reached through structs only, depth first. A leaf under a list or
+// map has one value per element, not per row, so it cannot give the row count.
+static const ParquetField* find_readable_struct_leaf(const ParquetField& field) {
+    if (is_readable_level_source(field)) {
+        return &field;
+    }
+    if (field.type != ColumnType::STRUCT) {
+        return nullptr;
+    }
+    for (const auto& child : field.children) {
+        if (const ParquetField* leaf = find_readable_struct_leaf(child); leaf != nullptr) {
+            return leaf;
+        }
+    }
+    return nullptr;
+}
+
+const ParquetField* ColumnReaderFactory::find_struct_level_source(const ParquetField& field) {
+    // Its values are read and dropped, so prefer a fixed-width one over a byte array.
+    const ParquetField* byte_array = nullptr;
+    for (const auto& child : field.children) {
+        if (!is_readable_level_source(child)) {
+            continue;
+        }
+        if (child.physical_type != tparquet::Type::BYTE_ARRAY &&
+            child.physical_type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            return &child;
+        }
+        if (byte_array == nullptr) {
+            byte_array = &child;
+        }
+    }
+    if (byte_array != nullptr) {
+        return byte_array;
+    }
+    // No direct scalar subfield: a leaf under a struct subfield also has one value per row and carries this
+    // struct's def levels. A struct whose stored subfields are only lists or maps keeps reading NULL.
+    for (const auto& child : field.children) {
+        if (child.type != ColumnType::STRUCT) {
+            continue;
+        }
+        if (const ParquetField* leaf = find_readable_struct_leaf(child); leaf != nullptr) {
+            return leaf;
+        }
+    }
+    return nullptr;
+}
+
 Status VariantShreddedReadHints::add_path(std::string path) {
     ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(path)));
     shredded_paths.emplace_back(std::move(path));
@@ -477,9 +515,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 const TIcebergSchemaField* lake_child = mapping.lake_children[i];
                 if (lake_child != nullptr && lake_child->__isset.initial_default &&
                     !col_type.children[i].is_complex_type()) {
-                    // A type the default parser does not support (e.g. TIME) keeps reading NULL, as before
+                    // A type the default parser does not support keeps reading NULL, as before
                     // defaults were filled; any other failure still fails the scan.
-                    auto default_column = create_default_column(col_type.children[i], lake_child->initial_default);
+                    auto default_column = FormatScanContext::create_initial_default_column(col_type.children[i], true,
+                                                                                           lake_child->initial_default);
                     if (default_column.ok()) {
                         default_columns.emplace(col_type.field_names[i], std::move(default_column).value());
                     } else if (!default_column.status().is_not_supported()) {
@@ -497,9 +536,19 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         // maybe struct subfield ColumnReader is null
         if (any_reader_not_null(children_readers)) {
             return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns));
-        } else {
-            return nullptr;
         }
+        const ParquetField* level_source_field =
+                lake_schema_field != nullptr ? find_struct_level_source(*field) : nullptr;
+        if (level_source_field != nullptr) {
+            // Iceberg subfields added after the file was written: keep the struct's nulls and fill the defaults.
+            // Readers keep a pointer to their type, so it lives in the struct reader.
+            auto level_source_type =
+                    std::make_unique<TypeDescriptor>(variant_typed_desc_from_parquet_field(level_source_field));
+            ASSIGN_OR_RETURN(ColumnReaderPtr level_source, create(opts, level_source_field, *level_source_type));
+            return std::make_unique<StructColumnReader>(field, std::move(children_readers), std::move(default_columns),
+                                                        std::move(level_source), std::move(level_source_type));
+        }
+        return nullptr;
     } else {
         if (col_type.type == TYPE_GEOGRAPHY) {
             if (lake_schema_field == nullptr) {

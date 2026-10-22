@@ -495,6 +495,9 @@ public class IcebergTableTest extends TableTestBase {
         List<TIcebergPartitionInfo> partitionInfos = desc.getIcebergTable().getPartition_info();
         Assertions.assertEquals(1, partitionInfos.size());
         Assertions.assertEquals("p", partitionInfos.get(0).getPartition_column_name());
+        // SHOW CREATE TABLE shows the unknown transform instead of failing.
+        Assertions.assertEquals(List.of("future_transform[3](`id`)", "`p`"),
+                table.getPartitionColumnNamesWithTransform());
 
         // A writer cannot compute the unknown field, so writes still fail.
         StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
