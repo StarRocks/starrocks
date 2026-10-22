@@ -137,6 +137,7 @@ public class CreateRoutineLoadStmtTest {
             Assertions.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
             Assertions.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
             Assertions.assertFalse(createRoutineLoadStmt.isPauseOnFatalParseError());
+            Assertions.assertFalse(createRoutineLoadStmt.isSkipOnFatalParseError());
         }
 
         {
@@ -152,6 +153,7 @@ public class CreateRoutineLoadStmtTest {
                     + "\"max_filter_ratio\" = \"0.12\",\n"
                     + "\"strict_mode\" = \"false\",\n"
                     + "\"pause_on_fatal_parse_error\" = \"true\",\n"
+                    + "\"skip_on_fatal_parse_error\" = \"true\",\n"
                     + "\"timezone\" = \"Asia/Shanghai\"\n"
                     + ")\n"
                     + "FROM KAFKA\n"
@@ -178,6 +180,7 @@ public class CreateRoutineLoadStmtTest {
             Assertions.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
             Assertions.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
             Assertions.assertTrue(createRoutineLoadStmt.isPauseOnFatalParseError());
+            Assertions.assertTrue(createRoutineLoadStmt.isSkipOnFatalParseError());
         }
     }
 
