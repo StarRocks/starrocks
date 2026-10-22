@@ -1325,9 +1325,11 @@ build_croaringbitmap() {
 
     local croaring_c_flags="$(append_flags "${CFLAGS}" "-Wno-error")"
     local croaring_cxx_flags="$(append_flags "${CXXFLAGS}" "-D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error")"
-    if [[ "$(uname -m)" == "x86_64" ]]; then
-        croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
-        croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
+    if [[ "$(uname -m)" == "x86_64" && "${THIRD_PARTY_BUILD_WITH_SSE4_2:-${USE_SSE4_2:-ON}}" == "ON" ]]; then
+        if [[ "$(sysctl -n hw.optional.sse4_2 2>/dev/null || echo 1)" == "1" ]]; then
+            croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
+            croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
+        fi
     fi
 
     if ! "${CMAKE_CMD}" .. \

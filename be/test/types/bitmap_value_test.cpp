@@ -1261,24 +1261,54 @@ TEST(BitmapValueTest1, croaring_5_3_2_unaligned_deserialize_and_simd_containers)
         ASSERT_EQ(expected, actual);
     }
 
-    // 2. Sparse-bitset to_array() at card = 256 (PR #868 AVX-512 VPCOMPRESSB / BMI2 BZHI tail safety).
+    // 2. Sparse-bitset toUint32Array() at card = 4101 (in [4097, 8191] where PR #868 AVX-512
+    // VPCOMPRESSB / masked store replaces the scalar loop, with < 16 bits per 64-bit word)
+    // followed by 4101 -> 4096 bitset-to-array demotion (bitset_extract_setbits_avx512_uint16).
     {
         roaring::Roaring sparse_bitset;
-        for (uint32_t i = 0; i < 5000; ++i) {
-            sparse_bitset.add(i * 2); // Promotes to bitset container (> 4096 elements)
+        std::vector<uint32_t> expected_bitset_vals;
+        expected_bitset_vals.reserve(4101);
+        for (uint32_t w = 0; w < 1024; ++w) {
+            uint32_t base = w * 64;
+            for (uint32_t bit : {0U, 13U, 29U, 51U}) {
+                sparse_bitset.add(base + bit);
+                expected_bitset_vals.push_back(base + bit);
+            }
         }
-        for (uint32_t i = 256; i < 5000; ++i) {
-            sparse_bitset.remove(i * 2); // Retains bitset container with exact cardinality 256
+        // Add 5 extra bits in the final 64-bit word so cardinality = 4101 (> 4096 DEFAULT_MAX_SIZE),
+        // promoting the container to BITSET_CONTAINER_TYPE while keeping advance = 9 (< 16) in the tail word.
+        const uint32_t last_word_base = 1023U * 64U;
+        const std::vector<uint32_t> extra_tail_bits = {3U, 7U, 19U, 37U, 61U};
+        for (uint32_t bit : extra_tail_bits) {
+            sparse_bitset.add(last_word_base + bit);
+            expected_bitset_vals.push_back(last_word_base + bit);
         }
-        ASSERT_EQ(256U, sparse_bitset.cardinality());
-        std::vector<uint32_t> out(256 + 16, 0xDEADBEEFU);
+        std::sort(expected_bitset_vals.begin(), expected_bitset_vals.end());
+
+        ASSERT_EQ(4101U, sparse_bitset.cardinality());
+        roaring::api::roaring_statistics_t stat{};
+        roaring::api::roaring_bitmap_statistics(&sparse_bitset.roaring, &stat);
+        ASSERT_EQ(1U, stat.n_bitset_containers);
+        ASSERT_EQ(0U, stat.n_array_containers);
+
+        std::vector<uint32_t> out(4101 + 16, 0xDEADBEEFU);
         sparse_bitset.toUint32Array(out.data());
-        for (uint32_t i = 0; i < 256; ++i) {
-            ASSERT_EQ(i * 2, out[i]);
+        for (size_t i = 0; i < expected_bitset_vals.size(); ++i) {
+            ASSERT_EQ(expected_bitset_vals[i], out[i]);
         }
-        for (uint32_t i = 256; i < 256 + 16; ++i) {
+        for (size_t i = 4101; i < 4101 + 16; ++i) {
             ASSERT_EQ(0xDEADBEEFU, out[i]);
         }
+
+        // Remove the 5 extra bits to cross the 4097 -> 4096 demotion threshold
+        // (exercising array_container_from_bitset -> bitset_extract_setbits_avx512_uint16).
+        for (uint32_t bit : extra_tail_bits) {
+            sparse_bitset.remove(last_word_base + bit);
+        }
+        ASSERT_EQ(4096U, sparse_bitset.cardinality());
+        roaring::api::roaring_bitmap_statistics(&sparse_bitset.roaring, &stat);
+        ASSERT_EQ(0U, stat.n_bitset_containers);
+        ASSERT_EQ(1U, stat.n_array_containers);
     }
 
     // 3. Interleaved multi-container and single-into-many operator|= (PRs #850, #906, #908)

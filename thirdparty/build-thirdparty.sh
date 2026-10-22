@@ -324,10 +324,17 @@ if [[ -z ${THIRD_PARTY_BUILD_WITH_AVX2} ]]; then
     THIRD_PARTY_BUILD_WITH_AVX2=ON
 fi
 
+if [[ -z ${THIRD_PARTY_BUILD_WITH_SSE4_2} ]]; then
+    THIRD_PARTY_BUILD_WITH_SSE4_2=${USE_SSE4_2:-ON}
+fi
+
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
     if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
         THIRD_PARTY_BUILD_WITH_AVX2=OFF
+    fi
+    if [[ -z $(grep -o 'sse4_2' /proc/cpuinfo) || -z $(grep -o 'pclmulqdq' /proc/cpuinfo) ]]; then
+        THIRD_PARTY_BUILD_WITH_SSE4_2=OFF
     fi
 fi
 
@@ -1176,7 +1183,7 @@ build_croaringbitmap() {
 
     local croaring_c_flags="${CFLAGS}"
     local croaring_cxx_flags="${CXXFLAGS}"
-    if [[ "${MACHINE_TYPE}" == "x86_64" ]]; then
+    if [[ "${MACHINE_TYPE}" == "x86_64" && "${THIRD_PARTY_BUILD_WITH_SSE4_2}" == "ON" ]]; then
         croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
         croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
     fi
