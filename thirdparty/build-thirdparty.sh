@@ -1224,7 +1224,7 @@ build_croaringbitmap() {
     ${BUILD_SYSTEM} install
 
     local expected_version="${CROARINGBITMAP_SOURCE#CRoaring-}"
-    for required_hdr in roaring.h roaring64.h roaring.hh roaring64map.hh roaring_version.h; do
+    for required_hdr in roaring.h roaring64.h roaring.hh roaring64.hh roaring64map.hh roaring_version.h; do
         if [[ ! -s "$TP_INSTALL_DIR/include/roaring/${required_hdr}" ]]; then
             echo "ERROR: Missing CRoaring header $TP_INSTALL_DIR/include/roaring/${required_hdr}" >&2
             exit 1
