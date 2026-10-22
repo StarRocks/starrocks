@@ -17,7 +17,6 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
-#include "formats/scan_context.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -85,8 +84,7 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
             const OrcMappingOrcType& child = orc_mapping->get_orc_type_child_mapping(i);
             std::unique_ptr<ORCColumnReader> child_reader;
             if (child.orc_type == nullptr) {
-                ASSIGN_OR_RETURN(child_reader,
-                                 create_default_column_reader(child_type, true, reader, child.initial_default));
+                ASSIGN_OR_RETURN(child_reader, create_default_column_reader(child_type, true, reader));
             } else {
                 ASSIGN_OR_RETURN(child_reader,
                                  ORCColumnReader::create(child_type, child.orc_type, true, child.orc_mapping, reader));
@@ -135,33 +133,14 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(
-        const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
-        const std::optional<std::string>& initial_default) {
-    ColumnPtr default_column = nullptr;
-    if (initial_default.has_value()) {
-        auto column = FormatScanContext::create_initial_default_column(type, nullable, *initial_default);
-        // A type the default parser does not support keeps reading NULL; any other failure fails the scan.
-        if (column.ok()) {
-            default_column = std::move(column).value();
-        } else if (!column.status().is_not_supported()) {
-            return column.status();
-        }
-    }
-    return std::make_unique<DefaultColumnReader>(type, nullable, reader, std::move(default_column));
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(const TypeDescriptor& type,
+                                                                                         bool nullable,
+                                                                                         OrcChunkReader* reader) {
+    return std::make_unique<DefaultColumnReader>(type, nullable, reader);
 }
 
-<<<<<<< HEAD
 Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     col->append_default(size);
-=======
-Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) {
-    if (_default_column != nullptr) {
-        col->append_value_multiple_times(*_default_column, 0, size);
-    } else {
-        col->append_default(size);
-    }
->>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
     return Status::OK();
 }
 
@@ -971,18 +950,11 @@ Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, Colu
     auto& field_columns = col_struct->fields_column();
 
     for (size_t i = 0; i < _type.children.size(); i++) {
-<<<<<<< HEAD
-        size_t column_id = _child_readers[i]->get_orc_type()->getColumnId();
-        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
-        RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_columns[i], from, size));
-=======
         const orc::Type* field_orc_type = _child_readers[i]->get_orc_type();
         // nullptr for a subfield missing from the file (DefaultColumnReader)
         orc::ColumnVectorBatch* field_cvb =
                 field_orc_type == nullptr ? nullptr : orc_struct->fieldsColumnIdMap[field_orc_type->getColumnId()];
-        auto* field_column = field_columns[i]->as_mutable_raw_ptr();
-        RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_column, from, size));
->>>>>>> 209630d ([BugFix] Fix Iceberg read follow-ups: unknown transforms in SHOW CREATE, TIME/TIMESTAMPTZ defaults, missing struct subfields, filters on default columns (#81311))
+        RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_columns[i], from, size));
     }
     return Status::OK();
 }

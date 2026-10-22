@@ -173,8 +173,6 @@ private:
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
-    // Own the initial-default values the FixedValueColumnReaders of not existed columns point into.
-    std::vector<ColumnPtr> _not_existed_default_columns;
 
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;

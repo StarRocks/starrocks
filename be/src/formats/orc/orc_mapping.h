@@ -48,9 +48,8 @@ struct OrcMappingOptions {
 // For a complex type, it contains orc_mapping and orc_type both
 struct OrcMappingOrcType {
     const OrcMappingPtr orc_mapping = nullptr;
-    // nullptr for an Iceberg struct subfield missing from the file: it reads initial_default, or NULL.
+    // nullptr for an Iceberg struct subfield missing from the file: it reads NULL.
     const orc::Type* orc_type = nullptr;
-    const std::optional<std::string> initial_default = std::nullopt;
 };
 
 // OrcMapping is used to create a global mapping for orc
@@ -108,8 +107,7 @@ public:
 
     bool contains(size_t original_pos_in_table_definition) const;
 
-    void add_mapping(size_t pos_in_src, const OrcMappingPtr& child_mapping, const orc::Type* orc_type,
-                     std::optional<std::string> initial_default = std::nullopt);
+    void add_mapping(size_t pos_in_src, const OrcMappingPtr& child_mapping, const orc::Type* orc_type);
 
     void clear();
 

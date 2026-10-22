@@ -306,7 +306,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
             if (mapping->get_orc_type_child_mapping(index).orc_type == nullptr) {
-                // missing from the file, read as its default with the table type
+                // missing from the file, read as NULL with the table type
                 sub_field_type = origin_type.children.at(index);
                 continue;
             }
