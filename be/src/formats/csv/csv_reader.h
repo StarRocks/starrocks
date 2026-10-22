@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 #include "formats/csv/converter.h"
+#include "formats/csv/csv_parse_options.h"
 
 namespace starrocks {
 class CSVBuffer {
@@ -126,32 +127,6 @@ struct CSVRow {
     }
 };
 
-struct CSVParseOptions {
-    std::string row_delimiter;
-    std::string column_delimiter;
-    int64_t skip_header;
-    bool trim_space;
-    char escape;
-    char enclose;
-    CSVParseOptions(const std::string& row_delimiter_, const std::string& column_delimiter_, int64_t skip_header_ = 0,
-                    bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
-        row_delimiter = row_delimiter_;
-        column_delimiter = column_delimiter_;
-        skip_header = skip_header_;
-        trim_space = trim_space_;
-        escape = escape_;
-        enclose = enclose_;
-    }
-    CSVParseOptions() {
-        row_delimiter = '\n';
-        column_delimiter = ',';
-        skip_header = false;
-        trim_space = false;
-        escape = 0;
-        enclose = 0;
-    }
-};
-
 class CSVReader {
 #ifndef BE_TEST
     constexpr static size_t kMinBufferSize = 8 * 1024 * 1024L;
@@ -181,6 +156,15 @@ public:
     Status more_rows();
 
     void set_limit(size_t limit) { _limit = limit; }
+
+    // Declares that the limit falls exactly on a record boundary, so the range ends with the record
+    // that finishes there.
+    //
+    // Without this the reader runs on until it has passed the limit. That is right for a range cut
+    // at an arbitrary offset, because the range that follows discards the partial record it starts
+    // inside, and the two rules meet. For a range whose end is already a record boundary it would
+    // read the next range's first record as well, and the row would be loaded twice.
+    void set_limit_at_record_boundary() { _limit_at_record_boundary = true; }
 
     void split_record(const Record& record, Fields* fields) const;
 
@@ -218,8 +202,16 @@ private:
     Status _expand_buffer();
     Status _expand_buffer_loosely();
 
+    bool _reached_limit() const {
+        if (_limit == 0) {
+            return false;
+        }
+        return _limit_at_record_boundary ? _parsed_bytes >= _limit : _parsed_bytes > _limit;
+    }
+
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
+    bool _limit_at_record_boundary = false;
 };
 
 } // namespace starrocks
