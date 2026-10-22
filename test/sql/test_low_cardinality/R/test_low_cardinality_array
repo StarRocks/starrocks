@@ -607,3 +607,8 @@ with cte as (select st, IF(st = 'GS', null, lower(st)) r FROM s3, unnest(s3.a2) 
 -- result:
 AH	ah
 -- !result
+with cte as (select a1, a2 from s1) [materialized] select a1 from cte where a2[1] = 'JX' order by a1 limit 2;
+-- result:
+["Hebei","Hong Kong","Macao","Guangxi"]
+["Hong Kong","Jiangsu","Tibet","Yunnan","Fujian"]
+-- !result
