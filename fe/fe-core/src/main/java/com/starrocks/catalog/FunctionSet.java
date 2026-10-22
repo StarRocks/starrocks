@@ -189,6 +189,7 @@ public class FunctionSet {
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
+    public static final String ENCODE_FINGERPRINT_SHA256_V2 = "encode_fingerprint_sha256_v2";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -732,7 +733,12 @@ public class FunctionSet {
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
+<<<<<<< HEAD
                     ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY);
+=======
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY, AI_COMPLETE,
+                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
+>>>>>>> 6bf11de ([BugFix] Use a prefix-free row id fingerprint for incremental MVs (#81259))
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
