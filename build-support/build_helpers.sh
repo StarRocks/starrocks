@@ -403,7 +403,11 @@ starrocks_detect_linker_type() {
     else
         base_exe_linker_flags="${LDFLAGS:-}"
     fi
-    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${cached_config_cxx_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
+    local gcc_toolchain_flag=""
+    if [[ "${cxx_compiler}" == *clang* && -n "${STARROCKS_GCC_HOME:-}" ]]; then
+        gcc_toolchain_flag="--gcc-toolchain=${STARROCKS_GCC_HOME}"
+    fi
+    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${gcc_toolchain_flag} ${cached_config_cxx_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
     local flag_tokens=()
     read -r -a flag_tokens <<< "${combined_flags}"
     local flag_linker=""
@@ -430,22 +434,35 @@ starrocks_detect_linker_type() {
                 ;;
         esac
         local flag_ld_bin=""
-        if command -v "${flag_linker}" >/dev/null 2>&1; then
+        if [[ "${flag_linker}" == */* ]] && command -v "${flag_linker}" >/dev/null 2>&1; then
             flag_ld_bin="${flag_linker}"
-        elif command -v "ld.${flag_linker}" >/dev/null 2>&1; then
-            flag_ld_bin="ld.${flag_linker}"
         else
             local compiler_flag_ld=""
-            compiler_flag_ld="$("${cxx_compiler}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
+            compiler_flag_ld="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
+            if [[ -z "${compiler_flag_ld}" || "${compiler_flag_ld}" == "ld.${flag_linker}" ]] && [[ "${#flag_tokens[@]}" -gt 0 ]]; then
+                compiler_flag_ld="$("${cxx_compiler}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
+            fi
             if [[ -n "${compiler_flag_ld}" && "${compiler_flag_ld}" != "ld.${flag_linker}" ]] && command -v "${compiler_flag_ld}" >/dev/null 2>&1; then
                 flag_ld_bin="${compiler_flag_ld}"
+            elif command -v "${flag_linker}" >/dev/null 2>&1; then
+                flag_ld_bin="${flag_linker}"
+            elif command -v "ld.${flag_linker}" >/dev/null 2>&1; then
+                flag_ld_bin="ld.${flag_linker}"
             fi
         fi
         if [[ -n "${flag_ld_bin}" ]]; then
             local flag_ld_version=""
             flag_ld_version="$("${flag_ld_bin}" -v 2>&1 || "${flag_ld_bin}" --version 2>&1 || true)"
             case "${flag_ld_version}" in
-                *LLD*|*lld*|*mold*|*GNU\ gold*)
+                *LLD*|*mold*|*GNU\ gold*)
+                    echo "modern"
+                    return 0
+                    ;;
+                *GNU\ ld*)
+                    echo "legacy"
+                    return 0
+                    ;;
+                *lld*)
                     echo "modern"
                     return 0
                     ;;
@@ -456,12 +473,13 @@ starrocks_detect_linker_type() {
     fi
 
     # Inspect the active compiler's resolved linker (-Wl,--version or -print-prog-name=ld),
-    # then fall back to system ld on PATH.
+    # forwarding surviving driver flags (e.g., -B<dir>, -B <dir>, --prefix=<dir>, --gcc-toolchain=<dir>),
+    # then fall back to bare compiler probes and finally system ld on PATH.
     if ! ( declare -F ld >/dev/null 2>&1 && [[ "${cxx_compiler}" == "g++" ]] && ! declare -F g++ >/dev/null 2>&1 ); then
         local compiler_wl_version=""
-        compiler_wl_version="$("${cxx_compiler}" -Wl,--version 2>&1 || true)"
+        compiler_wl_version="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -Wl,--version 2>&1 || true)"
         case "${compiler_wl_version}" in
-            *LLD*|*lld*|*mold*|*GNU\ gold*)
+            *LLD*|*mold*|*GNU\ gold*)
                 echo "modern"
                 return 0
                 ;;
@@ -469,15 +487,19 @@ starrocks_detect_linker_type() {
                 echo "legacy"
                 return 0
                 ;;
+            *lld*)
+                echo "modern"
+                return 0
+                ;;
         esac
 
         local compiler_ld=""
-        compiler_ld="$("${cxx_compiler}" -print-prog-name=ld 2>/dev/null || true)"
+        compiler_ld="$("${cxx_compiler}" "${flag_tokens[@]+"${flag_tokens[@]}"}" -print-prog-name=ld 2>/dev/null || true)"
         if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
             local compiler_ld_version=""
-            compiler_ld_version="$("${compiler_ld}" -v 2>&1 || true)"
+            compiler_ld_version="$("${compiler_ld}" -v 2>&1 || "${compiler_ld}" --version 2>&1 || true)"
             case "${compiler_ld_version}" in
-                *LLD*|*lld*|*mold*|*GNU\ gold*)
+                *LLD*|*mold*|*GNU\ gold*)
                     echo "modern"
                     return 0
                     ;;
@@ -485,7 +507,49 @@ starrocks_detect_linker_type() {
                     echo "legacy"
                     return 0
                     ;;
+                *lld*)
+                    echo "modern"
+                    return 0
+                    ;;
             esac
+        fi
+
+        if [[ "${#flag_tokens[@]}" -gt 0 ]]; then
+            compiler_wl_version="$("${cxx_compiler}" -Wl,--version 2>&1 || true)"
+            case "${compiler_wl_version}" in
+                *LLD*|*mold*|*GNU\ gold*)
+                    echo "modern"
+                    return 0
+                    ;;
+                *GNU\ ld*)
+                    echo "legacy"
+                    return 0
+                    ;;
+                *lld*)
+                    echo "modern"
+                    return 0
+                    ;;
+            esac
+
+            compiler_ld="$("${cxx_compiler}" -print-prog-name=ld 2>/dev/null || true)"
+            if [[ -n "${compiler_ld}" && "${compiler_ld}" != "ld" ]] && command -v "${compiler_ld}" >/dev/null 2>&1; then
+                local bare_compiler_ld_version=""
+                bare_compiler_ld_version="$("${compiler_ld}" -v 2>&1 || "${compiler_ld}" --version 2>&1 || true)"
+                case "${bare_compiler_ld_version}" in
+                    *LLD*|*mold*|*GNU\ gold*)
+                        echo "modern"
+                        return 0
+                        ;;
+                    *GNU\ ld*)
+                        echo "legacy"
+                        return 0
+                        ;;
+                    *lld*)
+                        echo "modern"
+                        return 0
+                        ;;
+                esac
+            fi
         fi
     fi
 

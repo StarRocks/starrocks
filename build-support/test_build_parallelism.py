@@ -826,6 +826,247 @@ class TestBuildParallelism(unittest.TestCase):
                 "modern",
             )
 
+    def test_detect_linker_type_passes_driver_search_flags_to_compiler_probe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gcc_bin = os.path.join(tmpdir, "gcc", "bin")
+            os.makedirs(gcc_bin, exist_ok=True)
+            lld_dir = os.path.join(tmpdir, "lld-bin")
+            os.makedirs(lld_dir, exist_ok=True)
+            bfd_in_lld_named_dir = os.path.join(tmpdir, "not-lld-dir")
+            os.makedirs(bfd_in_lld_named_dir, exist_ok=True)
+            custom_dir = os.path.join(tmpdir, "custom-bin")
+            os.makedirs(custom_dir, exist_ok=True)
+
+            mock_lld = os.path.join(lld_dir, "ld")
+            with open(mock_lld, "w") as f:
+                f.write("#!/bin/sh\necho 'LLD 17.0.6'\n")
+            os.chmod(mock_lld, 0o755)
+
+            mock_bfd = os.path.join(bfd_in_lld_named_dir, "ld")
+            with open(mock_bfd, "w") as f:
+                f.write("#!/bin/sh\necho 'GNU ld (GNU Binutils) 2.38'\n")
+            os.chmod(mock_bfd, 0o755)
+
+            mock_custom_mold = os.path.join(custom_dir, "ld.mycustom")
+            with open(mock_custom_mold, "w") as f:
+                f.write("#!/bin/sh\necho 'mold 2.4.0 (compatible with GNU ld)'\n")
+            os.chmod(mock_custom_mold, 0o755)
+
+            # Mock g++ that honors -B<dir>, -B <dir>, and --prefix=<dir> when probing linker,
+            # while defaulting to GNU BFD when no search-path flag is passed.
+            mock_gxx = os.path.join(gcc_bin, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write(f"""#!/bin/sh
+search_dir=""
+prev_b=0
+for arg in "$@"; do
+    if [ "$prev_b" -eq 1 ]; then
+        search_dir="$arg"
+        prev_b=0
+        continue
+    fi
+    case "$arg" in
+        -B) prev_b=1 ;;
+        -B*) search_dir="${{arg#-B}}" ;;
+        --prefix=*) search_dir="${{arg#--prefix=}}" ;;
+    esac
+done
+case "$*" in
+    *-Wl,--version*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            echo "$search_dir/ld --version"
+            "$search_dir/ld" --version
+            exit 0
+        fi
+        echo "GNU ld (GNU Binutils) 2.38"
+        ;;
+    *-print-prog-name=ld.mycustom*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld.mycustom" ]; then
+            echo "$search_dir/ld.mycustom"
+        else
+            echo "ld.mycustom"
+        fi
+        ;;
+    *-print-prog-name=ld*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            echo "$search_dir/ld"
+        else
+            echo "/usr/bin/ld"
+        fi
+        ;;
+    *)
+        echo "12.1.0"
+        ;;
+esac
+""")
+            os.chmod(mock_gxx, 0o755)
+
+            build_dir = os.path.join(tmpdir, "ut_build_ASAN")
+            os.makedirs(build_dir, exist_ok=True)
+            cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+            cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "GNU ld (GNU Binutils) 2.38"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+
+            base_env = {"STARROCKS_GCC_HOME": os.path.join(tmpdir, "gcc")}
+
+            # 1. Compact -B<dir> in STARROCKS_CXX_COMMON_FLAGS selects modern linker.
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {**base_env, "STARROCKS_CXX_COMMON_FLAGS": f"-B{lld_dir}"},
+                ),
+                "modern",
+            )
+
+            # 2. Space-separated -B <dir> and --prefix=<dir> in surviving flag sources select modern linker.
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {**base_env, "STARROCKS_CXX_COMMON_FLAGS": f"-B {lld_dir}"},
+                ),
+                "modern",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {**base_env, "STARROCKS_CXX_LINKER_FLAGS": f"--prefix={lld_dir}"},
+                ),
+                "modern",
+            )
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {**base_env, "LDFLAGS": f"-B{lld_dir}"},
+                ),
+                "modern",
+            )
+            with open(cache_file, "w") as f:
+                f.write(f"CMAKE_EXE_LINKER_FLAGS_ASAN:STRING=-B{lld_dir}\n")
+            self.assertEqual(self.run_bash(cmd, base_env), "modern")
+            os.remove(cache_file)
+
+            # 3. Directory path containing 'lld' with a GNU BFD linker must classify as 'legacy',
+            # even when the host/default linker is modern LLD.
+            modern_default_cmd = f"""
+            starrocks_is_darwin() {{ return 1; }}
+            uname() {{ echo "x86_64"; }}
+            ldd() {{ echo "ldd (GNU libc) 2.35"; }}
+            ld() {{ echo "LLD 17.0.6"; }}
+            starrocks_detect_linker_type "{build_dir}"
+            """
+            self.assertEqual(
+                self.run_bash(
+                    modern_default_cmd,
+                    {
+                        **base_env,
+                        "STARROCKS_CXX_COMMON_FLAGS": f"-B{bfd_in_lld_named_dir}",
+                    },
+                ),
+                "legacy",
+            )
+
+            # 4. Shadowed CXXFLAGS and cached base CMAKE_CXX_FLAGS with -B<dir> remain ignored.
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {**base_env, "CXXFLAGS": f"-B{lld_dir}"},
+                ),
+                "legacy",
+            )
+            with open(cache_file, "w") as f:
+                f.write(f"CMAKE_CXX_FLAGS:STRING=-B{lld_dir}\n")
+            self.assertEqual(self.run_bash(cmd, base_env), "legacy")
+            os.remove(cache_file)
+
+            # 5. -B<dir> combined with custom -fuse-ld=mycustom resolves ld.mycustom via compiler probe.
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        **base_env,
+                        "STARROCKS_CXX_LINKER_FLAGS": f"-B{custom_dir} -fuse-ld=mycustom",
+                    },
+                ),
+                "modern",
+            )
+
+            # 6. Clang with STARROCKS_GCC_HOME forwards --gcc-toolchain=${STARROCKS_GCC_HOME}.
+            llvm_home = os.path.join(tmpdir, "llvm")
+            llvm_bin = os.path.join(llvm_home, "bin")
+            os.makedirs(llvm_bin, exist_ok=True)
+            mock_clangxx = os.path.join(llvm_bin, "clang++")
+            with open(mock_clangxx, "w") as f:
+                f.write(f"""#!/bin/sh
+case "$*" in
+    *--gcc-toolchain={tmpdir}/gcc*-Wl,--version*)
+        echo "GNU gold (GNU Binutils 2.38) 1.16"
+        ;;
+    *-Wl,--version*)
+        echo "GNU ld (GNU Binutils) 2.38"
+        ;;
+    *)
+        echo "17.0.6"
+        ;;
+esac
+""")
+            os.chmod(mock_clangxx, 0o755)
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "CC": os.path.join(llvm_bin, "clang"),
+                        "CXX": mock_clangxx,
+                        "STARROCKS_GCC_HOME": f"{tmpdir}/gcc",
+                    },
+                ),
+                "modern",
+            )
+
+            # 7. When -Wl,--version produces no banner, -print-prog-name=ld still receives driver search flags.
+            prog_only_cxx = os.path.join(tmpdir, "prog-only-g++")
+            with open(prog_only_cxx, "w") as f:
+                f.write(f"""#!/bin/sh
+search_dir=""
+for arg in "$@"; do
+    case "$arg" in
+        -B*) search_dir="${{arg#-B}}" ;;
+    esac
+done
+case "$*" in
+    *-Wl,--version*)
+        exit 1
+        ;;
+    *-print-prog-name=ld*)
+        if [ -n "$search_dir" ] && [ -x "$search_dir/ld" ]; then
+            echo "$search_dir/ld"
+        else
+            echo "{mock_bfd}"
+        fi
+        ;;
+    *)
+        echo "12.1.0"
+        ;;
+esac
+""")
+            os.chmod(prog_only_cxx, 0o755)
+            self.assertEqual(
+                self.run_bash(
+                    cmd,
+                    {
+                        "CC": "gcc",
+                        "CXX": prog_only_cxx,
+                        "STARROCKS_CXX_COMMON_FLAGS": f"-B{lld_dir}",
+                    },
+                ),
+                "modern",
+            )
+
     def test_detect_linker_type_aarch64_honors_compiler_and_flags(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_dir = os.path.join(tmpdir, "bin")
