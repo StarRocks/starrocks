@@ -16,7 +16,6 @@
 #include <arrow/testing/gtest_util.h>
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -52,9 +51,9 @@ TEST_F(PaimonScannerProjectionTest, pruned_map_reads_actual_schema_across_chunks
         PaimonScanner scanner;
         prepare(&scanner, &context, &slot, type, array);
         ChunkPtr first;
-        ASSERT_OK(scanner.do_get_next(nullptr, &first));
+        ASSERT_TRUE(scanner.do_get_next(nullptr, &first).ok());
         auto column = first->get_column_by_slot_id(1);
-        auto* map = down_cast<MapColumn*>(ColumnHelper::get_data_column(column.get()));
+        auto* map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(column.get()));
         ASSERT_EQ(2, map->keys_column()->size());
         ASSERT_EQ(2, map->values_column()->size());
         auto pruned = pruned_child == 0 ? map->keys_column() : map->values_column();
@@ -63,10 +62,10 @@ TEST_F(PaimonScannerProjectionTest, pruned_map_reads_actual_schema_across_chunks
         ASSERT_EQ(pruned_child == 0 ? "10" : "'a'",
                   (pruned_child == 0 ? map->values_column() : map->keys_column())->debug_item(0));
         ChunkPtr second;
-        ASSERT_OK(scanner.do_get_next(nullptr, &second));
+        ASSERT_TRUE(scanner.do_get_next(nullptr, &second).ok());
         ASSERT_EQ("{}", second->get_column_by_slot_id(1)->debug_item(0));
         ChunkPtr third;
-        ASSERT_OK(scanner.do_get_next(nullptr, &third));
+        ASSERT_TRUE(scanner.do_get_next(nullptr, &third).ok());
         ASSERT_TRUE(third->get_column_by_slot_id(1)->is_null(0));
         // Returning later chunks must not overwrite previously returned data.
         ASSERT_EQ(2, map->keys_column()->size());
@@ -86,7 +85,7 @@ TEST_F(PaimonScannerProjectionTest, pruned_struct_uses_field_names) {
     PaimonScanner scanner;
     prepare(&scanner, &context, &slot, type, array);
     ChunkPtr chunk;
-    ASSERT_OK(scanner.do_get_next(nullptr, &chunk));
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &chunk).ok());
     ASSERT_EQ("{score:7}", chunk->get_column_by_slot_id(1)->debug_item(0));
 }
 
@@ -95,7 +94,8 @@ TEST_F(PaimonScannerProjectionTest, missing_arrow_column_reports_error) {
     HdfsScannerContext context;
     PaimonScanner scanner;
     prepare(&scanner, &context, &slot, arrow::int32(), arrow::ArrayFromJSON(arrow::int32(), "[7]"));
-    scanner._arrow_record_batch = arrow::RecordBatch::Make(arrow::schema({}), 1, {});
+    scanner._arrow_record_batch =
+            arrow::RecordBatch::Make(arrow::schema({}), 1, std::vector<std::shared_ptr<arrow::Array>>{});
     ChunkPtr chunk;
     auto status = scanner.do_get_next(nullptr, &chunk);
     ASSERT_FALSE(status.ok());
