@@ -16,20 +16,6 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include <atomic>
-#include <chrono>
-#include <new>
-#include <thread>
-#include <vector>
-
-#include "base/container/lru_cache.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/scoped_updater.h"
-#include "common/config_primary_key_fwd.h"
->>>>>>> d60f9ae ([Enhancement] Make lake_pk_index_block_cache_limit_percent mutable (#81244))
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
@@ -409,7 +395,7 @@ TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
 TEST_F(LakeDelvecLoaderTest, test_refresh_block_cache_mem_limit) {
     SCOPED_UPDATE(int32_t, config::lake_pk_index_block_cache_limit_percent, 10);
     MemTracker primary_key_tracker(1000, "primary_key");
-    PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
+    UpdateManager manager(_location_provider, &primary_key_tracker);
     ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
 
     config::lake_pk_index_block_cache_limit_percent = 50;

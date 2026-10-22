@@ -234,6 +234,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("lake_pk_index_block_cache_limit_percent", [&]() -> Status {
+            auto* update_mgr = _exec_env->lake_update_manager();
+            if (update_mgr != nullptr) {
+                update_mgr->refresh_block_cache_mem_limit();
+                LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                          << config::lake_pk_index_block_cache_limit_percent
+                          << ", block cache capacity: " << update_mgr->block_cache()->cache()->get_capacity();
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() -> Status {
             if (_exec_env->dictionary_cache_pool() != nullptr) {
                 return _exec_env->dictionary_cache_pool()->update_max_threads(
