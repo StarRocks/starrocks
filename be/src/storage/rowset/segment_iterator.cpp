@@ -333,6 +333,7 @@ private:
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
 
     Status _apply_tablet_range();
+    Status _apply_task_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
     uint32_t segment_id() const { return _segment->id(); }
@@ -842,6 +843,9 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::_init_internal() {
+    if (_opts.task_range.has_value() && (_opts.rowid_range_option != nullptr || !_opts.short_key_ranges.empty())) {
+        return Status::NotSupported("grouped range task does not support split segment readers");
+    }
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
@@ -885,6 +889,7 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_tablet_range());
+    RETURN_IF_ERROR(_apply_task_range());
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
     if (!apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
@@ -1571,6 +1576,23 @@ Status SegmentIterator::_apply_tablet_range() {
         _scan_range &= SparseRange<>(rowid_range_opt.value());
     } else {
         // no valid rowid range, clear the scan range
+        _scan_range.clear();
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_task_range() {
+    if (!_opts.task_range.has_value() || _opts.task_range->all_range()) {
+        return Status::OK();
+    }
+    // Attribute exact ownership seeking to the existing range-filter timer and page/IO counters.
+    // This is an independent AND, after the query-range union and physical tablet ownership.
+    SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    ASSIGN_OR_RETURN(auto rowid_range, _seek_range_to_rowid_range(*_opts.task_range));
+    if (rowid_range.has_value()) {
+        _scan_range &= SparseRange<>(*rowid_range);
+    } else {
         _scan_range.clear();
     }
     return Status::OK();

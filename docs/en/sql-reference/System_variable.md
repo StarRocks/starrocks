@@ -1647,11 +1647,17 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Scope**: Session
 * **Default**: `colocate`
 * **Data type**: String
-* **Valid values**: `colocate`, `parallel`
+* **Valid values**: `colocate`, `parallel`, `grouped`
 
 A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
 
 Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
+`grouped` is a session-only experimental opt-in for native shared-data DUPLICATE KEY tables whose base index has exactly three identical sort and colocate columns, all BIGINT NOT NULL. GROUP BY must contain exactly those direct columns, in any order, with one `COUNT(DISTINCT <direct BIGINT column>)`. NULL DISTINCT values keep normal COUNT semantics. Literal predicates on a grouping column, output aliases, HAVING, and final ORDER BY/LIMIT are supported when the complete grouping proof is retained.
+
+Grouped execution captures source versions and tablet ranges once, then forms complete key-range groups across all selected physical partitions. It requires at least two selected physical partitions and two nonempty key-range groups. Each group feeds one blocking HASH aggregate and only finalized scalar results are gathered. It requires Pipeline and Group Execution, and `parallel_fragment_exec_instance_num = 1`. The parallel-mode exclusions also apply; forced multi-stage aggregation and incompatible global late materialization are unsupported. Sort aggregation and per-bucket aggregation are disabled for this path. Fully pruned input retains normal empty-input semantics. PREPARE/EXECUTE re-plans aggregates under the current mode instead of reusing a complete physical plan.
+
+A scan supports at most 1,024 groups and 8,192 clipped tasks; Group Execution capacity also applies. EXPLAIN reports grouped execution and unique source/group/task counts. The `RangeClipTasks` profile counter counts opened clip tasks; ordinary tablet and segment counters may count repeated task reads and are not global unique-source counts. This mode does not guarantee a speedup or constant-memory DISTINCT aggregation. The default remains `colocate`.
 
 ### resource_group
 

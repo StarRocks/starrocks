@@ -214,6 +214,7 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | Table | Table name. | 
 | TabletCount | Number of tablets. | 
 | MorselsCount | Number of morsels. | 
+| RangeClipTasks | Number of grouped lake range-clip tasks successfully opened, reported under `DataSource`. Counted once per validated data source task, including tasks that return no rows; segment reads and reader reopens do not add to this count. |
 | Predicates | Predicate expression. | 
 | PredicatesPartition | Predicate expression applied to partitions. | 
 | SharedScan | Whether the `enable_shared_scan` Session variable is enabled. | 

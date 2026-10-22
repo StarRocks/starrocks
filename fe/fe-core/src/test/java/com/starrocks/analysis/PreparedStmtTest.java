@@ -214,6 +214,15 @@ public class PreparedStmtTest{
             Assertions.assertTrue(prepared.isCached());
             Assertions.assertTrue(ctx.getSessionVariable().isParallelRangeScan());
 
+            ctx.getSessionVariable().setRangeScanExecutionMode("grouped");
+            SemanticException groupedFailure = Assertions.assertThrows(SemanticException.class,
+                    () -> executeRangeModePoint(statement, "c"));
+            Assertions.assertTrue(groupedFailure.getMessage().contains("range_scan_execution_mode=grouped"));
+            Assertions.assertTrue(groupedFailure.getMessage().contains("an aggregate is required"));
+            value = scan.getPredicate().getChild(1).cast();
+            Assertions.assertEquals("b", value.getVarchar());
+            Assertions.assertTrue(prepared.isCached());
+
             ctx.getSessionVariable().setRangeScanExecutionMode("colocate");
             Assertions.assertSame(cached.getPhysicalPlan(), executeRangeModePoint(statement, "d").getPhysicalPlan());
             value = scan.getPredicate().getChild(1).cast();

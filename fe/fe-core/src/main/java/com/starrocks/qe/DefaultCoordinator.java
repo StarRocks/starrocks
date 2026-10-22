@@ -522,8 +522,9 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
         if (jobSpec.getScanNodes().stream()
-                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
-            // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan
+                        && (nativeScan.isParallelRangeScan() || nativeScan.isGroupedRangeScan()))) {
+            // Captured native tablet/group tasks use the ordinary one-shot deployment lifecycle.
             jobSpec.setIncrementalScanRanges(false);
         }
 

@@ -4610,3 +4610,47 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             log.info(f"Set tablet_id = {self.tablet_id}")
         else:
             raise Exception(f"Failed to get tablet ID for table {table_name}")
+
+    def show_tablet_ids(self, table_name, partition_name=None):
+        """
+        All tablet ids of the table, across every installed index generation -- a superseded
+        pre-reshard generation stays installed while a bookmark pins it, and SHOW TABLETS lists it
+        alongside the current one.
+        """
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name})"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name}"
+        result = self.execute_sql(sql, True)
+        if not (result and result.get("result") and len(result["result"]) > 0):
+            raise Exception(f"Failed to get tablet IDs for table {table_name}")
+        return {int(row[0]) for row in result["result"]}  # First column is TabletId
+
+    def set_max_tablet_id(self, table_name, partition_name=None):
+        """
+        Bind ${tablet_id} to the LARGEST tablet id of the table. SHOW TABLETS row order is not
+        deterministic across installed generations, but a reshard mints a fresh id for every tablet
+        of the generation it installs, so the largest id always belongs to the current generation.
+        """
+        self.tablet_id = str(max(self.show_tablet_ids(table_name, partition_name)))
+        log.info(f"Set tablet_id = {self.tablet_id}")
+
+    def wait_reshard_job_finish(self, table_name, job_type, expect_count, timeout_sec=60):
+        """
+        Wait until at least expect_count reshard jobs of job_type have FINISHED for the table.
+        The scan is scoped to the current database because tablet_reshard_jobs is cluster-wide.
+        """
+        sql = (
+            "SELECT count(*) FROM INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database()"
+            f" AND TABLE_NAME = '{table_name}' AND JOB_TYPE = '{job_type}' AND JOB_STATE = 'FINISHED'"
+        )
+        begin_time = time.time()
+        while time.time() - begin_time < timeout_sec:
+            result = self.execute_sql(sql, True)
+            if result["status"] and len(result["result"]) > 0 and int(result["result"][0][0]) >= expect_count:
+                return
+            time.sleep(1)
+        tools.assert_true(
+            False,
+            f"wait {job_type} job of {table_name} error, expect {expect_count} finished job(s) in {timeout_sec}s",
+        )

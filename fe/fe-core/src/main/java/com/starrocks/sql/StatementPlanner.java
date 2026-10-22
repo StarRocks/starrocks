@@ -629,7 +629,8 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
-        boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+        boolean isShortCircuit = !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -719,7 +720,8 @@ public class StatementPlanner {
                 }
 
                 boolean isShortCircuit =
-                        ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+                        !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
                 OptExpression optimizedPlan;
                 try (Timer ignored = Tracers.watchScope("Optimizer")) {
                     OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);

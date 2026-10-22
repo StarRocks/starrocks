@@ -30,6 +30,8 @@
 
 namespace starrocks {
 
+struct RangeGroupTask;
+
 class RuntimeProfile;
 class RuntimeState;
 
@@ -45,6 +47,9 @@ using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 // Params for TabletReader
 struct TabletReaderParams {
+    // Immutable ownership clip, independent of predicate ranges.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
+
     enum class RangeStartOperation { GT = 0, GE, EQ };
     enum class RangeEndOperation { LT = 0, LE, EQ };
 

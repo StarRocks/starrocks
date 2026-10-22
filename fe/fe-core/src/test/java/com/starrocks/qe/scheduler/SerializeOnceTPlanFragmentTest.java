@@ -255,4 +255,121 @@ public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
         assertTrue(deployedFragments.size() > 1);
         assertEquals(deployedFragments.size(), deployedFragments.stream().distinct().count());
     }
+
+    private record GroupedFixture(com.starrocks.qe.QueryGroupBackendSelectorTest.Fixture source,
+                                  ExecutionFragment fragment, TFragmentInstanceFactory factory) { }
+
+    private static GroupedFixture groupedFixture(int groups, int workers) throws Exception {
+        var f = com.starrocks.qe.QueryGroupBackendSelectorTest.fixture(groups, workers, 8);
+        f.context().setExecutionId(new TUniqueId(99, 101));
+        f.context().setQualifiedUser("root");
+        f.context().setCurrentUserIdentity(com.starrocks.catalog.UserIdentity.ROOT);
+        var sharedScan = SessionVariable.class.getDeclaredField("enableSharedScan");
+        sharedScan.setAccessible(true);
+        sharedScan.setBoolean(f.context().getSessionVariable(), true);
+        f.fragment().getPlanFragment().setSink(new com.starrocks.planner.ResultSink(
+                new com.starrocks.planner.PlanNodeId(1), com.starrocks.thrift.TResultSinkType.MYSQL_PROTOCAL));
+        var job = com.starrocks.qe.scheduler.dag.JobSpec.Factory.fromQuerySpec(f.context(),
+                List.of(f.fragment().getPlanFragment()), List.of(f.scan()),
+                new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()),
+                com.starrocks.thrift.TQueryType.SELECT, null);
+        var dag = com.starrocks.qe.scheduler.dag.ExecutionDAG.build(job);
+        var fragment = dag.getFragmentsInCreatedOrder().get(0);
+        new com.starrocks.qe.scheduler.assignment.LocalFragmentAssignmentStrategy(f.context(), f.provider(),
+                true, false, false).assignFragmentToWorker(fragment);
+        dag.finalizeDAG();
+        return new GroupedFixture(f, fragment, new TFragmentInstanceFactory(f.context(), job, dag,
+                new TNetworkAddress("127.0.0.1", 9020)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"binary", "compact"})
+    public void groupedRequestsSerializeIndividualCompleteQueuesAndFinalizedConsumer(String protocol) throws Exception {
+        for (int workers : List.of(1, 2)) {
+            var f = groupedFixture(9, workers);
+            var serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
+            var deserializer = ConfigurableSerDesFactory.getTDeserializer(protocol);
+            TPlanFragment shared = f.factory().createSharedFragment(f.fragment());
+            byte[] sharedBefore = shared == null ? null : serializer.serialize(shared);
+            int totalTasks = 0;
+            Map<Integer, Long> owners = new HashMap<>();
+            for (var instance : f.fragment().getInstances()) {
+                var request = f.factory().create(instance, shared,
+                        new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0);
+                assertFalse(request.isEnable_shared_scan());
+                assertFalse(request.getQuery_options().isEnable_tablet_internal_parallel());
+                TExecPlanFragmentParams decoded = new TExecPlanFragmentParams();
+                deserializer.deserialize(decoded, serializer.serialize(request));
+                assertEquals(instance.getPipelineDop(), decoded.getPipeline_dop());
+                assertEquals(instance.getGroupExecutionScanDop(), decoded.getGroup_execution_scan_dop());
+                assertTrue(decoded.getParams().getPer_node_scan_ranges().isEmpty());
+                var queues = decoded.getParams().getNode_to_per_driver_seq_scan_ranges().get(0);
+                assertEquals(instance.getGroupExecutionScanDop(), queues.size());
+                for (var queue : queues.values()) {
+                    assertTrue(queue.isEmpty() || queue.size() == 2);
+                    assertTrue(queue.stream().map(r -> r.getScan_range().getGrouped_range_task().getGroup_id())
+                            .distinct().count() <= 1);
+                    if (!queue.isEmpty()) {
+                        int group = queue.get(0).getScan_range().getGrouped_range_task().getGroup_id();
+                        assertNull(owners.put(group, instance.getWorkerId()));
+                    }
+                    for (var range : queue) {
+                        assertFalse(range.isHas_more());
+                        assertEquals("23", range.getScan_range().getInternal_scan_range().getVersion());
+                        assertEquals(range.getScan_range().getInternal_scan_range().getBucket_sequence(),
+                                range.getScan_range().getGrouped_range_task().getGroup_id());
+                        totalTasks++;
+                    }
+                }
+                f.fragment().getQueryGroupAssignment().validatePlan(decoded.getFragment());
+            }
+            assertEquals(18, totalTasks);
+            assertEquals(f.fragment().getQueryGroupAssignment().getGroupToWorker(), owners);
+            // 4.1's getter always disables shared scan; verify the stored session value stays untouched.
+            var sharedScan = SessionVariable.class.getDeclaredField("enableSharedScan");
+            sharedScan.setAccessible(true);
+            assertTrue(sharedScan.getBoolean(f.source().context().getSessionVariable()));
+            if (shared != null) {
+                assertArrayEquals(sharedBefore, serializer.serialize(shared));
+            }
+        }
+    }
+
+    @Test
+    public void groupedHandoffRejectsLateQueueAndConsumerTampering() throws Exception {
+        for (int mutation = 0; mutation < 12; mutation++) {
+            var f = groupedFixture(mutation == 10 ? 9 : 3, 1);
+            var instance = f.fragment().getInstances().get(0);
+            var queues = instance.getNode2DriverSeqToScanRanges().get(0);
+            switch (mutation) {
+                case 0 -> queues.get(0).remove(0);
+                case 1 -> queues.get(0).add(queues.get(0).get(0).deepCopy());
+                case 2 -> queues.get(0).get(0).getScan_range().getInternal_scan_range().setVersion("999");
+                case 3 -> ((com.starrocks.qe.QueryGroupBackendSelectorTest.ConsumerNode)
+                        f.fragment().getPlanFragment().getPlanRoot()).needsFinalize = false;
+                case 4 -> queues.get(0).get(0).setHas_more(true);
+                case 5 -> queues.get(0).get(0).setEmpty(true);
+                case 6 -> instance.setPipelineDop(1);
+                case 7 -> instance.setGroupExecutionScanDop(1);
+                case 8 -> ((com.starrocks.qe.QueryGroupBackendSelectorTest.ConsumerNode)
+                        f.fragment().getPlanFragment().getPlanRoot()).streaming = true;
+                case 9 -> f.fragment().getPlanFragment().disablePhysicalPropertyOptimize();
+                case 11 -> f.fragment().getPlanFragment().enableAdaptiveDop();
+                default -> queues.get(15).add(queues.get(0).get(0).deepCopy());
+            }
+            assertThrows(IllegalStateException.class, () -> f.factory().create(instance,
+                    new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0));
+        }
+    }
+
+    @Test
+    public void groupedHandoffRejectsIncrementalAndAlteredSharedFragment() throws Exception {
+        var f = groupedFixture(9, 2);
+        var instance = f.fragment().getInstances().get(0);
+        assertThrows(IllegalStateException.class, () -> f.factory().createIncrementalScanRanges(instance));
+        TPlanFragment shared = f.factory().createSharedFragment(f.fragment());
+        shared.getGroup_execution_param().setExec_groups(List.of());
+        assertThrows(IllegalStateException.class, () -> f.factory().create(instance, shared,
+                new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0));
+    }
 }

@@ -4579,10 +4579,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setRangeScanExecutionMode(String mode) {
-        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)) {
-            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel");
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)
+                && !"grouped".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel|grouped");
         }
         rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isGroupedRangeScan() {
+        return "grouped".equals(rangeScanExecutionMode);
+    }
+
+    public boolean isRangeScanExecutionOverride() {
+        return isParallelRangeScan() || isGroupedRangeScan();
     }
 
     public boolean isParallelRangeScan() {

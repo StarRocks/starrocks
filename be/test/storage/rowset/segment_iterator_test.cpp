@@ -22,11 +22,13 @@
 #include <unordered_map>
 
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "common/config.h"
 #include "common/object_pool.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
+#include "io/seekable_input_stream.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/chunk_helper.h"
@@ -40,6 +42,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -68,7 +71,11 @@ private:
         col.set_is_key(key);
         col.set_is_nullable(nullable);
 
-        if (type == TYPE_INT) {
+        if (type == TYPE_BIGINT) {
+            col.set_type("BIGINT");
+            col.set_length(8);
+            col.set_index_length(8);
+        } else if (type == TYPE_INT) {
             col.set_type("INT");
             col.set_length(4);
             col.set_index_length(4);
@@ -91,7 +98,7 @@ private:
 
 public:
     TabletSchemaBuilder& create(int32_t id, bool nullable, LogicalType type, bool key = false) {
-        if (type == TYPE_INT) {
+        if (type == TYPE_INT || type == TYPE_BIGINT) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
         } else if (type == TYPE_VARCHAR) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
@@ -160,6 +167,23 @@ struct VecSchemaBuilder {
 private:
     Schema vec_schema;
 };
+inline std::shared_ptr<Segment> write_and_open_segment(const std::shared_ptr<FileSystem>& fs, const std::string& path,
+                                                       const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                       const Chunk& chunk, size_t num_rows_per_block) {
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(path));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = num_rows_per_block;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    CHECK_OK(writer.init(true));
+    CHECK_OK(writer.append_chunk(chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{path}, 0, tablet_schema));
+    return segment;
+}
+
 } // namespace test
 
 // This case is only triggered by dictionary inconsistencies.
@@ -1091,6 +1115,181 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         ASSERT_EQ(0, stats.segment_stats_filtered);
         ASSERT_EQ(0, stats.rows_stats_filtered);
     }
+}
+
+namespace {
+
+class GroupedCountingStream : public io::SeekableInputStreamWrapper {
+public:
+    GroupedCountingStream(std::unique_ptr<RandomAccessFile> file, int64_t* bytes)
+            : SeekableInputStreamWrapper(std::move(file)), _bytes(bytes) {}
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(SeekableInputStreamWrapper::read_at_fully(offset, out, count));
+        *_bytes += count;
+        return Status::OK();
+    }
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        ASSIGN_OR_RETURN(auto n, SeekableInputStreamWrapper::read_at(offset, out, count));
+        *_bytes += n;
+        return n;
+    }
+
+private:
+    int64_t* _bytes;
+};
+
+class GroupedCountingFileSystem : public MemoryFileSystem {
+public:
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override {
+        ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+        auto stream = std::make_shared<GroupedCountingStream>(std::move(file), &bytes);
+        return std::make_unique<RandomAccessFile>(std::move(stream), path);
+    }
+    int64_t bytes = 0;
+};
+
+SeekRange grouped_test_range(const Schema& schema, int64_t lo, int64_t hi) {
+    Schema key_schema(std::vector<FieldPtr>{schema.field(0)});
+    SeekRange result(SeekTuple(key_schema, {Datum(lo)}), SeekTuple(key_schema, {Datum(hi)}));
+    result.set_inclusive_lower(true);
+    return result;
+}
+
+std::vector<int64_t> grouped_read_keys(const ChunkIteratorPtr& iterator) {
+    std::vector<int64_t> keys;
+    auto chunk = ChunkHelper::new_chunk(iterator->schema(), 128);
+    while (true) {
+        chunk->reset();
+        auto status = iterator->get_next(chunk.get());
+        if (status.is_end_of_file()) break;
+        CHECK_OK(status);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) keys.push_back(chunk->get(i)[0].get_int64());
+    }
+    iterator->close();
+    return keys;
+}
+
+} // namespace
+
+TEST_F(SegmentIteratorTest, GroupedTaskIntersectsQueryUnionAndPhysicalRange) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkHelper::new_chunk(read_schema, 20);
+    for (int64_t i = 0; i < 10; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    }
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped", schema, *chunk, 2);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    opts.ranges = {grouped_test_range(read_schema, 0, 3), grouped_test_range(read_schema, 6, 10)};
+    opts.tablet_range = grouped_test_range(read_schema, 2, 8);
+    opts.task_range = grouped_test_range(read_schema, 1, 7);
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6}), grouped_read_keys(iter));
+    opts.task_range = grouped_test_range(read_schema, 3, 6);
+    ASSIGN_OR_ABORT(iter, segment->new_iterator(read_schema, opts));
+    EXPECT_TRUE(grouped_read_keys(iter).empty());
+    opts.task_range.reset();
+    ASSIGN_OR_ABORT(iter, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6, 7, 7}), grouped_read_keys(iter));
+}
+
+TEST_F(SegmentIteratorTest, GroupedTaskConversionRetainsBothIndependentRanges) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    SegmentReadOptions original, converted;
+    original.task_range = grouped_test_range(read_schema, -3, 7);
+    original.tablet_range = grouped_test_range(read_schema, 2, 9);
+    ObjectPool pool;
+    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
+    ASSERT_TRUE(converted.task_range);
+    ASSERT_TRUE(converted.tablet_range);
+    EXPECT_EQ(-3, converted.task_range->lower().get(0).get_int64());
+    EXPECT_EQ(7, converted.task_range->upper().get(0).get_int64());
+    EXPECT_TRUE(converted.task_range->inclusive_lower());
+    EXPECT_FALSE(converted.task_range->inclusive_upper());
+    EXPECT_EQ(2, converted.tablet_range->lower().get(0).get_int64());
+    EXPECT_EQ(9, converted.tablet_range->upper().get(0).get_int64());
+    original.task_range.reset();
+    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
+    EXPECT_FALSE(converted.task_range);
+}
+
+// The filesystem counts real data/index reads: a row-correct full-scan-then-filter would still
+// read almost a full file per clip. Boundary pages may overlap and are measured, not forbidden.
+TEST_F(SegmentIteratorTest, GroupedTaskReadsClippedPagesInsteadOfRepeatedFullSegments) {
+    auto fs = std::make_shared<GroupedCountingFileSystem>();
+    ASSERT_OK(fs->create_dir(kSegmentDir));
+    const auto saved_page_size = config::data_page_size;
+    config::data_page_size = 1024;
+    DeferOp restore([&] { config::data_page_size = saved_page_size; });
+    auto schema = std::shared_ptr<TabletSchema>(
+            test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).create(1, false, TYPE_BIGINT).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    constexpr int64_t n = 32768;
+    auto chunk = ChunkHelper::new_chunk(read_schema, n);
+    for (int64_t i = 0; i < n; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(int64_t(i * 1234567891011LL)));
+    }
+    auto segment = test::write_and_open_segment(fs, kSegmentDir + "/grouped_io", schema, *chunk, 128);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.stats = &stats;
+    opts.use_page_cache = false;
+    fs->bytes = 0;
+    ASSIGN_OR_ABORT(auto all, segment->new_iterator(read_schema, opts));
+    EXPECT_EQ(n, grouped_read_keys(all).size());
+    const auto full_bytes = fs->bytes;
+    ASSERT_GT(full_bytes, 0);
+    fs->bytes = 0;
+    std::vector<int64_t> actual;
+    for (int64_t i = 0; i < 4; ++i) {
+        opts.task_range = grouped_test_range(read_schema, i * n / 4, (i + 1) * n / 4);
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
+        auto keys = grouped_read_keys(iter);
+        ASSERT_EQ(n / 4, keys.size());
+        EXPECT_EQ(i * n / 4, keys.front());
+        EXPECT_EQ((i + 1) * n / 4 - 1, keys.back());
+        actual.insert(actual.end(), keys.begin(), keys.end());
+    }
+    ASSERT_EQ(n, actual.size());
+    for (int64_t i = 0; i < n; ++i) ASSERT_EQ(i, actual[i]);
+    RecordProperty("ordinary_read_bytes", full_bytes);
+    RecordProperty("four_clip_read_bytes", fs->bytes);
+    EXPECT_LT(fs->bytes, full_bytes * 2) << "Allow boundary/index overhead, reject four full reads";
+}
+
+TEST_F(SegmentIteratorTest, GroupedTaskRejectsSplitAndHonorsCancellation) {
+    auto schema =
+            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
+    auto read_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkHelper::new_chunk(read_schema, 10);
+    for (int64_t i = 0; i < 10; ++i) chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+    auto segment = test::write_and_open_segment(_fs, kSegmentDir + "/grouped_cancel", schema, *chunk, 2);
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = _fs;
+    opts.stats = &stats;
+    opts.task_range = grouped_test_range(read_schema, 1, 5);
+    opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(0, 10));
+    ASSIGN_OR_ABORT(auto split, segment->new_iterator(read_schema, opts));
+    chunk->reset();
+    EXPECT_TRUE(split->get_next(chunk.get()).is_not_supported());
+    split->close();
+    opts.rowid_range_option.reset();
+    std::atomic<bool> cancelled{true};
+    opts.is_cancelled = &cancelled;
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, opts));
+    EXPECT_TRUE(iter->get_next(chunk.get()).is_cancelled());
+    iter->close();
 }
 
 } // namespace starrocks

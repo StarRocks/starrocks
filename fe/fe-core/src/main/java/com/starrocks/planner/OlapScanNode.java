@@ -176,6 +176,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private List<Long> hintsReplicaIds = Lists.newArrayList();
     private boolean isFinalized = false;
     private boolean parallelRangeScan;
+    private boolean groupedRangeScan;
+    private List<Integer> orderedPhysicalCUniqueIds = List.of();
+    private final List<QueryGroupManifest.Source> groupedSources = new ArrayList<>();
+    private QueryGroupManifest queryGroupManifest;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
     // only used in bucket agg
@@ -254,6 +258,29 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
+    }
+
+    public boolean isGroupedRangeScan() {
+        return groupedRangeScan;
+    }
+
+    public void setGroupedRangeScan(boolean groupedRangeScan) {
+        this.groupedRangeScan = groupedRangeScan;
+    }
+
+    public void setOrderedPhysicalCUniqueIds(List<Integer> ids) {
+        orderedPhysicalCUniqueIds = List.copyOf(ids);
+    }
+
+    public QueryGroupManifest getQueryGroupManifest() {
+        return queryGroupManifest;
+    }
+
+    public void finalizeQueryGroupManifest() throws StarRocksException {
+        Preconditions.checkState(groupedRangeScan && queryGroupManifest == null);
+        queryGroupManifest = QueryGroupManifestBuilder.build(id.asInt(),
+                new QueryGroupManifest.KeyDefinition(olapTable.getId(), index.indexMetaId, orderedPhysicalCUniqueIds),
+                groupedSources);
     }
 
     public boolean isParallelRangeScan() {
@@ -780,8 +807,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             scanRange.setInternal_scan_range(internalRange);
             scanRangeLocations.setScan_range(scanRange);
 
-            if (!parallelRangeScan) {
+            if (!parallelRangeScan && !groupedRangeScan) {
                 bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
+            }
+            if (groupedRangeScan) {
+                Preconditions.checkState(queryGroupManifest == null, "Grouped source snapshot is finalized");
+                groupedSources.add(new QueryGroupManifest.Source(groupedSources.size(), physicalPartition.getId(),
+                        tabletId, visibleVersion, schemaHash, tablet.getRange() == null ? null : tablet.getRange().getRange(),
+                        scanRangeLocations, tablet.getDataSize(true), tablet.getRowCount(visibleVersion)));
             }
             checkScanRangeNumSafeOnce(scanRange);
 
@@ -849,7 +882,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
-        RangeColocateScanDispatch dispatch = parallelRangeScan ? null : RangeColocateScanDispatch.forTable(olapTable);
+        RangeColocateScanDispatch dispatch = (parallelRangeScan || groupedRangeScan) ? null
+                : RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -870,7 +904,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                if (!parallelRangeScan) {
+                if (!parallelRangeScan && !groupedRangeScan) {
                     fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 }
                 totalTabletsNum += selectedIndex.getTablets().size();
@@ -983,6 +1017,15 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
+        if (groupedRangeScan) {
+            output.append(prefix).append("SCAN EXECUTION MODE: GROUPED_SCAN\n");
+            if (queryGroupManifest != null) {
+                output.append(prefix).append("GROUPED SOURCES/GROUPS/TASKS: ")
+                        .append(queryGroupManifest.getSourceCount()).append("/")
+                        .append(queryGroupManifest.getGroupCount()).append("/")
+                        .append(queryGroupManifest.getTaskCount()).append("\n");
+            }
+        }
         if (parallelRangeScan) {
             output.append(prefix).append("SCAN EXECUTION MODE: PARALLEL_SCAN\n");
             output.append(prefix).append("EFFECTIVE DISTRIBUTION: ANY, STORAGE DISTRIBUTION: RANGE\n");
@@ -1239,9 +1282,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
         }
 
-        assignOrderByHints(keyColumnNames);
+        if (!groupedRangeScan) {
+            assignOrderByHints(keyColumnNames);
+        }
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
+            msg.node_type = groupedRangeScan ? TPlanNodeType.LAKE_GROUPED_SCAN_NODE : TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.lake_scan_node.setSort_key_column_names(keyColumnNames);
@@ -1293,7 +1338,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 sample.toThrift(sampleOptions);
             }
 
-            msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            if (!groupedRangeScan) {
+                msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            }
             msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;

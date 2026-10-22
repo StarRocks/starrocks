@@ -18,8 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MultiCastPlanFragment;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryGroupAssignment;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -117,11 +119,36 @@ public class TFragmentInstanceFactory {
 
         toThriftFromCommonParams(result, instance.getExecFragment(), sharedFragment, descTable, totalTableSinkDop);
         toThriftForUniqueParams(result, instance, accTabletSinkDop);
+        validateGroupedHandoff(result, instance);
 
         return result;
     }
 
+    private static boolean hasGroupedScan(ExecutionFragment fragment) {
+        return fragment.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isGroupedRangeScan());
+    }
+
+    private void validateGroupedHandoff(TExecPlanFragmentParams result, FragmentInstance instance) {
+        ExecutionFragment fragment = instance.getExecFragment();
+        if (!hasGroupedScan(fragment)) {
+            return;
+        }
+        QueryGroupAssignment assignment = fragment.getQueryGroupAssignment();
+        Preconditions.checkState(assignment != null && context != null && jobSpec.isEnablePipeline()
+                        && !jobSpec.isIncrementalScanRanges(),
+                "range_scan_execution_mode=grouped: a captured one-shot pipeline assignment is required");
+        assignment.validateLayout(fragment, context.getSessionVariable());
+        // A shared fragment can predate a late plan mutation. Check both the live plan and emitted bytes' source.
+        assignment.validatePlan(fragment.getPlanFragment().toThrift());
+        assignment.validatePlan(result.getFragment());
+        result.setEnable_shared_scan(false);
+        result.getQuery_options().setEnable_tablet_internal_parallel(false);
+    }
+
     public TExecPlanFragmentParams createIncrementalScanRanges(FragmentInstance instance) {
+        Preconditions.checkState(!hasGroupedScan(instance.getExecFragment()),
+                "range_scan_execution_mode=grouped: incremental deployment is unsupported");
         TExecPlanFragmentParams result = new TExecPlanFragmentParams();
         result.setProtocol_version(InternalServiceVersion.V1);
         result.setParams(new TPlanFragmentExecParams());

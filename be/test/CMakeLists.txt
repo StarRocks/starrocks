@@ -138,6 +138,7 @@ set(EXEC_FILES
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/cache_stats_scanner_test.cpp
+        ./exec/grouped_scan_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
@@ -581,6 +582,8 @@ SET(DW_TEST_FILES
     ./storage/lake/segment_pk_iterator_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/filenames_test.cpp
+    ./storage/query/range_group_task_test.cpp
+    ./storage/lake/lake_grouped_range_reader_test.cpp
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp

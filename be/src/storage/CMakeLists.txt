@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 set(STORAGE_FILES
+    query/range_group_task.cpp
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp

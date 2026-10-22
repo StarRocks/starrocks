@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -68,7 +70,9 @@ public:
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        _reader->get_split_tasks(split_tasks);
+        if (_reader != nullptr && !_wire_grouped_range_task.has_value()) {
+            _reader->get_split_tasks(split_tasks);
+        }
     }
 
     // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
@@ -100,6 +104,9 @@ private:
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
+    const std::optional<TGroupedRangeTask> _wire_grouped_range_task;
+    bool _range_clip_task_counted = false;
+    Status _scan_range_status = Status::OK();
 
     Status _status = Status::OK();
     // The conjuncts couldn't push down to storage engine
@@ -242,6 +249,7 @@ public:
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
     bool always_shared_scan() const override { return false; }
+    bool is_grouped_scan() const { return _is_grouped_scan; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
@@ -283,6 +291,8 @@ public:
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
+    const bool _is_grouped_scan;
+    const bool _has_lake_scan_node;
 
     // for ut
     lake::TabletManager* _tablet_manager;
@@ -292,6 +302,9 @@ protected:
     int64_t splitted_scan_rows = 0;
 
 private:
+    Status validate_grouped_scan() const;
+    Status validate_scan_range(const TScanRange& range) const;
+
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
