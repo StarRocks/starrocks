@@ -207,8 +207,14 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             assertTrue(result instanceof LakeTableAddIndexJob);
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
             assertEquals(1, job.getNewIndexes().size());
+<<<<<<< HEAD
             assertEquals(1, job.getIndexesToAdd().size());
             verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+=======
+            assertEquals(1, job.buildIndexesToAdd(table).size());
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
+>>>>>>> b1bb363fbd1... [BugFix][RB-434] Rebuild the lake index fast-path BE payload instead of journaling Thrift structs (#65270)
         }
     }
 
@@ -241,6 +247,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
 
             // Base meta (100L): full index set + schema-id stamp.
+            job.prepareAlterRequests(table);
             AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
             job.populateAlterRequest(baseTask, 100L, table.getIndexMetaByMetaId(100L), table);
             ArgumentCaptor<List<com.starrocks.thrift.TOlapTableIndex>> baseCap =
@@ -356,10 +363,18 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             LakeTableDropIndexJob job = (LakeTableDropIndexJob) result;
             assertEquals(1, job.getDropIndexIds().size());
             assertEquals(101L, job.getDropIndexIds().get(0));
+<<<<<<< HEAD
             assertEquals(1, job.getDropInfos().size());
             assertEquals(101L, job.getDropInfos().get(0).getIndex_id());
             assertEquals(TIndexType.BITMAP, job.getDropInfos().get(0).getIndex_type());
             verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+=======
+            assertEquals(1, job.buildDropInfos(table).size());
+            assertEquals(101L, job.buildDropInfos(table).get(0).getIndex_id());
+            assertEquals(TIndexType.BITMAP, job.buildDropInfos(table).get(0).getIndex_type());
+            // The state is left to process(), which sets it once the job is journaled.
+            verify(table, never()).setState(any());
+>>>>>>> b1bb363fbd1... [BugFix][RB-434] Rebuild the lake index fast-path BE payload instead of journaling Thrift structs (#65270)
         }
     }
 
@@ -393,9 +408,9 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             Object result = invoke(m, handler, stubDb(), table,
                     Collections.<AlterClause>singletonList(clause));
             LakeTableDropIndexJob job = (LakeTableDropIndexJob) result;
-            assertEquals(2, job.getDropInfos().size());
+            assertEquals(2, job.buildDropInfos(table).size());
             // Same index id, distinct col_unique_ids.
-            for (TDropIndexInfo info : job.getDropInfos()) {
+            for (TDropIndexInfo info : job.buildDropInfos(table)) {
                 assertEquals(101L, info.getIndex_id());
                 assertEquals(TIndexType.NGRAMBF, info.getIndex_type());
             }
@@ -424,12 +439,13 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             assertNotNull(result);
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
             assertEquals(2, job.getAddBfColumns().size());
-            assertEquals(2, job.getIndexesToAdd().size());
-            for (TOlapTableIndex t : job.getIndexesToAdd()) {
+            assertEquals(2, job.buildIndexesToAdd(table).size());
+            for (TOlapTableIndex t : job.buildIndexesToAdd(table)) {
                 assertEquals(TIndexType.BLOOM_FILTER, t.getIndex_type());
                 assertNotNull(t.getIndex_properties());
                 assertTrue(t.getIndex_properties().containsKey("bloom_filter_fpp"));
             }
+            job.prepareAlterRequests(table);
             AlterReplicaTask task = mock(AlterReplicaTask.class);
             job.populateAlterRequest(task, 100L, table.getIndexMetaByMetaId(100L), table);
             ArgumentCaptor<List<TOlapTableIndex>> indexes = ArgumentCaptor.forClass(List.class);
@@ -455,7 +471,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             Object result = invoke(m, handler, stubDb(), table, Collections.singleton("c1"));
             LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
-            String fpp = job.getIndexesToAdd().get(0).getIndex_properties().get("bloom_filter_fpp");
+            String fpp = job.buildIndexesToAdd(table).get(0).getIndex_properties().get("bloom_filter_fpp");
             assertEquals(Double.toString(FeConstants.DEFAULT_BLOOM_FILTER_FPP), fpp);
         }
     }
@@ -505,8 +521,8 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             assertNotNull(result);
             LakeTableDropIndexJob job = (LakeTableDropIndexJob) result;
             assertEquals(1, job.getDropBfColumns().size());
-            assertEquals(1, job.getDropInfos().size());
-            TDropIndexInfo info = job.getDropInfos().get(0);
+            assertEquals(1, job.buildDropInfos(table).size());
+            TDropIndexInfo info = job.buildDropInfos(table).get(0);
             // Plain BF uses index_id=-1 sentinel.
             assertEquals(-1L, info.getIndex_id());
             assertEquals(TIndexType.BLOOM_FILTER, info.getIndex_type());
@@ -529,7 +545,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testToThriftIndex_BitmapMapping() throws Exception {
-        Method m = SchemaChangeHandler.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
+        Method m = LakeTableAddIndexJob.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
         m.setAccessible(true);
         Index ix = new Index(101L, "ix_a", Collections.singletonList(ColumnId.create("c1")),
                 IndexDef.IndexType.BITMAP, "", new HashMap<>());
@@ -543,7 +559,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testToThriftIndex_NgrambfMapping() throws Exception {
-        Method m = SchemaChangeHandler.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
+        Method m = LakeTableAddIndexJob.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
         m.setAccessible(true);
         Index ix = new Index(-1L, "ng", Collections.singletonList(ColumnId.create("c1")),
                 IndexDef.IndexType.NGRAMBF, "", new HashMap<>());
@@ -554,7 +570,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testToThriftIndex_GinMapping() throws Exception {
-        Method m = SchemaChangeHandler.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
+        Method m = LakeTableAddIndexJob.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
         m.setAccessible(true);
         Index ix = new Index(101L, "g1", Collections.singletonList(ColumnId.create("c1")),
                 IndexDef.IndexType.GIN, "", new HashMap<>());
@@ -565,7 +581,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testToThriftIndex_VectorMapping() throws Exception {
-        Method m = SchemaChangeHandler.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
+        Method m = LakeTableAddIndexJob.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
         m.setAccessible(true);
         Index ix = new Index(101L, "v1", Collections.singletonList(ColumnId.create("c1")),
                 IndexDef.IndexType.VECTOR, "", new HashMap<>());
@@ -576,7 +592,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
     @Test
     public void testToThriftIndex_UnknownColumnFallsBackToColumnId() throws Exception {
-        Method m = SchemaChangeHandler.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
+        Method m = LakeTableAddIndexJob.class.getDeclaredMethod("toThriftIndex", Index.class, OlapTable.class);
         m.setAccessible(true);
         Index ix = new Index(101L, "ix_a", Collections.singletonList(ColumnId.create("ghost")),
                 IndexDef.IndexType.BITMAP, "", new HashMap<>());

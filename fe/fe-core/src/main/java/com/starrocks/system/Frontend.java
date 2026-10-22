@@ -78,6 +78,9 @@ public class Frontend extends JsonWriter {
 
     private float heapUsedPercent;
     private int cpuCores;
+    // Reported by the FE's latest successful heartbeat; see FrontendHbResponse. Not persisted: every leader learns
+    // it from its own heartbeats.
+    private boolean rebuildsLakeIndexPayload = false;
 
     public Frontend() {
     }
@@ -179,6 +182,10 @@ public class Frontend extends JsonWriter {
         return cpuCores;
     }
 
+    public boolean rebuildsLakeIndexPayload() {
+        return rebuildsLakeIndexPayload;
+    }
+
     /**
      * handle Frontend's heartbeat response.
      */
@@ -198,7 +205,10 @@ public class Frontend extends JsonWriter {
             heapUsedPercent = hbResponse.getHeapUsedPercent();
             cpuCores = hbResponse.getCpuCores();
             macAddress = hbResponse.getMacAddress();
+            rebuildsLakeIndexPayload = hbResponse.rebuildsLakeIndexPayload();
         } else {
+            // The FE may be restarting on another version; assume nothing until it answers again.
+            rebuildsLakeIndexPayload = false;
             if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
                 this.heartbeatRetryTimes++;
             } else {
