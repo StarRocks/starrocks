@@ -86,29 +86,21 @@ starrocks_detect_parallelism() {
             cur_subpath="${cur_subpath%/*}"
         done
 
-        # 2. cgroup v1: walk leaf-to-root cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct/...)
-        if [[ "${cgroup_cores}" -le 0 ]]; then
-            cur_subpath="${v1_cpu_subpath}"
-            while true; do
+        # 2. cgroup v1: walk leaf-to-root cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us (or cpu,cpuacct / cpuacct,cpu)
+        cur_subpath="${v1_cpu_subpath}"
+        while true; do
+            local ctrl_dir=""
+            local found_readable_v1_quota=0
+            for ctrl_dir in "${cgroup_root}/cpu" "${cgroup_root}/cpu,cpuacct" "${cgroup_root}/cpuacct,cpu"; do
                 local v1_quota="" v1_period=""
-                if [[ -z "${cur_subpath}" ]]; then
-                    v1_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || true)"
-                    if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 ]]; then
-                        v1_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" ]]; then
+                    found_readable_v1_quota=1
+                    v1_quota="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" 2>/dev/null || true)"
+                    if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" ]]; then
+                        v1_period="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                    else
+                        v1_period=100000
                     fi
-                else
-                    local ctrl_dir=""
-                    for ctrl_dir in "${cgroup_root}/cpu" "${cgroup_root}/cpu,cpuacct"; do
-                        if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" ]]; then
-                            v1_quota="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_quota_us" 2>/dev/null || true)"
-                            if [[ -r "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" ]]; then
-                                v1_period="$(cat "${ctrl_dir}${cur_subpath}/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
-                            else
-                                v1_period=100000
-                            fi
-                            break
-                        fi
-                    done
                 fi
                 if [[ -n "${v1_quota}" && "${v1_quota}" =~ ^[0-9]+$ && "${v1_quota}" -gt 0 && \
                       -n "${v1_period}" && "${v1_period}" =~ ^[0-9]+$ && "${v1_period}" -gt 0 ]]; then
@@ -118,10 +110,24 @@ starrocks_detect_parallelism() {
                         cgroup_cores="${v1_level_cores}"
                     fi
                 fi
-                [[ -z "${cur_subpath}" ]] && break
-                cur_subpath="${cur_subpath%/*}"
             done
-        fi
+            if [[ -z "${cur_subpath}" && "${found_readable_v1_quota}" -eq 0 ]]; then
+                local v1_root_quota="" v1_root_period=""
+                v1_root_quota="$(cat "${cgroup_root}/cpu/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_quota_us" 2>/dev/null || cat "${cgroup_root}/cpuacct,cpu/cpu.cfs_quota_us" 2>/dev/null || true)"
+                if [[ -n "${v1_root_quota}" && "${v1_root_quota}" =~ ^[0-9]+$ && "${v1_root_quota}" -gt 0 ]]; then
+                    v1_root_period="$(cat "${cgroup_root}/cpu/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpu,cpuacct/cpu.cfs_period_us" 2>/dev/null || cat "${cgroup_root}/cpuacct,cpu/cpu.cfs_period_us" 2>/dev/null || echo 100000)"
+                    if [[ -n "${v1_root_period}" && "${v1_root_period}" =~ ^[0-9]+$ && "${v1_root_period}" -gt 0 ]]; then
+                        local v1_root_cores=$(( v1_root_quota / v1_root_period ))
+                        [[ "${v1_root_cores}" -lt 1 ]] && v1_root_cores=1
+                        if [[ "${cgroup_cores}" -le 0 || "${v1_root_cores}" -lt "${cgroup_cores}" ]]; then
+                            cgroup_cores="${v1_root_cores}"
+                        fi
+                    fi
+                fi
+            fi
+            [[ -z "${cur_subpath}" ]] && break
+            cur_subpath="${cur_subpath%/*}"
+        done
 
         if [[ "${cgroup_cores}" -gt 0 && "${cgroup_cores}" -lt "${cpu_count}" ]]; then
             cpu_count="${cgroup_cores}"
@@ -212,9 +218,6 @@ starrocks_detect_total_ram_gb() {
         done
 
         cgroup_bytes="$(cat "${cgroup_root}/memory.max" 2>/dev/null || cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
-        if [[ ( -z "${cgroup_bytes}" || ! "${cgroup_bytes}" =~ ^[0-9]+$ ) && -r "${cgroup_root}/memory/memory.limit_in_bytes" ]]; then
-            cgroup_bytes="$(cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
-        fi
         if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
             local root_cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
             # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
@@ -222,6 +225,19 @@ starrocks_detect_total_ram_gb() {
                 [[ "${root_cgroup_gb}" -lt 1 ]] && root_cgroup_gb=1
                 if [[ "${best_cgroup_gb}" -le 0 || "${root_cgroup_gb}" -lt "${best_cgroup_gb}" ]]; then
                     best_cgroup_gb="${root_cgroup_gb}"
+                fi
+            fi
+        fi
+        if [[ -r "${cgroup_root}/memory/memory.limit_in_bytes" ]]; then
+            local root_v1_bytes=""
+            root_v1_bytes="$(cat "${cgroup_root}/memory/memory.limit_in_bytes" 2>/dev/null || true)"
+            if [[ -n "${root_v1_bytes}" && "${root_v1_bytes}" =~ ^[0-9]+$ && "${root_v1_bytes}" -gt 0 ]]; then
+                local root_v1_gb=$(( root_v1_bytes / 1024 / 1024 / 1024 ))
+                if [[ "${root_v1_gb}" -le 1048576 ]]; then
+                    [[ "${root_v1_gb}" -lt 1 ]] && root_v1_gb=1
+                    if [[ "${best_cgroup_gb}" -le 0 || "${root_v1_gb}" -lt "${best_cgroup_gb}" ]]; then
+                        best_cgroup_gb="${root_v1_gb}"
+                    fi
                 fi
             fi
         fi
@@ -249,6 +265,24 @@ starrocks_detect_linker_type() {
             *lld*|*mold*|*gold*) echo "modern" ; return 0 ;;
             *bfd*)               echo "legacy" ; return 0 ;;
         esac
+        local explicit_ld_bin=""
+        if command -v "${explicit_linker}" >/dev/null 2>&1; then
+            explicit_ld_bin="${explicit_linker}"
+        elif command -v "ld.${explicit_linker}" >/dev/null 2>&1; then
+            explicit_ld_bin="ld.${explicit_linker}"
+        fi
+        if [[ -n "${explicit_ld_bin}" ]]; then
+            local explicit_ld_ver=""
+            explicit_ld_ver="$("${explicit_ld_bin}" -v 2>&1 || "${explicit_ld_bin}" --version 2>&1 || true)"
+            case "${explicit_ld_ver}" in
+                *LLD*|*lld*|*mold*|*GNU\ gold*)
+                    echo "modern"
+                    return 0
+                    ;;
+            esac
+        fi
+        echo "legacy"
+        return 0
     fi
 
     if starrocks_is_darwin; then
@@ -259,16 +293,16 @@ starrocks_detect_linker_type() {
     local cxx_compiler=""
     local cached_c=""
     local cached_cxx=""
-    local cached_cxx_flags=""
     local cached_exe_linker_flags=""
-    local cached_shared_linker_flags=""
+    local has_cached_exe_linker_flags=0
     local has_cmake_compiler_override=0
     if [[ -n "${build_dir}" && -r "${build_dir}/CMakeCache.txt" ]]; then
         cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
         cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        cached_cxx_flags="$(sed -n -E 's/^CMAKE_CXX_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
-        cached_shared_linker_flags="$(sed -n -E 's/^CMAKE_SHARED_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        if grep -q -E '^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=' "${build_dir}/CMakeCache.txt" 2>/dev/null; then
+            has_cached_exe_linker_flags=1
+            cached_exe_linker_flags="$(sed -n -E 's/^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+        fi
         if [[ -n "${cached_c}" || -n "${cached_cxx}" ]]; then
             has_cmake_compiler_override=1
         fi
@@ -280,10 +314,18 @@ starrocks_detect_linker_type() {
         cxx_compiler="${cached_cxx:-${CXX:-g++}}"
     elif [[ -n "${CC:-}" && -n "${CXX:-}" ]]; then
         cxx_compiler="${CXX}"
-    elif [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
-        cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
-    elif [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
-        cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+    elif [[ -n "${STARROCKS_GCC_HOME:-}" ]]; then
+        if [[ -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
+            cxx_compiler="${STARROCKS_GCC_HOME}/bin/g++"
+        else
+            cxx_compiler="g++"
+        fi
+    elif [[ -n "${STARROCKS_LLVM_HOME:-}" ]]; then
+        if [[ -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
+            cxx_compiler="${STARROCKS_LLVM_HOME}/bin/clang++"
+        else
+            cxx_compiler="g++"
+        fi
     else
         cxx_compiler="g++"
     fi
@@ -324,12 +366,21 @@ starrocks_detect_linker_type() {
         fi
     fi
 
-    # Inspect explicit linker flags (-fuse-ld=* / --ld-path=*) in effective CMake link line order:
-    # <FLAGS> (CMAKE_CXX_FLAGS + CXXFLAGS + STARROCKS_CXX_COMMON_FLAGS) followed by
-    # <CMAKE_CXX_LINK_FLAGS> (CMAKE_EXE/SHARED_LINKER_FLAGS + LDFLAGS + STARROCKS_CXX_LINKER_FLAGS).
-    local combined_flags="${cached_cxx_flags} ${CXXFLAGS:-} ${STARROCKS_CXX_COMMON_FLAGS:-} ${cached_exe_linker_flags} ${cached_shared_linker_flags} ${LDFLAGS:-} ${STARROCKS_CXX_LINKER_FLAGS:-}"
+    # Inspect explicit compiler-driver linker flags (-fuse-ld=* / --ld-path=*) that survive into
+    # be/CMakeLists.txt's UT executable link command:
+    # - be/CMakeLists.txt:481-498 overwrites CMAKE_CXX_FLAGS with ${CXX_COMMON_FLAGS} ${CXX_FLAGS_<BUILD_TYPE>}
+    #   (which includes ENV{STARROCKS_CXX_COMMON_FLAGS}, while ignoring ENV{CXXFLAGS} and cached CMAKE_CXX_FLAGS).
+    # - UT executables use CMAKE_EXE_LINKER_FLAGS (seeded from cached CMAKE_EXE_LINKER_FLAGS if present in
+    #   CMakeCache.txt, otherwise from ENV{LDFLAGS}) followed by ENV{STARROCKS_CXX_LINKER_FLAGS}.
+    local base_exe_linker_flags=""
+    if [[ "${has_cached_exe_linker_flags}" -eq 1 ]]; then
+        base_exe_linker_flags="${cached_exe_linker_flags}"
+    else
+        base_exe_linker_flags="${LDFLAGS:-}"
+    fi
+    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-}"
     local flag_tokens=()
-    read -r -a flag_tokens <<< "${combined_flags//,/ }"
+    read -r -a flag_tokens <<< "${combined_flags}"
     local flag_linker=""
     local flag_token=""
     for flag_token in "${flag_tokens[@]+"${flag_tokens[@]}"}"; do
@@ -353,20 +404,30 @@ starrocks_detect_linker_type() {
                 return 0
                 ;;
         esac
+        local flag_ld_bin=""
         if command -v "${flag_linker}" >/dev/null 2>&1; then
+            flag_ld_bin="${flag_linker}"
+        elif command -v "ld.${flag_linker}" >/dev/null 2>&1; then
+            flag_ld_bin="ld.${flag_linker}"
+        else
+            local compiler_flag_ld=""
+            compiler_flag_ld="$("${cxx_compiler}" -print-prog-name="ld.${flag_linker}" 2>/dev/null || true)"
+            if [[ -n "${compiler_flag_ld}" && "${compiler_flag_ld}" != "ld.${flag_linker}" ]] && command -v "${compiler_flag_ld}" >/dev/null 2>&1; then
+                flag_ld_bin="${compiler_flag_ld}"
+            fi
+        fi
+        if [[ -n "${flag_ld_bin}" ]]; then
             local flag_ld_version=""
-            flag_ld_version="$("${flag_linker}" -v 2>&1 || "${flag_linker}" --version 2>&1 || true)"
+            flag_ld_version="$("${flag_ld_bin}" -v 2>&1 || "${flag_ld_bin}" --version 2>&1 || true)"
             case "${flag_ld_version}" in
                 *LLD*|*lld*|*mold*|*GNU\ gold*)
                     echo "modern"
                     return 0
                     ;;
-                *)
-                    echo "legacy"
-                    return 0
-                    ;;
             esac
         fi
+        echo "legacy"
+        return 0
     fi
 
     # Inspect the active compiler's resolved linker (-Wl,--version or -print-prog-name=ld),

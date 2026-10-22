@@ -521,12 +521,21 @@ class TestBuildParallelism(unittest.TestCase):
             ),
             "modern",
         )
+        # be/CMakeLists.txt:480-498 overwrites CMAKE_CXX_FLAGS, so ENV{CXXFLAGS} is shadowed
         self.assertEqual(
             self.run_bash(
                 cmd_default_legacy,
-                {"CXXFLAGS": "-Wl,-fuse-ld=lld"},
+                {"CXXFLAGS": "-fuse-ld=lld"},
             ),
-            "modern",
+            "legacy",
+        )
+        # -Wl,-fuse-ld=lld is passed to ld rather than the compiler driver and does not select lld
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_legacy,
+                {"STARROCKS_CXX_LINKER_FLAGS": "-Wl,-fuse-ld=lld"},
+            ),
+            "legacy",
         )
 
         self.assertEqual(
@@ -555,9 +564,17 @@ class TestBuildParallelism(unittest.TestCase):
             ),
             "legacy",
         )
+        self.assertEqual(
+            self.run_bash(
+                cmd_default_modern_ld,
+                {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=custom-unknown"},
+            ),
+            "legacy",
+        )
 
         # On glibc < 2.29 + GCC > 14.0.0, be/CMakeLists.txt:984 appends
         # add_link_options("-fuse-ld=gold") (<LINK_FLAGS>) after CMAKE_EXE_LINKER_FLAGS
+        # when STARROCKS_LINKER is empty, but a non-empty unknown STARROCKS_LINKER must not fall through.
         cmd_auto_gold = """
         starrocks_is_darwin() { return 1; }
         uname() { echo "x86_64"; }
@@ -572,6 +589,13 @@ class TestBuildParallelism(unittest.TestCase):
                 {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=bfd"},
             ),
             "modern",
+        )
+        self.assertEqual(
+            self.run_bash(
+                cmd_auto_gold,
+                {"STARROCKS_LINKER": "custom-unknown-linker"},
+            ),
+            "legacy",
         )
 
     def test_detect_linker_type_honors_cmake_cache_linker_flags(self):
@@ -589,25 +613,40 @@ class TestBuildParallelism(unittest.TestCase):
             starrocks_detect_linker_type "{build_dir}"
             """
 
-            for cache_entry in (
-                "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=lld\n",
+            with open(cache_file, "w") as f:
+                f.write("CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=lld\n")
+            self.assertEqual(self.run_bash(cmd), "modern")
+
+            # Cached CMAKE_CXX_FLAGS is overwritten by be/CMakeLists.txt:480-498,
+            # and UT executables do not use CMAKE_SHARED_LINKER_FLAGS.
+            for shadowed_cache_entry in (
                 "CMAKE_CXX_FLAGS:STRING=-fuse-ld=mold\n",
                 "CMAKE_SHARED_LINKER_FLAGS:STRING=-fuse-ld=gold\n",
             ):
                 with open(cache_file, "w") as f:
-                    f.write(cache_entry)
-                self.assertEqual(self.run_bash(cmd), "modern")
+                    f.write(shadowed_cache_entry)
+                self.assertEqual(self.run_bash(cmd), "legacy")
 
-            with open(cache_file, "w") as f:
-                f.write("CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=bfd\n")
-            self.assertEqual(self.run_bash(cmd), "legacy")
-            self.assertEqual(
-                self.run_bash(
-                    cmd,
-                    {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
-                ),
-                "modern",
-            )
+            # Once CMAKE_EXE_LINKER_FLAGS is present in CMakeCache.txt (even empty),
+            # CMake ignores ambient ENV{LDFLAGS}, whereas STARROCKS_CXX_LINKER_FLAGS is still appended.
+            for cached_exe_entry in (
+                "CMAKE_EXE_LINKER_FLAGS:STRING=\n",
+                "CMAKE_EXE_LINKER_FLAGS:STRING=-fuse-ld=bfd\n",
+            ):
+                with open(cache_file, "w") as f:
+                    f.write(cached_exe_entry)
+                self.assertEqual(self.run_bash(cmd), "legacy")
+                self.assertEqual(
+                    self.run_bash(cmd, {"LDFLAGS": "-fuse-ld=lld"}),
+                    "legacy",
+                )
+                self.assertEqual(
+                    self.run_bash(
+                        cmd,
+                        {"STARROCKS_CXX_LINKER_FLAGS": "-fuse-ld=lld"},
+                    ),
+                    "modern",
+                )
 
     def test_detect_linker_type_probes_compiler_prog_name_ld(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1097,6 +1136,53 @@ class TestBuildParallelism(unittest.TestCase):
             )
             self.assertEqual(p2, "6")
 
+        with tempfile.TemporaryDirectory() as tmpdir_hybrid:
+            with open(os.path.join(tmpdir_hybrid, "cpu.max"), "w") as f:
+                f.write("800000 100000\n")
+            cpuacct_cpu_root = os.path.join(tmpdir_hybrid, "cpuacct,cpu")
+            nested_hybrid = os.path.join(cpuacct_cpu_root, "docker", "abc")
+            os.makedirs(nested_hybrid, exist_ok=True)
+            with open(os.path.join(nested_hybrid, "cpu.cfs_quota_us"), "w") as f:
+                f.write("300000\n")
+            with open(os.path.join(nested_hybrid, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            proc_cgroup_hybrid = os.path.join(tmpdir_hybrid, "proc_self_cgroup")
+            with open(proc_cgroup_hybrid, "w") as f:
+                f.write("0::/\n5:cpuacct,cpu:/docker/abc\n")
+
+            p_hybrid = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_hybrid,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_hybrid,
+                },
+            )
+            self.assertEqual(p_hybrid, "3")
+
+        with tempfile.TemporaryDirectory() as tmpdir_multi_v1:
+            cpu_sub = os.path.join(tmpdir_multi_v1, "cpu", "docker", "abc")
+            cpuacct_sub = os.path.join(tmpdir_multi_v1, "cpu,cpuacct", "docker", "abc")
+            os.makedirs(cpu_sub, exist_ok=True)
+            os.makedirs(cpuacct_sub, exist_ok=True)
+            with open(os.path.join(cpu_sub, "cpu.cfs_quota_us"), "w") as f:
+                f.write("-1\n")
+            with open(os.path.join(cpuacct_sub, "cpu.cfs_quota_us"), "w") as f:
+                f.write("500000\n")
+            with open(os.path.join(cpuacct_sub, "cpu.cfs_period_us"), "w") as f:
+                f.write("100000\n")
+            proc_cgroup_multi = os.path.join(tmpdir_multi_v1, "proc_self_cgroup")
+            with open(proc_cgroup_multi, "w") as f:
+                f.write("5:cpu,cpuacct:/docker/abc\n")
+
+            p_multi = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_multi_v1,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_multi,
+                },
+            )
+            self.assertEqual(p_multi, "5")
+
     def test_detect_total_ram_gb_nested_cgroup_v2_and_v1(self):
         with tempfile.TemporaryDirectory() as tmpdir_v2:
             with open(os.path.join(tmpdir_v2, "memory.max"), "w") as f:
@@ -1155,6 +1241,26 @@ class TestBuildParallelism(unittest.TestCase):
                 },
             )
             self.assertEqual(ram_v1, "8")
+
+        with tempfile.TemporaryDirectory() as tmpdir_both_root:
+            with open(os.path.join(tmpdir_both_root, "memory.max"), "w") as f:
+                f.write("34359738368\n")
+            mem_root_both = os.path.join(tmpdir_both_root, "memory")
+            os.makedirs(mem_root_both, exist_ok=True)
+            with open(os.path.join(mem_root_both, "memory.limit_in_bytes"), "w") as f:
+                f.write("8589934592\n")
+            proc_cgroup_both = os.path.join(tmpdir_both_root, "proc_self_cgroup")
+            with open(proc_cgroup_both, "w") as f:
+                f.write("0::/\n")
+
+            ram_both = self.run_bash(
+                cmd,
+                {
+                    "STARROCKS_CGROUP_ROOT": tmpdir_both_root,
+                    "STARROCKS_PROC_SELF_CGROUP": proc_cgroup_both,
+                },
+            )
+            self.assertEqual(ram_both, "8")
 
     def test_run_be_ut_detect_parallelism(self):
         # 1. Verify -j is documented in run-be-ut.sh help
