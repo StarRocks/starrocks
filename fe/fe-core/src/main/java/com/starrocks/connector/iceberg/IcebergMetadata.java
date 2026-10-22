@@ -136,7 +136,6 @@ import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
-import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -206,7 +205,6 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
-import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
@@ -879,21 +877,26 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Encryption states this connector cannot serve, checked once on the scan path.
+     *
+     * <p>This used to refuse encrypted tables outright -- {@code encryption.key-id} present, or
+     * encryption keys in table metadata, meant "not supported". Reading Parquet Modular Encryption is
+     * now implemented, so a blanket refusal would make that support unreachable: the throw sat above
+     * every read path, so the scan died here before any key could be recovered.
+     *
+     * <p>What replaces it is narrower and is the condition that actually matters: a table that
+     * <b>declares</b> encryption which the catalog will not <b>enforce</b>. {@code encryption.key-id} is
+     * a table property and reaches every catalog, but the {@code EncryptionManager} comes from the
+     * catalog's {@code TableOperations}, so the two can disagree -- and when they do, no key can be
+     * recovered and the scan must not proceed as though the table were plaintext. See
+     * {@link IcebergEncryption}.
+     *
+     * <p>Deliberately expressed as that state rather than as a property or version test, so a catalog
+     * gaining encryption support starts working here with no change.
+     */
     static void checkUnsupportedEncryption(org.apache.iceberg.Table icebergTable) {
-        if (icebergTable.properties().containsKey(ENCRYPTION_TABLE_KEY)) {
-            throw new StarRocksConnectorException(
-                    "Iceberg table encryption is not supported. Table '%s' has encryption property '%s' set.",
-                    icebergTable.name(), ENCRYPTION_TABLE_KEY);
-        }
-
-        if (icebergTable instanceof BaseTable) {
-            TableMetadata metadata = ((BaseTable) icebergTable).operations().current();
-            if (metadata.encryptionKeys() != null && !metadata.encryptionKeys().isEmpty()) {
-                throw new StarRocksConnectorException(
-                        "Iceberg table encryption is not supported. Table '%s' has encryption keys set.",
-                        icebergTable.name());
-            }
-        }
+        IcebergEncryption.checkReadSupported(icebergTable, icebergTable.name());
     }
 
     public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {

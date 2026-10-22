@@ -50,6 +50,7 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
     private final AtomicInteger tokenSequence = new AtomicInteger();
     private final AtomicInteger tokenFetches = new AtomicInteger();
     private volatile String validToken;
+    private volatile int tokenExpiresInSeconds = 3600;
 
     @BeforeEach
     public void setUp() throws IOException {
@@ -67,7 +68,8 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
             validToken = token;
             tokenFetches.incrementAndGet();
             respond(exchange, 200,
-                    "{\"access_token\":\"" + token + "\",\"token_type\":\"bearer\",\"expires_in\":3600}");
+                    "{\"access_token\":\"" + token + "\",\"token_type\":\"bearer\",\"expires_in\":" +
+                            tokenExpiresInSeconds + "}");
         });
         server.createContext("/v1/config", exchange -> respond(exchange, 200, "{\"defaults\":{},\"overrides\":{}}"));
         server.createContext("/v1/namespaces", exchange -> {
@@ -122,7 +124,13 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
     }
 
     @Test
-    public void testShutdownStopsTokenRefreshThread() throws InterruptedException {
+    public void testShutdownStopsTokenRefresh() throws InterruptedException {
+        // Iceberg 1.11 no longer gives each catalog its own "<name>-token-refresh" thread: OAuth2Manager
+        // schedules refreshes on the JVM-wide ThreadPools.authRefreshPool(), which is never shut down per
+        // catalog, and closing the catalog instead stops its auth session from refreshing. So shutdown is
+        // checked by what it has to achieve -- the catalog stops minting tokens -- rather than by a thread.
+        // One-second tokens make the session refresh about every 0.9s (expiry minus a 10% window).
+        tokenExpiresInSeconds = 1;
         String uri = "http://127.0.0.1:" + server.getAddress().getPort();
         IcebergRESTCatalog catalog = new IcebergRESTCatalog("shutdown_catalog", new Configuration(),
                 ImmutableMap.of(
@@ -130,20 +138,22 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
                         "iceberg.catalog.security", "oauth2",
                         "iceberg.catalog.oauth2.credential", "id:secret"));
         Assertions.assertEquals(List.of("db1"), catalog.listAllDatabases(connectContext));
-        Assertions.assertTrue(refreshThreadAlive("shutdown_catalog"), "the OAuth2 session schedules a token refresh");
 
-        catalog.shutdown();
-        catalog.shutdown();
-
+        int initial = tokenFetches.get();
         long deadline = System.currentTimeMillis() + 10_000;
-        while (refreshThreadAlive("shutdown_catalog") && System.currentTimeMillis() < deadline) {
+        while (tokenFetches.get() <= initial && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);
         }
-        Assertions.assertFalse(refreshThreadAlive("shutdown_catalog"), "token refresh thread survived shutdown");
-    }
+        Assertions.assertTrue(tokenFetches.get() > initial, "the OAuth2 session schedules a token refresh");
 
-    private static boolean refreshThreadAlive(String catalogName) {
-        return Thread.getAllStackTraces().keySet().stream()
-                .anyMatch(thread -> thread.isAlive() && thread.getName().startsWith(catalogName + "-token-refresh"));
+        catalog.shutdown();
+        catalog.shutdown();
+
+        // Let a refresh that was already in flight when shutdown ran finish, then require silence for
+        // several refresh periods.
+        Thread.sleep(1_500);
+        int afterShutdown = tokenFetches.get();
+        Thread.sleep(3_000);
+        Assertions.assertEquals(afterShutdown, tokenFetches.get(), "token refresh kept running after shutdown");
     }
 }
