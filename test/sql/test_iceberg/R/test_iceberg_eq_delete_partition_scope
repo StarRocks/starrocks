@@ -16,7 +16,9 @@ create external catalog hive_eq_scope_${uuid0} PROPERTIES ("type"="hive",
 );
 -- result:
 -- !result
-create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0};
+create database iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/db"
+);
 -- result:
 -- !result
 create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id(
@@ -132,9 +134,6 @@ create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes(
 insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_part_deletes values (2, 'a');
 -- result:
 -- !result
-set enable_read_iceberg_equality_delete_with_partition_evolution = true;
--- result:
--- !result
 alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/mixed_part_deletes", file_format="parquet", equality_columns="id");
 -- result:
 -- !result
@@ -142,7 +141,58 @@ select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed order by p, i
 -- result:
 2	b2	b
 -- !result
+create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key values (1, 'a1', 'a'), (2, 'b2', 'b');
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes(
+    id int,
+    p string
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_part_deletes/p=b");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes values (9, 'b');
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_part_deletes", file_format="parquet", equality_columns="id,p");
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key drop partition column p;
+-- result:
+-- !result
+create table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_deletes");
+-- result:
+-- !result
+insert into hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes values (2);
+-- result:
+-- !result
+alter table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key execute add_equality_delete_files(location="oss://${oss_bucket}/eq_scope_db_${uuid0}/global_key_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key order by id;
+-- result:
+1	a1	a
+-- !result
+select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key where id = 2;
+-- result:
+0
+-- !result
 set enable_read_iceberg_equality_delete_with_partition_evolution = false;
+-- result:
+-- !result
+select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key order by id;
+-- result:
+E: (1064, "Equality delete files aren't supported for tables with partition evolution.You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it")
+-- !result
+set enable_read_iceberg_equality_delete_with_partition_evolution = true;
 -- result:
 -- !result
 create table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.two_keys(
@@ -197,6 +247,15 @@ drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id force;
 -- result:
 -- !result
 drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed force;
+-- result:
+-- !result
+drop table iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_part_deletes force;
+-- result:
+-- !result
+drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.global_key_deletes force;
 -- result:
 -- !result
 drop table hive_eq_scope_${uuid0}.eq_scope_db_${uuid0}.mixed_global_deletes force;
