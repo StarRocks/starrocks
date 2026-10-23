@@ -1086,6 +1086,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   3. 全局变量 `version` 的值 (`show variables like 'version';`)
 - 引入版本: -
 
+### `mysql_service_compression_enabled`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 是否在连接握手中提供 MySQL 压缩协议（zlib 和 zstd）。只有请求压缩的客户端才会使用压缩传输，例如 `mysql --compression-algorithms=zstd` 或 JDBC `useCompression=true`；其他客户端不受影响。设置为 `false` 时，FE 不再提供压缩。修改仅对新建连接生效。
+- 引入版本: -
+
 ### `mysql_service_io_threads_num`
 
 - 默认值: 4
