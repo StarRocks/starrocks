@@ -1518,6 +1518,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Timeout in seconds used for Kafka-related routine load operations. When a client request does not specify a timeout, `routine_load_kafka_timeout_second` is used as the default RPC timeout (converted to milliseconds) for `get_info`. It is also used as the per-call consume poll timeout for the librdkafka consumer (converted to milliseconds and capped by remaining runtime). Note: the internal `get_info` path reduces this value to 80% before passing it to librdkafka to avoid FE-side timeout races. Set this to a value that balances timely failure reporting and sufficient time for network/broker responses; changes require a restart because the setting is not mutable.
 - Introduced in: v3.2.0
 
+### routine_load_kafka_client_rack
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Kafka `client.rack` that this BE or CN advertises for every Routine Load consumer it runs (KIP-392, "fetch from closest replica"). When the Kafka brokers are configured with `broker.rack` and a rack-aware `replica.selector.class` (for example `org.apache.kafka.common.replica.RackAwareReplicaSelector`), a consumer that advertises a matching rack is served from a replica in the same rack, such as the same cloud availability zone, instead of from the partition leader. This removes the cross-zone transfer of the consumed data. Set it on each node to that node's own rack or zone identifier; `be.conf` supports `${ENV_VAR}` substitution, so the value can be injected from an environment variable. A job-level `"property.client.rack"` in `CREATE ROUTINE LOAD` overrides this value for that job. Brokers without rack-aware replica selection ignore the setting. An empty value (the default) leaves `client.rack` unset, so consumers keep fetching from the partition leader.
+- Introduced in: v4.2.0
+
 ### routine_load_pulsar_timeout_second
 
 - Default: 10

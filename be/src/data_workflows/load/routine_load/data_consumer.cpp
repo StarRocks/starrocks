@@ -115,6 +115,15 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
     }
 
+    // Node-level client.rack (KIP-392 "fetch from closest replica"): lets each BE/CN consume from a replica
+    // in its own rack/availability zone instead of the partition leader. Applied BEFORE the job's custom
+    // properties so that an explicit "property.client.rack" on the job still wins. Not recorded in
+    // _custom_properties: it is identical for every consumer on this node and must not affect match().
+    const std::string& node_rack = config::routine_load_kafka_client_rack;
+    if (!node_rack.empty()) {
+        RETURN_IF_ERROR(set_conf("client.rack", node_rack));
+    }
+
     for (auto& item : ctx->kafka_info->properties) {
         if (boost::algorithm::starts_with(item.second, "FILE:")) {
             // file property should has format: FILE:file_id:md5
@@ -139,6 +148,16 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             RETURN_IF_ERROR(set_conf(item.first, item.second));
         }
         _custom_properties.emplace(item.first, item.second);
+    }
+
+    // Report the client.rack that is actually in effect: a job-level property overrides the node config, and an
+    // empty job value (which turns follower fetching off for that job) is reported too.
+    auto rack_it = ctx->kafka_info->properties.find("client.rack");
+    const bool from_job = rack_it != ctx->kafka_info->properties.end();
+    const std::string& effective_rack = from_job ? rack_it->second : node_rack;
+    if (from_job || !node_rack.empty()) {
+        LOG(INFO) << "kafka consumer client.rack: " << (effective_rack.empty() ? "<empty>" : effective_rack)
+                  << (from_job ? " (job property)" : " (node config routine_load_kafka_client_rack)");
     }
 
     if (conf->set("event_cb", &_k_event_cb, errstr) != RdKafka::Conf::CONF_OK) {

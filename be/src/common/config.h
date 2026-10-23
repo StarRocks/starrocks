@@ -1072,6 +1072,14 @@ CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 // kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
+// Kafka `client.rack` advertised by every routine load consumer on this node (KIP-392 "fetch from
+// closest replica"). With rack-aware brokers (broker.rack + replica.selector.class=RackAwareReplicaSelector)
+// the consumer is served from a replica in the same rack/availability zone instead of the partition
+// leader, which removes cross-zone traffic for the consumed data. Set it per node to the node's own
+// rack or zone identifier (be.conf supports ${ENV_VAR} substitution). Empty (default) leaves client.rack
+// unset. A job-level "property.client.rack" overrides this value for that job.
+CONF_String(routine_load_kafka_client_rack, "");
+
 // pulsar request timeout
 CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
