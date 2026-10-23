@@ -14,6 +14,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorCode;
+>>>>>>> 44cbdf0f4f ([Enhancement] when query is killed by kill command, return errorCode '1317' instead of default value (#69615))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -57,6 +62,7 @@ public class KillQueryHandleTest {
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), false);
         // isKilled is set
         Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(ErrorCode.ERR_QUERY_INTERRUPTED, ctx1.getState().getErrorCode());
         Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
@@ -179,6 +185,7 @@ public class KillQueryHandleTest {
         ConnectContext ctx = kill("a_custom_query_id", false);
         // isKilled is set
         Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(ErrorCode.ERR_QUERY_INTERRUPTED, ctx1.getState().getErrorCode());
         Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
