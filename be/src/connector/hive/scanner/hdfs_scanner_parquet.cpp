@@ -45,21 +45,8 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 .chunk_size = runtime_state->chunk_size(),
         });
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-<<<<<<< HEAD
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-                RETURN_IF_ERROR(iceberg_delete_builder.build_parquet(*delete_file));
-=======
-            if (delete_file->__isset.deletion_vector) {
-                // Timed and counted by the IcebergDeletionVector section only: neither
-                // iceberg_delete_file_build_ns (published as IcebergV2FormatTimer/
-                // DeleteFileBuildTime) nor deletion_vector_build_count (Delta Lake's own
-                // section) may pick up V3 DV work.
-                RETURN_IF_ERROR(iceberg_delete_builder.build_deletion_vector(*delete_file));
-            } else if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
                 RETURN_IF_ERROR(iceberg_delete_builder.build_position_delete(*delete_file, THdfsFileFormat::PARQUET));
-                v2_delete_files++;
->>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
             } else {
                 const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                    delete_file->file_content);

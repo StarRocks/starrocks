@@ -336,17 +336,8 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     });
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-<<<<<<< HEAD
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(*delete_file));
-=======
-        if (delete_file->__isset.deletion_vector) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_deletion_vector(*delete_file));
-        } else if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-            SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
             RETURN_IF_ERROR(iceberg_delete_builder.build_position_delete(*delete_file, THdfsFileFormat::ORC));
-            v2_delete_files++;
->>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                delete_file->file_content);

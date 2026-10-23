@@ -220,20 +220,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
-<<<<<<< HEAD
-                checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
-=======
                 checkFileFormatSupportedDelete(fileScanTask, usedForDelete, usedForDelete && readsRowLineage());
-                // A plain read of a data file whose deletion vector deletes every row returns nothing; DELETE,
-                // UPDATE and MERGE (usedForDelete), rewrites (recordScanFiles) and the equality-delete scan, which
-                // reads the task's delete files rather than its data file, keep it.
-                if (!usedForDelete && !recordScanFiles &&
-                        morParams.getScanTaskType() != IcebergMORParams.ScanTaskType.EQ_DELETE &&
-                        isFullyDeletedByDeletionVector(fileScanTask)) {
-                    Tracers.count(EXTERNAL, "ICEBERG.skippedFullyDeletedDataFiles", 1);
-                    continue;
-                }
->>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -340,31 +327,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             target.setFull_path(deleteFile.path().toString());
             target.setFile_content(TIcebergFileContent.POSITION_DELETES);
             target.setLength(deleteFile.fileSizeInBytes());
-<<<<<<< HEAD
-=======
-
-            if (ContentFileUtil.isDV(deleteFile)) {
-                // contentOffset/contentSizeInBytes are Long; unboxing a null would NPE, so reject
-                // malformed metadata with a message that names the file.
-                Long offset = deleteFile.contentOffset();
-                Long size = deleteFile.contentSizeInBytes();
-                if (offset == null || offset < 0 || size == null || size <= 0) {
-                    throw new StarRocksConnectorException(
-                            "Deletion vector [" + deleteFile.path() +
-                            "] has invalid content_offset/content_size_in_bytes: " + offset + "/" + size);
-                }
-                TIcebergDeletionVectorBlob blob = new TIcebergDeletionVectorBlob();
-                blob.setContent_offset(offset);
-                blob.setContent_size_in_bytes(size);
-                blob.setRecord_count(deleteFile.recordCount());
-                blob.setReferenced_data_file(deleteFile.referencedDataFile());
-                target.setDeletion_vector(blob);
-            } else if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
+            if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
                 // a position delete file may have another format than its data file (write.delete.format.default)
                 target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
             }
-
->>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
             posDeleteFiles.add(target);
         }
 

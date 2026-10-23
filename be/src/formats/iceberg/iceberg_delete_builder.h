@@ -72,17 +72,10 @@ public:
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
 
-<<<<<<< HEAD
-=======
     // Reads a position delete file in its own format when the FE sent it, else in `data_file_format`: a delete file
     // may have another format than its data file (write.delete.format.default).
     Status build_position_delete(const TIcebergDeleteFile& delete_file, THdfsFileFormat::type data_file_format) const;
 
-    // Reads the V3 deletion-vector blob located by delete_file.deletion_vector and ORs it into
-    // the shared bitmap. delete_file.full_path is the Puffin file, length its full size.
-    Status build_deletion_vector(const TIcebergDeleteFile& delete_file) const;
-
->>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
     DeletionBitmapPtr deletion_bitmap() const { return _deletion_bitmap; }
 
 private:
