@@ -14,16 +14,18 @@
 
 """Unit tests for View schema definition and column handling."""
 
-import pytest
-from sqlalchemy import Column, MetaData
+from sqlalchemy import Column, MetaData, testing
+from sqlalchemy.testing import expect_raises_message, fixtures
 
 from starrocks.alembic.ops import AlterViewOp, CreateViewOp, DropViewOp
 from starrocks.datatype import STRING
 from starrocks.sql.schema import View
 
 
-class TestViewColumnDefinitions:
+class ViewColumnDefinitionsTest(fixtures.TestBase):
     """Test different ways to define columns in View."""
+
+    __requires__ = ("sqlalchemy_2",)
 
     def test_view_with_column_objects(self):
         """Test View with Column objects via *args."""
@@ -116,7 +118,7 @@ class TestViewColumnDefinitions:
     def test_view_columns_with_invalid_dict(self):
         """Test that invalid dict column definition raises error."""
         metadata = MetaData()
-        with pytest.raises(ValueError, match="Invalid column definition"):
+        with expect_raises_message(ValueError, "Invalid column definition"):
             View(
                 'v_invalid',
                 metadata,
@@ -127,7 +129,7 @@ class TestViewColumnDefinitions:
     def test_view_columns_with_invalid_type(self):
         """Test that invalid column type raises error."""
         metadata = MetaData()
-        with pytest.raises(ValueError, match="Invalid column definitions"):
+        with expect_raises_message(ValueError, "Invalid column definitions"):
             View(
                 'v_invalid',
                 metadata,
@@ -136,9 +138,10 @@ class TestViewColumnDefinitions:
             )
 
 
-class TestViewOpsWithColumns:
+class ViewOpsWithColumnsTest(fixtures.TestBase):
     """Test View operations with columns."""
 
+    @testing.requires.sqlalchemy_2
     def test_create_view_op_from_view_with_columns(self):
         """Test creating CreateViewOp from View object with columns."""
         metadata = MetaData()
@@ -163,6 +166,7 @@ class TestViewOpsWithColumns:
         assert op.columns[1] == {'name': 'name', 'comment': 'User name'}
         assert op.columns[2] == {'name': 'email', 'comment': None}
 
+    @testing.requires.sqlalchemy_2
     def test_create_view_op_reverse(self):
         """Test CreateViewOp reverse operation."""
         metadata = MetaData()
@@ -181,6 +185,7 @@ class TestViewOpsWithColumns:
 
         assert drop_op.view_name == 'v2'
 
+    @testing.requires.sqlalchemy_2
     def test_drop_view_op_from_view_with_columns(self):
         """Test creating DropViewOp from View object with columns."""
         metadata = MetaData()
@@ -219,6 +224,7 @@ class TestViewOpsWithColumns:
         assert op.columns is not None
         assert len(op.columns) == 2
 
+    @testing.requires.sqlalchemy_2
     def test_view_op_without_columns(self):
         """Test View op without columns."""
         metadata = MetaData()
@@ -232,7 +238,7 @@ class TestViewOpsWithColumns:
         assert op.columns is None
 
 
-class TestAlterViewOpsWithColumns:
+class AlterViewOpsWithColumnsTest(fixtures.TestBase):
     """Test AlterView operations with columns."""
 
     def test_alter_view_op_with_columns(self):

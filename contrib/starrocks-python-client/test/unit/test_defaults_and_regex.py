@@ -14,12 +14,14 @@
 
 """Tests for performance optimizations and default value updates."""
 
+from sqlalchemy.testing import fixtures
+
 from starrocks.common.defaults import ReflectionTableDefaults
 from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.reflection import StarRocksTableDefinitionParser
 
 
-class TestRegexPattern:
+class RegexPatternTest(fixtures.TestBase):
     """Test performance optimizations for regex patterns."""
 
     def test_parse_distribution_clause_with_compiled_regex(self):
@@ -93,7 +95,7 @@ class TestRegexPattern:
         assert result is None
 
 
-class TestDefaultValues:
+class DefaultValuesTest(fixtures.TestBase):
     """Test default value constants."""
 
     def test_engine_normalization(self):

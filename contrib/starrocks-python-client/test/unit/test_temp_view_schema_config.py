@@ -18,6 +18,7 @@ transient canonicalization view is created for view/MV definition comparison."""
 from types import SimpleNamespace
 
 from sqlalchemy import MetaData
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic import compare
 from starrocks.alembic.compare import (
@@ -35,7 +36,7 @@ def _autogen_context(opts):
     return SimpleNamespace(migration_context=SimpleNamespace(opts=opts))
 
 
-class TestConfiguredTempViewSchema:
+class ConfiguredTempViewSchemaTest(fixtures.TestBase):
     def test_returns_configured_value(self):
         ctx = _autogen_context({TEMP_VIEW_SCHEMA_OPT: "migrations"})
         assert _configured_temp_view_schema(ctx) == "migrations"
@@ -72,7 +73,7 @@ class _FakeConn:
         return _FakeResult(None)
 
 
-class TestTempViewHostSchema:
+class TempViewHostSchemaTest(fixtures.TestBase):
     def test_temp_view_created_and_read_in_given_schema(self):
         conn = _FakeConn("SELECT a FROM t")
         result = _get_canonical_sql_via_temp_view(conn, "locked_schema", "SELECT a FROM t")
@@ -86,7 +87,9 @@ class TestTempViewHostSchema:
         assert any("DROP VIEW IF EXISTS `locked_schema`.`_alembic_cmp_" in c[0] for c in conn.calls)
 
 
-class TestViewCompareRoutesToConfiguredSchema:
+class ViewCompareRoutesToConfiguredSchemaTest(fixtures.TestBase):
+    __requires__ = ("sqlalchemy_2",)
+
     def test_temp_view_schema_overrides_object_schema(self, monkeypatch):
         captured = {}
 

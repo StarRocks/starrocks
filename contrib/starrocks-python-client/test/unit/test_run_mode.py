@@ -17,6 +17,7 @@
 from unittest.mock import MagicMock
 
 from sqlalchemy import exc
+from sqlalchemy.testing import fixtures
 
 from starrocks.common.types import SystemRunMode
 from starrocks.dialect import StarRocksDialect
@@ -55,7 +56,7 @@ def _rows_result(rows):
     return result
 
 
-class TestGetRunMode:
+class GetRunModeTest(fixtures.TestBase):
     def test_uses_run_mode_variable(self):
         conn = _connection({"SELECT @@run_mode": _scalar_result("SHARED_DATA")})
         assert StarRocksDialect()._get_run_mode(conn) == SystemRunMode.SHARED_DATA
