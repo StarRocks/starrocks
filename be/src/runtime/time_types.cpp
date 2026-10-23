@@ -423,6 +423,7 @@ bool date::from_string_to_datetime_internal(const char* ptr_date, const char* pt
 
     return true;
 }
+<<<<<<< HEAD
 // if string content is 10 chars try to process based on "%Y-%m-%d",
 //    if successful return result;
 //    else failed use uncommon approach.
@@ -431,6 +432,47 @@ bool date::from_string_to_datetime_internal(const char* ptr_date, const char* pt
 //    else failed use uncommon approach.
 // else use uncommon approach.
 //
+=======
+
+bool date::from_string_to_date(const char* date_str, size_t len, int* year, int* month, int* day) {
+    // We can use from_string_to_datetime and just extract the date components
+    ToDatetimeResult result;
+    auto [is_valid, _] = from_string_to_datetime(date_str, len, &result);
+
+    if (is_valid) {
+        *year = result.year;
+        *month = result.month;
+        *day = result.day;
+        return true;
+    }
+
+    return false;
+}
+
+#ifdef __SSE4_1__
+inline __m128i load_xmm_safe(const char* p) {
+#ifndef ADDRESS_SANITIZER
+    constexpr uintptr_t PAGE_MASK = 4096 - 1;
+    bool read_cross_page = (reinterpret_cast<uintptr_t>(p) & PAGE_MASK) > PAGE_MASK - 16;
+#else
+    bool read_cross_page = true;
+#endif
+    if (!read_cross_page) {
+        return _mm_loadu_si128((const __m128i*)p);
+    } else {
+        alignas(16) char tmp[16] = {};
+        memcpy(tmp, p, 10);
+        return _mm_load_si128((const __m128i*)tmp);
+    }
+}
+#endif
+
+// If format string has at least 19 chars we guess
+// is it like "%Y-%m-%d %H:%i:%s" or "%Y-%m-%dT%H:%i:%s[.f+]Z",
+// and if 10th char is T and 11th is digit followed by time format and optional microseconds and Z
+// or if there is some space between first 10 chars and last 8 chars, return true.
+// else return false;
+>>>>>>> 1088fd383b ([UT] Set read_cross_page to true on ASAN in load_xmm_safe (#68943))
 // @return <is_valid, is_only_date>
 //     is_valid is true if the date_str is valid datetime string.
 //     is_only_date is true if the date_str only contains date part.
