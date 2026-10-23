@@ -323,8 +323,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
-    if (_scanner_ctx->table_specific.iceberg_delete_files.empty()) return Status::OK();
-    SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+    if (_scanner_ctx->table_specific.iceberg_delete_files.empty() || counts_from_metadata()) return Status::OK();
     formats::IcebergDeleteBuilder iceberg_delete_builder(formats::IcebergDeleteBuilderContext{
             .scan_context = &_scanner_ctx->format_scan_context,
             .fs = _scanner_ctx->fs,
@@ -334,9 +333,16 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
             .chunk_size = _runtime_state->chunk_size(),
     });
 
+    // V3 deletion vectors are timed and counted by the IcebergDeletionVector section only, as on the
+    // parquet scanner: DeleteFilesPerScan and the ICEBERG_V2_MOR section keep meaning v2 position deletes.
+    int64_t v2_delete_files = 0;
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+        if (delete_file->__isset.deletion_vector) {
+            RETURN_IF_ERROR(iceberg_delete_builder.build_deletion_vector(*delete_file));
+        } else if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
             RETURN_IF_ERROR(iceberg_delete_builder.build_orc(*delete_file));
+            v2_delete_files++;
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                delete_file->file_content);
@@ -346,7 +352,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     }
 
     _skip_rows_ctx->deletion_bitmap = iceberg_delete_builder.deletion_bitmap();
-    _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+    _app_stats.iceberg_delete_files_per_scan += v2_delete_files;
     return Status::OK();
 }
 

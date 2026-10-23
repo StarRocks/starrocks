@@ -31,8 +31,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
+import com.starrocks.type.VarcharType;
+>>>>>>> b68eb3f16aa... [BugFix][RB-225] Fix Iceberg branch read schema, time travel before an equality key rename, DVs on ORC, and _pos predicates (#66717)
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -99,9 +105,10 @@ public class QueryPeriodResolver {
         QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
         QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
         TvrVersionRange versionRange;
+        Optional<ConnectorTableVersion> endVersion;
         try {
             Optional<ConnectorTableVersion> startVersion = resolve(queryPeriod.getStart(), periodType, session);
-            Optional<ConnectorTableVersion> endVersion = resolve(queryPeriod.getEnd(), periodType, session);
+            endVersion = resolve(queryPeriod.getEnd(), periodType, session);
             versionRange = metadataMgr.getTableVersionRange(
                     tableRelation.getName().getDb(), table, startVersion, endVersion);
         } catch (Exception e) {
@@ -115,20 +122,37 @@ public class QueryPeriodResolver {
         }
         // Pin only after a successful bind, so a failed (or retried) bind never leaves the relation
         // pinned-but-unbound, which the guard above would later mistake for "already resolved".
-        Table boundTable = bindIcebergSnapshotReadView((IcebergTable) table, versionRange);
+        Table boundTable = bindIcebergSnapshotReadView((IcebergTable) table, versionRange,
+                isBranchRef(((IcebergTable) table).getNativeTable(), endVersion));
         tableRelation.setTvrVersionRange(versionRange);
         return boundTable;
     }
 
+    // A branch is read with the table's current schema (Iceberg SnapshotUtil.schemaFor); only a tag,
+    // a snapshot id or a timestamp reads with the schema of the snapshot it points to.
+    private static boolean isBranchRef(org.apache.iceberg.Table nativeTable, Optional<ConnectorTableVersion> version) {
+        if (version.isEmpty() || version.get().getPointerType() != PointerType.VERSION) {
+            return false;
+        }
+        ConstantOperator value = version.get().getConstantOperator();
+        if (value.getType() != VarcharType.VARCHAR) {
+            return false;
+        }
+        SnapshotRef ref = nativeTable.refs().get(value.getVarchar());
+        return ref != null && ref.isBranch();
+    }
+
     // Rebind the Iceberg table to the resolved snapshot's read metadata (schema + partition specs),
     // returning an immutable per-query copy.
-    private static Table bindIcebergSnapshotReadView(IcebergTable icebergTable, TvrVersionRange versionRange) {
+    private static Table bindIcebergSnapshotReadView(IcebergTable icebergTable, TvrVersionRange versionRange,
+                                                     boolean branch) {
         Optional<Long> snapshotId = versionRange.end();
         if (snapshotId.isEmpty()) {
             return icebergTable;
         }
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
+        Schema snapshotSchema = branch ? nativeTable.schema()
+                : IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
         if (snapshotSchema == null) {
             // Legacy metadata without a per-snapshot schema id: keep the current table state.
             return icebergTable;

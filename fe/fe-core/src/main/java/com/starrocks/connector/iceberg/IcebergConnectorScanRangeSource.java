@@ -321,6 +321,28 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             target.setFull_path(deleteFile.path().toString());
             target.setFile_content(TIcebergFileContent.POSITION_DELETES);
             target.setLength(deleteFile.fileSizeInBytes());
+<<<<<<< HEAD
+=======
+
+            if (ContentFileUtil.isDV(deleteFile)) {
+                // contentOffset/contentSizeInBytes are Long; unboxing a null would NPE, so reject
+                // malformed metadata with a message that names the file.
+                Long offset = deleteFile.contentOffset();
+                Long size = deleteFile.contentSizeInBytes();
+                if (offset == null || offset < 0 || size == null || size <= 0) {
+                    throw new StarRocksConnectorException(
+                            "Deletion vector [" + deleteFile.path() +
+                            "] has invalid content_offset/content_size_in_bytes: " + offset + "/" + size);
+                }
+                TIcebergDeletionVectorBlob blob = new TIcebergDeletionVectorBlob();
+                blob.setContent_offset(offset);
+                blob.setContent_size_in_bytes(size);
+                blob.setRecord_count(deleteFile.recordCount());
+                blob.setReferenced_data_file(deleteFile.referencedDataFile());
+                target.setDeletion_vector(blob);
+            }
+
+>>>>>>> b68eb3f16aa... [BugFix][RB-225] Fix Iceberg branch read schema, time travel before an equality key rename, DVs on ORC, and _pos predicates (#66717)
             posDeleteFiles.add(target);
         }
 
