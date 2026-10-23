@@ -43,7 +43,8 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion,
+                                 long versionTime, Long contentIdentity) {
     }
 
     @Override

@@ -157,6 +157,7 @@ message PTabletInfo {
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
     repeated int64 valid_dict_collected_version = 6;
+    repeated int64 valid_dict_content_identities = 7;
 }
 
 message PLoadChannelProfileConfig {

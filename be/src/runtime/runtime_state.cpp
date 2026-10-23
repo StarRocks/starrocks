@@ -450,11 +450,13 @@ Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& ex
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_load_global_dicts, &_load_dict_versions);
+    return _build_global_dict(global_dict_list, &_load_global_dicts, &_load_dict_versions,
+                              &_load_dict_content_identities);
 }
 
 Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version) {
+                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version,
+                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_identity) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
         GlobalDictMap dict_map;
@@ -470,6 +472,9 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
             rdict_map.emplace(global_dict.ids[i], slice);
         }
         result->emplace(uint32_t(global_dict.columnId), std::make_pair(std::move(dict_map), std::move(rdict_map)));
+        if (column_id_to_identity != nullptr && global_dict.__isset.content_identity) {
+            column_id_to_identity->emplace(uint32_t(global_dict.columnId), global_dict.content_identity);
+        }
         if (column_id_to_version != nullptr) {
             column_id_to_version->emplace(uint32_t(global_dict.columnId), global_dict.version);
         }

@@ -249,7 +249,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion,
+                                 long versionTime, Long contentIdentity) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -269,8 +270,14 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     ColumnDict columnDict = columnOptional.get();
                     long lastVersion = columnDict.getVersion();
                     long dictCollectVersion = columnDict.getCollectedVersion();
-                    if (collectVersion != dictCollectVersion) {
-                        LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
+                    if (collectedVersion != dictCollectVersion) {
+                        LOG.info("remove dict by unmatched version {}:{}", collectedVersion, dictCollectVersion);
+                        removeGlobalDict(tableId, columnName);
+                        return;
+                    }
+                    if (contentIdentity != null && contentIdentity != columnDict.getContentIdentity()) {
+                        LOG.info("remove dict by unmatched content identity for table:{} column:{} received:{} expected:{}",
+                                tableId, columnName, contentIdentity, columnDict.getContentIdentity());
                         removeGlobalDict(tableId, columnName);
                         return;
                     }
