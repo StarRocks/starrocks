@@ -62,6 +62,29 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1,
     }
     return true;
 }
+#elif defined(__ARM_NEON) && defined(__aarch64__) && defined(__BYTE_ORDER__) && \
+        (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) && !defined(ADDRESS_SANITIZER)
+#include <arm_neon.h>
+
+template <typename T>
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
+    if (size1 != size2) {
+        return false;
+    }
+    for (size_t offset = 0; offset < size1; offset += 16) {
+        uint8x16_t v1 = vld1q_u8(reinterpret_cast<const uint8_t*>(p1 + offset));
+        uint8x16_t v2 = vld1q_u8(reinterpret_cast<const uint8_t*>(p2 + offset));
+        uint8x16_t eq = vceqq_u8(v1, v2);
+        uint8x8_t narrowed = vshrn_n_u16(vreinterpretq_u16_u8(eq), 4);
+        uint64_t mask = ~vget_lane_u64(vreinterpret_u64_u8(narrowed), 0);
+        if (mask) {
+            offset += (__builtin_ctzll(mask) >> 2);
+            return offset >= size1;
+        }
+    }
+    return true;
+}
 #else
 
 template <typename T>

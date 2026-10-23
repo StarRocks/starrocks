@@ -120,7 +120,7 @@ struct SumMapAggregateFunctionState : public AggregateFunctionEmptyState {
 
                     } else {
                         // Insert new key-value pair
-                        uint8_t* pos = mem_pool->allocate(key.size);
+                        uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                         memcpy(pos, key.data, key.size);
                         value_result_column->get_data().push_back(value);
                         hash_map.emplace(Slice(pos, key.size), value_result_column->size() - 1);

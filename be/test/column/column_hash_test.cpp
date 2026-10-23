@@ -15,13 +15,20 @@
 #include "column/column_hash/column_hash.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <array>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -337,5 +344,181 @@ INSTANTIATE_TEST_SUITE_P(AllHashFunctions, ColumnHashTest, ::testing::ValuesIn(k
                          [](const ::testing::TestParamInfo<HashFunctionParam>& info) {
                              return std::string(info.param.name);
                          });
+
+TEST(MemequalPaddedTest, ZeroLengthAndUnequalLength) {
+    alignas(16) std::array<uint8_t, 256> buf1{};
+    alignas(16) std::array<uint8_t, 256> buf2{};
+    buf1.fill(0xAA);
+    buf2.fill(0x55);
+    const auto* b1 = reinterpret_cast<const char*>(buf1.data());
+    const auto* b2 = reinterpret_cast<const char*>(buf2.data());
+
+    EXPECT_TRUE(memequal_padded(b1, 0, b2, 0));
+    EXPECT_TRUE(memequal_padded(buf1.data(), 0, buf2.data(), 0));
+    EXPECT_TRUE(SliceEqual()(Slice(b1, 0), Slice(b2, 0)));
+    EXPECT_TRUE(SliceNormalEqual()(Slice(b1, 0), Slice(b2, 0)));
+    EXPECT_FALSE(memequal_padded(b1, 5, b1, 6));
+    EXPECT_FALSE(SliceEqual()(Slice(b1, 5), Slice(b1, 6)));
+}
+
+TEST(MemequalPaddedTest, EqualPayloadDifferingPadding) {
+    alignas(16) std::array<uint8_t, 256> buf1{};
+    alignas(16) std::array<uint8_t, 256> buf2{};
+    for (size_t size = 0; size <= 128; ++size) {
+        buf1.fill(0);
+        buf2.fill(0);
+        for (size_t i = 0; i < size; ++i) {
+            auto val = static_cast<uint8_t>((i * 37 + 13) & 0xFF);
+            buf1[i] = val;
+            buf2[i] = val;
+        }
+        std::fill_n(buf1.data() + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0x11});
+        std::fill_n(buf2.data() + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0xEE});
+
+        const auto* c1 = reinterpret_cast<const char*>(buf1.data());
+        const auto* c2 = reinterpret_cast<const char*>(buf2.data());
+        EXPECT_TRUE(memequal_padded(c1, size, c2, size)) << "size=" << size;
+        EXPECT_TRUE(memequal_padded(buf1.data(), size, buf2.data(), size)) << "size=" << size;
+        EXPECT_TRUE(SliceEqual()(Slice(c1, size), Slice(c2, size))) << "size=" << size;
+    }
+}
+
+TEST(MemequalPaddedTest, EqualPayloadEqualPadding) {
+    alignas(16) std::array<uint8_t, 256> buf1{};
+    alignas(16) std::array<uint8_t, 256> buf2{};
+    for (size_t size = 0; size <= 128; ++size) {
+        buf1.fill(0x77);
+        buf2.fill(0x77);
+        for (size_t i = 0; i < size; ++i) {
+            auto val = static_cast<uint8_t>((i * 53 + 7) & 0xFF);
+            buf1[i] = val;
+            buf2[i] = val;
+        }
+
+        const auto* c1 = reinterpret_cast<const char*>(buf1.data());
+        const auto* c2 = reinterpret_cast<const char*>(buf2.data());
+        EXPECT_TRUE(memequal_padded(c1, size, c2, size)) << "size=" << size;
+        EXPECT_TRUE(memequal_padded(buf1.data(), size, buf2.data(), size)) << "size=" << size;
+    }
+}
+
+TEST(MemequalPaddedTest, MismatchAtEveryIndex) {
+    alignas(16) std::array<uint8_t, 256> buf1{};
+    alignas(16) std::array<uint8_t, 256> buf2{};
+    for (size_t size = 1; size <= 64; ++size) {
+        for (size_t k = 0; k < size; ++k) {
+            buf1.fill(0x33);
+            buf2.fill(0x33);
+            for (size_t i = 0; i < size; ++i) {
+                auto val = static_cast<uint8_t>((i * 29 + 3) & 0xFF);
+                buf1[i] = val;
+                buf2[i] = val;
+            }
+            buf2[k] ^= static_cast<uint8_t>(1U << (k % 8));
+
+            const auto* c1 = reinterpret_cast<const char*>(buf1.data());
+            const auto* c2 = reinterpret_cast<const char*>(buf2.data());
+            EXPECT_FALSE(memequal_padded(c1, size, c2, size)) << "size=" << size << " k=" << k;
+            EXPECT_FALSE(memequal_padded(buf1.data(), size, buf2.data(), size)) << "size=" << size << " k=" << k;
+        }
+    }
+}
+
+TEST(MemequalPaddedTest, UnalignedBases) {
+    const size_t kSizes[] = {1, 7, 8, 15, 16, 17, 31, 32, 33, 48};
+    alignas(16) std::array<uint8_t, 256> buf1{};
+    alignas(16) std::array<uint8_t, 256> buf2{};
+    for (size_t off1 = 0; off1 < 16; ++off1) {
+        for (size_t off2 = 0; off2 < 16; ++off2) {
+            for (size_t size : kSizes) {
+                buf1.fill(0x11);
+                buf2.fill(0xEE);
+                uint8_t* p1 = buf1.data() + off1;
+                uint8_t* p2 = buf2.data() + off2;
+                for (size_t i = 0; i < size; ++i) {
+                    auto val = static_cast<uint8_t>((i * 41 + 19) & 0xFF);
+                    p1[i] = val;
+                    p2[i] = val;
+                }
+                std::fill_n(p1 + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0x11});
+                std::fill_n(p2 + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0xEE});
+
+                EXPECT_TRUE(memequal_padded(p1, size, p2, size))
+                        << "off1=" << off1 << " off2=" << off2 << " size=" << size;
+
+                p2[size - 1] ^= 0x01;
+                EXPECT_FALSE(memequal_padded(p1, size, p2, size))
+                        << "off1=" << off1 << " off2=" << off2 << " size=" << size;
+            }
+        }
+    }
+}
+
+TEST(MemequalPaddedTest, PageBoundaryBeforeUnmappedPage) {
+    const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    void* map1 = mmap(nullptr, 2 * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* map2 = mmap(nullptr, 2 * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(map1, MAP_FAILED);
+    ASSERT_NE(map2, MAP_FAILED);
+    ASSERT_EQ(0, mprotect(static_cast<uint8_t*>(map1) + page_size, page_size, PROT_NONE));
+    ASSERT_EQ(0, mprotect(static_cast<uint8_t*>(map2) + page_size, page_size, PROT_NONE));
+
+    auto* end1 = static_cast<uint8_t*>(map1) + page_size;
+    auto* end2 = static_cast<uint8_t*>(map2) + page_size;
+
+    // size == 0 must not dereference even with zero padding before the unmapped page.
+    EXPECT_TRUE(memequal_padded(end1, 0, end2, 0));
+
+    // Any size in [1, 64] placed with exactly SLICE_MEMEQUAL_OVERFLOW_PADDING (15) bytes before the
+    // unmapped page must not fault even when the 15 padding bytes differ, including GlobalDictMap lookups.
+    for (size_t size = 1; size <= 64; ++size) {
+        uint8_t* p1 = end1 - (size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        uint8_t* p2 = end2 - (size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        for (size_t i = 0; i < size; ++i) {
+            auto val = static_cast<uint8_t>((i * 43 + 7) & 0xFF);
+            p1[i] = val;
+            p2[i] = val;
+        }
+        std::fill_n(p1 + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0xAA});
+        std::fill_n(p2 + size, SLICE_MEMEQUAL_OVERFLOW_PADDING, uint8_t{0x55});
+        EXPECT_TRUE(memequal_padded(p1, size, p2, size)) << "size=" << size;
+
+        GlobalDictMap global_dict;
+        global_dict.emplace(Slice(p1, size), static_cast<DictId>(size));
+        auto dict_it = global_dict.find(Slice(p2, size));
+        ASSERT_NE(dict_it, global_dict.end()) << "size=" << size;
+        EXPECT_EQ(dict_it->second, static_cast<DictId>(size));
+
+        p2[size - 1] ^= 0x80;
+        EXPECT_FALSE(memequal_padded(p1, size, p2, size)) << "size=" << size;
+        EXPECT_EQ(global_dict.find(Slice(p2, size)), global_dict.end()) << "size=" << size;
+    }
+
+    // SliceNormalEqual and DictColumnsValidMap must not read past size even with 0 trailing padding bytes.
+    DictColumnsValidMap valid_map;
+    for (size_t size = 1; size <= 64; ++size) {
+        uint8_t* p1 = end1 - size;
+        uint8_t* p2 = end2 - size;
+        for (size_t i = 0; i < size; ++i) {
+            auto val = static_cast<uint8_t>('a' + (i % 26));
+            p1[i] = val;
+            p2[i] = val;
+        }
+        Slice s1(p1, size);
+        Slice s2(p2, size);
+        EXPECT_TRUE(SliceNormalEqual()(s1, s2)) << "size=" << size;
+        p2[size - 1] ^= 0x01;
+        EXPECT_FALSE(SliceNormalEqual()(s1, s2)) << "size=" << size;
+
+        std::string key(reinterpret_cast<const char*>(p1), size);
+        valid_map.emplace(key, (size % 2) == 0);
+        auto it = valid_map.find(key);
+        ASSERT_NE(it, valid_map.end());
+        EXPECT_EQ(it->second, (size % 2) == 0);
+    }
+
+    ASSERT_EQ(0, munmap(map1, 2 * page_size));
+    ASSERT_EQ(0, munmap(map2, 2 * page_size));
+}
 
 } // namespace starrocks
