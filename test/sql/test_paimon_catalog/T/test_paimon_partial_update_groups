@@ -129,4 +129,3 @@ function: assert_paimon_readers("select id,v,seq from paimon_boundaries_${uuid0}
 function: assert_paimon_readers("select v from paimon_boundaries_${uuid0}.paimon_test.reader_partial_ignore_delete_v1 order by id", "reader_partial_ignore_delete_v1", "jni", "EXPLICIT_MODE")
 set catalog default_catalog;
 drop catalog paimon_boundaries_${uuid0};
-

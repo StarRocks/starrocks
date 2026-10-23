@@ -206,4 +206,3 @@ set paimon_reader_mode = 'jni';
 function: assert_paimon_readers("select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1", "reader_bitmap64_dv_v1", "jni", "EXPLICIT_MODE")
 set catalog default_catalog;
 drop catalog paimon_boundaries_${uuid0};
-
