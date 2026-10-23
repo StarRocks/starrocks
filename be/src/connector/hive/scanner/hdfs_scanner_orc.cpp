@@ -36,10 +36,13 @@ namespace starrocks {
 
 struct SplitContext : public FileScanSplitContext {
     std::shared_ptr<std::string> footer;
+    // the file's deletes, built once by the task that splits the file: they are keyed by file-level row numbers
+    SkipRowsContextPtr skip_rows_ctx;
 
     FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };
@@ -473,6 +476,7 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = _skip_rows_ctx;
         ctx->start_offset = info.offset();
         ctx->end_offset = info.offset() + info.length();
         _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
@@ -525,6 +529,20 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
+    // resolved before the deletes are loaded: a conjunct on a column the file lacks may skip the whole file
+    RETURN_IF_ERROR(resolve_columns(reader.get()));
+    if (_should_skip_file) {
+        return Status::OK();
+    }
+    // a split task reuses the deletes of the task that split the file; the others build them before splitting,
+    // unless they read no stripe
+    if (_scanner_ctx->format_scan_context.split_context != nullptr) {
+        auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->format_scan_context.split_context);
+        _skip_rows_ctx = split_context->skip_rows_ctx;
+    } else if (!stripes.empty()) {
+        RETURN_IF_ERROR(build_iceberg_delete_builder());
+        RETURN_IF_ERROR(build_paimon_delete_file_builder());
+    }
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
     if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
         _scanner_ctx->format_scan_context.split.has_split_tasks = true;
@@ -533,10 +551,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
-    RETURN_IF_ERROR(resolve_columns(reader.get()));
-    if (_should_skip_file) {
-        return Status::OK();
-    }
 
     // create orc chunk reader .
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
@@ -576,10 +590,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx->runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
-
-    // create iceberg delete builder at last
-    RETURN_IF_ERROR(build_iceberg_delete_builder());
-    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 
@@ -773,17 +783,16 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerCon
 }
 
 void HdfsOrcScanner::do_update_counter(HdfsScannerProfile* profile) {
+    const std::string orcProfileSectionPrefix = "ORC";
+    RuntimeProfile* root_profile = profile->runtime_profile;
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
+    // the deletes are built only by the task that splits the file, not by its split tasks
+    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
         return;
     }
-    const std::string orcProfileSectionPrefix = "ORC";
-
-    RuntimeProfile* root_profile = profile->runtime_profile;
-    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
-
-    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
     RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),

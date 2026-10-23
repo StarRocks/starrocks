@@ -16,11 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
@@ -1787,6 +1790,97 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.is_end_of_file());
     scanner->close();
+}
+
+// The task that splits an ORC file builds its deletes once; its split tasks share them, and since the deletes are
+// keyed by file-level row numbers, a split task starting at a later stripe skips the right rows.
+TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
+    const std::string file = "orc_split_tasks_share_deletes.orc";
+    std::filesystem::remove(file);
+    const size_t num_rows = 20000;
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        // force a stripe per batch
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        const size_t batch_size = 1000;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        for (size_t start = 0; start < num_rows; start += batch_size) {
+            for (size_t i = 0; i < batch_size; i++) {
+                id->data[i] = start + i;
+            }
+            id->numElements = batch_size;
+            root->numElements = batch_size;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    ASSERT_GT(orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getNumberOfStripes(), 2);
+
+    // every 7th row of the file is deleted
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    for (size_t i = 0; i < num_rows; i += 7) {
+        bitmap->add_value(i);
+    }
+
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto* range = _create_scan_range(file, 0, 0);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    ctx->format_scan_context.options.enable_split_tasks = true;
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    ASSERT_GT(split_tasks.size(), 2);
+    scanner->close();
+
+    // read the last split task alone, over its range as HiveDataSource sets it
+    const FileScanSplitContext* last = split_tasks.back().get();
+    auto* split_range = _create_scan_range(file, last->start_offset, last->end_offset - last->start_offset);
+    auto* split_ctx = _create_ctx(file, split_range, tuple_desc);
+    split_ctx->format_scan_context.split_context = last;
+    auto split_scanner = std::make_shared<HdfsOrcScanner>();
+    ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
+    ASSERT_OK(split_scanner->open(_runtime_state));
+    EXPECT_EQ(bitmap, split_scanner->_skip_rows_ctx->deletion_bitmap);
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    int64_t rows = 0;
+    int64_t min_id = std::numeric_limits<int64_t>::max();
+    int64_t max_id = -1;
+    Status status;
+    for (;;) {
+        chunk->reset();
+        status = split_scanner->get_next(_runtime_state, &chunk);
+        if (!status.ok() && !status.is_end_of_file()) break;
+        const Column* col = chunk->get_column_raw_ptr_by_slot_id(0);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            int64_t v = col->get(i).get_int64();
+            EXPECT_NE(0, v % 7) << v;
+            min_id = std::min(min_id, v);
+            max_id = std::max(max_id, v);
+        }
+        rows += chunk->num_rows();
+        if (status.is_end_of_file()) break;
+    }
+    ASSERT_TRUE(status.is_end_of_file()) << status;
+    ASSERT_GT(rows, 0);
+    // the last stripe holds ids [19000, 20000); 19999 is a multiple of 7, so deleted
+    EXPECT_EQ(19000, min_id);
+    EXPECT_EQ(19998, max_id);
+    int64_t live = 0;
+    for (int64_t v = min_id; v < static_cast<int64_t>(num_rows); v++) {
+        live += (v % 7 != 0);
+    }
+    EXPECT_EQ(live, rows);
+    split_scanner->close();
 }
 
 // =============================================================================
