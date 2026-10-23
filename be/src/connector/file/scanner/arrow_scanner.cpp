@@ -137,7 +137,7 @@ int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc
             }
         }
         if (metadata_len == 0) {
-            break;
+            continue;
         }
         if (metadata_len < 0 || total_size - offset < metadata_len) {
             declared_rows = saturating_add(declared_rows, 1);
@@ -170,6 +170,18 @@ int64_t count_ipc_stream_declared_rows(const std::shared_ptr<arrow::Buffer>& ipc
         offset += body_len;
     }
     return declared_rows;
+}
+
+bool has_non_padding_trailing_bytes(const arrow::Buffer& buf, int64_t consumed) {
+    const int64_t remaining = buf.size() - consumed;
+    if (remaining <= 0) {
+        return false;
+    }
+    const int64_t max_alignment_padding = (-consumed) & 7;
+    if (remaining > max_alignment_padding) {
+        return true;
+    }
+    return std::any_of(buf.data() + consumed, buf.data() + buf.size(), [](uint8_t b) { return b != 0; });
 }
 
 } // namespace
@@ -576,17 +588,17 @@ Status ArrowScanner::decode_discrete_message(ArrowBoundedMemoryPool* pool,
     arrow::ipc::IpcReadOptions read_options = arrow::ipc::IpcReadOptions::Defaults();
     read_options.memory_pool = pool;
 
-    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(buffer_reader, read_options);
-    if (!reader_res.ok()) {
-        *filtered_rows = 1;
-        return Status::InternalError("Arrow IPC parse error: " + reader_res.status().ToString());
-    }
-    auto reader = std::move(reader_res).MoveValueUnsafe();
-
     // Every row a rejected message declares is counted as filtered, however far decoding got.
     auto declared_rows = [&]() {
         return std::max<int64_t>({*rows, count_ipc_stream_declared_rows(owning_buffer), int64_t{1}});
     };
+
+    auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(buffer_reader, read_options);
+    if (!reader_res.ok()) {
+        *filtered_rows = declared_rows();
+        return Status::InternalError("Arrow IPC parse error: " + reader_res.status().ToString());
+    }
+    auto reader = std::move(reader_res).MoveValueUnsafe();
 
     constexpr int64_t kBatchMetadataOverheadBytes = 1024;
     int64_t batch_count = 0;
@@ -611,6 +623,11 @@ Status ArrowScanner::decode_discrete_message(ArrowBoundedMemoryPool* pool,
             return Status::InternalError(read_error);
         }
         if (batch == nullptr) {
+            if (has_non_padding_trailing_bytes(*owning_buffer, buffer_reader->Tell().ValueOr(0))) {
+                batches->clear();
+                *filtered_rows = declared_rows();
+                return Status::DataQualityError("Arrow IPC stream has trailing bytes after end-of-stream marker");
+            }
             break;
         }
 

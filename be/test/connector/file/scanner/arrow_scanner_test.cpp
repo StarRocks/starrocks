@@ -5470,4 +5470,128 @@ TEST_F(ArrowScannerTest, TestStreamPropagatesDelegateOutOfMemoryDuringDictionary
     scanner.close();
 }
 
+TEST_F(ArrowScannerTest, TestStreamCountsDeclaredRowsWhenStreamReaderOpenFails) {
+    auto c = make_int_slot_case();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(c.slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    std::vector<int32_t> values(4096, 7);
+    auto batch_4096 = make_int32_batch(c.good_schema, values);
+    auto schema_only = make_schema_only_ipc_stream(c.good_schema);
+    ASSERT_GT(schema_only.size(), 16u);
+    const size_t schema_msg_end = schema_only.size() - 8;
+    auto full_stream = serialize_ipc_stream(c.good_schema, {batch_4096});
+    ASSERT_GT(full_stream.size(), schema_msg_end);
+
+    // Message 1: Bare RECORD_BATCH IPC message without a leading SCHEMA message.
+    // RecordBatchStreamReader::Open fails ("Input is not a schema message"), while the intact
+    // RECORD_BATCH header declares 4096 rows.
+    std::vector<uint8_t> bare_record_batch(full_stream.begin() + schema_msg_end, full_stream.end());
+    append_raw_message(pipe, bare_record_batch.data(), bare_record_batch.size());
+
+    // Message 2: Leading SCHEMA message whose outer Message FlatBuffer is intact (Message::Open succeeds
+    // with type == SCHEMA and body_length == 0) but whose inner Schema FlatBuffer fails deserialization in
+    // RecordBatchStreamReader::Open, followed by the intact 4096-row RECORD_BATCH message.
+    std::vector<uint8_t> corrupt_schema_stream;
+    for (size_t pos = 8; pos < schema_msg_end; ++pos) {
+        std::vector<uint8_t> candidate = full_stream;
+        candidate[pos] ^= 0xFF;
+        auto meta_buf = std::make_shared<arrow::Buffer>(candidate.data() + 8, static_cast<int64_t>(schema_msg_end - 8));
+        auto msg_res = arrow::ipc::Message::Open(meta_buf, nullptr);
+        if (!msg_res.ok() || msg_res.ValueUnsafe() == nullptr ||
+            msg_res.ValueUnsafe()->type() != arrow::ipc::MessageType::SCHEMA ||
+            msg_res.ValueUnsafe()->body_length() != 0) {
+            continue;
+        }
+        auto full_buf = std::make_shared<arrow::Buffer>(candidate.data(), static_cast<int64_t>(candidate.size()));
+        auto reader_res =
+                arrow::ipc::RecordBatchStreamReader::Open(std::make_shared<arrow::io::BufferReader>(full_buf));
+        if (!reader_res.ok()) {
+            corrupt_schema_stream = std::move(candidate);
+            break;
+        }
+    }
+    ASSERT_FALSE(corrupt_schema_stream.empty());
+    append_raw_message(pipe, corrupt_schema_stream.data(), corrupt_schema_stream.size());
+
+    // Message 3: Valid 2-row message.
+    append_ipc_message(pipe, c.good_schema, {make_int32_batch(c.good_schema, {10, 20})});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_EQ(10, res.value()->columns()[0]->get(0).get_int32());
+    EXPECT_EQ(20, res.value()->columns()[0]->get(1).get_int32());
+
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(2, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+    EXPECT_EQ(4096 + 4096, ctx->counter->num_rows_filtered);
+    scanner.close();
+}
+
+TEST_F(ArrowScannerTest, TestStreamRejectsUnreadBytesAfterFirstIpcEos) {
+    auto c = make_int_slot_case();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(c.slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    // Message 1: Two complete IPC streams concatenated in one broker message (2 rows + EOS, then 5 rows + EOS).
+    auto stream1 = serialize_ipc_stream(c.good_schema, {make_int32_batch(c.good_schema, {1, 2})});
+    auto stream2 = serialize_ipc_stream(c.good_schema, {make_int32_batch(c.good_schema, {3, 4, 5, 6, 7})});
+    std::vector<uint8_t> concatenated = stream1;
+    concatenated.insert(concatenated.end(), stream2.begin(), stream2.end());
+    append_raw_message(pipe, concatenated.data(), concatenated.size());
+
+    // Message 2: Valid 3-row IPC stream followed by 4 trailing garbage bytes after 8-byte EOS.
+    auto stream3 = serialize_ipc_stream(c.good_schema, {make_int32_batch(c.good_schema, {10, 20, 30})});
+    const std::string trailing_junk = "JUNK";
+    stream3.insert(stream3.end(), trailing_junk.begin(), trailing_junk.end());
+    append_raw_message(pipe, stream3.data(), stream3.size());
+
+    // Message 3: Valid 3-row IPC stream ending with a legacy 4-byte EOS (0x00000000 at an odd 4-byte offset)
+    // followed by 4 non-zero bytes within the 8-byte alignment window (must be rejected).
+    auto stream4 = serialize_ipc_stream(c.good_schema, {make_int32_batch(c.good_schema, {40, 50, 60})});
+    ASSERT_GE(stream4.size(), 8u);
+    stream4.resize(stream4.size() - 8);
+    const uint8_t legacy_eos[4] = {0, 0, 0, 0};
+    stream4.insert(stream4.end(), legacy_eos, legacy_eos + 4);
+    stream4.insert(stream4.end(), trailing_junk.begin(), trailing_junk.end());
+    append_raw_message(pipe, stream4.data(), stream4.size());
+
+    // Message 4: Valid 2-row IPC stream ending with a legacy 4-byte EOS followed by 4 zero alignment-padding
+    // bytes to reach the 8-byte boundary (permitted padding, must be accepted).
+    auto stream5 = serialize_ipc_stream(c.good_schema, {make_int32_batch(c.good_schema, {100, 200})});
+    ASSERT_GE(stream5.size(), 8u);
+    stream5.resize(stream5.size() - 8);
+    const uint8_t legacy_padded_eos[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    stream5.insert(stream5.end(), legacy_padded_eos, legacy_padded_eos + 8);
+    append_raw_message(pipe, stream5.data(), stream5.size());
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_EQ(100, res.value()->columns()[0]->get(0).get_int32());
+    EXPECT_EQ(200, res.value()->columns()[0]->get(1).get_int32());
+
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(3, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+    EXPECT_EQ((2 + 5) + (3 + 1) + (3 + 1), ctx->counter->num_rows_filtered);
+    scanner.close();
+}
+
 } // namespace starrocks
