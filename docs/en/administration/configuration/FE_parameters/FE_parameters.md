@@ -48,7 +48,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ## Parameter groups
 
 For table-level shared-data Compaction admission, see
-[`lake_compaction_mode` and `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_mode).
+[`lake_compaction_admission_mode` and `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_admission_mode).
 The default `NORMAL` mode preserves existing scheduling; explicitly select `ALLOWLIST` to restrict eligible tables.
 
 The parameters are grouped in these categories:

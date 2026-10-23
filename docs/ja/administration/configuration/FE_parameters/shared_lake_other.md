@@ -472,7 +472,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、サブタスクの 1 つが成功した場合、システムは共有データクラスターでのコンパクション操作を成功と見なします。
 - 導入時期：v3.5.2
 
-### `lake_compaction_mode`
+### `lake_compaction_admission_mode`
 
 - デフォルト：`NORMAL`
 - タイプ：String

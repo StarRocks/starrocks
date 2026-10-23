@@ -129,7 +129,7 @@ public class CompactionMgr implements MemoryTrackable {
             GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
                 compactionScheduler.disableTableOrPartitionId(Config.lake_compaction_disable_ids);
                 compactionScheduler.updateCompactionAllowlist(
-                        Config.lake_compaction_mode, Config.lake_compaction_allow_table_ids);
+                        Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
             });
             compactionScheduler.start();
         }

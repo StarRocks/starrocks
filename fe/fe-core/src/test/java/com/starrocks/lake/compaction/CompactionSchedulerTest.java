@@ -195,15 +195,15 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testCompactionAllowlistAtStartup() {
-        String savedMode = Config.lake_compaction_mode;
+        String savedMode = Config.lake_compaction_admission_mode;
         String savedIds = Config.lake_compaction_allow_table_ids;
         try {
             Config.lake_compaction_allow_table_ids = "bad-id";
-            Config.lake_compaction_mode = "NORMAL";
+            Config.lake_compaction_admission_mode = "NORMAL";
             CompactionScheduler normal = new CompactionScheduler(new CompactionMgr(), systemInfoService,
                     globalTransactionMgr, globalStateMgr, "");
             Assertions.assertTrue(normal.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
-            Config.lake_compaction_mode = "ALLOWLIST";
+            Config.lake_compaction_admission_mode = "ALLOWLIST";
             CompactionScheduler invalid = new CompactionScheduler(new CompactionMgr(), systemInfoService,
                     globalTransactionMgr, globalStateMgr, "");
             Assertions.assertFalse(invalid.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
@@ -213,7 +213,7 @@ public class CompactionSchedulerTest {
             Assertions.assertTrue(allowlist.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
             Assertions.assertFalse(allowlist.isCompactionAllowed(new PartitionIdentifier(1, 5, 6)));
         } finally {
-            Config.lake_compaction_mode = savedMode;
+            Config.lake_compaction_admission_mode = savedMode;
             Config.lake_compaction_allow_table_ids = savedIds;
         }
     }

@@ -472,7 +472,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
-### `lake_compaction_mode`
+### `lake_compaction_admission_mode`
 
 - 默认值: `NORMAL`
 - 类型: String
