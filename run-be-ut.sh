@@ -41,12 +41,19 @@ append_runtime_library_path() {
 
 if starrocks_is_darwin; then
     starrocks_setup_darwin_build_env
-    PARALLEL=$(starrocks_detect_parallelism)
 else
     . ${STARROCKS_HOME}/env.sh
-    host_parallelism=$(starrocks_detect_parallelism)
-    PARALLEL=$[$host_parallelism/4+1]
 fi
+HAS_EXPLICIT_PARALLEL=0
+if [[ -n "${PARALLEL:-}" && "${PARALLEL}" =~ ^[0-9]+$ && "${PARALLEL}" -gt 0 ]]; then
+    HAS_EXPLICIT_PARALLEL=1
+fi
+CMAKE_BUILD_TYPE="${BUILD_TYPE:-ASAN}"
+CMAKE_BUILD_PREFIX="${CMAKE_BUILD_PREFIX:-${STARROCKS_HOME}/be}"
+CMAKE_BUILD_DIR="${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}"
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
+SR_RAM_GB="$(starrocks_detect_total_ram_gb)"
+PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
 
 # Check args
 usage() {
@@ -259,12 +266,16 @@ while true; do
         --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
         --without-arm-pmull) USE_ARM_PMULL=OFF; shift ;;
         --with-arm-pmull) USE_ARM_PMULL=ON; shift ;;
-        -j) PARALLEL=$2; shift 2 ;;
+        -j) PARALLEL=$2; HAS_EXPLICIT_PARALLEL=1; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
 
+if [[ ! "${PARALLEL}" =~ ^[0-9]+$ ]] || [[ "${PARALLEL}" -lt 1 ]]; then
+    echo "Error: -j/PARALLEL must be a positive integer" >&2
+    exit 1
+fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
@@ -305,6 +316,10 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
+if [[ "${HAS_EXPLICIT_PARALLEL}" -eq 0 ]]; then
+    PARALLEL="$(PARALLEL="" starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
+fi
 
 source ${STARROCKS_HOME}/bin/common.sh
 
@@ -368,6 +383,13 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
+
+SR_LINKER_TYPE="$(starrocks_detect_linker_type "${CMAKE_BUILD_DIR}")"
+if [[ "${HAS_EXPLICIT_PARALLEL}" -eq 0 ]]; then
+    PARALLEL="$(PARALLEL="" starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
+fi
+
+echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: ${SR_LINKER_TYPE}, RAM: ${SR_RAM_GB} GiB)"
 
 if [[ -n "$BUILD_TARGET" ]]; then
     ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
