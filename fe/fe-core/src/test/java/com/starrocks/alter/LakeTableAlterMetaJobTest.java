@@ -61,6 +61,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -78,6 +79,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
 
 public class LakeTableAlterMetaJobTest {
     private static final String DB_NAME = "test";
@@ -543,6 +550,67 @@ public class LakeTableAlterMetaJobTest {
             long commitVersion = commitVersionMap.get(partitionId);
             Assertions.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
         }
+    }
+
+    /**
+     * A load that commits while the job updates the tablet metadata takes a version below the one the job
+     * commits, so the gtid that labels the job's version must be drawn after the load's: when the job reserves
+     * the version, and journaled with the reservation so that a job resumed from that entry publishes the same
+     * gtid.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        LakeTable gtidTable = createTable(connectContext,
+                "CREATE TABLE t_gtid(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
+                        + "PROPERTIES('enable_persistent_index'='true', 'file_bundling'='false')");
+        LakeTableAlterMetaJob gtidJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), gtidTable.getId(), gtidTable.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX,
+                true, "CLOUD_NATIVE");
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, PublishProperty publishProperty) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+
+        gtidJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, gtidJob.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, gtidTable);
+        gtidJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, gtidJob.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (gtidJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + gtidJob.getJobState());
+            gtidJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load, gtidTable,
+                gtidTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        LakeTableAlterMetaJob finishedRewritingEntry = readJournaledEntries(gtidJob.getJobId()).stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        publishedTxns.clear();
+        Assertions.assertTrue(finishedRewritingEntry.lakePublishVersion());
+        Assertions.assertEquals(Set.of(commitGtid),
+                publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet()));
     }
 
     @Test

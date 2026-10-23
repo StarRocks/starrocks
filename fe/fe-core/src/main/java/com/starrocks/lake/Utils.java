@@ -152,7 +152,7 @@ public class Utils {
      *         in which case the caller should leave the job at
      *         {@code FINISHED_REWRITING} so the operator can retry.
      */
-    public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+    public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                   Map<Long, Long> commitVersionMap,
                                                   Map<Long, List<Tablet>> tabletsByPartition,
                                                   ComputeResource computeResource, boolean useAggregatePublish) {
@@ -168,12 +168,8 @@ public class Utils {
                 if (commitVersion == null) {
                     continue;
                 }
-                TxnInfoPB txnInfo = new TxnInfoPB();
-                txnInfo.txnId = watershedTxnId;
-                txnInfo.combinedTxnLog = false;
-                txnInfo.commitTime = System.currentTimeMillis() / 1000;
-                txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-                txnInfo.gtid = watershedGtid;
+                TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
+                        System.currentTimeMillis(), commitGtid);
                 txnInfo.noOpPublish = true;
                 publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, computeResource,
                         useAggregatePublish);

@@ -103,9 +103,11 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1302,6 +1304,69 @@ public class LakeTableSchemaChangeJobTest {
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+    }
+
+    /**
+     * A load that commits while the job rewrites the tablets takes a version below the one the job commits, so
+     * the gtid that labels the job's version must be drawn after the load's: when the job reserves the version,
+     * and journaled with the reservation so that a new leader publishes the same gtid. The WAITING_TXN entry
+     * carries a gtid as well, so that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        LakeTable gtidTable = createTable(connectContext, "CREATE TABLE t_gtid(c0 INT) duplicate key(c0) "
+                + "distributed by hash(c0) buckets 2 PROPERTIES('file_bundling'='false')");
+        alterTable(connectContext, "ALTER TABLE t_gtid ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        LakeTableSchemaChangeJob job = getAlterJob(gtidTable);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, gtidTable);
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, gtidTable,
+                gtidTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The shadow tablets and the unchanged origin tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeTableSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        LakeTableSchemaChangeJob waitingTxnEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN).findFirst().orElseThrow();
+        Assertions.assertTrue(waitingTxnEntry.commitGtid > 0);
+        LakeTableSchemaChangeJob finishedRewritingEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(commitGtid, finishedRewritingEntry.commitGtid);
     }
 
     @Test

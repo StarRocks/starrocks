@@ -41,8 +41,9 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     // The job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+    // Gtid of the versions the job publishes, journaled under its old name.
     @SerializedName(value = "watershedGtid")
-    protected long watershedGtid = -1;
+    protected long commitGtid = 0;
 
     public LakeTableSchemaChangeJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                         String tableName, long timeoutMs) {
@@ -56,7 +57,7 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     protected LakeTableSchemaChangeJobBase(LakeTableSchemaChangeJobBase job) {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
-        this.watershedGtid = job.watershedGtid;
+        this.commitGtid = job.commitGtid;
     }
 
     // NOTE: Metadata access in these jobs locks only the job's own table

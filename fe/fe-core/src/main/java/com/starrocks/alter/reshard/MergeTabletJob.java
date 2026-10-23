@@ -38,6 +38,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
@@ -205,7 +206,6 @@ public class MergeTabletJob extends TabletReshardJob {
         // 1. Begin transaction (allocate transaction id)
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
         // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
         //    boundary below. No table lock needed: init() already moved the
@@ -218,7 +218,12 @@ public class MergeTabletJob extends TabletReshardJob {
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
-        updateNextVersions();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first, so a failure here leaves no version reserved.
+            gtid = globalStateMgr.getGtidGenerator().nextGtid();
+            updateNextVersions(lockedTable.get());
+        }
 
         // 4. Add new tablets to inverted index
         addTabletsToInvertedIndex();
@@ -499,7 +504,9 @@ public class MergeTabletJob extends TabletReshardJob {
     // Correspond to runPendingJob()
     @Override
     protected void replayPreparingJob() {
-        updateNextVersions();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            updateNextVersions(lockedTable.get());
+        }
         addTabletsToInvertedIndex();
         registerReshardingTablets();
         LOG.info("Merge tablet job replayed preparing job. {}", this);
@@ -633,32 +640,30 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
-    private void updateNextVersions() {
-        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
+    // The caller holds the table WRITE lock.
+    private void updateNextVersions(OlapTable olapTable) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
 
-                long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-                if (commitVersion <= 0) {
-                    commitVersion = physicalPartition.getNextVersion();
-                    reshardingPhysicalPartition.setCommitVersion(commitVersion);
-                }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            if (commitVersion <= 0) {
+                commitVersion = physicalPartition.getNextVersion();
+                reshardingPhysicalPartition.setCommitVersion(commitVersion);
+            }
 
-                // Never move nextVersion backwards. The commit version is reserved here, in
-                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
-                // few steps later -- so a load transaction that commits in between journals its own
-                // entry first, and a replaying FE applies that entry before this one. By then the
-                // transaction has already carried nextVersion past the version reserved here, and
-                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
-                // version out twice.
-                if (physicalPartition.getNextVersion() < commitVersion + 1) {
-                    physicalPartition.setNextVersion(commitVersion + 1);
-                }
+            // Never move nextVersion backwards. The commit version is reserved here, in
+            // runPendingJob, but the job does not journal anything until it reaches PREPARING a
+            // few steps later -- so a load transaction that commits in between journals its own
+            // entry first, and a replaying FE applies that entry before this one. By then the
+            // transaction has already carried nextVersion past the version reserved here, and
+            // assigning commitVersion + 1 unconditionally would drag it back, handing the same
+            // version out twice.
+            if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                physicalPartition.setNextVersion(commitVersion + 1);
             }
         }
     }
@@ -730,12 +735,8 @@ public class MergeTabletJob extends TabletReshardJob {
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
             boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = transactionId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = stateStartedTimeMs / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_TABLET_RESHARD;
-            txnInfo.gtid = gtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(transactionId, TxnTypePB.TXN_TABLET_RESHARD,
+                    stateStartedTimeMs, gtid);
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             // vectorIndexBuildInfos is required by the publishVersion signature but intentionally

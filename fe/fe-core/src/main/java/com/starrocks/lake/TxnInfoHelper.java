@@ -17,6 +17,7 @@ package com.starrocks.lake;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.stream.Collectors;
@@ -56,6 +57,20 @@ public class TxnInfoHelper {
                     .collect(Collectors.toList()));
         }
 
+        return infoPB;
+    }
+
+    /**
+     * Builds the TxnInfoPB of a job publishing a version it reserved. The gtid is required so that no such
+     * publish leaves it out; it may be 0 for a job that reserved its version on an older FE.
+     */
+    public static TxnInfoPB forJobPublish(long txnId, TxnTypePB txnType, long commitTimeMs, long gtid) {
+        TxnInfoPB infoPB = new TxnInfoPB();
+        infoPB.txnId = txnId;
+        infoPB.combinedTxnLog = false;
+        infoPB.commitTime = commitTimeMs / 1000; // milliseconds to seconds
+        infoPB.txnType = txnType;
+        infoPB.gtid = gtid;
         return infoPB;
     }
 }

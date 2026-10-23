@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import org.junit.jupiter.api.Test;
@@ -103,6 +104,22 @@ public class TxnInfoHelperTest {
 
         assertFalse(info.forcePublish);
         assertTrue(info.unshareCompaction);
+    }
+
+    /**
+     * A job that reserved its version on an FE that drew no gtid for it must still be able to publish, so a zero
+     * gtid passes through instead of being rejected.
+     */
+    @Test
+    public void testForJobPublish() {
+        TxnInfoPB info = TxnInfoHelper.forJobPublish(42L, TxnTypePB.TXN_EMPTY, 5999L, 1001L);
+        assertEquals(42L, info.txnId.longValue());
+        assertEquals(TxnTypePB.TXN_EMPTY, info.txnType);
+        assertEquals(5L, info.commitTime.longValue()); // seconds
+        assertFalse(info.combinedTxnLog);
+        assertEquals(1001L, info.gtid.longValue());
+
+        assertEquals(0L, TxnInfoHelper.forJobPublish(42L, TxnTypePB.TXN_NORMAL, 5999L, 0L).gtid.longValue());
     }
 
     private static TUniqueId tid(long hi, long lo) {

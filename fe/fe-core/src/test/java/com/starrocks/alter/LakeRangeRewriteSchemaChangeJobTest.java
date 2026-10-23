@@ -49,6 +49,10 @@ import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -83,6 +87,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1824,7 +1829,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         AtomicReference<Long> publishedCommitVersion = new AtomicReference<>();
         new MockUp<com.starrocks.lake.Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
@@ -1870,7 +1875,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // Stub the no-op publish so the force-cancel succeeds without a backend.
         new MockUp<com.starrocks.lake.Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
@@ -2006,6 +2011,86 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(7L, watershedVersion, "exercise the empty-at-W>1 publish path");
         Assertions.assertEquals(Map.of(123456L, true, 123457L, false), capturedEmpty,
                 "final TxnInfoPB must preserve both saved source-empty facts after eviction");
+    }
+
+    /**
+     * A load that commits while the job rewrites the partitions takes a version below the one the job commits,
+     * so the gtid that labels the job's version must be drawn after the load's: when the job reserves the
+     * version in its first FINISHED_REWRITING round, and journaled with the reservation so that a new leader
+     * publishes the same gtid. The WAITING_TXN entry that allocates the watershed carries a gtid as well, so
+     * that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        ConcurrentLoad.holdPublishDaemon();
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // The load becomes visible before the rewrite transaction states below are faked for the job.
+        TransactionState load = ConcurrentLoad.commit(db, table);
+        ConcurrentLoad.makeVisible(db, load);
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 123456L);
+        mockShadowRewriteTransaction(job.getTransactionId().get(), job.getWatershedVersion(physicalPartitionId));
+        job.setRewriteExecutor((context, insertStmt) -> { });
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+
+            @Mock
+            public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                            long baseVersion, long newVersion,
+                                                            Map<ComputeNode, List<Long>> nodeToTablets,
+                                                            ComputeResource computeResource,
+                                                            AggregatePublishVersionRequest request,
+                                                            PublishProperty publishProperty) {
+                publishedTxns.addAll(txnInfos);
+                publishedVersions.add(newVersion);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request, long baseVersion,
+                                                           ComputeResource computeResource,
+                                                           Map<Long, Double> compactionScores,
+                                                           Map<Long, TabletStatPB> tabletStats,
+                                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+            }
+        };
+        job.setPublishExecutor(LakeOnlineRewriteJobBase::lakePublishVersion);
+        job.runFinishedRewritingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+
+        long loadVersion = ConcurrentLoad.versionIn(load, table, physicalPartitionId);
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The shadow tablets and the origin tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        LakeRangeRewriteSchemaChangeJob watershedEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN
+                        && entry.getTransactionId().isPresent())
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(watershedEntry.commitGtid > 0);
+        // The last FINISHED_REWRITING entry is the one that reserved the commit version.
+        LakeRangeRewriteSchemaChangeJob reservationEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .reduce((first, second) -> second).orElseThrow();
+        Assertions.assertEquals(commitGtid, reservationEntry.commitGtid);
     }
 
     @Test
@@ -3747,7 +3832,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     public void testForceCancelWithPublishInFlightPrunesOncePublishCompletes() throws Exception {
         new MockUp<Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    Map<Long, Long> commitVersionMap,
                                                    Map<Long, List<Tablet>> tabletsByPartition,
                                                    ComputeResource computeResource,
