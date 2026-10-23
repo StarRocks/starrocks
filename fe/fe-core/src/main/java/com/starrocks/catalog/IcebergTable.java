@@ -232,12 +232,15 @@ public class IcebergTable extends Table {
             fieldIdToIndex.put(fields.get(i).fieldId(), i);
         }
 
-        // Keep the returned indexes aligned with sortOrder.fields() order.
+        // Keep the returned indexes aligned with sortOrder.fields() order: callers pair indexes.get(i) with
+        // sortOrder.fields().get(i). A sort field whose source is not a top-level column (e.g. a struct subfield)
+        // ends the list, since skipping it would shift every later direction and null order onto the wrong column.
         for (SortField sortField : sortOrder.fields()) {
             Integer idx = fieldIdToIndex.get(sortField.sourceId());
-            if (idx != null) {
-                indexes.add(idx);
+            if (idx == null) {
+                break;
             }
+            indexes.add(idx);
         }
 
         return indexes;
