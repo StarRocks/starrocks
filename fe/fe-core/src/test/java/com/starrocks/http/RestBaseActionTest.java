@@ -15,6 +15,10 @@
 package com.starrocks.http;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthChannel;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
@@ -279,14 +283,25 @@ public class RestBaseActionTest {
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
             mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
-                            eq("ldap_user"), eq("10.4.5.6"), any(byte[].class)))
+                            any(AuthCredentials.class)))
                     .thenAnswer(invocation -> {
                         ConnectContext authCtx = invocation.getArgument(0);
-                        byte[] passwordBytes = invocation.getArgument(3);
-                        Assertions.assertArrayEquals("secret".getBytes(StandardCharsets.UTF_8), passwordBytes);
+                        AuthCredentials cred = invocation.getArgument(1);
+                        // The HTTP layer must hand the handler a plaintext-password credential
+                        // tagged with the HTTP channel - not a MySQL handshake frame, and not an
+                        // unset channel (an unset one is exactly what used to make the
+                        // security-integration chain skip every integration).
+                        Assertions.assertEquals(AuthCredentialKind.PLAIN_PASSWORD, cred.kind());
+                        Assertions.assertEquals(AuthChannel.HTTP, cred.channel());
+                        Assertions.assertEquals("ldap_user", cred.userDeclared());
+                        Assertions.assertEquals("10.4.5.6", cred.remoteHost());
+                        Assertions.assertArrayEquals("secret".getBytes(StandardCharsets.UTF_8), cred.rawSecret());
+                        // The real handler also sets qualifiedUser; the stub has to, because
+                        // RestBaseAction reads it back to decide whether the user changed.
                         authCtx.setCurrentUserIdentity(authenticatedUser);
                         authCtx.setCurrentRoleIds(roleIds);
                         authCtx.setGroups(groups);
+                        authCtx.setQualifiedUser("ldap_user");
                         return authenticatedUser;
                     });
 
@@ -299,6 +314,79 @@ public class RestBaseActionTest {
         Assertions.assertEquals(groups, action.observedGroups);
         Assertions.assertEquals("ldap_user", action.observedQualifiedUser);
         Assertions.assertEquals("10.4.5.6", action.observedRemoteIp);
+    }
+
+    /**
+     * A SQL action's context lives as long as its keep-alive connection. A Bearer request leaves the
+     * caller's token on it; the Basic request that follows on the same connection must not inherit
+     * that token (IcebergRESTCatalog forwards whatever token the context carries).
+     */
+    @Test
+    public void testABasicRequestDoesNotInheritTheTokenOfAnEarlierBearerRequest() throws Exception {
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        HttpConnectContext connectContext = new HttpConnectContext();
+        connectContext.setAuthToken("jwt-of-the-previous-caller");
+        connectContext.setSecurityIntegration("jwt_si");
+        BaseRequest request = mockExecutableRequest(basicAuth("ldap_user", "secret"), connectContext);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authCtx = invocation.getArgument(0);
+                        Assertions.assertNull(authCtx.getAuthToken(), "cleared before the handler runs");
+                        authCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("ldap_user", "%"));
+                        authCtx.setQualifiedUser("ldap_user");
+                        return authCtx.getCurrentUserIdentity();
+                    });
+            action.execute(request, new BaseResponse());
+        }
+
+        Assertions.assertTrue(action.executed);
+        Assertions.assertNull(connectContext.getAuthToken());
+        Assertions.assertEquals(new AccessControlContext().getSecurityIntegration(), connectContext.getSecurityIntegration(),
+                "the integration that verified the previous caller is gone with its token");
+    }
+
+    /**
+     * Authentication now writes straight onto the live context. When it refuses the request, the
+     * context must be exactly what it was: a refused name left on a registered context would be
+     * taken for its user by the next request and corrupt the per-user connection counts.
+     */
+    @Test
+    public void testARefusedRequestLeavesTheContextAsItWas() throws Exception {
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        HttpConnectContext connectContext = new HttpConnectContext();
+        UserIdentity previousUser = UserIdentity.createAnalyzedUserIdentWithIp("alice", "%");
+        connectContext.setCurrentUserIdentity(previousUser);
+        connectContext.setQualifiedUser("alice");
+        connectContext.setCurrentRoleIds(Set.of(7L));
+        connectContext.setGroups(Set.of("g1"));
+        connectContext.setAuthToken("alice-token");
+        connectContext.setSecurityIntegration("jwt_si");
+        BaseRequest request = mockExecutableRequest(basicAuth("mallory", "wrong"), connectContext);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        // The real handler writes the identity before the permitted_groups gate
+                        // refuses it; model that worst case.
+                        ConnectContext authCtx = invocation.getArgument(0);
+                        authCtx.setCurrentUserIdentity(UserIdentity.createEphemeralUserIdent("mallory", "%"));
+                        authCtx.setQualifiedUser("mallory");
+                        authCtx.setCurrentRoleIds(Set.of());
+                        authCtx.setGroups(Set.of());
+                        throw new AuthenticationException("refused by permitted_groups");
+                    });
+            Assertions.assertThrows(AccessDeniedException.class, () -> action.execute(request, new BaseResponse()));
+        }
+
+        Assertions.assertFalse(action.executed);
+        Assertions.assertEquals(previousUser, connectContext.getCurrentUserIdentity());
+        Assertions.assertEquals("alice", connectContext.getQualifiedUser());
+        Assertions.assertEquals(Set.of(7L), connectContext.getCurrentRoleIds());
+        Assertions.assertEquals(Set.of("g1"), connectContext.getGroups());
+        Assertions.assertEquals("alice-token", connectContext.getAuthToken());
+        Assertions.assertEquals("jwt_si", connectContext.getSecurityIntegration());
     }
 
     @Test
@@ -315,6 +403,47 @@ public class RestBaseActionTest {
         Assertions.assertNull(action.observedUser);
     }
 
+    /**
+     * TC-L3-46-05: a real {@code Authorization: Bearer ...} header must reach the handler as a
+     * BEARER_TOKEN credential with no declared user - the username comes from the token claim, and
+     * the identity the handler resolves (plus its group-derived roles) must land on the request
+     * ctx.
+     */
+    @Test
+    public void testExecuteWithBearerAuth() throws Exception {
+        TestableRestBaseAction action = new TestableRestBaseAction();
+        HttpConnectContext connectContext = new HttpConnectContext();
+        BaseRequest request = mockExecutableRequest("Bearer header.payload.signature", connectContext);
+        UserIdentity tokenUser = UserIdentity.createEphemeralUserIdent("jwt_user", "%");
+        Set<Long> roleIds = Set.of(30L);
+        Set<String> groups = Set.of("jwt_admins");
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
+                            any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authCtx = invocation.getArgument(0);
+                        AuthCredentials cred = invocation.getArgument(1);
+                        Assertions.assertEquals(AuthCredentialKind.BEARER_TOKEN, cred.kind());
+                        Assertions.assertEquals(AuthChannel.HTTP, cred.channel());
+                        Assertions.assertNull(cred.userDeclared(), "Bearer carries no declared user");
+                        Assertions.assertEquals("header.payload.signature", cred.tokenString());
+                        authCtx.setCurrentUserIdentity(tokenUser);
+                        authCtx.setCurrentRoleIds(roleIds);
+                        authCtx.setGroups(groups);
+                        authCtx.setQualifiedUser("jwt_user");
+                        return tokenUser;
+                    });
+
+            action.execute(request, new BaseResponse());
+        }
+
+        Assertions.assertTrue(action.executed);
+        Assertions.assertEquals(tokenUser, action.observedUser);
+        Assertions.assertEquals(roleIds, action.observedRoleIds);
+        Assertions.assertEquals(groups, action.observedGroups);
+    }
+
     @Test
     public void testExecuteWithInvalidCredentialsThrowsAccessDeniedBeforeDispatch() throws Exception {
         TestableRestBaseAction action = new TestableRestBaseAction();
@@ -322,7 +451,7 @@ public class RestBaseActionTest {
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
             mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class),
-                            eq("bad_user"), eq("10.4.5.6"), any(byte[].class)))
+                            any(AuthCredentials.class)))
                     .thenThrow(new AuthenticationException("bad credentials"));
 
             Assertions.assertThrows(AccessDeniedException.class, () -> action.execute(request, new BaseResponse()));

@@ -29,10 +29,12 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -41,10 +43,11 @@ import java.util.TreeMap;
  * property map and delegates the SQL synthesis, BE invocation, and JSON
  * decode to {@link FilesSampleSubqueryExecutor}.
  *
- * <p>The sub-query reads exactly the file-status snapshot the load's pending
- * task resolved — re-globbing here would race with the load's own
- * enumeration and risk planning quantile cuts from a different file set
- * than the one actually loaded.
+ * <p>The sub-query reads the file-status snapshot the load's pending task
+ * resolved — or, past {@code tablet_pre_split_data_tier_scan_byte_limit}, the
+ * subset of it {@link DataTierFileSubset} chooses — never a fresh listing:
+ * re-globbing here would race with the load's own enumeration and risk planning
+ * quantile cuts from a different file set than the one actually loaded.
  *
  * <p>A {@code COLUMNS FROM PATH} declaration is forwarded to FILES as its own
  * {@code columns_from_path} property, so a path-derived column — typically the
@@ -75,12 +78,17 @@ import java.util.TreeMap;
  * empty file lists, and the column mappings
  * {@link #rejectKeyPerturbingFileGroups} screens out — a per-group {@code WHERE},
  * a negative load, a hadoop function, a {@code SET} / derived column, or a key
- * column that the mapping either supplies from the path or never names.
+ * column that the mapping either supplies from the path or never names, or a partition column
+ * the COLUMNS list leaves to its default.
  * (Example: {@code SET sort_key = upper(file_x)} would have the sampler read
  * the file's raw {@code sort_key} column instead of the mapped value the load
  * inserts.) CSV adds its own: file groups disagreeing on the positional field
  * layout or on the CSV dialect, a non-ASCII {@code enclose} / {@code escape}
  * byte, and a missing {@code COLUMNS} list with no base schema to fall back on.
+ *
+ * <p>A generated sort-key or partition column is projected as the expression the scan context carries for
+ * it -- its definition over the file columns it reads, each cast to its target type, which is how
+ * {@code Load} computes it.
  */
 final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
@@ -109,16 +117,71 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         // CSV. Knowing the format up front is what lets the CSV branch below pin that position.
         String format = resolveSharedFormat(context.fileGroups());
         rejectKeyPerturbingFileGroups(context.fileGroups(), sampledKeyColumns(request));
+        rejectUnreadPartitionColumns(context.fileGroups(), request.getPartitionSourceColumns());
 
         List<String> columnsFromPath = resolveSharedColumnsFromPath(context.fileGroups());
-        ResolvedFiles resolved = collectResolvedFiles(context.fileStatusesPerGroup());
+        // The load projects each partition source by its target column name, so a partition source is read
+        // from the path exactly when that name is one of the COLUMNS FROM PATH columns. A Broker Load cannot
+        // feed one with a literal.
+        List<Column> partitionSources = request.getPartitionSourceColumns();
+        PathPartitionValues pathPartitions = PathPartitionValues.of(columnsFromPath, partitionSources);
+        DataTierFileSubset files = DataTierFileSubset.choose(collectResolvedFiles(context.fileStatusesPerGroup()),
+                pathPartitions, DataTierFileSubset.partitionFromFileData(partitionSources, pathPartitions, Set.of()),
+                /*requireExactFilesPaths=*/ false);
 
         Map<String, String> filesProperties = buildFilesProperties(
-                brokerDesc, String.join(",", resolved.paths()), format, columnsFromPath);
+                brokerDesc, String.join(",", files.paths()), format, columnsFromPath);
         if (FORMAT_CSV.equals(format)) {
             appendCsvProperties(filesProperties, context, request);
         }
-        return new Source(filesProperties, resolved.totalBytes(), context.computeResource());
+        files.report(ERROR_PREFIX);
+        Map<String, String> constants = context.targetToConstantSql();
+        Map<String, String> expressions = context.targetToExpressionSql();
+        return new Source(filesProperties, files.totalBytes(), context.computeResource(), null,
+                fileColumnsByName(request, constants, expressions), constants, expressions,
+                files.scannedBytes(), files.partitionSourceBytes(), context.sessionSemantics());
+    }
+
+    /**
+     * Projects each rollup's sort key the way the base sort key is projected: by the column's own name,
+     * except a generated column, which is projected as the expression the scan context carries for it.
+     */
+    @Override
+    protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
+        BrokerLoadScanContext context = requireBrokerLoadContext(request);
+        Map<String, String> constants = context.targetToConstantSql();
+        Map<String, String> expressions = context.targetToExpressionSql();
+        if (constants.isEmpty() && expressions.isEmpty()) {
+            return super.secondaryProjectionIdents(request);
+        }
+        Map<String, String> fileColumns = fileColumnsByName(request, constants, expressions);
+        List<String> idents = new ArrayList<>();
+        for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
+            idents.addAll(filesProjections(spec.sortKey(), fileColumns, constants, expressions));
+        }
+        return idents;
+    }
+
+    /**
+     * The FILES column behind each directly projected column: the column's own name, since a Broker Load
+     * reads a column by the target's name. Empty -- name identity -- unless a generated column is computed:
+     * only then does {@link #filesProjections} need every other projected column mapped explicitly.
+     */
+    private static Map<String, String> fileColumnsByName(
+            SampleRequest request, Map<String, String> constants, Map<String, String> expressions) {
+        if (constants.isEmpty() && expressions.isEmpty()) {
+            return Map.of();
+        }
+        List<Column> projected = new ArrayList<>(sampledKeyColumns(request));
+        projected.addAll(request.getPartitionSourceColumns());
+        Map<String, String> byName = new HashMap<>();
+        for (Column column : projected) {
+            String targetName = column.getName().toLowerCase();
+            if (!constants.containsKey(targetName) && !expressions.containsKey(targetName)) {
+                byName.put(targetName, column.getName());
+            }
+        }
+        return byName;
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request) throws StarRocksException {
@@ -243,10 +306,39 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         if (columnExpressions == null || columnExpressions.isEmpty()) {
             return;
         }
-        for (Column keyColumn : sampledKeyColumns) {
-            if (!namesImportedColumn(columnExpressions, keyColumn.getName())) {
-                throw new StarRocksException(ERROR_PREFIX + "COLUMNS list does not name key column \""
-                        + keyColumn.getName() + "\", so the load does not populate it from the source");
+        rejectUnnamedColumns(columnExpressions, sampledKeyColumns, "key",
+                "so the load does not populate it from the source");
+    }
+
+    /**
+     * Rejects a COLUMNS list that does not name a non-generated partition column. The load writes that
+     * column's default, while the sampler would read whatever the file carries under its name and pre-create
+     * partitions the load never writes. A partition read from the path passes: COLUMNS FROM PATH names are
+     * part of the COLUMNS list.
+     */
+    private static void rejectUnreadPartitionColumns(List<BrokerFileGroup> fileGroups, List<Column> partitionColumns)
+            throws StarRocksException {
+        for (BrokerFileGroup fileGroup : fileGroups) {
+            List<ImportColumnDesc> columnExpressions = fileGroup.getColumnExprList();
+            if (columnExpressions == null || columnExpressions.isEmpty()) {
+                continue;
+            }
+            rejectUnnamedColumns(columnExpressions, partitionColumns, "partition",
+                    "so the load writes its default rather than the file's value");
+        }
+    }
+
+    /**
+     * Throws when the COLUMNS list does not name one of {@code columns}. A generated column is skipped: it can
+     * never be named (Load rejects it), the hook already checked that the columns it reads are, and the sampler
+     * computes it from them.
+     */
+    private static void rejectUnnamedColumns(List<ImportColumnDesc> columnExpressions, List<Column> columns,
+                                             String kind, String consequence) throws StarRocksException {
+        for (Column column : columns) {
+            if (!column.isGeneratedColumn() && !namesImportedColumn(columnExpressions, column.getName())) {
+                throw new StarRocksException(ERROR_PREFIX + "COLUMNS list does not name " + kind + " column \""
+                        + column.getName() + "\", " + consequence);
             }
         }
     }
@@ -351,7 +443,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
             throws StarRocksException {
         List<String> fileFieldNames = resolveSharedCsvFileFields(context);
         filesProperties.put(TableFunctionTable.PROPERTY_SCHEMA,
-                buildCsvSchema(fileFieldNames, projectedColumnsByName(request)));
+                buildCsvSchema(fileFieldNames, projectedColumnsByName(request, context.generatedColumnInputs())));
         appendCsvDialect(filesProperties, resolveSharedCsvDialect(context.fileGroups()));
     }
 
@@ -449,13 +541,19 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         return type.toSql();
     }
 
-    /** Every column the sampling SELECT projects — the sampled keys plus the partition sources. */
-    private static Map<String, Column> projectedColumnsByName(SampleRequest request) {
+    /**
+     * Every column the sampling SELECT reads from the file -- the sampled keys, the partition sources, and
+     * the columns a sampled generated column is computed from.
+     */
+    private static Map<String, Column> projectedColumnsByName(SampleRequest request, List<Column> generatedColumnInputs) {
         Map<String, Column> byName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Column column : sampledKeyColumns(request)) {
             byName.putIfAbsent(column.getName(), column);
         }
         for (Column column : request.getPartitionSourceColumns()) {
+            byName.putIfAbsent(column.getName(), column);
+        }
+        for (Column column : generatedColumnInputs) {
             byName.putIfAbsent(column.getName(), column);
         }
         return byName;
@@ -547,16 +645,13 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
     }
 
     /**
-     * Walks the load's resolved file-status snapshot, dropping directory
-     * entries, summing file byte totals, and returning the per-file paths
-     * for the FILES {@code path} property. A path containing {@code ,} is
-     * rejected because FILES has no escape syntax for its path-list
-     * separator.
+     * Walks the load's resolved file-status snapshot, dropping directory entries and returning the
+     * files. A path containing {@code ,} is rejected because FILES has no escape syntax for its
+     * path-list separator.
      */
-    private static ResolvedFiles collectResolvedFiles(
+    private static List<TBrokerFileStatus> collectResolvedFiles(
             List<List<TBrokerFileStatus>> fileStatusesPerGroup) throws StarRocksException {
-        List<String> paths = new ArrayList<>();
-        long totalBytes = 0L;
+        List<TBrokerFileStatus> files = new ArrayList<>();
         for (List<TBrokerFileStatus> filesInGroup : fileStatusesPerGroup) {
             for (TBrokerFileStatus fileStatus : filesInGroup) {
                 if (fileStatus.isDir) {
@@ -567,14 +662,13 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
                             + "file path contains \",\" which FILES treats as a path-list separator: "
                             + fileStatus.path);
                 }
-                paths.add(fileStatus.path);
-                totalBytes += fileStatus.size;
+                files.add(fileStatus);
             }
         }
-        if (paths.isEmpty()) {
+        if (files.isEmpty()) {
             throw new StarRocksException(ERROR_PREFIX + "no files to sample (all entries were directories or empty)");
         }
-        return new ResolvedFiles(paths, totalBytes);
+        return files;
     }
 
     /**
@@ -596,8 +690,5 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
                     String.join(",", columnsFromPath));
         }
         return filesProperties;
-    }
-
-    private record ResolvedFiles(List<String> paths, long totalBytes) {
     }
 }

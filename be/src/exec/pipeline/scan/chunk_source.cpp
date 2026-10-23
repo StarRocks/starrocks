@@ -97,7 +97,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                     // implementation drifts across chunks -- a chunk whose rows all evaluate non-null
                     // yields a bare BinaryColumn while the next one yields NullableColumn<BinaryColumn>.
                     // ChunkPipelineAccumulator::push then appends one into the other, and
-                    // BinaryColumnBase::append reinterprets the source through a release-mode down_cast.
+                    // BinaryColumn::append reinterprets the source through a release-mode down_cast.
                     const auto& type_desc = expr_ctxs[k]->root()->type();
                     if (col->only_null()) {
                         auto mutable_col = ColumnHelper::create_column(type_desc, true);

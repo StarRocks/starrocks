@@ -107,41 +107,6 @@ void FileColumn::resize(const size_t n) {
     }
 }
 
-StatusOr<MutableColumnPtr> FileColumn::upgrade_if_overflow() {
-    for (auto& column : _fields) {
-        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!ret.ok()) {
-            return ret;
-        }
-        if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return nullptr;
-}
-
-StatusOr<MutableColumnPtr> FileColumn::downgrade() {
-    for (auto& column : _fields) {
-        auto ret = downgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!ret.ok()) {
-            return ret;
-        }
-        if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return nullptr;
-}
-
-bool FileColumn::has_large_column() const {
-    for (const auto& column : _fields) {
-        if (column->has_large_column()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void FileColumn::assign(const size_t n, const size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign FileColumn";
     const auto desc = this->clone_empty();

@@ -6,6 +6,8 @@ sidebar_position: 21
 
 # AI テキスト関数
 
+関数と Provider の権限要件は [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+
 これらの関数は [ai_complete](ai_complete.md#設定) と同じ SYSTEM チャットエンドポイントと認証情報を使用し、タスク用のプロンプトを作成して型付きの結果を返します。新しい関数を使用する前に、すべての FE と BE をアップグレードしてください。
 
 :::warning

@@ -45,13 +45,13 @@ import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -77,7 +77,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.PreResolvedViewBodies;
+import com.starrocks.sql.analyzer.PreResolvedState;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -175,7 +175,9 @@ public class ConnectContext {
     protected String currentDb = "";
 
     // Unified access control context holding authentication and authorization information
-    protected AccessControlContext accessControlContext = new AccessControlContext();
+    // volatile: the HTTP SQL API replaces it per request (setAccessControlContext) from whichever
+    // executor thread handles that request, and later requests on the same channel read it.
+    protected volatile AccessControlContext accessControlContext = new AccessControlContext();
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -270,9 +272,9 @@ public class ConnectContext {
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
 
-    // View bodies the unlocked pre-pass resolved for the statement being planned, handed to the locked
-    // analyzer when it expands those views. Scoped to one statement: StatementPlanner clears it.
-    private final PreResolvedViewBodies preResolvedViewBodies = new PreResolvedViewBodies();
+    // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
+    // Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedState preResolvedState = new PreResolvedState();
 
     // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
     // its per-statement timings here so the eventual profile can attach them. Broker Load instead
@@ -636,6 +638,15 @@ public class ConnectContext {
 
     public void setSecurityIntegration(String securityIntegration) {
         accessControlContext.setSecurityIntegration(securityIntegration);
+    }
+
+    /**
+     * Replace the access-control context wholesale. The HTTP SQL API authenticates each request
+     * onto a fresh one and installs it here only once the attempt has succeeded, so a refused
+     * attempt leaves nothing of itself on a context that outlives the request.
+     */
+    public void setAccessControlContext(AccessControlContext accessControlContext) {
+        this.accessControlContext = accessControlContext;
     }
 
     /**
@@ -1417,8 +1428,8 @@ public class ConnectContext {
         this.queryMVContext = queryMVContext;
     }
 
-    public PreResolvedViewBodies getPreResolvedViewBodies() {
-        return preResolvedViewBodies;
+    public PreResolvedState getPreResolvedState() {
+        return preResolvedState;
     }
 
     public StatisticsLoadBudget getStatisticsLoadBudget() {
@@ -1575,12 +1586,36 @@ public class ConnectContext {
     }
 
     /**
+     * A connection whose handshake was answered before the user finished the IdP login - an
+     * OAuth2 user on a client that cannot speak the OAuth2 plugin - is not logged in until the
+     * browser callback deposits the token, and until then {@code ConnectProcessor} refuses every
+     * command. Bound how long it may stay that way by the integration's {@code
+     * connect_wait_timeout}, the same bound the plugin-aware client's handshake waits for;
+     * otherwise any name could hold a connection open for the whole {@code wait_timeout} without
+     * ever logging in.
+     */
+    private boolean isLoginPendingPastTimeout(long now) {
+        AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
+        if (!(provider instanceof OAuth2AuthenticationProvider oauth2) || accessControlContext.getAuthToken() != null) {
+            return false;
+        }
+        return now - connectionStartTime > oauth2.getoAuth2Context().connectWaitTimeout() * 1000L;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
      * @return true if timeout, false otherwise
      */
     public boolean checkTimeout(long now) {
+        if (isLoginPendingPastTimeout(now)) {
+            LOG.warn("kill connection whose OAuth2 login never completed, remote: {}, user: {}",
+                    getRemoteIP(), getQualifiedUser());
+            kill(true, "Connection closed: the OAuth2 login was not completed within connect_wait_timeout");
+            return true;
+        }
+
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
             return false;
@@ -1924,7 +1959,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1932,7 +1967,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time

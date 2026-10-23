@@ -311,6 +311,12 @@ struct FormatScanContext {
     } split;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    // A one-row column of `type` holding an Iceberg initial-default as FE serializes it, for a column or struct
+    // subfield missing from a data file. TIME arrives as "HH:MM[:SS[.ffffff]]" and is stored as whole seconds, like
+    // the file readers do. NotSupported for a type the value cannot be parsed into.
+    static StatusOr<MutableColumnPtr> create_initial_default_column(const TypeDescriptor& type, bool nullable,
+                                                                    const std::string& value);
     bool can_use_count_optimization() const;
     bool has_count_column() const { return _count_slot.has_value(); }
     bool can_use_min_max_optimization() const;

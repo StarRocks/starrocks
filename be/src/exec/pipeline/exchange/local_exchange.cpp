@@ -18,6 +18,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
@@ -57,6 +59,14 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
 Status Partitioner::send_chunk(const ChunkPtr& chunk,
                                const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
+    // If every shard is consumed before we return, dropping our `memory_entry` reference below performs the
+    // last refund on this sink thread. Notify sinks after that, otherwise parked sink drivers may never be woken.
+    // Declared before `memory_entry` so it runs after the entry is released.
+    DeferOp notify([this]() {
+        if (auto* exchanger = _source->exchanger(); exchanger != nullptr) {
+            exchanger->notify_sink();
+        }
+    });
     // Unpack const columns now (instead of inside each per-source add_chunk) so the
     // accounted memory reflects the materialized post-unpack footprint. For const
     // columns the pre-unpack memory is O(1) while the buffered, unpacked memory is
@@ -78,6 +88,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk,
 
         RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size, memory_entry));
     }
+    TEST_SYNC_POINT("Partitioner::send_chunk::after_add_chunks");
     return Status::OK();
 }
 

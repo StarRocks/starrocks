@@ -197,6 +197,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private TupleDescriptor exportTupleDesc;
+    // The sink's file system properties, resolved once before setJob takes the table lock; see
+    // resolveHdfsProperties. Every fragment gets its own copy.
+    private THdfsProperties resolvedHdfsProperties;
     private Table exportTable;
     // when set to true, means this job instance is created by replay thread(FE restarted or master changed)
     private boolean isReplayed = false;
@@ -288,6 +291,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
 
+        // For a path whose file system is not cached yet, getTProperties builds it -- a round trip to the
+        // storage, which the table lock below does not protect.
+        resolveHdfsProperties();
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                 LockType.READ)) {
             genExecFragment(stmt);
@@ -447,6 +453,17 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 computeResource);
     }
 
+    private THdfsProperties resolveHdfsProperties() throws StarRocksException {
+        if (resolvedHdfsProperties == null) {
+            THdfsProperties properties = new THdfsProperties();
+            if (!brokerPersistInfo.hasBroker()) {
+                HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), properties);
+            }
+            resolvedHdfsProperties = properties;
+        }
+        return resolvedHdfsProperties;
+    }
+
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws
             StarRocksException {
         PlanFragment fragment = null;
@@ -469,10 +486,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         fragment.setOutputExprs(createOutputExprs());
 
         scanNode.setFragmentId(fragment.getFragmentId());
-        THdfsProperties hdfsProperties = new THdfsProperties();
-        if (!brokerPersistInfo.hasBroker()) {
-            HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), hdfsProperties);
-        }
+        THdfsProperties hdfsProperties = resolveHdfsProperties().deepCopy();
         BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
 
         // Extract column names from slot descriptors for CSV header row

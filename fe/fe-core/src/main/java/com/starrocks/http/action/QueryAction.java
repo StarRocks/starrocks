@@ -48,6 +48,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -110,13 +111,14 @@ public class QueryAction extends WebBaseAction {
             if (i == queryIdIndex) {
                 continue;
             }
-            buffer.append("<th>" + columnHeaders.get(i) + "</th>");
+            buffer.append("<th>").append(Encode.forHtml(columnHeaders.get(i))).append("</th>");
         }
 
         buffer.append("<th>Profile</th>");
         buffer.append("</tr>");
     }
 
+    // Cells are HTML-encoded because they carry user-controlled text, such as SQL statements and custom query ids.
     private void appendFinishedQueryTableBody(
             StringBuilder buffer,
             List<List<String>> bodies,
@@ -139,15 +141,15 @@ public class QueryAction extends WebBaseAction {
                                 + " ...";
                         // Add title attribute for hover tooltip to show full statement
                         buffer.append("<span title=\"")
-                                .append(statement.replace("\"", "&quot;"))
+                                .append(Encode.forHtmlAttribute(statement))
                                 .append("\">")
-                                .append(truncatedStatement)
+                                .append(Encode.forHtml(truncatedStatement))
                                 .append("</span>");
                     } else {
-                        buffer.append(statement);
+                        buffer.append(Encode.forHtml(statement));
                     }
                 } else {
-                    buffer.append(row.get(i));
+                    buffer.append(Encode.forHtml(row.get(i)));
                 }
                 buffer.append("</td>");
             }
@@ -159,9 +161,11 @@ public class QueryAction extends WebBaseAction {
                 buffer.append("<td>Empty Query ID</td>");
             } else {
                 buffer.append("<td>");
-                buffer.append("<a href=\"/query_profile?query_id="
-                        + queryId
-                        + "\">" + queryId + "</a>");
+                buffer.append("<a href=\"/query_profile?query_id=")
+                        .append(Encode.forUriComponent(queryId))
+                        .append("\">")
+                        .append(Encode.forHtml(queryId))
+                        .append("</a>");
                 buffer.append("</td>");
             }
 

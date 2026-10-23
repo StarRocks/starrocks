@@ -19,6 +19,7 @@
 #include <limits>
 
 #include "fmt/format.h"
+#include "storage/lake/lake_proto_normalizer.h"
 
 namespace starrocks::lake {
 
@@ -74,7 +75,7 @@ Status check_txn_meta_agreement(const TxnLogPB& dst, const TxnLogPB& src) {
     return Status::OK();
 }
 
-// ssts are indexed BY SEGMENT at publish time (update_manager reads op_write.ssts(segment_id) and
+// ssts are indexed BY SEGMENT at publish time (primary_key_manager reads op_write.ssts(segment_id) and
 // stamps the ingested sstable's rssid from that index), so a log either carries one sst per segment
 // or none at all. A mix across nodes would shift every sst onto the wrong segment, corrupting the
 // primary key index without any visible error, so reject it here.
@@ -144,6 +145,7 @@ Status merge_multi_node_write_txn_log(TxnLogPB* dst, TxnLogPB* src) {
         appended->Swap(&segment_meta);
         appended->set_segment_idx(dst_rowset->segment_metas_size() - 1);
     }
+    give_standalone_segments_a_bundle_offset(dst_rowset);
 
     // Rewrite segments ride along with the segments they are named for, keeping the positional pairing
     // publish resolves them by. Both sides were checked to be either full or empty, and mixing the two

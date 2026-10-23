@@ -101,6 +101,45 @@ TEST(ParallelTaskRunnerTest, async_mode_reports_error_after_join) {
     ASSERT_EQ(8, ran.load());
 }
 
+TEST(ParallelTaskRunnerTest, nested_producers_share_pool_without_waiting) {
+    // One worker proves producers release the pool; four workers exercise concurrent run() calls.
+    for (int threads : {1, 4}) {
+        auto pool = make_pool(threads);
+        auto load_token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        auto get_token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        std::atomic<int> ran{0};
+        scoped_refptr<Trace> trace(new Trace);
+        {
+            ADOPT_TRACE(trace.get());
+            ParallelTaskRunner get_runner(get_token.get());
+            ParallelTaskRunner load_runner(load_token.get());
+            for (int i = 0; i < 4; ++i) {
+                load_runner.run([&get_runner, &ran, i]() {
+                    for (int j = 0; j < 8; ++j) {
+                        get_runner.run([&ran, i, j]() {
+                            ++ran;
+                            TRACE_COUNTER_INCREMENT("nested_get_cnt", 1);
+                            return i == 0 && j == 0 ? Status::IOError("nested read error") : Status::OK();
+                        });
+                    }
+                    return Status::OK();
+                });
+            }
+            ASSERT_OK(load_runner.join());
+            auto st = get_runner.join();
+            EXPECT_TRUE(st.is_io_error()) << st;
+            EXPECT_EQ(32, ran.load());
+        }
+        int64_t counted = 0;
+        for (const auto& [name, value] : trace->metrics()->Get()) {
+            if (std::string(name) == "nested_get_cnt") {
+                counted = value;
+            }
+        }
+        EXPECT_EQ(32, counted);
+    }
+}
+
 TEST(ParallelTaskRunnerTest, join_with_no_tasks_is_ok) {
     ParallelTaskRunner inline_runner(nullptr);
     ASSERT_OK(inline_runner.join());

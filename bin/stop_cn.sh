@@ -76,14 +76,8 @@ while true; do
     esac
 done
 
-# kill all python worker process
-find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= read -r -d $'\0' worker; do
-    pid=$(echo "$worker" | sed -n 's/.*pyworker_\([0-9]*\).*/\1/p')
-    if [[ ! -z "$pid" ]]; then
-        kill -9 "$pid" > /dev/null
-        rm -- "$worker"
-    fi
-done
+# kill all python UDF worker processes spawned by this CN, then remove their sockets
+reap_python_udf_workers
 
 
 if [ -f $pidfile ]; then

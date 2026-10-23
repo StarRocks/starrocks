@@ -140,6 +140,10 @@ private:
                     rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                     tablet_info->add_valid_dict_cache_columns(item.first);
                     tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
+                    const auto& identity = rowset_global_dicts->at(item.first).content_identity;
+                    if (identity.has_value()) {
+                        tablet_info->add_valid_dict_content_identities(*identity);
+                    }
                 } else {
                     tablet_info->add_invalid_dict_cache_columns(item.first);
                 }

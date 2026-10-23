@@ -392,6 +392,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
 - 引入版本: v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的连接超时，必须为正数。服务端在该时间内未接受连接时，CREATE 或 ALTER GROUP PROVIDER 语句失败，Group Provider 保持原有配置。若没有上限，一个永不响应的服务端不仅会卡住该语句，还会卡住每台 FE 的日志回放。
+- 引入版本: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的读取超时，必须为正数。限制已建立连接的服务端最多可以静默多久，超时后读取失败；失败后的行为见 `group_provider_http_connect_timeout_ms`。
+- 引入版本: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - 默认值: 300
@@ -495,7 +513,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Double
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发存算分离集群中 Compaction 操作的 Compaction Score 阈值。当分区的 Compaction Score 大于或等于此值时，系统会对该分区执行 Compaction。
+- 描述: 存算分离集群中自动 Compaction 的 Compaction Score 阈值。自动 Compaction 要求分区的分数大于 `0` 且大于或等于此阈值。即使此参数设置为 `0`，分数为 `0` 的分区也会被跳过。手动 Compaction 等优先级请求不受这些分数条件限制。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -632,6 +650,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - 默认值: true
@@ -752,6 +779,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离（lake）模式下，PublishVersionDaemon 重试上次发布失败的分区之前的最小间隔。单事务发布路径和批量发布路径均适用。只有真正失败的分区才会等待：首次尝试即成功发布的分区不会被延迟，仅在等待前序版本可见的分区不算作失败。增大该值可以降低发布持续失败时 leader 和对象存储的负载，但问题恢复后的追赶速度也会变慢。设置为 `0` 表示每个守护线程周期都重试，即退避机制引入之前的行为。负值按 `0` 处理。
+- 引入版本: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - 默认值: true
@@ -776,7 +812,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，云原生表或物化视图在创建分区时如何写入初始 tablet 元数据，仅由表属性 `file_bundling` 决定：开启 `file_bundling` 时，同一物理分区下的所有 tablet 共用一份 tablet 元数据（Range 分布的表除外，这类表的每个 tablet 都有各自的键范围）；未开启时，每个 tablet 各写一份。rollup 和 schema 变更作业始终为每个 tablet 单独写入元数据。如果开启了表属性 `light_weight_tablet_creation`，以上两种情况在创建时都不写入初始 tablet 元数据。此前，开启该参数后，未开启 `file_bundling` 的表也会使用共享的 tablet 元数据，这类表上的 rollup 或 schema 变更作业可能覆盖同一分区中原有索引的 tablet 元数据。该参数开启期间创建的分区仍可正常读取。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -900,6 +936,78 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于 StarRocks 集群内部身份验证的令牌。如果未指定此参数，StarRocks 会在集群 Leader FE 首次启动时为集群生成一个随机令牌。
 - 引入版本: -
 
+### `authentication_failure_cache_capacity`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `authentication_failure_cache_ttl_second` 最多记住多少条被拒绝的凭据。用于限制一个客户端（或一个不断更换用户名的攻击者）能占用的内存，超出后按最早写入的顺序淘汰。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_group_case_insensitive`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 登录得到的组名与 `GRANT ... TO EXTERNAL GROUP` 或 `permitted_groups` 中仅大小写不同的条目是否算匹配。默认开启，因为 LDAP 的 `cn` 在目录里本就不区分大小写，用另一种大小写写的 GRANT 不应该静默失效。如果组背后的身份系统把大小写不同的组当作不同的组（例如从 JWT claim 读到的组），请设为 `false`，这样 `Admins` 和 `admins` 仍是两个组。只影响比较：组名按到达时的原样存储和显示，交给 Apache Ranger 时也不改写。
+- 引入版本: v4.2
+
+### `authentication_ldap_case_insensitive`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
+- 引入版本: v4.2.0
+
+### `jwks_cache_ttl_seconds`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 每个 JWKS URL 对应的公钥集（JWK Set）缓存生命期。HTTP Bearer 每个请求都要做一次完整认证，因此缓存公钥集，而不是每次都去 IdP 拉取。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- 默认值: 300
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 在缓存的 JWKS 过期前多少秒于后台提前刷新，以减少缓存未命中。必须小于 `jwks_cache_ttl_seconds`。默认值取的是 TTL 的一半，这样一次刷新失败后还剩半个 TTL 可以重试；注意它是绝对秒数而非比例，调整 TTL 时需要一并调整。
+- 引入版本: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- 默认值: 3600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: IdP 不可达时，最多继续使用已过期的陈旧 JWKS 多长时间，以便已签发的 token 仍能验签。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 未知 key ID（`kid`）触发强制刷新 JWKS 的最小时间间隔，用于防止 kid flooding。
+- 引入版本: v4.2
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串
@@ -934,6 +1042,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 socket 读超时。参见 `authentication_ldap_simple_conn_timeout_ms`。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 TCP 连接超时。不设置时会退回到操作系统的 TCP 超时，目录不可达时可能把处理请求的线程占住几分钟——security integration 现在也为 HTTP、Arrow Flight 和 BE→FE 的导入 RPC 做认证，占住的就是这些通道的工作线程。需要认证快速失败时可以调小。
+- 引入版本: v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 

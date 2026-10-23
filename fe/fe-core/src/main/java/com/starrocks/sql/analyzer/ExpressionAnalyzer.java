@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -1156,6 +1155,7 @@ public class ExpressionAnalyzer {
                 FunctionAnalyzer.analyze(node);
                 verifyNoAiInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1182,6 +1182,7 @@ public class ExpressionAnalyzer {
                     FunctionAnalyzer.analyze(node);
                     verifyNoAiInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1198,6 +1199,7 @@ public class ExpressionAnalyzer {
             FunctionAnalyzer.analyze(node);
             verifyNoAiInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
         }
 
@@ -1258,6 +1260,10 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
+                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
+                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
+            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:
@@ -1694,7 +1700,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);

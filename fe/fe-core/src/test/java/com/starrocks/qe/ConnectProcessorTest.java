@@ -46,19 +46,23 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.mysql.MysqlColType;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
+import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -87,6 +91,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -101,6 +108,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -297,6 +305,114 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testStmtCloseUsesLittleEndianStatementId() throws Exception {
+        int stmtId = 0x01020304;
+        for (ByteOrder byteOrder : new ByteOrder[] {ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN}) {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+            serializer.writeInt4(stmtId);
+            MysqlChannel channel = mockChannel(serializer.toByteBuffer().order(byteOrder));
+            ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+            PrepareStmtContext preparedStmt = new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null);
+            ctx.putPreparedStmt(String.valueOf(stmtId), preparedStmt);
+            ctx.putPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId)), preparedStmt);
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)), byteOrder.toString());
+            Assertions.assertSame(preparedStmt, ctx.getPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId))));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
+    }
+
+    @Test
+    public void testStmtCloseFromPackageDecoder() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt4(5); // three-byte payload length followed by sequence ID 0
+        serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        serializer.writeInt4(1);
+        MysqlPackageDecoder decoder = new MysqlPackageDecoder();
+        decoder.consume(serializer.toByteBuffer());
+        RequestPackage request = decoder.poll();
+        Assertions.assertNotNull(request);
+
+        MysqlChannel channel = mockChannel(request.byteBuffer());
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        ctx.putPreparedStmt("1", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
+
+        new ConnectProcessor(ctx).processOnce(request);
+
+        Assertions.assertNull(ctx.getPreparedStmt("1"));
+        Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+        Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+    }
+
+    @Test
+    public void testStmtCloseAfterLargeExecutePacket() throws Exception {
+        int stmtId = 1;
+        String value = "x".repeat(16 * 1024);
+        MysqlSerializer execute = MysqlSerializer.newInstance();
+        execute.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
+        execute.writeInt4(stmtId);
+        execute.writeInt1(0); // flags
+        execute.writeInt4(1); // iteration count
+        execute.writeInt1(0); // null bitmap
+        execute.writeInt1(1); // new parameter types
+        execute.writeInt2(MysqlColType.MYSQL_TYPE_STRING.getCode());
+        execute.writeLenEncodedString(value);
+
+        MysqlSerializer close = MysqlSerializer.newInstance();
+        close.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        close.writeInt4(stmtId);
+
+        MysqlSerializer packets = MysqlSerializer.newInstance();
+        for (ByteBuffer payload : new ByteBuffer[] {execute.toByteBuffer(), close.toByteBuffer()}) {
+            packets.writeInt1(payload.remaining() & 0xff);
+            packets.writeInt2(payload.remaining() >> 8);
+            packets.writeInt1(0); // each command starts a new packet sequence
+            packets.writeBytes(payload.array());
+        }
+        ByteBuffer input = packets.toByteBuffer();
+        MysqlChannel channel = Mockito.spy(new MysqlChannel(connection) {
+            @Override
+            public int realNetRead(ByteBuffer destination) {
+                if (!input.hasRemaining()) {
+                    return -1;
+                }
+                int length = Math.min(destination.remaining(), input.remaining());
+                for (int i = 0; i < length; i++) {
+                    destination.put(input.get());
+                }
+                return length;
+            }
+        });
+        Mockito.doNothing().when(channel).sendAndFlush(Mockito.any(ByteBuffer.class));
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        Deencapsulation.setField(ctx.getSessionVariable(), "auditExecuteStmt", false);
+        PrepareStmt prepareStmt = (PrepareStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "SELECT ?", ctx.getSessionVariable()).get(0);
+        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(prepareStmt, ctx, null));
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        try (MockedConstruction<StmtExecutor> executors = Mockito.mockConstruction(StmtExecutor.class)) {
+            processor.processOnce();
+            Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+            Assertions.assertEquals(1, executors.constructed().size());
+            Mockito.verify(executors.constructed().get(0)).execute();
+            Assertions.assertNotNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Mockito.clearInvocations(channel);
+
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
+    }
+
+    @Test
     public void testQuit() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(quitPacket), GlobalStateMgr.getCurrentState());
 
@@ -315,6 +431,81 @@ public class ConnectProcessorTest extends DDLTestBase {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+    }
+
+    /**
+     * A connection whose handshake was answered before the login completed (an OAuth2 user waiting
+     * for the browser callback) used to be able to switch databases, list columns and so probe which
+     * databases exist, because only the statement commands asked the provider whether the login had
+     * completed. Every command but ping / quit now asks, and gets the same answer the first
+     * statement would: the authorization URL.
+     */
+    @Test
+    public void testACommandOnAPendingLoginIsRefusedWithTheAuthorizationUrl() throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        AuthenticationProvider provider = Mockito.mock(AuthenticationProvider.class);
+        Mockito.doThrow(new AuthenticationException(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED,
+                        "https://idp.example.com/auth?response_type=code"))
+                .when(provider).checkLoginSuccess(Mockito.anyInt(), Mockito.any());
+        Mockito.doReturn(provider).when(ctx).getAuthenticationProvider();
+        ctx.setThreadLocalInfo();
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("response_type=code"),
+                ctx.getState().getErrorMessage());
+        Assertions.assertTrue(ctx.getDatabase() == null || ctx.getDatabase().isEmpty(),
+                "the database switch must not have happened");
+
+        // COM_FIELD_LIST is refused the same way: no column listing before the login completes.
+        ConnectContext listing = initMockContext(mockChannel(fieldListPacket), GlobalStateMgr.getCurrentState());
+        myContext.setDatabase("testDb1");
+        Mockito.doReturn(provider).when(listing).getAuthenticationProvider();
+        listing.setThreadLocalInfo();
+        new ConnectProcessor(listing).processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(listing.getState().isError());
+        Assertions.assertTrue(listing.getState().getErrorMessage().contains("response_type=code"));
+
+        // Ping is how a client keeps the connection alive while the user is in the browser.
+        ConnectContext pinging = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
+        Mockito.doReturn(provider).when(pinging).getAuthenticationProvider();
+        pinging.setThreadLocalInfo();
+        new ConnectProcessor(pinging).processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_PING, myContext.getCommand());
+        Assertions.assertFalse(pinging.getState().isError());
+
+        // ... and the user may give up.
+        ConnectContext quitting = initMockContext(mockChannel(quitPacket), GlobalStateMgr.getCurrentState());
+        Mockito.doReturn(provider).when(quitting).getAuthenticationProvider();
+        quitting.setThreadLocalInfo();
+        new ConnectProcessor(quitting).processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_QUIT, myContext.getCommand());
+        Assertions.assertFalse(quitting.getState().isError());
+    }
+
+    /**
+     * The gate asks the provider; a provider with nothing to wait for (a password login, whose
+     * checkLoginSuccess is the no-op default) lets every command through as before.
+     */
+    @Test
+    public void testACompletedLoginIsNotGated() throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        Mockito.doReturn(new PlainPasswordAuthenticationProvider(new byte[0])).when(ctx).getAuthenticationProvider();
+        ctx.setThreadLocalInfo();
+
+        new ConnectProcessor(ctx).processOnce();
+
         Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
         Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
     }
@@ -1843,6 +2034,26 @@ public class ConnectProcessorTest extends DDLTestBase {
             Assertions.assertEquals("", ctx.getCustomQueryId());
             Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource("customQueryIdCases")
+    public void testAuditRecordsEffectiveCustomQueryId(String sql, String expectedCustomQueryId) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.getSessionVariable().setCustomQueryId("session_id");
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertEquals(expectedCustomQueryId, ctx.getAuditEventBuilder().build().customQueryId);
+    }
+
+    private static Stream<Arguments> customQueryIdCases() {
+        return Stream.of(
+                Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
+                Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
+                Arguments.of("select 1", "session_id"));
     }
 
     @Test

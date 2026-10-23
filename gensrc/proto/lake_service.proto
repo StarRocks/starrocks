@@ -214,6 +214,9 @@ message CompactRequest {
     // Rewrites every complete rowset containing at least one explicitly shared
     // segment. Used once after a range-tablet split to make all child files private.
     optional bool unshare_segments = 14 [default = false];
+    // The FE evaluates the table's forbidden time ranges before dispatch.
+    // Explicit manual compaction may still request base compaction.
+    optional bool allow_base_compaction = 52 [default = true];
 }
 
 message AggregateCompactRequest {
@@ -431,6 +434,13 @@ message UploadSnapshotFilesRequestPB {
 message UploadSnapshotFilesResponsePB {
     optional StatusPB status = 1;
     repeated int64 failed_tablets = 2;
+}
+
+// Asks whether a node is still reachable while its upload_snapshot_files call is outstanding.
+message PingSnapshotNodeRequestPB {
+}
+
+message PingSnapshotNodeResponsePB {
 }
 
 message AbortCompactionRequest {
@@ -728,4 +738,5 @@ service LakeService {
     // Placeholder for external cluster snapshot feature.
     rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
     rpc build_vector_index(BuildVectorIndexRequest) returns (BuildVectorIndexResponse);
+    rpc ping_snapshot_node(PingSnapshotNodeRequestPB) returns (PingSnapshotNodeResponsePB);
 }

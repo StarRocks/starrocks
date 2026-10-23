@@ -501,8 +501,12 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
         }
         // The storage aggregate functions above take the column type as both their argument and
         // return type.
-        auto type_desc = TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                           field->type()->precision(), field->type()->scale());
+        // Only DecimalV3 TypeInfo carries precision and scale. Legacy decimal TypeInfo returns -1,
+        // so use the descriptor's fixed (27, 9) defaults for DECIMAL/DECIMALV2.
+        auto type_desc = is_decimalv3_field_type(normalized_tpe)
+                                 ? TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                                                     field->type()->precision(), field->type()->scale())
+                                 : TypeDescriptor::from_logical_type(normalized_tpe);
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func, type_desc,
                                                              std::vector<TypeDescriptor>{type_desc});
     }

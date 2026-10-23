@@ -18,6 +18,8 @@
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -25,6 +27,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -32,7 +35,6 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
 
@@ -89,9 +91,9 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
                              const std::span<const TxnInfoPB>& txns) {
     int64_t version = base_version;
 
-    auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
+    auto index_version = tablet_mgr->primary_key_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > new_version) {
-        tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+        tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         return version;
     }
     if (index_version > version) {
@@ -110,7 +112,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
         if (res.ok()) {
             version = index_version;
         } else {
-            tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+            tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         }
     }
 
@@ -273,10 +275,11 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
     return schema_change_log;
 }
 
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
-                                            InitialMetadataOrder base_version_order) {
+static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                                      int64_t base_version, int64_t new_version,
+                                                      std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
+                                                      int64_t fe_built_version,
+                                                      InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -688,6 +691,26 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     return new_metadata;
 }
 
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
+                                            InitialMetadataOrder base_version_order) {
+    auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
+                                  fe_built_version, base_version_order);
+    // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
+    // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
+    // that the retry has memory to load into. Any other publish only checks the urgent level: the background
+    // evict thread does the regular trimming to primary_key_index_memory_high_percent, and this is the backstop
+    // for when the cache grows past the urgent level before that thread runs. Like that thread, it is part of
+    // the automatic eviction that enable_auto_evict_update_cache turns off.
+    if (res.status().is_mem_limit_exceeded()) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_middle_percent);
+    } else if (config::enable_auto_evict_update_cache) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_urgent_percent);
+    }
+    return res;
+}
+
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
                            const int64_t* log_versions) {
     auto files_to_delete = std::vector<std::string>{};
@@ -848,6 +871,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built persistent index sstables, one per segment (empty name = segment had no sstable)
+        for (const auto& sst : txn_log.op_write().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
         // pre-built tombstone sstables (empty name = del file had no sstable)
         for (const auto& del_sst : txn_log.op_write().del_ssts()) {
             if (!del_sst.name().empty()) {
@@ -872,6 +901,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
+        // pre-built persistent index sstables of the new segments
+        for (const auto& sst : txn_log.op_compaction().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
         for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
@@ -889,6 +924,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
             }
+            for (const auto& sst : op_write.ssts()) {
+                if (!sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+                }
+            }
             for (const auto& del_sst : op_write.del_ssts()) {
                 if (!del_sst.name().empty()) {
                     files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
@@ -905,7 +945,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     } else {
         tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
     }
-    tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
+    tablet_mgr->primary_key_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
 }
 
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns) {

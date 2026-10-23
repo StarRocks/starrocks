@@ -70,6 +70,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -133,6 +134,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class DefaultCoordinator extends Coordinator {
@@ -141,6 +143,9 @@ public class DefaultCoordinator extends Coordinator {
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
     // Cap on how many pending instances are named individually, so a wide fan-out cannot blow up the log.
     private static final int MAX_LOGGED_UNREPORTED_INSTANCES = 20;
+    // Matches the value of a `host: x`, `host=x` or `host [x]` fragment in a BE error message.
+    private static final Pattern HOST_VALUE_PATTERN =
+            Pattern.compile("(?i)(\\bhost\\s*(?:[:=]\\s*|\\[\\s*))[^\\s,;)\\]]+");
     private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
             ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "external-resource-cleanup", false);
 
@@ -627,13 +632,26 @@ public class DefaultCoordinator extends Coordinator {
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
+        } catch (RangeColocateUnalignedException e) {
+            // Nothing is deployed yet. Give the query-queue slot back now rather than after the statement is re-planned
+            // (the retry loop releases it again when it unregisters this coordinator, which is harmless), and close any
+            // external scan sources this attempt opened: the retry loop does not clear them.
+            onReleaseSlots();
+            clearExternalResources();
+            throw e;
         }
 
-        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
-            deliverExecFragments(option);
-        }
+        try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
+                deliverExecFragments(option);
+            }
 
-        scheduler.continueSchedule(option);
+            scheduler.continueSchedule(option);
+        } catch (RangeColocateUnalignedException e) {
+            // Fragments may already be running here (phased scheduling assigns more scan ranges after deploying the
+            // first ones), so this attempt must not be re-planned: fail it as the plain scheduling error it was.
+            throw new IllegalStateException(e.getMessage(), e);
+        }
 
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {
@@ -1026,11 +1044,7 @@ public class DefaultCoordinator extends Coordinator {
                     LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
                 }
 
-                // hide host info
-                int hostIndex = errMsg.indexOf("host");
-                if (hostIndex != -1) {
-                    errMsg = errMsg.substring(0, hostIndex);
-                }
+                errMsg = hideHostInfo(errMsg);
                 InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
                 if (status.isCancelled() &&
                         status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
@@ -1232,6 +1246,15 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("failed to summarize unreported instances of query {}",
                     DebugUtil.printId(jobSpec.getQueryId()), e);
         }
+    }
+
+    /**
+     * Masks host values in a BE error message before it reaches the client, keeping the rest of the
+     * message so the failure cause stays readable. The caller logs the unmasked message.
+     */
+    @VisibleForTesting
+    static String hideHostInfo(String errMsg) {
+        return HOST_VALUE_PATTERN.matcher(errMsg).replaceAll("$1***");
     }
 
     /**

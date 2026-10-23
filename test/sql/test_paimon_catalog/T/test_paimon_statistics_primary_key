@@ -1,0 +1,35 @@
+-- name: test_paimon_statistics_primary_key
+create external catalog paimon_static_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"enable_get_stats_from_external_metadata" = "true",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set disable_table_stats_from_metadata_for_single_table = false;
+set enable_paimon_column_statistics = true;
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "id")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "amount")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1", "flag")
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1;
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "id")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "amount")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1", "flag")
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_parquet_compacted_v1;
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "id")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "amount")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1", "flag")
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_orc_unmerged_v1;
+function: assert_explain_costs_contains("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "cardinality: 3", "stats source: TABLE_METADATA")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "id")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "amount")
+function: get_col_stats_from_explain_costs("select id, amount, flag from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1", "flag")
+select count(*), count(amount) from paimon_static_${uuid0}.paimon_test.pk_orc_compacted_v1;
+set catalog default_catalog;
+drop catalog paimon_static_${uuid0};

@@ -313,6 +313,15 @@ struct JsonType {
 struct BsonType {
 }
 
+/**
+ * Embedded Variant logical type annotation
+ */
+struct VariantType {
+  // The version of the variant specification that the variant was
+  // written with.
+  1: optional i8 specification_version
+}
+
 /** Edge interpolation algorithm for Geography logical type */
 enum EdgeInterpolationAlgorithm {
   SPHERICAL = 0;
@@ -414,7 +423,8 @@ union LogicalType {
   12: JsonType JSON           // use ConvertedType JSON
   13: BsonType BSON           // use ConvertedType BSON
   14: UUIDType UUID           // no compatible ConvertedType
-  // 15 and 16 belong to FLOAT16 and VARIANT in upstream parquet-format.
+  // 15 belongs to FLOAT16 in upstream parquet-format.
+  16: VariantType VARIANT     // no compatible ConvertedType
   17: GeometryType GEOMETRY   // no compatible ConvertedType
   18: GeographyType GEOGRAPHY // no compatible ConvertedType
 }

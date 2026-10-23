@@ -19,11 +19,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <set>
 #include <thread>
 
 #include "base/bthreads/util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -35,6 +37,10 @@
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#ifdef USE_STAROS
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
+#endif
 #include "data_workflows/load/tablet_writer/load_channel.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "fs/fs_factory.h"
@@ -50,9 +56,9 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -70,8 +76,9 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_directory);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
 
         _load_channel_mgr =
                 std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
@@ -262,7 +269,7 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<RuntimeProfile> _root_profile;
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::TabletManager> _tablet_manager;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -1409,6 +1416,110 @@ TEST_F(LakeTabletsChannelTest, test_cancel_releases_txn_log_waiter) {
             << eos_response.status().error_msgs(0);
     EXPECT_LT(waited_ms, kTimeoutMs / 2) << "cancel did not release the waiter promptly";
 }
+
+#ifdef USE_STAROS
+class LakeTabletsChannelShardInfoHandoffTest : public LakeTabletsChannelTest {
+protected:
+    void SetUp() override {
+        LakeTabletsChannelTest::SetUp();
+        _origin_worker = get_staros_worker();
+        auto worker = std::make_shared<StarOSWorker>();
+        // This node owns 10086 of partition 10 and both tablets of partition 11, but not 10087.
+        for (int64_t tablet_id : {10086, 10088, 10089}) {
+            StarOSWorker::ShardInfo info;
+            info.id = tablet_id;
+            info.hash_code = 0;
+            info.path_info.set_full_path(partition_path(tablet_id));
+            CHECK(worker->add_shard(info).ok());
+        }
+        set_staros_worker_for_test(std::move(worker));
+    }
+
+    void TearDown() override {
+        set_staros_worker_for_test(_origin_worker);
+        LakeTabletsChannelTest::TearDown();
+    }
+
+    static std::string partition_path(int64_t tablet_id) {
+        return fmt::format("s3://bucket/partition_{}", tablet_id < 10088 ? 10 : 11);
+    }
+
+    // Writes into tablets 10086..10089 (partitions 10 and 11) from a single sender in combined-txn-log
+    // mode and returns the eos response, which carries the txn logs back to the load coordinator.
+    PTabletWriterAddBatchResult write_and_finish() {
+        constexpr int kChunkSize = 128;
+        constexpr int kChunkSizePerTablet = kChunkSize / 4;
+        auto chunk = generate_data(kChunkSize);
+
+        auto open_request = _open_request;
+        open_request.set_sender_id(0);
+        open_request.set_num_senders(1);
+        open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
+        PTabletWriterOpenResult open_response;
+        CHECK_OK(_tablets_channel->open(open_request, &open_response, _schema_param, false));
+
+        PTabletWriterAddChunkRequest request;
+        PTabletWriterAddBatchResult response;
+        request.set_index_id(kIndexId);
+        request.set_sender_id(0);
+        request.set_eos(false);
+        request.set_packet_seq(0);
+        request.set_timeout_ms(30 * 1000);
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            request.add_tablet_ids(tablet_id);
+            request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        request.mutable_chunk()->Swap(&chunk_pb);
+        bool close_channel = false;
+        _tablets_channel->add_chunk(&chunk, request, &response, &close_channel);
+        CHECK_EQ(TStatusCode::OK, response.status().status_code());
+
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(0);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(1);
+        finish_request.add_partition_ids(10);
+        finish_request.add_partition_ids(11);
+        finish_request.set_timeout_ms(30 * 1000);
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
+        return finish_response;
+    }
+
+    std::shared_ptr<StarOSWorker> _origin_worker;
+};
+
+// In combined-txn-log mode the load coordinator writes each partition's combined txn log itself and
+// usually owns no tablet of the partition. The eos response hands it the shard info of one tablet this
+// node owns per partition, so the coordinator need not ask starmgr for it.
+TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_eos_hands_over_one_shard_info_per_partition) {
+    auto response = write_and_finish();
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    ASSERT_EQ(4, response.lake_tablet_data().txn_logs_size());
+    ASSERT_EQ(2, response.lake_tablet_data().shard_infos_size());
+    std::set<int64_t> partitions;
+    for (const auto& serialized : response.lake_tablet_data().shard_infos()) {
+        staros::AddShardInfo info;
+        ASSERT_TRUE(info.ParseFromString(serialized));
+        // 10087 is written here but not owned here, so it is never the one handed over.
+        ASSERT_NE(10087, info.shard_id());
+        EXPECT_EQ(partition_path(info.shard_id()), info.file_path_info().full_path());
+        partitions.insert(info.shard_id() < 10088 ? 10 : 11);
+    }
+    EXPECT_EQ((std::set<int64_t>{10, 11}), partitions);
+}
+
+TEST_F(LakeTabletsChannelShardInfoHandoffTest, test_no_shard_info_when_shard_info_cache_disabled) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
+    auto response = write_and_finish();
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    ASSERT_EQ(4, response.lake_tablet_data().txn_logs_size());
+    ASSERT_EQ(0, response.lake_tablet_data().shard_infos_size());
+}
+#endif // USE_STAROS
 
 TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
     auto num_sender = GetParam().num_sender;

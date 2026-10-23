@@ -268,11 +268,35 @@ Used for MySQL client compatibility. No practical usage.
 ### blacklist_backup_routing
 
 * **Scope**: Session
-* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). `TABLET_HASH` takes the eligible node with the highest hash of the tablet and the node (rendezvous hashing): the tablets of an unavailable node spread evenly over the other nodes, while each tablet keeps going to the same backup across queries, so its data is cached on only one backup node. For a colocated scan, the hash uses the colocation group and the bucket instead of the tablet, so every table in the group sends the same bucket to the same backup. FEs choose the same backup for a tablet as long as they see the same set of eligible nodes. The variable also applies when a load (for example, `INSERT`) writes to a tablet whose compute node is unavailable. Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
 * **Default**: `CIRCULAR`
 * **Data type**: String
-* **Valid values**: `CIRCULAR`, `RANDOM`
+* **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
 * **Introduced in**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
 
 ### broadcast_row_limit
 
@@ -724,6 +748,12 @@ Each catalog uses two prefetch workers with a queue of at most 128 batch jobs. W
 * **Data Type**: boolean
 * **Introduced in**: v3.3.8, v3.4.0, v3.5.0
 
+### enable_exchange_sink_buffer_flush
+
+* **Description**: Whether to limit the memory that an exchange sink uses to buffer rows for a shuffle before they are sent. The exchange sink keeps one partial chunk per destination pipeline driver and normally sends it only when the chunk is full; when this variable is `true` and the partial chunks of a driver retain more memory than the BE configuration item `exchange_sink_buffer_flush_threshold_bytes`, they are sent immediately. Set it to `false` to restore the previous behavior for a session.
+* **Default**: true
+* **Introduced in**: -
+
 ### enable_filter_unused_columns_in_scan_stage
 
 * **Description**: Controls pruning of columns produced by Scan nodes so the scan stage only outputs columns that are actually needed downstream (either as outputs or for non-pushable predicates). When enabled, PlanFragmentBuilder.setUnUsedOutputColumns will mark scan output columns that are exclusively used in pushdownable predicates and not required later, allowing the scan to trim those columns and reduce I/O and network transfer. The pruning is guarded: it will not apply for aggregation-family indexes in the non-skip-aggregation (non-skip-aggr) scan stage (keys/value columns must be retained to merge/aggregate), and the planner always ensures at least one column is returned from a scan. See `isEnableFilterUnusedColumnsInScanStage()` and the enable/disable helpers `enableTrimOnlyFilteredColumnsInScanStage()` / `disableTrimOnlyFilteredColumnsInScanStage()` in SessionVariable.
@@ -737,6 +767,12 @@ Each catalog uses two prefetch workers with a queue of at most 128 batch jobs. W
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this prevents the gather fragment from being placed on a BE that the rest of the query does not use. It does not guarantee label isolation by itself: if any other fragment of the query runs outside the label, the gather fragment may also run there. Known cases include scans of external catalog tables (such as Hive or Iceberg), `choose_execute_instances_mode` values other than `LOCALITY`, `prefer_compute_node=true`, and right or full bucket-shuffle joins with pruned buckets. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
 
 ### enable_gin_filter
 
@@ -769,6 +805,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
 
 ### enable_incremental_mv
 
@@ -1590,7 +1632,12 @@ Used for MySQL client compatibility. No practical usage.
 
 ### paimon_reader_mode
 
-* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).
+
+  * `AUTO`: StarRocks automatically selects an appropriate reader.
+  * `JNI`: Forces the Paimon Java reader through JNI.
+  * `NATIVE`: Uses the StarRocks file reader when compatible; otherwise requires a compatible paimon-cpp read. The query fails instead of falling back to JNI.
+  * Setting `paimon_force_jni_reader=true` is equivalent to selecting `JNI` and takes precedence over this variable.
 * **Default**: AUTO
 * **Data type**: String
 * **Introduced in**: v4.2
@@ -1758,7 +1805,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -1974,6 +2021,7 @@ Used to display the time zone of the current system. Cannot be changed.
   * `force` -- spreads whenever the remaining preconditions allow, including hash-bucket distributions. Use it when you want the spread on a table `auto` declines to take.
 * Regardless of the mode, the feature also requires a cloud-native table with `file_bundling` enabled, a transaction on combined txn logs, and a partition with fewer tablets than the number of nodes this load is actually spread over. That width is the smallest of three: the node count derived from the load's size (`lake_multi_node_write_bytes_per_node`), `lake_multi_node_write_max_nodes`, and the alive compute nodes. A partition that already holds that many tablets stays on the single-node path even under `force` -- five tablets on a six-node warehouse do not spread if the load's size is only worth three writers. Stream load and routine load are excluded outright: neither can be sized at planning time, and treating an unknown size as a large one there would give the smallest and most frequent batches the widest spread. Partial updates (row and column mode), condition updates, loads omitting an auto-increment column, and loads during a schema change are all supported.
 * A partition that automatic partitioning creates during the load itself is spread too. It is not in the plan, so its tablets are handed to the load afterwards, over the create-partition RPC: they are spread over the same number of nodes the load resolved when it was planned, picked from the compute nodes alive at the moment the partition is created -- a long load can outlive the node list it was planned against. Such a partition normally starts with a single tablet, because the data boundaries that would have split it have not been seen yet, so it is exactly the shape this setting exists for.
+* Sub-partitions that automatic bucketing (`bucket_size`) adds during the load are spread as well. Automatic bucketing applies only to `RANDOM` distribution, so this takes effect only under `force`.
 * **Default**: auto
 * **Type**: String
 * **Scope**: Session
@@ -1989,7 +2037,7 @@ Used to display the time zone of the current system. Cannot be changed.
 
 ### lake_multi_node_write_bytes_per_node
 
-* **Description**: Only applies in shared-data mode, and only when `lake_multi_node_tablet_write_mode` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the session variable `lake_multi_node_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows -- so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load; when neither is available the node count is left to `lake_multi_node_write_max_nodes` alone, because for those two paths an unknown size is not a small size. Stream load and routine load are the exception and do not spread at all -- there an unknown size means a micro-batch, not an unmeasured bulk load. Set to 0 to disable size-based sizing.
+* **Description**: Only applies in shared-data mode, and only when `lake_multi_node_tablet_write_mode` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the session variable `lake_multi_node_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows -- so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load. Primary Key `UPDATE` and `DELETE` use the estimated output row count and widths of the columns actually written. A partial update counts the key and updated/generated columns; a delete counts the key, any required generated partition columns, and the operation column. These estimates do not use the source scan size. If the row count is reliable but column widths are unknown, type sizes are used. Missing or inaccurate row counts keep the size unknown; the existing node and alive-node bounds then apply. Stream load and routine load are the exception and do not spread at all -- there an unknown size means a micro-batch, not an unmeasured bulk load. Set to 0 to disable size-based sizing.
 * **Default**: 2147483648 (2 GB)
 * **Unit**: Bytes
 * **Type**: Long

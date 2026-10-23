@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,11 +28,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import javax.naming.Context;
+import javax.naming.InvalidNameException;
 import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
 import javax.naming.PartialResultException;
+import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
@@ -53,7 +58,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     private final String ldapSearchFilter;
     private final String ldapUserDN;
     private final String ldapBindDNPattern;
-    private final LdapGroupSource ldapGroupSource;
+    private final GroupSource ldapGroupSource;
     private final String ldapMemberOfAttr;
 
     /**
@@ -73,7 +78,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapBindDNPattern) {
         this(ldapServerHost, ldapServerPort, useSSL, trustStorePath, trustStorePwd, ldapBindRootDN, ldapBindRootPwd,
                 ldapBindBaseDN, ldapSearchFilter, ldapUserDN, ldapBindDNPattern,
-                LdapGroupSource.GROUP_PROVIDER, "memberOf");
+                GroupSource.GROUP_PROVIDER, "memberOf");
     }
 
     public LDAPAuthProvider(String ldapServerHost,
@@ -87,9 +92,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapSearchFilter,
                             String ldapUserDN,
                             String ldapBindDNPattern,
-                            LdapGroupSource ldapGroupSource,
+                            GroupSource ldapGroupSource,
                             String ldapMemberOfAttr) {
-        this.ldapGroupSource = ldapGroupSource == null ? LdapGroupSource.GROUP_PROVIDER : ldapGroupSource;
+        this.ldapGroupSource = ldapGroupSource == null ? GroupSource.GROUP_PROVIDER : ldapGroupSource;
         this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
@@ -105,21 +110,34 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public UserIdentity authenticate(AccessControlContext authContext, UserIdentity userIdentity, AuthCredentials cred)
             throws AuthenticationException {
-        //clear password terminate string
-        byte[] clearPassword = authResponse;
-        if (authResponse[authResponse.length - 1] == 0) {
-            clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
+        // One shape only. The MySQL clear-password frame reaches here as PLAIN_PASSWORD with its
+        // trailing NUL already stripped at the entry point, so MySQL and HTTP Basic are the same
+        // bytes by the time they arrive.
+        if (cred.kind() != AuthCredentialKind.PLAIN_PASSWORD) {
+            throw new AuthenticationException(
+                    "LDAP user must authenticate with a password, not " + cred.kind());
         }
+        byte[] clearPassword = cred.rawSecret();
 
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
         // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
-        boolean readMemberOf = ldapGroupSource.readsMemberOf() && !legacyPerUserDN;
+        boolean readMemberOf = ldapGroupSource.usesAuthenticatorGroups() && !legacyPerUserDN;
+        // The entry's own spelling of the name, wanted only when the session identity is going to be
+        // taken from the directory rather than from what the client typed.
+        boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
         // Empty array means "return no attribute at all"; leaving it unset would make JNDI ask the
         // directory for every attribute of the entry and then throw them away.
-        String[] requestedAttributes = readMemberOf ? new String[] {ldapMemberOfAttr} : new String[0];
+        List<String> requested = new ArrayList<>();
+        if (readMemberOf) {
+            requested.add(ldapMemberOfAttr);
+        }
+        if (readCanonicalName) {
+            requested.add(ldapSearchFilter);
+        }
+        String[] requestedAttributes = requested.toArray(new String[0]);
 
         String distinguishedName;
         LdapUserEntry userEntry = null;
@@ -141,7 +159,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             } else {
                 // Priority 3: search-and-bind. The search that resolves the DN also carries the
                 // requested attributes back, so reading memberOf costs no extra request here.
-                if (readMemberOf) {
+                if (requestedAttributes.length > 0) {
                     userEntry = findUserEntryByRoot(user, requestedAttributes);
                     distinguishedName = userEntry.dn();
                 } else {
@@ -155,28 +173,72 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
             // set distinguished name to auth context
             authContext.setDistinguishedName(distinguishedName);
-        } catch (Exception e) {
+        } catch (AuthenticationException e) {
+            // Already classified (empty password, user not found, or a nested bind failure): pass it through.
+            LOG.warn("check password failed for user: {}", user, e);
+            throw e;
+        } catch (javax.naming.AuthenticationException e) {
+            // The directory answered and rejected the credential -- a definitive "wrong password".
             LOG.warn("check password failed for user: {}", user, e);
             throw new AuthenticationException(e.getMessage());
+        } catch (Exception e) {
+            // Anything else means we could not get an answer: connection refused, timeout, TLS failure.
+            // Mark it transient so a caller that caches rejections does not hold a valid credential back
+            // until the directory recovers.
+            LOG.warn("cannot reach the directory while authenticating user: {}", user, e);
+            throw new AuthenticationException(e.getMessage()).asTransient();
+        }
+
+        if (readCanonicalName) {
+            authContext.setAuthenticatedUserName(
+                    userEntry == null ? null : readSearchAttrValue(userEntry.attributes()));
         }
 
         if (readMemberOf) {
             // Authentication already succeeded at this point. A group-resolution failure must never
             // turn into an authentication failure, so everything below is contained.
             try {
-                authContext.setMemberOfGroups(
+                authContext.setAuthenticatorGroups(
                         resolveMemberOfGroups(user, distinguishedName,
                                 userEntry == null ? null : userEntry.attributes(), directBind));
             } catch (Exception e) {
                 LOG.warn("failed to resolve memberOf groups for user: {}, dn: {}", user, distinguishedName, e);
-                authContext.setMemberOfGroups(Set.of());
+                authContext.setAuthenticatorGroups(Set.of());
             }
-        } else {
-            // Write the field in this branch too, so it always states what *this* authentication
-            // resolved instead of keeping whatever it happened to hold. Leaving it untouched would
-            // make correctness depend on "nobody wrote it earlier", which is exactly the kind of
-            // assumption that breaks when the field gets reused somewhere else later.
-            authContext.setMemberOfGroups(Set.of());
+        }
+        return userIdentity;
+    }
+
+    @Override
+    public boolean supportsCredentialKind(AuthCredentialKind kind) {
+        // Binds against the directory with a password. The MySQL clear-password frame is unwrapped
+        // at the entry point, so this one shape covers MySQL and HTTP Basic alike. A Bearer token
+        // is not a password: leaving it out is what keeps the security-integration chain from
+        // offering this provider a token it cannot check.
+        return kind == AuthCredentialKind.PLAIN_PASSWORD;
+    }
+
+    /**
+     * Read the entry's own spelling of the attribute the search filtered on, e.g. `uid` or
+     * `sAMAccountName`. That is the authoritative form of the name; anything StarRocks derives on its
+     * own is a guess at a spelling the directory may not hold.
+     *
+     * @return null when the attribute was not returned or is not textual
+     */
+    private String readSearchAttrValue(Attributes attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        try {
+            Attribute attribute = attributes.get(ldapSearchFilter);
+            if (attribute == null || attribute.size() == 0) {
+                return null;
+            }
+            Object value = attribute.get(0);
+            return value instanceof String ? (String) value : null;
+        } catch (NamingException e) {
+            LOG.debug("cannot read '{}' back from the user entry", ldapSearchFilter, e);
+            return null;
         }
     }
 
@@ -187,6 +249,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * called at all: calling and discarding would pay for a read we said we do not want, and a broken
      * group provider would still be able to affect a mode that explicitly excludes it.
      */
+    @Override
     public boolean isGroupProviderUsed() {
         return ldapGroupSource.usesGroupProvider();
     }
@@ -197,8 +260,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * configured group source, so neither can silently keep contributing after the other is turned
      * off.
      */
-    public boolean isMemberOfUsed() {
-        return ldapGroupSource.readsMemberOf();
+    @Override
+    public boolean isAuthenticatorGroupsUsed() {
+        return ldapGroupSource.usesAuthenticatorGroups();
     }
 
     /**
@@ -220,7 +284,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * empty result is never an error here, it just means the caller keeps the group providers only
      */
     public TargetUserGroups resolveMemberOfGroupsForUser(String user) {
-        if (!ldapGroupSource.readsMemberOf()) {
+        if (!ldapGroupSource.usesAuthenticatorGroups()) {
             // Nothing to read, and deliberately no request: the default configuration must not pay
             // for a directory round trip it does not need.
             return TargetUserGroups.NONE;
@@ -299,7 +363,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         private static final TargetUserGroups NONE = new TargetUserGroups(null, Set.of());
     }
 
-    public LdapGroupSource getGroupSource() {
+    public GroupSource getGroupSource() {
         return ldapGroupSource;
     }
 
@@ -433,13 +497,21 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      * open a connection - the user bind, the service account search and the memberOf probe - so that
      * a change to URL handling, SSL or timeouts only has to be made once.
      */
-    private Hashtable<String, String> buildEnv(String principal, String credentials) throws Exception {
+    // Package-private so a test can assert the two timeouts below are actually set.
+    Hashtable<String, String> buildEnv(String principal, String credentials) throws Exception {
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_CREDENTIALS, credentials);
         env.put(Context.SECURITY_PRINCIPAL, principal);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, getURL());
+        // Both timeouts matter: without them the bind falls back to the OS TCP timeout, so an unreachable
+        // directory can pin the calling thread -- an HTTP worker or a thrift handler now that a security
+        // integration serves those channels too. LDAPGroupProvider sets the same two properties.
+        env.put("com.sun.jndi.ldap.connect.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_timeout_ms));
+        env.put("com.sun.jndi.ldap.read.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_read_timeout_ms));
         if (useSSL) {
             setSSLContext(env);
         }
@@ -675,6 +747,35 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         if (username == null) {
             return null;
         }
-        return username.toLowerCase();
+        // Locale.ROOT, never the default locale: under a Turkish locale 'I' lowercases to the dotless
+        // 'i', which would silently change ASCII user names such as 'Li'.
+        return username.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Canonicalize an LDAP distinguished name so that two DNs which denote the same entry map to the
+     * same string. {@link LdapName} takes care of the RFC 4514 syntax (separator whitespace, escaping,
+     * attribute type case), and the extra lowercase covers attribute values, which LDAP and Active
+     * Directory also compare without regard to case.
+     *
+     * @param dn the distinguished name, may be null
+     * @return the canonical form, or a best-effort lowercase when the input is not a parsable DN
+     */
+    public static String canonicalDn(String dn) {
+        if (dn == null) {
+            return null;
+        }
+        try {
+            // Rebuilding the name from its parsed RDNs is what actually normalizes it: an LdapName that
+            // was constructed from a string hands that same string back from toString(), whitespace
+            // around the separators included.
+            LdapName parsed = new LdapName(dn);
+            return new LdapName(parsed.getRdns()).toString().toLowerCase(Locale.ROOT);
+        } catch (InvalidNameException e) {
+            // Expected whenever the distinguished name falls back to the bare user name, so this stays
+            // at debug level; lowercase is the best we can do and matches the previous behaviour.
+            LOG.debug("'{}' is not a valid LDAP distinguished name, fall back to lowercase", dn);
+            return dn.toLowerCase(Locale.ROOT);
+        }
     }
 }

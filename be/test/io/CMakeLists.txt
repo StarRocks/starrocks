@@ -19,6 +19,7 @@ set(IO_TEST_FILES
     fd_input_stream_test.cpp
     fd_output_stream_test.cpp
     io_profiler_test.cpp
+    s3_output_stream_part_test.cpp
     seekable_input_stream_test.cpp
     io_error_test.cpp
 )

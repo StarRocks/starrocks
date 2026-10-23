@@ -431,6 +431,26 @@ TEST_F(TimeFunctionsTest, weekWithModeTest) {
     }
 }
 
+// A datetime before 0000-01-01 (e.g. str_to_date('0000-01-00', '%Y-%m-%d')) used to hit a DCHECK in compute_daynr().
+TEST_F(TimeFunctionsTest, weekFunctionsYearBeforeZeroTest) {
+    TimestampValue ts;
+    ts._timestamp = timestamp::from_julian_and_time(date::from_date(0, 1, 1) - 1, 0);
+    ASSERT_FALSE(ts.is_valid());
+
+    auto tc = TimestampColumn::create();
+    tc->append(ts);
+    Columns columns;
+    columns.emplace_back(std::move(tc));
+    Columns columns_with_mode = columns;
+    columns_with_mode.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(3, 1));
+
+    ASSERT_TRUE(TimeFunctions::year_week_with_default_mode(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::year_week_with_mode(_utils->get_fn_ctx(), columns_with_mode).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_with_default_mode(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_with_mode(_utils->get_fn_ctx(), columns_with_mode).ok());
+}
+
 TEST_F(TimeFunctionsTest, toDateTest) {
     const int year = 2020, month = 6, day = 18;
     auto tc = TimestampColumn::create();
@@ -2615,6 +2635,68 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     ASSERT_TRUE(
             TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
+}
+
+// A conversion that leaves the DATETIME range (0000..9999) returns NULL instead of an invalid value.
+TEST_F(TimeFunctionsTest, convertTzOutOfRangeReturnsNull) {
+    auto run = [](const Columns& columns, bool const_zones) {
+        FunctionUtils utils;
+        utils.get_fn_ctx()->set_constant_columns(columns);
+        if (const_zones) {
+            utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_DATETIME);
+            utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+            utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+        }
+        EXPECT_TRUE(TimeFunctions::convert_tz_prepare(utils.get_fn_ctx(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::convert_tz(utils.get_fn_ctx(), columns).value();
+        EXPECT_TRUE(
+                TimeFunctions::convert_tz_close(utils.get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+        return result;
+    };
+    {
+        // per-row zones: both the fixed-offset fast path and the cctz path
+        auto tc = TimestampColumn::create();
+        tc->append(TimestampValue::create(9999, 12, 31, 23, 0, 0));
+        tc->append(TimestampValue::create(0, 1, 1, 1, 0, 0));
+        tc->append(TimestampValue::create(9999, 12, 31, 20, 0, 0));
+        tc->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+        tc->append(TimestampValue::create(9999, 12, 31, 23, 0, 0));
+        auto tc_from = BinaryColumn::create();
+        auto tc_to = BinaryColumn::create();
+        for (auto [from, to] : std::vector<std::pair<const char*, const char*>>{{"-05:00", "UTC"},
+                                                                                {"+08:00", "UTC"},
+                                                                                {"America/New_York", "UTC"},
+                                                                                {"-05:00", "UTC"},
+                                                                                {"UTC", "-05:00"}}) {
+            tc_from->append(Slice(from));
+            tc_to->append(Slice(to));
+        }
+        ColumnPtr result = run(Columns{tc, tc_from, tc_to}, false);
+        ASSERT_TRUE(result->is_null(0));
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_TRUE(result->is_null(2));
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_FALSE(result->is_null(3));
+        ASSERT_EQ(TimestampValue::create(2024, 1, 1, 5, 0, 0), data->get_data()[3]);
+        ASSERT_FALSE(result->is_null(4));
+        ASSERT_EQ(TimestampValue::create(9999, 12, 31, 18, 0, 0), data->get_data()[4]);
+    }
+    {
+        // constant zones
+        auto tc = TimestampColumn::create();
+        tc->append(TimestampValue::create(9999, 12, 31, 20, 0, 0));
+        tc->append(TimestampValue::create(2024, 1, 1, 0, 0, 0));
+        auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>("America/New_York", 1);
+        auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>("UTC", 1);
+        ColumnPtr result = run(Columns{tc, tc_from, tc_to}, true);
+        ASSERT_TRUE(result->is_null(0));
+        ASSERT_FALSE(result->is_null(1));
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ(TimestampValue::create(2024, 1, 1, 5, 0, 0), data->get_data()[1]);
+    }
 }
 
 // Regression test for the thread-local DST-offset-window cache in convert_tz_const (see

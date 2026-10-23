@@ -20,6 +20,9 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
@@ -63,7 +66,7 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testToProcResultBuildsUnderTheGivenTitles() {
+    public void testToProcResultBuildsUnderTheGivenTitles() throws AnalysisException {
         List<String> titleNames = List.of("JobId", "TableName", "State");
         List<List<Comparable>> rows = List.of(List.of(1L, "t1", "FINISHED"), List.of(2L, "t2", "RUNNING"));
 
@@ -75,10 +78,47 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testToProcResultOnNoRows() {
+    public void testToProcResultOnNoRows() throws AnalysisException {
         BaseProcResult result = ProcUtils.toProcResult(List.of("JobId"), List.of());
         Assertions.assertEquals(List.of("JobId"), result.getColumnNames());
         Assertions.assertTrue(result.getRows().isEmpty());
+    }
+
+    @Test
+    public void testToProcResultRejectsAMisalignedRow() {
+        // fetchResult does not go through applyFilterOrderLimit, and SHOW PROC and the proc HTTP
+        // endpoints take that road. Both end here, so the check does.
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        AnalysisException e = Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.toProcResult(titleNames, List.of(List.of("1", "t1"))));
+        Assertions.assertTrue(e.getMessage().contains("row has 2 columns but 3 were expected"),
+                e.getMessage());
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.toProcResult(titleNames, List.of(List.of("1", "t1", "FINISHED", "extra"))));
+    }
+
+    @Test
+    public void testApplyFilterOrderLimitRejectsAMisalignedRow() {
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        List<List<Comparable>> narrow = List.of(List.of("1", "t1"));
+
+        // The point of the change: a statement without a WHERE clause is checked too.
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.applyFilterOrderLimit(titleNames, narrow, null, null, null));
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.applyFilterOrderLimit(titleNames, narrow, Map.of("tablename", eq("t1")),
+                        null, null));
+    }
+
+    @Test
+    public void testCheckRowWidthsIsReachableOnItsOwn() {
+        // A caller that walks titleNames and the row together by index has to check before that
+        // walk, not when the result is built - PartitionsProcDir still filters with its own loop.
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.checkRowWidths(titleNames, List.of(List.of("1", "t1"))));
+        Assertions.assertDoesNotThrow(
+                () -> ProcUtils.checkRowWidths(titleNames, List.of(List.of("1", "t1", "FINISHED"))));
     }
 
     @Test
@@ -113,16 +153,98 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testFilterResultLeavesAnUnrecognisedShapeAlone() throws AnalysisException {
-        // A string right-hand side with an operator other than = matches neither branch. It passes
-        // rather than throwing: the analyzer is what rejects predicates it does not support.
-        Map<String, Expr> filter = Map.of("tablename",
+    public void testFilterResultOnAStringComparedWithAnOrderingOperator() {
+        // Neither an equality on a string nor a comparison on a date, so the integer branch takes
+        // it. This is PartitionsProcDir's behaviour, kept as it was, and which exception comes out
+        // depends on the cell, because the left side is parsed before the right side is cast.
+        //
+        // How SHOW PARTITIONS reaches it: ShowStmtAnalyzer restricts the operator for
+        // PartitionName/State but never checks the right-hand side of
+        // PartitionId/Buckets/ReplicationNum, so WHERE Buckets > 'abc' analyzes. The cell is an
+        // integer, so the parse succeeds and the cast is what fails.
+        Map<String, Expr> onBuckets = Map.of("buckets",
+                new BinaryPredicate(BinaryType.GT, new SlotRef(null, "Buckets"), new StringLiteral("abc")));
+        Assertions.assertThrows(ClassCastException.class,
+                () -> ProcUtils.filterResult("Buckets", 8L, onBuckets));
+
+        // No alter statement can produce the shape at all -- ShowAlterStmtAnalyzer takes = only,
+        // for TableName and State -- which is why this path may take PartitionsProcDir's reading
+        // without any statement changing. Reached directly, a non-numeric cell fails the parse.
+        Map<String, Expr> onTableName = Map.of("tablename",
                 new BinaryPredicate(BinaryType.GT, new SlotRef(null, "TableName"), new StringLiteral("t1")));
-        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t2", filter));
+        Assertions.assertThrows(NumberFormatException.class,
+                () -> ProcUtils.filterResult("TableName", "t2", onTableName));
+    }
+
+    @Test
+    public void testFilterResultOnANumericColumn() throws AnalysisException {
+        // SHOW PARTITIONS' own columns, the branch that came over from PartitionsProcDir.
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.GT, 4)));
+        Assertions.assertFalse(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.GT, 16)));
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.EQ, 8)));
+        Assertions.assertFalse(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.NE, 8)));
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.LE, 8)));
+    }
+
+    @Test
+    public void testFilterResultOnALikePredicate() throws AnalysisException {
+        // SHOW PARTITIONS is the only statement whose analyzer admits LIKE.
+        Map<String, Expr> filter = Map.of("partitionname", new LikePredicate(
+                LikePredicate.Operator.LIKE, new SlotRef(null, "PartitionName"), new StringLiteral("p2024%")));
+        Assertions.assertTrue(ProcUtils.filterResult("PartitionName", "p202401", filter));
+        Assertions.assertFalse(ProcUtils.filterResult("PartitionName", "p202301", filter));
+    }
+
+    @Test
+    public void testApplyLimitWithinTheList() {
+        List<String> rows = List.of("a", "b", "c", "d");
+        Assertions.assertEquals(List.of("a", "b"), ProcUtils.applyLimit(rows, new LimitElement(0, 2)));
+        Assertions.assertEquals(List.of("b", "c"), ProcUtils.applyLimit(rows, new LimitElement(1, 2)));
+        Assertions.assertEquals(List.of("d"), ProcUtils.applyLimit(rows, new LimitElement(3, 1)));
+    }
+
+    @Test
+    public void testApplyLimitPastTheEnd() {
+        List<String> rows = List.of("a", "b", "c");
+        // The offset lands past the last row: no rows, not an exception. SHOW ALTER TABLE COLUMN
+        // LIMIT 10, 1 is the everyday way to reach this, since that list is usually empty.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(10, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(List.of(), new LimitElement(10, 1)));
+        // One past the size is where it starts going wrong; the size itself was already fine,
+        // since subList(3, 3) is empty rather than a range check failure.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(4, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(3, 1)));
+        // A count that runs off the end keeps what is there.
+        Assertions.assertEquals(List.of("c"), ProcUtils.applyLimit(rows, new LimitElement(2, 99)));
+    }
+
+    @Test
+    public void testApplyLimitDoesNotTruncateToInt() {
+        List<String> rows = List.of("a", "b", "c");
+        // Both values are declared long, and truncating to int fails in two directions: 2^31 casts
+        // negative, and 2^32 casts to 0, which is a valid index -- so the statement answered with
+        // the first rows of the list.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(4294967296L, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(2147483648L, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(Long.MAX_VALUE, 1)));
+        // And a count that large must not overflow when added to the offset.
+        Assertions.assertEquals(List.of("b", "c"), ProcUtils.applyLimit(rows, new LimitElement(1, Long.MAX_VALUE)));
+    }
+
+    @Test
+    public void testApplyLimitWithoutOne() {
+        List<String> rows = List.of("a", "b");
+        Assertions.assertSame(rows, ProcUtils.applyLimit(rows, null));
+        Assertions.assertSame(rows, ProcUtils.applyLimit(rows, LimitElement.NO_LIMIT));
     }
 
     private static Expr eq(String value) {
         return new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "col"), new StringLiteral(value));
+    }
+
+    private static Map<String, Expr> intFilter(BinaryType op, long value) {
+        return Map.of("buckets",
+                new BinaryPredicate(op, new SlotRef(null, "Buckets"), new IntLiteral(value)));
     }
 
     private static Map<String, Expr> dateFilter(BinaryType op, String value) {

@@ -65,11 +65,11 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
@@ -95,8 +95,8 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_tablet_metadata(GetParam());
@@ -257,7 +257,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 
     int64_t _src_tablet_id = 10000;
@@ -755,8 +755,8 @@ protected:
         CHECK_OK(fs::create_directories(_test_dir));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         // Create a simple tablet metadata for testing
@@ -827,7 +827,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<FileSystem> _shared_fs;
@@ -1109,7 +1109,7 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, does_not_hide_corrupt_source_me
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
     _replication_txn_manager.reset();
-    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
     _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
     const std::string meta_dir = "/remote/source/meta";
@@ -1154,8 +1154,8 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
     }
 
@@ -1308,7 +1308,7 @@ protected:
     std::string _test_dir = kTestDirectory;
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::TabletManager> _tablet_mgr;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 };
@@ -1609,6 +1609,71 @@ TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_
     }
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_segment_with_tde_remains_private) {
+    seed_test_encryption_keys();
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    auto source = make_metadata(53049, 2);
+    auto target = make_metadata(53050, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    auto* segment = rowset->add_segment_metas();
+    const auto filename = file_name(49, "dat");
+    segment->set_filename(filename);
+    segment->set_size(11);
+    segment->set_bundle_file_offset(0);
+    segment->set_synthetic_bundle_file_offset(true);
+
+    std::unordered_map<std::string, size_t> segment_sizes;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), &segment_sizes, nullptr, nullptr,
+                          &source_encryption_metas);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(11, segment_sizes.at(filename));
+    EXPECT_EQ("", source_encryption_metas.at(filename));
+    EXPECT_TRUE((*result)->rowsets(0).segment_metas(0).synthetic_bundle_file_offset());
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_reuses_existing_standalone_file_metadata) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+
+    for (bool target_synthetic : {false, true}) {
+        const int id = target_synthetic ? 53 : 51;
+        const auto filename = file_name(id, "dat");
+        auto source = make_metadata(id, 2);
+        auto target = make_metadata(id + 1, 1);
+        auto* target_rowset = target->add_rowsets();
+        target_rowset->set_id(1);
+        auto* target_segment = target_rowset->add_segment_metas();
+        target_segment->set_filename(filename);
+        target_segment->set_size(23);
+        target_segment->set_encryption_meta("target-encryption-meta");
+        if (target_synthetic) {
+            target_segment->set_bundle_file_offset(0);
+            target_segment->set_synthetic_bundle_file_offset(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+        auto* source_rowset = source->add_rowsets();
+        source_rowset->set_id(1);
+        auto* source_segment = source_rowset->add_segment_metas();
+        source_segment->set_filename(filename);
+        source_segment->set_size(11);
+        source_segment->set_bundle_file_offset(0);
+        source_segment->set_synthetic_bundle_file_offset(true);
+
+        auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
+        ASSERT_OK(result.status());
+        const auto& copied = (*result)->rowsets(0).segment_metas(0);
+        EXPECT_EQ("target-encryption-meta", copied.encryption_meta());
+        EXPECT_EQ(23, copied.size());
+        EXPECT_TRUE(copied.synthetic_bundle_file_offset());
+    }
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, new_source_encrypted_bundle_is_rejected_without_target_tde) {
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = false;
@@ -1861,7 +1926,7 @@ TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
     const std::string bundle_name = file_name(61, "dat");
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
-    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
+    for (const auto& [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);
         segment->set_size(logical_size);
@@ -2069,8 +2134,9 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_simple_tablet_metadata(_src_tablet_id);
@@ -2188,7 +2254,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 
     std::shared_ptr<TabletMetadata> _src_tablet_metadata;
@@ -3215,7 +3281,11 @@ TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_skipped_on_divergent_colu
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(4096);
-    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    segment->set_size(1024);
+    segment->set_bundle_file_offset(0);
+    segment->set_synthetic_bundle_file_offset(true);
     src_meta_v2->set_next_rowset_id(2);
     {
         auto& src_ver = (*src_meta_v2->mutable_idg_meta()->mutable_idgs())[1];
@@ -3274,7 +3344,7 @@ TEST_F(LakeReplicationRemoteStorageTest, copies_complete_bundle_object_through_f
     source->set_version(2);
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
-    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
+    for (const auto& [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);
         segment->set_size(logical_size);
@@ -3508,7 +3578,7 @@ TEST_F(LakeReplicationRemoteStorageTest, rejects_conflicting_bundled_encryption_
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
     const std::string bundle_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000073.dat";
-    for (const auto [offset, encryption_meta] :
+    for (const auto& [offset, encryption_meta] :
          {std::pair<int64_t, const char*>{0, "slice-zero-encryption"}, {11, "slice-one-encryption"}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);

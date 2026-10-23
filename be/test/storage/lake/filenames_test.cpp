@@ -48,6 +48,11 @@ TEST_F(FilenamesTest, extract_uuid_from) {
         std::string uuid = extract_uuid_from(file_name);
         ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
     }
+    {
+        std::string file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst";
+        std::string uuid = extract_uuid_from(file_name);
+        ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
+    }
 
     // Test valid delvec file names
     {
@@ -117,6 +122,13 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         ASSERT_EQ(old_file_name, new_file_name);
     }
 
+    // Test valid sst file input with a txn id
+    {
+        std::string old_file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst";
+        std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
+        ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst", new_file_name);
+    }
+
     // Test valid delvec file input
     {
         std::string old_file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.delvec";
@@ -158,6 +170,18 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
         ASSERT_TRUE(new_file_name.empty());
     }
+}
+
+TEST_F(FilenamesTest, gen_sst_filename) {
+    auto txn_sst = gen_sst_filename(0x1234);
+    ASSERT_TRUE(is_sst(txn_sst));
+    ASSERT_EQ(0x1234, extract_txn_id_prefix(txn_sst).value_or(0));
+    ASSERT_EQ(36, extract_uuid_from(txn_sst).size());
+
+    auto index_sst = gen_sst_filename();
+    ASSERT_TRUE(is_sst(index_sst));
+    ASSERT_FALSE(extract_txn_id_prefix(index_sst).has_value());
+    ASSERT_EQ(36, extract_uuid_from(index_sst).size());
 }
 
 TEST_F(FilenamesTest, gen_vector_index_filename) {

@@ -495,6 +495,11 @@ public class StatisticsCollectJobFactory {
                 return;
             }
         }
+        if (job.isAnalyzeAllTable() && table instanceof OlapTable olapTable && !olapTable.enableStatisticAutoCollect()) {
+            LOG.debug("statistics job skips table with automatic collection disabled: {}.{}",
+                    db.getFullName(), table.getName());
+            return;
+        }
         double healthy = 0;
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
         BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());

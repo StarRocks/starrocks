@@ -1,0 +1,53 @@
+-- name: test_json_subfield_cross_scan_type_hijack
+-- The v2 JSON path rewrite registered its synthesized extended column on the live OlapTable and then
+-- reused it across scans keyed by path name alone, with no type in the key. Two scans of one table
+-- reading the same path at different types therefore shared one column, and the loser's slot kept the
+-- winner's type while still carrying the loser's bytes. Nothing reported an error -- the value was
+-- simply reinterpreted:
+--   * get_json_int over a double-typed subfield returned the double, or the raw IEEE-754 bit pattern
+--     read back as an integer (3.75 came out as 1074659328),
+--   * length() over the hijacked slot returned a NEGATIVE length (-3), which is the direct precursor
+--     to an out-of-bounds Slice read, and
+--   * a LIKE predicate landing on a slot hijacked to BIGINT handed eight integer bytes to
+--     LikePredicate::constant_starts_with_fn, which called memequal on them and took the whole BE
+--     process down with SIGSEGV.
+-- Every query below must agree with the same query under cbo_json_v2_rewrite=false.
+-- The table carries no flat_json property: this is purely the FE rewrite.
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values
+  (1, parse_json('{"v":3.75,"c":"str1"}')),
+  (2, parse_json('{"v":9.25,"c":5}')),
+  (3, parse_json('{"v":1.5,"c":"str3"}'));
+set cbo_json_v2_rewrite = true;
+-- Two scans of one table, one reading $.v as an int and one as a double.
+select a.k, get_json_int(a.j, '$.v') as ai, get_json_double(b.j, '$.v') as bd
+  from t a join t b on a.k = b.k order by a.k;
+-- The string side of the same path must keep a sane length.
+select a.k, length(get_json_string(a.j, '$.v')) as len_s, get_json_int(b.j, '$.v') as bi
+  from t a join t b on a.k = b.k order by a.k;
+-- The same collision reached through the two branches of a UNION ALL rather than a join.
+select src, x from (
+  select 'int' as src, cast(get_json_int(j, '$.v') as string) as x from t
+  union all
+  select 'dbl' as src, cast(get_json_double(j, '$.v') as string) as x from t) u
+  order by src, x;
+-- A LIKE predicate on the string form of $.c while the other scan reads it as an int. This is the
+-- shape that crashed the backend, so reaching the result at all is most of the assertion.
+select a.k from t a join t b on a.k + 1 = b.k
+  where get_json_string(a.j, '$.c') like 'str%' and get_json_int(b.j, '$.c') > 3
+  order by a.k;
+-- Control: with the rewrite off every answer above must come back unchanged.
+set cbo_json_v2_rewrite = false;
+select a.k, get_json_int(a.j, '$.v') as ai, get_json_double(b.j, '$.v') as bd
+  from t a join t b on a.k = b.k order by a.k;
+select a.k, length(get_json_string(a.j, '$.v')) as len_s, get_json_int(b.j, '$.v') as bi
+  from t a join t b on a.k = b.k order by a.k;
+select src, x from (
+  select 'int' as src, cast(get_json_int(j, '$.v') as string) as x from t
+  union all
+  select 'dbl' as src, cast(get_json_double(j, '$.v') as string) as x from t) u
+  order by src, x;
+select a.k from t a join t b on a.k + 1 = b.k
+  where get_json_string(a.j, '$.c') like 'str%' and get_json_int(b.j, '$.c') > 3
+  order by a.k;

@@ -203,6 +203,7 @@ set(STORAGE_FILES
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
+    lake/tablet_merge_admission.cpp
     lake/tablet_merger.cpp
     lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
@@ -226,7 +227,7 @@ set(STORAGE_FILES
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/update_manager.cpp
+    lake/primary_key_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
@@ -264,7 +265,7 @@ set(STORAGE_FILES
     binlog_builder.cpp
     binlog_manager.cpp
     binlog_reader.cpp
-    lake/update_compaction_state.cpp
+    lake/primary_key_compaction_state.cpp
     lake/txn_log_applier.cpp
     persistent_index_compaction_manager.cpp
     persistent_index_load_executor.cpp

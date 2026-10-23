@@ -14,17 +14,11 @@
 
 package com.starrocks.sql;
 
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.connector.ConnectorMetadataRequestContext;
-import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,12 +28,9 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -48,7 +39,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -70,51 +60,31 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
-    private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
-    private volatile Thread testThread;
-
-    private void record(String key) {
-        if (Thread.currentThread() != testThread) {
-            return;
-        }
-        underLock.merge(key, LockHoldDepth.isUnderLock(), Boolean::logicalOr);
-    }
+    private LockProbe probe;
+    // Off by default: the DML tests pin getTable, and a DML target resolve may ask getDb on the way.
+    private boolean probeCreateTarget;
 
     /** Mounted on MetadataMgr, the one door every connector metadata request goes through. */
     private void probeConnectorCalls() {
-        testThread = Thread.currentThread();
+        probe = LockProbe.onCurrentThread();
+        probe.probeExternalGetTable();
+        probe.probeScanMetadata();
         new MockUp<MetadataMgr>() {
             @Mock
-            public Table getTable(Invocation invocation, ConnectContext context, String catalogName, String dbName,
-                                  String tblName) {
-                if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                    record("getTable:" + catalogName + "." + tblName);
+            public Database getDb(Invocation invocation, ConnectContext context, String catalogName, String dbName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    probe.record("getDb:" + catalogName + "." + dbName);
+                }
+                return invocation.proceed(context, catalogName, dbName);
+            }
+
+            @Mock
+            public boolean tableExists(Invocation invocation, ConnectContext context, String catalogName,
+                                       String dbName, String tblName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    probe.record("tableExists:" + catalogName + "." + tblName);
                 }
                 return invocation.proceed(context, catalogName, dbName, tblName);
-            }
-
-            @Mock
-            public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
-                                                 Table table, Map<ColumnRefOperator, Column> columns,
-                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
-                                                 long limit, TvrVersionRange versionRange) {
-                record("getTableStatistics:" + table.getName());
-                return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
-                        versionRange);
-            }
-
-            @Mock
-            public List<String> listPartitionNames(Invocation invocation, String catalogName, String dbName,
-                                                   String tableName, ConnectorMetadataRequestContext context) {
-                record("listPartitionNames:" + tableName);
-                return invocation.proceed(catalogName, dbName, tableName, context);
-            }
-
-            @Mock
-            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table,
-                                                       GetRemoteFilesParams params) {
-                record("getRemoteFiles:" + table.getName());
-                return invocation.proceed(table, params);
             }
         };
     }
@@ -129,22 +99,22 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
      *                          fail here rather than quietly widen the exemption
      */
     private void assertOnlyTheseWentRemoteUnderTheLock(String sql, String... stillUnderTheLock) {
-        // Without this the check below passes on an empty map, i.e. whenever the probe never fired.
-        Assertions.assertFalse(underLock.isEmpty(),
+        // Without this the check below passes on an empty probe, i.e. whenever it never fired.
+        Assertions.assertFalse(probe.isEmpty(),
                 "planning never reached the external catalog, the probe proves nothing, for: " + sql);
         Set<String> expected = Set.of(stillUnderTheLock);
-        underLock.forEach((site, held) -> {
+        for (String site : probe.keys()) {
             if (expected.contains(site)) {
-                return;
+                continue;
             }
-            Assertions.assertFalse(held,
+            Assertions.assertFalse(probe.everUnderLock(site),
                     "an FE metadata lock was held while planning contacted the external catalog, at " + site
-                            + ", for: " + sql + "; full samples: " + underLock);
-        });
+                            + ", for: " + sql + "; full samples: " + probe);
+        }
         for (String site : expected) {
-            Assertions.assertEquals(Boolean.TRUE, underLock.get(site),
+            Assertions.assertTrue(probe.everUnderLock(site),
                     site + " no longer runs under the lock, which is good news: drop it from this test and "
-                            + "from the residual list in the plan doc. Full samples: " + underLock);
+                            + "from the residual list in the plan doc. Full samples: " + probe);
         }
     }
 
@@ -194,11 +164,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
      * one is the source. The lock covers the internal source, and the target's statistics and file lists
      * used to be fetched while it was held.
      *
-     * <p>One residual, pinned rather than asserted away: resolving the target itself still happens under the
-     * lock. {@code MergeIntoAnalyzer} resolves it unconditionally, so unlike a table on the read side it
-     * cannot be pre-resolved before the lock by handing the analyzer the answer -- closing it means changing
-     * the analyzer, and what it costs today is one {@code getTable} against a synchronous connector cache,
-     * not the unbounded statistics-and-file-list traffic this change moves out.
+     * <p>Resolving the target is included: it is an external object, so the lock covers nothing about it,
+     * and the pre-pass resolves it before the lock is taken (see {@code PreResolvedState#WRITE_TARGET}). That was
+     * the last entry point left under the lock for this statement.
      */
     @Test
     public void testAMergeIntoReadingAConnectorPlansWithoutTheLock() throws Exception {
@@ -206,7 +174,139 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
                 + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
         plan(sql);
-        assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0_v2");
+        assertNothingWentRemoteUnderTheLock(sql);
+    }
+
+    /**
+     * The same shape on the INSERT side, which reaches the target through a different analyzer:
+     * {@code INSERT INTO <external> SELECT FROM <internal>} takes the lock for the internal source and used
+     * to resolve the external target inside it.
+     */
+    @Test
+    public void testAnInsertIntoAConnectorTargetPlansWithoutTheLock() throws Exception {
+        probeConnectorCalls();
+        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
+                + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
+        plan(sql);
+        assertNothingWentRemoteUnderTheLock(sql);
+    }
+
+    /**
+     * What the pre-pass is actually worth, stated as a difference rather than asserted in prose: turn it
+     * off and the target's resolve goes straight back inside the lock, while the statistics stay outside it
+     * -- those are two independent mechanisms (the pre-pass, and the snapshot that drops the lock before
+     * optimization) and this pins which one owns which entry point.
+     */
+    @Test
+    public void testWithoutThePrePassTheTargetGoesBackUnderTheLock() throws Exception {
+        boolean saved = Config.enable_experimental_external_table_preparse;
+        Config.enable_experimental_external_table_preparse = false;
+        try {
+            probeConnectorCalls();
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
+                    + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
+            plan(sql);
+            assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0_v2");
+        } finally {
+            Config.enable_experimental_external_table_preparse = saved;
+        }
+    }
+
+    /**
+     * The pre-pass must never be the thing that changes what a statement does. When it cannot resolve
+     * the target -- a database that is not there, a catalog that is not registered -- it leaves the
+     * stash empty and the locked analyzer reports exactly what it always reported, at the same place.
+     * <p>
+     * That fallback is the path every purely internal DML takes as well, so it is not an edge case:
+     * it is what keeps the change to external targets from being a change to all of them.
+     */
+    @Test
+    public void testAnUnresolvableTargetIsStillReportedByTheAnalyzer() {
+        for (String sql : List.of(
+                "DELETE FROM no_such_db.t WHERE pk = 1",
+                "UPDATE no_such_db.t SET v = 1 WHERE pk = 1",
+                "INSERT INTO no_such_db.t SELECT 1",
+                "MERGE INTO no_such_db.t AS a USING test.tprimary AS s ON a.pk = s.pk "
+                        + "WHEN MATCHED THEN UPDATE SET v = s.v1")) {
+            Exception e = Assertions.assertThrows(Exception.class, () -> plan(sql), sql);
+            Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("no_such_db"),
+                    "the analyzer should still name the database it could not find, for " + sql
+                            + ", but said: " + e.getMessage());
+        }
+        // And a catalog that does not exist at all: the name cannot even be normalized, which the
+        // pre-pass has to survive rather than turn into its own error.
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> plan("DELETE FROM no_such_catalog.db.t WHERE pk = 1"));
+        Assertions.assertNotNull(e.getMessage());
+    }
+
+    /**
+     * The target is handed over, not merely warmed: the analyzer must take what the pre-pass resolved rather
+     * than resolve it again off a cache that happens to be warm. Reverting either half -- the pre-pass entry
+     * or the analyzer's {@code take} -- puts a {@code getTable} back inside the lock, which is what the two
+     * tests above would then catch.
+     */
+    @Test
+    public void testThePreResolvedTargetIsConsumedByTheAnalyzer() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
+                + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
+        plan(sql);
+        Assertions.assertTrue(connectContext.getPreResolvedState().isEmpty(),
+                "the pre-resolved target was left behind, so the analyzer resolved its own copy instead");
+    }
+
+    /**
+     * A CTAS into an external catalog locks only the internal tables its SELECT reads, yet
+     * {@code CreateTableAnalyzer} used to ask the target catalog, with that lock held, whether the database
+     * and the table exist -- the {@code tableExists} / {@code getDb} failures of the dynamic sql-test run.
+     */
+    @Test
+    public void testACtasIntoAConnectorTargetAnalyzesWithoutTheLock() throws Exception {
+        probeCreateTarget = true;
+        probeConnectorCalls();
+        String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_before_lock AS SELECT pk, v1 FROM test.tprimary";
+        plan(sql);
+        Assertions.assertTrue(probe.calls("tableExists:iceberg0.ctas_before_lock") > 0,
+                "the CTAS never asked whether its target exists, the probe proves nothing: " + probe);
+        assertNothingWentRemoteUnderTheLock(sql);
+        Assertions.assertTrue(connectContext.getPreResolvedState().isEmpty(),
+                "the pre-resolved create target was left behind, so the analyzer asked the catalog again");
+    }
+
+    /** The reverse of the test above: without the pre-pass both questions go back inside the lock. */
+    @Test
+    public void testWithoutThePrePassTheCtasTargetGoesBackUnderTheLock() throws Exception {
+        boolean saved = Config.enable_experimental_external_table_preparse;
+        Config.enable_experimental_external_table_preparse = false;
+        try {
+            probeCreateTarget = true;
+            probeConnectorCalls();
+            String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_under_lock AS SELECT pk, v1 FROM test.tprimary";
+            plan(sql);
+            assertOnlyTheseWentRemoteUnderTheLock(sql, "getDb:iceberg0.unpartitioned_db",
+                    "tableExists:iceberg0.ctas_under_lock");
+        } finally {
+            Config.enable_experimental_external_table_preparse = saved;
+        }
+    }
+
+    /**
+     * The pre-pass must not change the answer: a target the catalog reports as existing is still rejected,
+     * i.e. the analyzer honors the answer it is handed. The mocked iceberg catalog reports no table as
+     * existing, so the answer is forced here.
+     */
+    @Test
+    public void testACtasOntoAnExistingConnectorTableIsStillRejected() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public boolean tableExists(ConnectContext context, String catalogName, String dbName, String tblName) {
+                return "ctas_exists".equals(tblName);
+            }
+        };
+        String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_exists AS SELECT pk, v1 FROM test.tprimary";
+        Exception e = Assertions.assertThrows(Exception.class, () -> plan(sql));
+        Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("already exists"),
+                "expected the table-exists error, got: " + e.getMessage());
     }
 
     /**
@@ -239,9 +339,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(false);
         }
-        Assertions.assertFalse(underLock.isEmpty(), "planning never reached the external catalog");
-        Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
-                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + underLock);
+        Assertions.assertFalse(probe.isEmpty(), "planning never reached the external catalog");
+        Assertions.assertTrue(probe.anyUnderLock(),
+                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + probe);
     }
 
     /**

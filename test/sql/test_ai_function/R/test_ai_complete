@@ -83,7 +83,7 @@ ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
 -- !result
 EXPLAIN SELECT ai_complete('missing-default-model');
 -- result:
-[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: FE config 'ai_default_chat_model' must be set for prompt-only ai_complete calls\.['"]\)
+[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: FE config 'ai_default_chat_model' must be set for ai_complete calls without an explicit model\.['"]\)
 -- !result
 EXPLAIN SELECT ai_complete('explicit-model', 'plans-without-default-model');
 -- result:

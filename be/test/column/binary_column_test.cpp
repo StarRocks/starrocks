@@ -36,75 +36,6 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
-    // small column
-    auto column = BinaryColumn::create();
-    for (size_t i = 0; i < 10; i++) {
-        column->append(std::to_string(i));
-    }
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    // offset overflow
-    column = BinaryColumn::create();
-    size_t count = 1 << 30;
-    for (size_t i = 0; i < count; i++) {
-        column->append(std::to_string(i));
-    }
-    ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value()->is_large_binary());
-    ASSERT_EQ(ret.value()->size(), count);
-
-    for (size_t i = 0; i < count; i++) {
-        ASSERT_EQ(ret.value()->get(i).get_slice().to_string(), std::to_string(i));
-    }
-
-    // row size overflow
-    // this case will allocate a lot of memory, so it is temporarily disabled
-    count = Column::MAX_CAPACITY_LIMIT + 5;
-    column = BinaryColumn::create();
-    column->reserve(count);
-    for (size_t i = 0; i < count; i++) {
-        column->append("a");
-    }
-    ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(!ret.ok());
-}
-
-// NOLINTNEXTLINE
-GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
-    auto column = BinaryColumn::create();
-    column->append_string("test");
-    ASSERT_FALSE(column->has_large_column());
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    auto large_column = LargeBinaryColumn::create();
-    ASSERT_TRUE(large_column->has_large_column());
-    for (size_t i = 0; i < 10; i++) {
-        large_column->append_string(std::to_string(i));
-    }
-    ret = large_column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(ret.value()->has_large_column());
-    ASSERT_EQ(ret.value()->size(), 10);
-    for (size_t i = 0; i < 10; i++) {
-        ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
-    }
-
-    large_column = LargeBinaryColumn::create();
-    size_t count = 1 << 29;
-    for (size_t i = 0; i < count; i++) {
-        large_column->append("0123456789");
-    }
-    ret = large_column->downgrade();
-    ASSERT_FALSE(ret.ok());
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_get_data) {
     auto column = BinaryColumn::create();
     for (int i = 0; i < 100; i++) {
@@ -769,13 +700,6 @@ PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
     EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
 }
 
-PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("foo"); // 3 bytes
-    col->append_string("bar"); // 3 bytes
-    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
-}
-
 // ---- append(const Column& src, size_t offset, size_t count) ----
 
 // Same type: BinaryColumn -> BinaryColumn
@@ -785,30 +709,6 @@ PARALLEL_TEST(BinaryColumnTest, test_append_same_type_binary) {
     dst->append(*src, 1, 2); // append "bb", "cc"
 
     EXPECT_EQ("['xx', 'bb', 'cc']", dst->debug_string());
-}
-
-// Same type: LargeBinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_same_type_large_binary) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("aa");
-    src->append_string("bb");
-    src->append_string("cc");
-
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("xx");
-    dst->append(*src, 0, 2); // append "aa", "bb"
-
-    EXPECT_EQ("['xx', 'aa', 'bb']", dst->debug_string());
-}
-
-// Cross type: BinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_binary_to_large) {
-    auto src = ColumnTestHelper::build_column<Slice>({"hello", "world", "foo"});
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("bar");
-    dst->append(*src, 1, 2); // append "world", "foo"
-
-    EXPECT_EQ("['bar', 'world', 'foo']", dst->debug_string());
 }
 
 // Append from offset=0 into an empty dst
@@ -829,13 +729,50 @@ PARALLEL_TEST(BinaryColumnTest, test_append_zero_count) {
     EXPECT_EQ("['y']", dst->debug_string());
 }
 
-// Cross type (unsupported): LargeBinaryColumn -> BinaryColumn must be rejected.
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupported) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("hello");
+// Cross type (unsupported): a non-binary column -> BinaryColumn must be rejected.
+PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_non_binary_unsupported) {
+    auto src = Int32Column::create();
+    src->append(1);
     auto dst = BinaryColumn::create();
     dst->append_string("bar");
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
+}
+
+// Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
+//   BinaryColumn::deserialize_and_append_batch_nullable() <- NullableColumn::
+//   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
+//   Aggregator::convert_hash_set_to_chunk().
+//
+// convert_hash_set_to_chunk() sizes `hash_set.results` to the whole chunk size and then fills only
+// the first `read_index` entries. A streaming DISTINCT aggregation that AggregateDistinctStreaming
+// SourceOperator::_output_chunk_from_hash_set() has just reset drains a brand new, empty hash set,
+// so read_index is 0 and every Slice in the buffer is still default constructed -- Slice() points
+// its data at the 1-byte "" literal. Both deserialize_and_append_batch overloads peeked at srcs[0]
+// to size a reserve() before consulting chunk_size, reading 4 bytes off the end of that literal.
+//
+// Deserializing zero rows must not touch srcs[0] at all.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_size) {
+    // Exactly what Aggregator::convert_hash_set_to_chunk() hands down when the hash set is empty:
+    // a full-size buffer of default constructed slices, and a row count of 0.
+    Buffer<Slice> srcs(4096);
+    ASSERT_EQ(0u, srcs[0].size);
+
+    auto column = BinaryColumn::create();
+    column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, column->size());
+
+    auto large_column = BinaryColumn::create();
+    large_column->get_offset().ensure_width_for_value(uint64_t{1} << 32);
+    ASSERT_TRUE(large_column->get_offset().is_large());
+    large_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, large_column->size());
+
+    // The nullable wrapper is the path the crash actually took.
+    auto nullable_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    nullable_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, nullable_column->size());
+    ASSERT_FALSE(nullable_column->has_null());
 }
 
 } // namespace starrocks

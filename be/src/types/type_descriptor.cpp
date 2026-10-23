@@ -53,21 +53,38 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         }
         break;
     }
-    case TTypeNodeType::STRUCT:
+    case TTypeNodeType::STRUCT: {
         type = TYPE_STRUCT;
         ++(*idx);
+        // field_ids / field_physical_names are indexed by child position, so they hold one entry per child:
+        // -1 / "" for a field that has none. They stay empty when no field has one.
+        bool has_field_id = false;
+        bool has_physical_name = false;
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
             if (struct_field.__isset.id && struct_field.id != -1) {
                 field_ids.emplace_back(struct_field.id);
+                has_field_id = true;
+            } else {
+                field_ids.emplace_back(-1);
             }
             if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
                 field_physical_names.emplace_back(struct_field.physical_name);
+                has_physical_name = true;
+            } else {
+                field_physical_names.emplace_back();
             }
+        }
+        if (!has_field_id) {
+            field_ids.clear();
+        }
+        if (!has_physical_name) {
+            field_physical_names.clear();
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
+    }
     case TTypeNodeType::ARRAY:
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 1);

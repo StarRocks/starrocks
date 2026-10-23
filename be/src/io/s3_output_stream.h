@@ -23,9 +23,11 @@ namespace starrocks::io {
 
 class S3OutputStream : public OutputStream {
 public:
+    // When `equal_part_size` is true, every multipart part except the last one is exactly
+    // `min_upload_part_size` bytes, as some S3-compatible stores (e.g. Cloudflare R2) require.
     explicit S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
                             int64_t max_single_part_size, int64_t min_upload_part_size,
-                            std::string content_type = http::ContentType::OCTET_STREAM);
+                            std::string content_type = http::ContentType::OCTET_STREAM, bool equal_part_size = false);
 
     ~S3OutputStream() override = default;
 
@@ -53,7 +55,11 @@ public:
 
 private:
     Status create_multipart_upload();
+    // Uploads the whole buffer as one part.
     Status multipart_upload();
+    // Uploads as many `_min_upload_part_size` parts as the buffer holds, keeping the remainder.
+    Status upload_equal_parts();
+    Status upload_part(const char* data, size_t size);
     Status singlepart_upload();
     Status complete_multipart_upload();
 
@@ -63,6 +69,9 @@ private:
     const int64_t _max_single_part_size;
     const int64_t _min_upload_part_size;
     const Aws::String _content_type;
+    // Cut every non-trailing part at exactly `_min_upload_part_size` bytes. Otherwise a part is cut
+    // whenever the buffer reaches `_min_upload_part_size`, so part sizes vary.
+    const bool _equal_part_size;
     Aws::String _buffer;
     Aws::String _upload_id;
     std::vector<Aws::String> _etags;
