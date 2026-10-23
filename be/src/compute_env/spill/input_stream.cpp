@@ -217,7 +217,9 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
     // concurrent prefetch is not allowed, should call _acquire and _release before and after prefetch
     // to ensure that it doesn't happen.
     if (!_acquire()) {
-        return Status::OK();
+        // Another task is still reading this stream. Do not report success: the buffer can be
+        // drained before that task releases ownership, leaving no task to fetch the next chunk.
+        return Status::Yield();
     }
     DeferOp defer([this]() { _release(); });
 
