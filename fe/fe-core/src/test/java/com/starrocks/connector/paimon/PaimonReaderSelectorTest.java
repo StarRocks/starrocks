@@ -17,12 +17,20 @@ package com.starrocks.connector.paimon;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable.PaimonReaderMode;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.fs.Path;
+import org.apache.paimon.fs.local.LocalFileIO;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.manifest.FileSource;
+import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.schema.Schema;
+import org.apache.paimon.schema.SchemaChange;
+import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FallbackReadFileStoreTable;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.table.FileStoreTableFactory;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.Split;
@@ -30,6 +38,7 @@ import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -61,6 +70,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -89,7 +99,7 @@ class PaimonReaderSelectorTest {
         });
     }
 
-    private static void assertAuto(PaimonReaderSelector selector, DataSplit split,
+    private static void assertAuto(PaimonReaderSelector selector, Split split,
                                    PaimonReaderSelector.Reader reader, PaimonReaderSelector.Reason reason) {
         assertEquals(new PaimonReaderSelector.Decision(reader, reason), selector.select(split, AUTO));
     }
@@ -334,6 +344,99 @@ class PaimonReaderSelectorTest {
         assertThrows(StarRocksConnectorException.class,
                 () -> selector(schema, "v").select(indexed, PaimonReaderMode.JNI));
         assertEquals(JNI, selector(schema, "id").select(indexed, PaimonReaderMode.JNI).reader());
+    }
+
+    private static void write(FileStoreTable table, int id, int value) throws Exception {
+        var builder = table.newBatchWriteBuilder();
+        try (var writer = builder.newWrite(); var commit = builder.newCommit()) {
+            writer.write(GenericRow.of(id, value));
+            commit.commit(writer.prepareCommit());
+        }
+    }
+
+    @Test
+    void unsupportedPerLevelFormatUsesJni(@TempDir java.nio.file.Path dir) throws Exception {
+        var io = LocalFileIO.create();
+        var path = new Path(dir.toUri());
+        new SchemaManager(io, path).createTable(new Schema(
+                schema(1, DataTypes.INT(), true, Map.of()).fields(), List.of(), List.of("id"),
+                Map.of("file.format", "avro", "bucket", "1", "file.format.per.level", "0:avro,1:json"), ""));
+        var table = FileStoreTableFactory.create(io, path);
+        write(table, 1, 7);
+        var read = table.newReadBuilder();
+        var splits = read.newScan().plan().splits();
+        assertEquals(1, splits.size());
+        var selector = new PaimonReaderSelector(table, List.of("id", "v"));
+        assertAuto(selector, splits.get(0), JNI, FILE_FORMAT);
+        assertThrows(StarRocksConnectorException.class, () -> selector.select(splits.get(0), PaimonReaderMode.NATIVE));
+        try (var rows = new RecordReaderIterator<>(read.newRead().createReader(splits.get(0)))) {
+            assertTrue(rows.hasNext());
+            assertEquals(7, rows.next().getInt(1));
+            assertFalse(rows.hasNext());
+        }
+        var supported = selector(schema(1, DataTypes.INT(), true,
+                Map.of("file.format.per.level", "0:avro,1:parquet")), "v");
+        assertAuto(supported, split("avro", false, 1, false), NATIVE, NATIVE_SUPPORTED);
+        var raw = selector(schema(1, DataTypes.INT(), true,
+                Map.of("file.format.per.level", "0:parquet,1:json")), "v");
+        assertAuto(raw, split("parquet", true, 1, false), STARROCKS, RAW_FILES);
+    }
+
+    @Test
+    void mainSplitChecksFallbackInitialization(@TempDir java.nio.file.Path dir) throws Exception {
+        var io = LocalFileIO.create();
+        var path = new Path(dir.toUri());
+        var manager = new SchemaManager(io, path);
+        manager.createTable(new Schema(schema(1, DataTypes.INT(), false, Map.of()).fields(),
+                List.of("id"), List.of(), Map.of("file.format", "avro", "bucket", "-1"), ""));
+        var main = FileStoreTableFactory.create(io, path);
+        write(main, 1, 7);
+        main.createBranch("archive");
+        manager.copyWithBranch("archive").commitChanges(SchemaChange.setOption("file.format", "json"),
+                SchemaChange.setOption("file.compression", "none"));
+        write(main.switchToBranch("archive"), 2, 8);
+        manager.commitChanges(SchemaChange.setOption("scan.fallback-branch", "archive"));
+        var table = FileStoreTableFactory.create(io, path);
+        var read = table.newReadBuilder();
+        var splits = read.newScan().plan().splits();
+        assertEquals(2, splits.size());
+        var selector = new PaimonReaderSelector(table, List.of("id", "v"));
+        var values = new java.util.ArrayList<Integer>();
+        for (var split : splits) {
+            assertAuto(selector, split, JNI, FILE_FORMAT);
+            assertEquals(JNI, selector.select(split, PaimonReaderMode.JNI).reader());
+            assertThrows(StarRocksConnectorException.class, () -> selector.select(split, PaimonReaderMode.NATIVE));
+            try (var rows = new RecordReaderIterator<>(read.newRead().createReader(split))) {
+                while (rows.hasNext()) {
+                    values.add(rows.next().getInt(1));
+                }
+            }
+        }
+        assertEquals(List.of(7, 8), values.stream().sorted().toList());
+    }
+
+    @Test
+    void fallbackInitializationChecksFormatsAndTypesOnce() {
+        for (boolean unsupportedType : List.of(false, true)) {
+            var main = org.mockito.Mockito.mock(FileStoreTable.class);
+            var branch = org.mockito.Mockito.mock(FileStoreTable.class);
+            org.mockito.Mockito.when(main.schema()).thenReturn(schema(1, DataTypes.INT(), false,
+                    Map.of("scan.fallback-branch", "archive")));
+            org.mockito.Mockito.when(branch.schema()).thenReturn(schema(0,
+                    unsupportedType ? DataTypes.TIME() : DataTypes.INT(), false,
+                    unsupportedType ? Map.of() : Map.of("file.format.per.level", "0:avro,1:json")));
+            org.mockito.Mockito.when(main.switchToBranch("archive")).thenReturn(branch);
+            var selector = new PaimonReaderSelector(main, List.of("id"));
+            var mainSplit = FallbackReadFileStoreTable.toFallbackSplit(split("avro", false, 1, false), false);
+            var reason = unsupportedType ? TABLE_SCHEMA : FILE_FORMAT;
+            assertAuto(selector, mainSplit, JNI, reason);
+            assertAuto(selector, mainSplit, JNI, reason);
+            assertEquals(JNI, selector.select(mainSplit, PaimonReaderMode.JNI).reader());
+            assertThrows(StarRocksConnectorException.class, () -> selector.select(mainSplit, PaimonReaderMode.NATIVE));
+            org.mockito.Mockito.verify(main, org.mockito.Mockito.times(1)).switchToBranch("archive");
+            org.mockito.Mockito.verify(branch, org.mockito.Mockito.times(1)).schema();
+            assertAuto(selector, split("parquet", true, 1, false), STARROCKS, RAW_FILES);
+        }
     }
 
     @Test

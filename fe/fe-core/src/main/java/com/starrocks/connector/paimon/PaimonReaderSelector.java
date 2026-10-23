@@ -16,6 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable.PaimonReaderMode;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FallbackReadFileStoreTable.FallbackDataSplit;
 import org.apache.paimon.table.FileStoreTable;
@@ -67,6 +68,7 @@ public final class PaimonReaderSelector {
 
     private final Map<Long, SchemaFields> schemaFields = new HashMap<>();
     private PaimonReaderSelector fallbackSelector;
+    private Reason nativeInitializationReason;
 
     private record SchemaFields(Map<String, DataField> names, Map<Integer, DataField> ids) {
         SchemaFields(TableSchema schema) {
@@ -138,11 +140,13 @@ public final class PaimonReaderSelector {
         if (PaimonSplitUtils.isGlobalIndexSplit(split) && !selector.schema.primaryKeys().isEmpty()) {
             return new Decision(Reader.JNI, Reason.PRIMARY_KEY_INDEXED_SPLIT);
         }
+        
+        Reason initialization = checkNativeInitialization();
+        if (initialization != Reason.NATIVE_SUPPORTED) {
+            return new Decision(Reader.JNI, initialization);
+        }
         if (!selector.supportsFileFormats(data)) {
             return new Decision(Reader.JNI, Reason.FILE_FORMAT);
-        }
-        if (!nativeSchemaSupported(selector.schema)) {
-            return new Decision(Reader.JNI, Reason.TABLE_SCHEMA);
         }
 
         boolean needsMerge = selector.requiresMerge(data);
@@ -253,10 +257,33 @@ public final class PaimonReaderSelector {
 
     // ==================== Paimon native compatibility checks ====================
 
-    private boolean supportsFileFormats(DataSplit split) {
-        if (!CPP_FORMATS.contains(schema.options().getOrDefault("file.format", "parquet"))) {
-            return false;
+    private Reason checkNativeInitialization() {
+        if (nativeInitializationReason != null) {
+            return nativeInitializationReason;
         }
+        // CPP initializes both branch readers even when the split belongs to the main branch.
+        PaimonReaderSelector fallback = getFallbackSelector();
+        if ((!schema.options().getOrDefault("scan.fallback-branch", "").isBlank() && fallback == null) ||
+                (fallback != null && fallback.schema == null)) {
+            return nativeInitializationReason = Reason.UNKNOWN_SCHEMA;
+        }
+        if (!supportsFileFormatOptions(schema) ||
+                (fallback != null && !supportsFileFormatOptions(fallback.schema))) {
+            return nativeInitializationReason = Reason.FILE_FORMAT;
+        }
+        if (!nativeSchemaSupported(schema) || (fallback != null && !nativeSchemaSupported(fallback.schema))) {
+            return nativeInitializationReason = Reason.TABLE_SCHEMA;
+        }
+        return nativeInitializationReason = Reason.NATIVE_SUPPORTED;
+    }
+
+    private static boolean supportsFileFormatOptions(TableSchema schema) {
+        var options = new CoreOptions(schema.options());
+        return CPP_FORMATS.contains(options.fileFormatString()) &&
+                options.fileFormatPerLevel().values().stream().allMatch(CPP_FORMATS::contains);
+    }
+
+    private boolean supportsFileFormats(DataSplit split) {
         for (var file : split.dataFiles()) {
             if (!CPP_FORMATS.contains(file.fileFormat())) {
                 return false;
@@ -496,14 +523,15 @@ public final class PaimonReaderSelector {
         if (!(split instanceof FallbackDataSplit) || !((FallbackDataSplit) split).isFallback()) {
             return this;
         }
-        if (table == null || schema == null) {
+        return getFallbackSelector();
+    }
+
+    private PaimonReaderSelector getFallbackSelector() {
+        String branch = schema == null ? null : schema.options().get("scan.fallback-branch");
+        if (table == null || branch == null || branch.isBlank()) {
             return null;
         }
         if (fallbackSelector == null) {
-            String branch = schema.options().get("scan.fallback-branch");
-            if (branch == null) {
-                return null;
-            }
             fallbackSelector = new PaimonReaderSelector(table.switchToBranch(branch), List.copyOf(fields));
         }
         return fallbackSelector;
