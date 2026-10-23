@@ -5199,7 +5199,9 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(currentSchema.schemaId(), branchReadSchema.schemaId());
         Assertions.assertEquals(currentSchema.findField("k1").fieldId(), branchReadSchema.findField("k1").fieldId());
 
-        QueryStatement tagStmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(
+        // branch-4.1 does not render the parsed time travel clause back to SQL (#72061 is not backported),
+        // so skip the deparse/reparse round trip: it would read the current schema instead of the tag's.
+        QueryStatement tagStmt = (QueryStatement) AnalyzeTestUtil.analyzeWithoutTestView(
                 "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'tag_s1'");
         Assertions.assertEquals(List.of("k1", "k2"), tagStmt.getQueryRelation().getColumnOutputNames());
         TableRelation tagRelation = (TableRelation) ((SelectRelation) tagStmt.getQueryRelation()).getRelation();
