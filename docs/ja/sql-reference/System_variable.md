@@ -679,6 +679,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **説明**: Runtime Filter で Iceberg テーブルの Equality Delete ファイルをスキップできるかどうか。テーブルのパーティション仕様（Partition Spec）が一度も変更されておらず、すべてのパーティションフィールドがクエリで読み取る INT、DATE、または STRING 列の identity 変換である場合に適用されます。この場合、Join がこれらの列に対して生成する Runtime Filter は、除外したパーティションの Equality Delete ファイルをスキップします。`false` に設定すると、すべての Equality Delete ファイルを適用します。たとえば、この変数名を含むエラーでクエリが失敗した場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.2
+
 ### enable_incremental_mv
 
 * **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。

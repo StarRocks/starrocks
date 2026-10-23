@@ -62,7 +62,17 @@ select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where id = 1 
 1	b1	b
 1	c1	c
 -- !result
+set enable_iceberg_eq_delete_runtime_filter_pruning = false;
+-- result:
+-- !result
 function: assert_explain_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
+-- result:
+None
+-- !result
+set enable_iceberg_eq_delete_runtime_filter_pruning = true;
+-- result:
+-- !result
+function: assert_explain_not_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
 -- result:
 None
 -- !result

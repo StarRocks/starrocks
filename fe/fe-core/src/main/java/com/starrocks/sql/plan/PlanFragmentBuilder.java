@@ -2112,6 +2112,7 @@ public class PlanFragmentBuilder {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
                         op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
+                icebergScanNode.setRuntimeFilterPruningColumns(op.getRuntimeFilterPruningColumns());
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
