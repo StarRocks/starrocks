@@ -107,6 +107,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
                         k -> data.getOrDefault(k, Optional.empty())));
             }
+            // Some partitions are still loading. Keep the ones already loaded instead of discarding them all.
+            return getLoadedTableStatistics(keys);
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute tableStatsCache.getAll", e);
             Thread.currentThread().interrupt();
@@ -114,6 +116,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+    }
+
+    /**
+     * The row counts of the partitions whose load has completed. A partition that is still loading, is not cached,
+     * or failed to load is left out: absent means not loaded yet, while Optional.empty() means loaded but without
+     * statistics. Reads through asMap() so that it neither counts as a cache hit or miss nor loads again.
+     */
+    private Map<Long, Optional<Long>> getLoadedTableStatistics(List<TableStatsCacheKey> keys) {
+        Map<TableStatsCacheKey, CompletableFuture<Optional<Long>>> cached = tableStatsCache.asMap();
+        Map<Long, Optional<Long>> loaded = new HashMap<>();
+        for (TableStatsCacheKey key : keys) {
+            CompletableFuture<Optional<Long>> future = cached.get(key);
+            if (future == null || !future.isDone() || future.isCompletedExceptionally()) {
+                continue;
+            }
+            Optional<Long> rowCount = future.getNow(null);
+            if (rowCount != null) {
+                loaded.put(key.getPartitionId(), rowCount);
+            }
+        }
+        return loaded;
     }
 
     /**

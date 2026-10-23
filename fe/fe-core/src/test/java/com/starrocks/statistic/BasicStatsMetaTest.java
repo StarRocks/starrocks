@@ -25,7 +25,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.optimizer.statistics.TableStatsCacheKey;
+import com.starrocks.sql.optimizer.statistics.TableStatsCacheLoader;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Expectations;
 import mockit.Mock;
@@ -43,9 +46,14 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static com.starrocks.persist.gson.GsonUtils.GSON;
 import static com.starrocks.statistic.StatsConstants.INIT_SAMPLE_STATS_JOB;
@@ -175,6 +183,62 @@ public class BasicStatsMetaTest extends PlanTestBase {
         Assertions.assertTrue(healthy < 0.5,
                 "health must be low when most rows sit in stale partitions, but was " + healthy);
         Assertions.assertEquals(0.08, healthy, 0.01);
+    }
+
+    @Test
+    public void testHealthyWithPartitionsStillLoading() {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(new ConnectContext(), "default_catalog", "test");
+        Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), "default_catalog", "test", "stats_health_parts");
+        List<Partition> partitions = Lists.newArrayList(tbl.getPartitions());
+        // 12 partitions of 1000 rows each, all analyzed: the row count in statistics of every one is 1000
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+
+            @Mock
+            public long getRowCount() {
+                return 1000L;
+            }
+        };
+        // The first 10 partitions load at once; the load of the other 2 has not finished yet.
+        Set<Long> loadedAtOnce = partitions.subList(0, 10).stream().map(Partition::getId).collect(Collectors.toSet());
+        new MockUp<TableStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> asyncLoadAll(
+                    Iterable<? extends TableStatsCacheKey> keys, Executor executor) {
+                Map<TableStatsCacheKey, Optional<Long>> rowCounts = new HashMap<>();
+                for (TableStatsCacheKey key : keys) {
+                    if (!loadedAtOnce.contains(key.getPartitionId())) {
+                        return new CompletableFuture<>();
+                    }
+                    rowCounts.put(key, Optional.of(1000L));
+                }
+                return CompletableFuture.completedFuture(rowCounts);
+            }
+        };
+
+        StatisticStorage original = GlobalStateMgr.getCurrentState().getStatisticStorage();
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        GlobalStateMgr.getCurrentState().setStatisticStorage(storage);
+        try {
+            storage.getTableStatistics(tbl.getId(), partitions.subList(0, 10));
+
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), tbl.getId(), List.of(),
+                    StatsConstants.AnalyzeType.FULL,
+                    LocalDateTime.of(2024, 07, 22, 12, 20), Map.of(), 12000);
+            BasicStatsMeta.TableHealthyMetrics metrics = basicStatsMeta.getTableHealthyMetrics(tbl);
+            // Before, the 2 partitions still loading discarded the row counts of all 12: tableRowCountInStatistics
+            // was 1, every partition was unhealthy and the health was 0.
+            Assertions.assertEquals(1 + 10 * 1000L, metrics.tableRowCountInStatistics);
+            Assertions.assertEquals(2, metrics.unhealthyPartitionCount);
+            Assertions.assertEquals(1 - 2000.0 / 12001, basicStatsMeta.getHealthy(), 0.001);
+        } finally {
+            GlobalStateMgr.getCurrentState().setStatisticStorage(original);
+        }
     }
 
     @Test
