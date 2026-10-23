@@ -3807,12 +3807,12 @@ public class StmtExecutor {
                     // this PR only wires the FE planner / executor entry points.
                     IcebergMetadata.IcebergSinkExtra extra = rowDeltaSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                            catalogName, dbName, tableName, commitInfos, rowDeltaSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergDeleteSink deleteSink) {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                            catalogName, dbName, tableName, commitInfos, deleteSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergTableSink) {
                     // This is an INSERT/OVERWRITE operation, use IcebergTableSink
                     IcebergTableSink sink = (IcebergTableSink) dataSink;

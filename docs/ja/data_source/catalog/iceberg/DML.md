@@ -126,7 +126,14 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 ### 構文
 
 ```SQL
+<<<<<<< HEAD
 DELETE FROM <table_name> WHERE <condition>
+=======
+[WITH <with_query> [, ...]]
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+[USING <relation> [, ...]]
+WHERE <condition>
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 ```
 
 ### パラメーター
@@ -136,6 +143,15 @@ DELETE FROM <table_name> WHERE <condition>
   - データベース修飾名（catalog 設定後）：`database_name.table_name`
   - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
 
+<<<<<<< HEAD
+=======
+- `branch_name`: 行を削除するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
+
+- `relation`: `condition` でターゲットテーブルと結合するテーブルまたはサブクエリ。ターゲットの行がそれらの複数の行と一致しても、削除は 1 回だけです。
+
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
+
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`: 削除する行を識別する条件。以下を含めることができます：
   - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
   - 論理演算子：`AND`、`OR`、`NOT`
@@ -221,7 +237,12 @@ UPDATE は Iceberg V2 の **Merge-On-Read** モデルで実装しています。
 ### 構文
 
 ```SQL
+<<<<<<< HEAD
 UPDATE <table_name>
+=======
+[WITH <with_query> [, ...]]
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -235,6 +256,13 @@ WHERE <condition>
 
 - `column_name = expression`: 更新対象列と新しい値。式は同一行の他の列、およびほかのサポートされている任意のスカラー関数を参照できます。
 
+<<<<<<< HEAD
+=======
+- `branch_name`: 更新するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
+
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
+
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
 
 ### 使用上の注意
@@ -327,7 +355,7 @@ MERGE INTO は UPDATE と同じ Iceberg V2 の **Merge-On-Read** コミットパ
 ### 構文
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -342,6 +370,8 @@ ON <merge_condition>
   - 完全修飾名：`catalog_name.database_name.table_name`
   - データベース修飾名（catalog 設定後）：`database_name.table_name`
   - テーブル名のみ（catalog とデータベース設定後）：`table_name`
+
+- `branch_name`: マージ先のブランチ。ブランチからターゲット行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
 - `source_relation`: merge を駆動するデータソース。テーブル、ビュー、または括弧で囲まれたサブクエリを指定できます。`ON` 条件または `WHEN` 句がその列を参照する場合は、エイリアスを付けてください。
 

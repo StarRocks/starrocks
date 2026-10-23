@@ -137,7 +137,14 @@ You can use the DELETE statement to delete data from Iceberg tables based on spe
 ### Syntax
 
 ```SQL
+<<<<<<< HEAD
 DELETE FROM <table_name> WHERE <condition>
+=======
+[WITH <with_query> [, ...]]
+DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+[USING <relation> [, ...]]
+WHERE <condition>
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 ```
 
 ### Parameters
@@ -147,6 +154,15 @@ DELETE FROM <table_name> WHERE <condition>
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
 
+<<<<<<< HEAD
+=======
+- `branch_name`: The branch to delete rows from. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
+
+- `relation`: The tables or sub-queries that `condition` joins the target table with. A target row that matches several of their rows is deleted once.
+
+- `with_query`: Common table expressions that `condition` can reference.
+
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`: The condition to identify which rows to delete. It can include:
   - Comparison operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `<>`
   - Logical operators: `AND`, `OR`, `NOT`
@@ -232,7 +248,12 @@ UPDATE is implemented using the Iceberg V2 **Merge-On-Read** model: each UPDATE 
 ### Syntax
 
 ```SQL
+<<<<<<< HEAD
 UPDATE <table_name>
+=======
+[WITH <with_query> [, ...]]
+UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -246,6 +267,13 @@ WHERE <condition>
 
 - `column_name = expression`: The target column and the new value. The expression may reference other columns in the same row and any supported scalar functions.
 
+<<<<<<< HEAD
+=======
+- `branch_name`: The branch to update. The rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
+
+- `with_query`: Common table expressions that `condition` can reference.
+
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`: The predicate that identifies which rows to update. The supported operators match those of `DELETE` (comparison, logical, `IN`/`NOT IN`, `BETWEEN`, `LIKE`, `IS NULL`/`IS NOT NULL`, and `IN`/`EXISTS` sub-queries).
 
 ### Usage notes
@@ -338,7 +366,7 @@ MERGE INTO reuses the same Iceberg V2 **Merge-On-Read** commit path as UPDATE: m
 ### Syntax
 
 ```SQL
-MERGE INTO <target_table> [ [AS] <target_alias> ]
+MERGE INTO <target_table> [FOR VERSION AS OF <branch_name>] [ [AS] <target_alias> ]
 USING <source_relation> [ [AS] <source_alias> ]
 ON <merge_condition>
 [ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
@@ -353,6 +381,8 @@ ON <merge_condition>
   - Fully qualified name: `catalog_name.database_name.table_name`
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
+
+- `branch_name`: The branch to merge into. The target rows are read from the branch and the change is committed to it. It must be a branch, not a tag.
 
 - `source_relation`: The data source that drives the merge. It can be a table, a view, or a parenthesized sub-query. Give it an alias when the `ON` condition or the `WHEN` clauses reference its columns.
 

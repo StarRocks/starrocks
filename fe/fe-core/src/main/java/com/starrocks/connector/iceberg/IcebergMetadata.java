@@ -2952,6 +2952,40 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (context != null) {
             updateCommitInfo(rowDelta, context);
         }
+<<<<<<< HEAD
+=======
+    }
+
+    private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
+                                       List<TIcebergDataFile> dataFiles,
+                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles, String branch,
+                                       String dbName, String tableName, Object extra,
+                                       ConnectContext context) {
+        long startMs = System.currentTimeMillis();
+        // Splits the delete metrics (total/duration/rows/bytes) by V2 position deletes vs V3
+        // deletion vectors, which have distinct cost and failure profiles.
+        String deleteType = IcebergDeletionVectorSupport.isDeletionVectorDelete(dataFiles)
+                ? ConnectorMetricsMgr.DELETE_TYPE_DELETION_VECTOR
+                : ConnectorMetricsMgr.DELETE_TYPE_POSITION;
+
+        // DELETE operations - use RowDelta
+        RowDelta rowDelta = transaction.newRowDelta();
+        if (branch != null) {
+            rowDelta.toBranch(branch);
+        }
+
+        // Base snapshot id frozen at plan time so conflict detection covers every commit landed between
+        // scan and commit; falling back to currentSnapshot would defeat SERIALIZABLE isolation.
+        Long planBaseSnapshotId = extra instanceof IcebergSinkExtra
+                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
+        if (planBaseSnapshotId == null) {
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                planBaseSnapshotId = head.snapshotId();
+            }
+        }
+        final Long baseSnapshotId = planBaseSnapshotId;
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 
         try {
             // Build the delete files inside commitWithCleanup so a failed lookup deletes the BE-written files.
@@ -2968,8 +3002,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            // Record metrics after successful commit
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
+            // Record metrics after successful commit, from the head of the branch it committed to
+            Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
             if (newSnapshot != null && newSnapshot.summary() != null) {
                 Map<String, String> summary = newSnapshot.summary();
                 long deletedRows = Long.parseLong(
@@ -2992,6 +3026,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    // The head of the branch a row delta commits to: validation must start from an ancestor of it
+    private static Snapshot headSnapshot(org.apache.iceberg.Table nativeTbl, String branch) {
+        return branch == null ? nativeTbl.currentSnapshot() : nativeTbl.snapshot(branch);
     }
 
     private void commitRowDeltaOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -3029,14 +3068,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // Use the base snapshot id frozen at plan time so conflict detection covers every
         // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
-        // target scan whenever existing rows are modified; the currentSnapshot fallback below
-        // covers paths that do not (plain appends, target-less MERGE).
+        // target scan whenever existing rows are modified; the fallback to the head of the target
+        // branch below covers paths that do not (plain appends, target-less MERGE).
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -3101,7 +3140,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (isMerge) {
                 ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
 
-                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                Snapshot newSnapshot = headSnapshot(nativeTbl, branch);
                 if (newSnapshot != null && newSnapshot.summary() != null) {
                     // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
                     // data = data rows written (UPDATE rewrites + INSERTs).
@@ -3126,7 +3165,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
 
-                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
+                Snapshot updateSnapshot = headSnapshot(nativeTbl, branch);
                 if (updateSnapshot != null && updateSnapshot.summary() != null) {
                     long affectedRows = Long.parseLong(updateSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));

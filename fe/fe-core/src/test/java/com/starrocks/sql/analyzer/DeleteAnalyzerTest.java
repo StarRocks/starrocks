@@ -32,6 +32,11 @@ import java.io.File;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.newFolder;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+<<<<<<< HEAD
+=======
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -110,6 +115,18 @@ public class DeleteAnalyzerTest {
         SemanticException exception = assertThrows(SemanticException.class,
                 () -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
         assertTrue(exception.getMessage().contains("Delete for Iceberg table do not support `with` clause"));
+    }
+
+    @Test
+    public void testIcebergDeleteOnBranch() {
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 FOR VERSION AS OF no_such_branch WHERE id = 1";
+        DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        assertEquals("no_such_branch", deleteStmt.getTargetBranch());
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
+        assertTrue(exception.getMessage().contains("Cannot find snapshot with reference name: no_such_branch"));
     }
 
     @Test

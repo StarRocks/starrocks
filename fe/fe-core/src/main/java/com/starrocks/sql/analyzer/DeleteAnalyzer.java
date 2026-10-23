@@ -264,7 +264,20 @@ public class DeleteAnalyzer {
         }
 
         // Create table relation with WHERE predicate
+<<<<<<< HEAD
         TableRelation tableRelation = new TableRelation(tableName);
+=======
+        TableRelation targetRelation = new TableRelation(tableName);
+        AnalyzerUtils.setIcebergWriteBranch(targetRelation, table, deleteStatement.getTargetBranch());
+        Relation relation = targetRelation;
+        if (deleteStatement.getUsingRelations() != null) {
+            for (Relation r : deleteStatement.getUsingRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+            // a row joined to several USING rows must be deleted once, or the delete file counts it twice
+            selectList.setIsDistinct(true);
+        }
+>>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
         SelectRelation selectRelation = new SelectRelation(
                 selectList,
                 tableRelation,
@@ -295,6 +308,10 @@ public class DeleteAnalyzer {
         if (table instanceof IcebergTable) {
             analyzeIcebergTable(deleteStatement, table, session);
             return;
+        }
+
+        if (deleteStatement.getTargetBranch() != null) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
         }
 
         if (table instanceof MaterializedView) {
