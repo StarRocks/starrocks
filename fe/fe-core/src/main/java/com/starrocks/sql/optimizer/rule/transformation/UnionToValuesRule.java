@@ -108,8 +108,9 @@ public class UnionToValuesRule extends TransformationRule {
                     }
 
                     for (List<ScalarOperator> row : rows) {
-                        List<ScalarOperator> l = Lists.newArrayList();
-                        unionOp.getChildOutputColumns().get(i).stream().map(outputRefMapping::get).map(row::get).forEach(l::add);
+                        List<ScalarOperator> l = unionOp.getChildOutputColumns().get(i).stream()
+                                .map(outputRefMapping::get)
+                                .map(row::get).collect(Collectors.toList());
                         newRows.add(l);
                     }
                 }
