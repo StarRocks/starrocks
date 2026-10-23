@@ -1555,7 +1555,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (joinType.isRightOuterJoin() || joinType.isFullOuterJoin()) {
                 preservedColumns.union(rightStatistics.getUsedColumns());
             }
-            joinStats = restoreUnknownPreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
+            joinStats = restorePreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
         }
 
         allJoinPredicate.removeAll(eqOnPredicates);
@@ -1982,12 +1982,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 .anyMatch(ColumnStatistic::isUnknown);
     }
 
-    // Statistics borrowed for an unknown key only price this join. Rows of an outer join's preserved side that find
-    // no match keep their own key values, which need not lie in the lender's domain, so a preserved-side key goes
-    // back to its unknown statistics in the join output.
-    private static Statistics restoreUnknownPreservedKeys(Statistics joinStats, Statistics rawCrossJoinStats,
-                                                          List<BinaryPredicateOperator> eqOnPredicates,
-                                                          ColumnRefSet preservedColumns) {
+    // Unmatched preserved rows retain their original key domain. Restore it after both null-padding passes of a
+    // full outer join, which can otherwise put an input histogram back into the output. The inner-join histogram
+    // does not describe the unmatched rows, and the input histogram does not describe repeated matches, so discard
+    // it for known preserved keys. Statistics borrowed for an unknown key only price this join and remain unknown.
+    private static Statistics restorePreservedKeys(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                   List<BinaryPredicateOperator> eqOnPredicates,
+                                                   ColumnRefSet preservedColumns) {
         Statistics.Builder builder = null;
         for (BinaryPredicateOperator predicate : eqOnPredicates) {
             for (ScalarOperator child : predicate.getChildren()) {
@@ -1995,13 +1996,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     continue;
                 }
                 ColumnStatistic raw = rawCrossJoinStats.getColumnStatistic(column);
-                if (!raw.isUnknown() || joinStats.getColumnStatistic(column).isUnknown()) {
-                    continue;
+                ColumnStatistic current = joinStats.getColumnStatistic(column);
+                ColumnStatistic restored;
+                if (raw.isUnknown()) {
+                    if (current.isUnknown()) {
+                        continue;
+                    }
+                    restored = raw;
+                } else {
+                    restored = buildFrom(current)
+                            .setMinValue(raw.getMinValue())
+                            .setMaxValue(raw.getMaxValue())
+                            .setMinString(raw.getMinString())
+                            .setMaxString(raw.getMaxString())
+                            .setDistinctValuesCount(raw.getDistinctValuesCount())
+                            .setHistogram(null)
+                            .build();
                 }
                 if (builder == null) {
                     builder = Statistics.buildFrom(joinStats);
                 }
-                builder.addColumnStatistic(column, raw);
+                builder.addColumnStatistic(column, restored);
             }
         }
         return builder == null ? joinStats : builder.build();
