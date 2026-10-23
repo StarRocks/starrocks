@@ -804,7 +804,17 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
         }
         if (sessionVariable.isCboPushDownGroupingSet()) {
+<<<<<<< HEAD
             scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
+=======
+            // Iterative, not once: the rule's own output matches its pattern again, so re-applying it
+            // peels one more grouping set and builds the next level of the rollup cascade. The rule's
+            // own guards bound this - it stops when the repeat is down to 3 grouping sets, when a
+            // level would peel no key (CUBE and other non-prefix-nested sets), or at
+            // cbo_push_down_groupingset_cascade_level. A repeat that starts at 3 grouping sets is
+            // pushed down once, and only on an overwhelming statistics estimate.
+            scheduler.rewriteIterative(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
+>>>>>>> b5a51863c51... [Enhancement] Push down a two-key ROLLUP only when statistics show an overwhelming win (#63873)
         }
     }
 

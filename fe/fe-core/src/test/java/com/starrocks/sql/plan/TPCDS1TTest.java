@@ -15,11 +15,21 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Pair;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+
+>>>>>>> b5a51863c51... [Enhancement] Push down a two-key ROLLUP only when statistics show an overwhelming win (#63873)
 public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @BeforeAll
@@ -614,6 +624,119 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
         assertContains(plan, "13:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 31: i_brand_id, 33: i_class_id, 35: i_category_id");
 
+    }
+
+    private String getGroupingSetPushDownPlan(String sql) throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            return getFragmentPlan(sql);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testTwoKeyRollupPushDown() throws Exception {
+        // rollup(a, b) is 3 grouping sets, below the static floor. It is pushed down only when the estimate
+        // says the win is overwhelming: a large input (Q70 store_sales, Q86 web_sales) whose full-key
+        // aggregate is estimated to cut it by orders of magnitude (state/county, category/class).
+        for (String sql : List.of(Q70, Q86)) {
+            String plan = getGroupingSetPushDownPlan(sql);
+            assertContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 1 lines");
+            assertNotContains(plan, "repeat: repeat 2 lines");
+        }
+
+        // Small inputs keep the plan main builds: Q05/Q77 roll up a UNION of per-channel results that are
+        // already aggregated, Q27 a few million joined rows.
+        for (String sql : List.of(Q05, Q77, Q27)) {
+            String plan = getGroupingSetPushDownPlan(sql);
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+        }
+
+        // A large input whose full-key aggregate is estimated to cut it only a few times keeps the plan too.
+        // rollup(ws_item_sk, ws_sold_date_sk): ~720M rows, estimated ~2.3x and really about 1.8x - an
+        // estimate that close to its own error is no sure win.
+        String plan = getGroupingSetPushDownPlan("select ws_item_sk, ws_sold_date_sk, count(*) from web_sales " +
+                "group by rollup(ws_item_sk, ws_sold_date_sk)");
+        assertNotContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "repeat: repeat 2 lines");
+
+        // 4 or more grouping sets keep exactly the static depth (one level per set above 3), whatever the
+        // estimate: Q14-1 and Q18 build 2 levels, Q22 too.
+        for (String sql : List.of(Q14_1, Q18, Q22)) {
+            assertContains(getGroupingSetPushDownPlan(sql), "repeat: repeat 2 lines");
+        }
+
+        // A cascade level of 1 is the rollback to the historical single split, which never touched 3 sets.
+        int previousLevel = connectContext.getSessionVariable().getCboPushDownGroupingSetCascadeLevel();
+        connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(1);
+        try {
+            plan = getGroupingSetPushDownPlan(Q70);
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(previousLevel);
+        }
+    }
+
+    @Test
+    public void testThreeGroupingSetShapes() throws Exception {
+        // low-NDV keys over web_sales, so the full-key aggregate is an overwhelming reduction
+        String select = "select ws_web_site_sk, ws_ship_mode_sk, count(*), sum(ws_quantity), " +
+                "grouping_id(ws_web_site_sk, ws_ship_mode_sk) from web_sales ";
+        // three non-prefix sets whose last set holds every key: the finest set is peeled off like a rollup
+        String plan = getGroupingSetPushDownPlan(select +
+                "group by grouping sets ((ws_web_site_sk), (ws_ship_mode_sk), (ws_web_site_sk, ws_ship_mode_sk))");
+        assertContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "repeat: repeat 1 lines");
+
+        // a set listed twice gets its own grouping id (QueryTransformer), which the cascade carries, so duplicated
+        // sets come out as duplicated rows with the rule on and off alike
+        for (String sets : new String[] {
+                "((ws_web_site_sk), (ws_web_site_sk), (ws_web_site_sk, ws_ship_mode_sk))",
+                "((ws_web_site_sk, ws_ship_mode_sk), (ws_web_site_sk), (ws_web_site_sk, ws_ship_mode_sk))"}) {
+            plan = getGroupingSetPushDownPlan(select + "group by grouping sets " + sets);
+            assertContains(plan, "MultiCastDataSinks");
+        }
+
+        // the same rollup over an input estimated empty is no win: keep the plan
+        plan = getGroupingSetPushDownPlan(select + "where ws_quantity > 1000000 " +
+                "group by rollup(ws_web_site_sk, ws_ship_mode_sk)");
+        assertNotContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "repeat: repeat 2 lines");
+    }
+
+    @Test
+    public void testThreeGroupingSetsOverCte() throws Exception {
+        boolean cteReuse = connectContext.getSessionVariable().isCboCteReuse();
+        double cteReuseRatio = connectContext.getSessionVariable().getCboCTERuseRatio();
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String cte = "with c as (select ws_web_site_sk a, ws_ship_mode_sk b from web_sales) ";
+            // The rollups read a reused CTE whose producer sits above them, outside the repeat's input: the
+            // producer's statistics are registered by then, so the estimate goes through the consumer.
+            Pair<ExecPlan, String> outside = UtFrameUtils.getFragmentPlanWithTrace(connectContext, cte +
+                    "select a, b, count(*) from c group by rollup(a, b) " +
+                    "union all select a, b, count(*) from c group by rollup(a, b)", "Optimizer").second;
+            assertContains(outside.second, "estimated input rows 7.20000376E8");
+            assertNotContains(outside.second, "CTE consumer without statistics");
+            assertContains(outside.first.getExplainString(TExplainLevel.NORMAL), "repeat: repeat 1 lines");
+
+            // The CTE is produced inside the repeat's input, so its producer is estimated before its consumers.
+            Pair<ExecPlan, String> inside = UtFrameUtils.getFragmentPlanWithTrace(connectContext,
+                    "select a, b, count(*) from (" + cte + "select x.a, x.b from c x join c y on x.a = y.a) t " +
+                            "group by rollup(a, b)", "Optimizer").second;
+            assertContains(inside.second, "PushDownAggregateGroupingSetsRule: 3 grouping sets, estimated input rows");
+            assertNotContains(inside.second, "CTE consumer without statistics");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setCboCteReuse(cteReuse);
+            connectContext.getSessionVariable().setCboCTERuseRatio(cteReuseRatio);
+        }
     }
 
     @Test
