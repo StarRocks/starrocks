@@ -59,12 +59,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(10)
-public class DeltaLakePrefetchSourceTest {
+class DeltaLakePrefetchSourceTest {
     private ExecutorService executor;
     private ConnectContext context;
 
     @BeforeEach
-    public void setup() {
+    void setup() {
         executor = Executors.newSingleThreadExecutor();
         context = new ConnectContext();
         context.setThreadLocalInfo();
@@ -73,7 +73,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @AfterEach
-    public void cleanup() throws Exception {
+    void cleanup() throws Exception {
         executor.shutdownNow();
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         Tracers.close();
@@ -109,7 +109,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testBoundedReadAheadAndEarlyClose() throws Exception {
+    void testBoundedReadAheadAndEarlyClose() throws Exception {
         Files files = new Files(1000);
         DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor, 2, 100000);
         assertEquals(0, files.reads.get());
@@ -126,7 +126,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testByteBudgetStopsAfterOneOversizedFile() throws Exception {
+    void testByteBudgetStopsAfterOneOversizedFile() throws Exception {
         Files files = new Files(1000);
         try (DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor, 256, 1)) {
             source.getOutput();
@@ -136,7 +136,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testOrderedDeliveryAndSingleCloseAtEof() throws Exception {
+    void testOrderedDeliveryAndSingleCloseAtEof() {
         Files files = new Files(11);
         try (DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor, 2, 100000)) {
             List<RemoteFileInfo> result = source.getAllOutputs();
@@ -152,7 +152,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testEmptySource() {
+    void testEmptySource() {
         Files files = new Files(0);
         try (DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor)) {
             assertFalse(source.hasMoreOutput());
@@ -161,7 +161,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testReaderFailureReachesConsumer() {
+    void testReaderFailureReachesConsumer() {
         RuntimeException failure = new IllegalStateException("bad metadata");
         Files files = new Files(1) {
             @Override
@@ -177,7 +177,23 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testCancelQueuedTaskBeforeReaderStarts() throws Exception {
+    void testErrorClosesReaderAndReachesConsumer() {
+        AssertionError failure = new AssertionError("metadata reader failed");
+        Files files = new Files(1) {
+            @Override
+            public boolean hasMoreOutput() {
+                throw failure;
+            }
+        };
+        try (DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor)) {
+            StarRocksConnectorException error = assertThrows(StarRocksConnectorException.class, source::hasMoreOutput);
+            assertSame(failure, error.getCause());
+        }
+        assertEquals(1, files.closes.get());
+    }
+
+    @Test
+    void testCancelQueuedTaskBeforeReaderStarts() throws Exception {
         Files files = new Files(1);
         AtomicReference<Runnable> queued = new AtomicReference<>();
         CountDownLatch scheduled = new CountDownLatch(1);
@@ -196,7 +212,7 @@ public class DeltaLakePrefetchSourceTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    public void testCancelBlockedReaderClosesWithoutWaitingForIo(boolean reject) throws Exception {
+    void testCancelBlockedReaderClosesWithoutWaitingForIo(boolean reject) throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         Files files = new Files(1) {
             @Override
@@ -223,7 +239,52 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testRejectedPrefetchFallsBackAndRestoresContext() {
+    void testCancelReturnsBeforeUninterruptibleIoAndLateTimerMerge() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Files files = new Files(1) {
+            @Override
+            public boolean hasMoreOutput() {
+                entered.countDown();
+                boolean interrupted = false;
+                try {
+                    while (true) {
+                        try {
+                            release.await();
+                            return false;
+                        } catch (InterruptedException e) {
+                            // Model an SDK call that cannot return until its underlying I/O completes.
+                            interrupted = true;
+                        }
+                    }
+                } finally {
+                    if (interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        };
+        DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(files, executor);
+        CompletableFuture<Boolean> consumer = CompletableFuture.supplyAsync(source::hasMoreOutput);
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            source.close();
+            assertFalse(consumer.get(5, TimeUnit.SECONDS));
+            assertEquals(0, files.closes.get());
+            // Profile finalization is allowed before the worker can close and merge its timer.
+            Tracers.printScopeTimer();
+            release.countDown();
+            executor.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            assertEquals(1, files.closes.get());
+            assertTrue(Tracers.printScopeTimer().contains("DELTA_LAKE.prefetchRead"));
+        } finally {
+            release.countDown();
+            source.close();
+        }
+    }
+
+    @Test
+    void testRejectedPrefetchFallsBackAndRestoresContext() {
         Files files = new Files(3) {
             @Override
             public RemoteFileInfo getOutput() {
@@ -243,7 +304,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testSlowConsumerDoesNotOccupySharedWorker() throws Exception {
+    void testSlowConsumerDoesNotOccupySharedWorker() throws Exception {
         try (DeltaLakePrefetchSource slow = new DeltaLakePrefetchSource(new Files(10000), executor, 2, 100000);
                 DeltaLakePrefetchSource fast = new DeltaLakePrefetchSource(new Files(9), executor, 2, 100000)) {
             slow.getOutput();
@@ -252,7 +313,7 @@ public class DeltaLakePrefetchSourceTest {
         }
     }
     @Test
-    public void testWorkerContextAndTraceAreRestored() throws Exception {
+    void testWorkerContextAndTraceAreRestored() throws Exception {
         Tracers previous = executor.submit(Tracers::get).get();
         Files files = new Files(1) {
             @Override
@@ -272,7 +333,7 @@ public class DeltaLakePrefetchSourceTest {
 
 
     @Test
-    public void testConsumerInterruptionCancelsQueuedRead() throws Exception {
+    void testConsumerInterruptionCancelsQueuedRead() throws Exception {
         Files files = new Files(1);
         CountDownLatch scheduled = new CountDownLatch(1);
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -301,7 +362,7 @@ public class DeltaLakePrefetchSourceTest {
     }
 
     @Test
-    public void testMetadataOptInReadsRealDeltaLog(@TempDir Path tablePath) throws Exception {
+    void testMetadataOptInReadsRealDeltaLog(@TempDir Path tablePath) throws Exception {
         Path logDir = java.nio.file.Files.createDirectories(tablePath.resolve("_delta_log"));
         String schema = "{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"integer\","
                 + "\"nullable\":true,\"metadata\":{}}]}";

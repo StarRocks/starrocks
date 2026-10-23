@@ -42,7 +42,7 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 public final class DeltaLakePrefetchSource implements RemoteFileInfoSource {
     private static final Logger LOG = LogManager.getLogger(DeltaLakePrefetchSource.class);
     private static final int DEFAULT_BATCH_FILES = 256;
-    private static final long DEFAULT_BATCH_BYTES = 1024 * 1024;
+    private static final long DEFAULT_BATCH_BYTES = 1024L * 1024;
 
     private record Batch(List<RemoteFileInfo> files, boolean finished) { }
 
@@ -88,28 +88,30 @@ public final class DeltaLakePrefetchSource implements RemoteFileInfoSource {
         Tracers previous = Tracers.get();
         Tracers worker = ownerTracers.fork(false);
         Tracers.set(worker);
-        boolean terminal = false;
+        boolean terminal = true;
         readerLock.lock();
-        try (ConnectContext.ScopeGuard scope = context == null ? null : context.bindScope();
-                Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.prefetchRead")) {
-            List<RemoteFileInfo> files = new ArrayList<>();
-            long bytes = 0;
-            while (!closed && files.size() < batchFiles && bytes < batchBytes) {
-                if (!delegate.hasMoreOutput()) {
-                    terminal = true;
-                    return new Batch(files, true);
+        try {
+            Batch batch;
+            try (ConnectContext.ScopeGuard scope = context == null ? null : context.bindScope();
+                    Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.prefetchRead")) {
+                List<RemoteFileInfo> files = new ArrayList<>();
+                long bytes = 0;
+                while (!closed && files.size() < batchFiles && bytes < batchBytes) {
+                    if (!delegate.hasMoreOutput()) {
+                        return new Batch(files, true);
+                    }
+                    if (closed) {
+                        break;
+                    }
+                    RemoteFileInfo file = delegate.getOutput();
+                    files.add(file);
+                    bytes += estimateBytes((DeltaRemoteFileInfo) file);
                 }
-                if (closed) {
-                    break;
-                }
-                RemoteFileInfo file = delegate.getOutput();
-                files.add(file);
-                bytes += estimateBytes((DeltaRemoteFileInfo) file);
+                batch = new Batch(files, closed);
             }
-            return new Batch(files, closed);
-        } catch (RuntimeException | Error e) {
-            terminal = true;
-            throw e;
+            // Mark success only after closing the scopes; any failure still closes the reader below.
+            terminal = false;
+            return batch;
         } finally {
             readerLock.unlock();
             // Check AFTER unlocking: either close() acquired the idle reader, or we observe its request here.
