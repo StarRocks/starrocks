@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
-import pytest
+from sqlalchemy.testing import expect_raises_message, fixtures
 
 from starrocks.alembic.compare import (
     compare_starrocks_column_agg_type,
@@ -26,104 +25,76 @@ from starrocks.common.params import ColumnAggInfoKey, DialectName
 from starrocks.common.types import ColumnAggType
 
 
-logger = logging.getLogger(__name__)
+def _starrocks_autogen_context() -> Mock:
+    autogen_context = Mock(spec=AutogenContext)
+    autogen_context.dialect = Mock()
+    autogen_context.dialect.name = DialectName
+    return autogen_context
 
 
-class TestAutogenerateColumnsAggType:
-    def test_column_compare_agg_type_logs_options(self, caplog):
-        autogen_context = Mock(spec=AutogenContext)
-        autogen_context.dialect = Mock()
-        autogen_context.dialect.name = DialectName
+def _column_with_agg_type(agg_type: ColumnAggType) -> Mock:
+    return Mock(dialect_options={DialectName: {ColumnAggInfoKey.AGG_TYPE: agg_type}})
+
+
+class CompareColumnAggTypeTest(fixtures.TestBase):
+    def test_same_agg_type_is_silent(self, caplog):
         caplog.set_level("WARNING")
-
-        # --- Test Case 1: Columns match ---
-        conn_col = Mock(
-            name="val1",
-            dialect_options={
-                DialectName: {
-                    ColumnAggInfoKey.AGG_TYPE: ColumnAggType.SUM
-                }
-            }
+        compare_starrocks_column_agg_type(
+            _starrocks_autogen_context(),
+            None,
+            "test_schema",
+            "t1",
+            "val1",
+            _column_with_agg_type(ColumnAggType.SUM),
+            _column_with_agg_type(ColumnAggType.SUM),
         )
-        meta_col = Mock(
-            name="val1",
-            dialect_options={
-                DialectName: {
-                    ColumnAggInfoKey.AGG_TYPE: ColumnAggType.SUM
-                }
-            }
-        )
-
-        caplog.clear()
-        compare_starrocks_column_agg_type(autogen_context, None, "test_schema", "t1", "val1", conn_col, meta_col)
         assert not caplog.records
 
-        # --- Test Case 2: Columns differ ---
-        meta_col_diff = Mock(
-            name="val1",
-            dialect_options={
-                DialectName: {
-                    ColumnAggInfoKey.AGG_TYPE: ColumnAggType.REPLACE
-                }
-            }
-        )
+    def test_changed_agg_type_raises(self):
+        with expect_raises_message(
+            NotImplementedError, "StarRocks does not support changing the aggregation type of a column"
+        ):
+            compare_starrocks_column_agg_type(
+                _starrocks_autogen_context(),
+                None,
+                "test_schema",
+                "t1",
+                "val1",
+                _column_with_agg_type(ColumnAggType.SUM),
+                _column_with_agg_type(ColumnAggType.REPLACE),
+            )
 
-        caplog.clear()
-        with pytest.raises(NotImplementedError) as exc_info:
-            compare_starrocks_column_agg_type(autogen_context, None, "test_schema", "t1", "val1", conn_col, meta_col_diff)
-        logger.debug(f"exc_info.value: {exc_info.value}")
-        assert (
-            "StarRocks does not support changing the aggregation type of a column"
-            in str(exc_info.value)
-        )
 
-class TestAutogenerateColumnsAutoIncrement:
-    def setup_method(self) -> None:
-        self.autogen_context = Mock(spec=AutogenContext)
-        self.autogen_context.dialect = Mock()
-        self.autogen_context.dialect.name = DialectName
-
-    def teardown_method(self) -> None:
-        self.autogen_context = None
+class CompareColumnAutoIncrementTest(fixtures.TestBase):
+    def setup_test(self):
+        self.autogen_context = _starrocks_autogen_context()
 
     def test_autoincrement_same_noop(self):
-
-        # conn and meta both True
-        conn_col = Mock(autoincrement=True)
-        meta_col = Mock(autoincrement=True)
-
-        # should not raise
-        compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col, meta_col)
-
-        # conn and meta both False
-        conn_col2 = Mock(autoincrement=False)
-        meta_col2 = Mock(autoincrement=False)
-
-        # should not raise
-        compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col2, meta_col2)
+        for autoincrement in (True, False):
+            compare_starrocks_column_autoincrement(
+                self.autogen_context,
+                None,
+                "sch",
+                "t1",
+                "id",
+                Mock(autoincrement=autoincrement),
+                Mock(autoincrement=autoincrement),
+            )
 
     def test_autoincrement_diff_warns(self, caplog):
-
         caplog.set_level("WARNING")
-
-        # conn True -> meta False
-        conn_col = Mock(autoincrement=True)
-        meta_col = Mock(autoincrement=False)
-
-        caplog.clear()
-        compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col, meta_col)
-        assert any(
-            "Detected AUTO_INCREMENT change" in str(r.getMessage()) and r.levelname == "WARNING"
-            for r in caplog.records
-        )
-
-        # conn False -> meta True
-        conn_col2 = Mock(autoincrement=False)
-        meta_col2 = Mock(autoincrement=True)
-
-        caplog.clear()
-        compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col2, meta_col2)
-        assert any(
-            "Detected AUTO_INCREMENT change" in str(r.getMessage()) and r.levelname == "WARNING"
-            for r in caplog.records
-        )
+        for conn_autoincrement, meta_autoincrement in ((True, False), (False, True)):
+            caplog.clear()
+            compare_starrocks_column_autoincrement(
+                self.autogen_context,
+                None,
+                "sch",
+                "t1",
+                "id",
+                Mock(autoincrement=conn_autoincrement),
+                Mock(autoincrement=meta_autoincrement),
+            )
+            assert any(
+                "Detected AUTO_INCREMENT change" in r.getMessage() and r.levelname == "WARNING"
+                for r in caplog.records
+            )
