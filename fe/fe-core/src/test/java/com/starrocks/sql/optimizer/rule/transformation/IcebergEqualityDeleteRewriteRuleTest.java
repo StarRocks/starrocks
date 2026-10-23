@@ -177,7 +177,6 @@ public class IcebergEqualityDeleteRewriteRuleTest {
                 table, Set.of(IcebergDeleteSchema.of(List.of(2), 0), IcebergDeleteSchema.of(byId, 1)), byId));
     }
 
-<<<<<<< HEAD
     // With deletes of more than one spec, a table that has a real $partition_key column cannot tell the specs
     // apart, so the rewrite must fail instead of applying partitioned deletes to other specs.
     @Test
@@ -252,7 +251,8 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         for (OptExpression child : expr.getInputs()) {
             collectEqDeleteScans(child, out);
         }
-=======
+    }
+
     private static final Schema PRUNING_SCHEMA = new Schema(
             Types.NestedField.optional(1, "id", Types.IntegerType.get()),
             Types.NestedField.optional(2, "p", Types.IntegerType.get()),
@@ -317,7 +317,6 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         // a real column named like an extended column would be matched as that column
         Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS,
                 PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity(PARTITION_KEY).build()));
->>>>>>> 92b8554636d... [Enhancement][RB-225] Skip Iceberg equality delete files of partitions that runtime filters reject (#66715)
     }
 
     private static void assertPartitionKeyEquality(ScalarOperator op, ColumnRefOperator left, ColumnRefOperator right) {

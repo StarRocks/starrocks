@@ -77,14 +77,7 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
-<<<<<<< HEAD
-=======
     private Set<String> runtimeFilterPruningColumns = Set.of();
-    // Materialized-planning outputs for the V3 deletion-vector delete sink; null unless this is
-    // the DELETE target's DATA scan node on a format-version >= 3 table.
-    private Map<String, List<DeleteFile>> previousDeletesByRef = null;
-    private Map<String, DataFile> plannedDataFiles = null;
->>>>>>> 92b8554636d... [Enhancement][RB-225] Skip Iceberg equality delete files of partitions that runtime filters reject (#66715)
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
 
