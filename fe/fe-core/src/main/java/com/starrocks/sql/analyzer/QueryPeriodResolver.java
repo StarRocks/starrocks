@@ -31,11 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.type.VarcharType;
->>>>>>> b68eb3f16aa... [BugFix][RB-225] Fix Iceberg branch read schema, time travel before an equality key rename, DVs on ORC, and _pos predicates (#66717)
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SnapshotRef;

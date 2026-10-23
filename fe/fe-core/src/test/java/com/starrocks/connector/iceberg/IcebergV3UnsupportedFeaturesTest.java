@@ -134,7 +134,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 false,
                 false);
 
-<<<<<<< HEAD
         // toScanRanges wraps exceptions: "build scan range failed" with cause containing DV message
         StarRocksConnectorException ex = Assertions.assertThrows(
                 StarRocksConnectorException.class,
@@ -144,94 +143,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 (ex.getCause() != null && ex.getCause().getMessage().contains("Deletion Vectors are not supported"));
         Assertions.assertTrue(hasDvMessage,
                 "Expected DV error message, got: " + ex.getMessage());
-=======
-        List<TScanRangeLocations> ranges = source.toScanRanges(task);
-        return ranges.get(0).getScan_range().getHdfs_scan_range();
-    }
-
-    @Test
-    public void testDeletionVectorRidesInDeleteFiles() throws Exception {
-        // data file is parquet, DV references it.
-        DataFile dataFile = mock(DataFile.class);
-        when(dataFile.location()).thenReturn("/path/to/data-a.parquet");
-        when(dataFile.format()).thenReturn(FileFormat.PARQUET);
-
-        DeleteFile dv = newDv("/path/to/data-a.parquet", "/path/to/dv.puffin", 4L, 38L, 6L, 64L);
-
-        THdfsScanRange range = IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(dv));
-
-        // The DV must travel as a delete file so every "are there delete files" check sees it.
-        Assertions.assertTrue(range.isSetDelete_files());
-        Assertions.assertEquals(1, range.getDelete_files().size());
-
-        TIcebergDeleteFile df = range.getDelete_files().get(0);
-        Assertions.assertEquals("/path/to/dv.puffin", df.getFull_path());
-        Assertions.assertEquals(TIcebergFileContent.POSITION_DELETES, df.getFile_content());
-        // length is the whole Puffin file, which is what cache select warms.
-        Assertions.assertEquals(64L, df.getLength());
-
-        Assertions.assertTrue(df.isSetDeletion_vector());
-        TIcebergDeletionVectorBlob blob = df.getDeletion_vector();
-        Assertions.assertEquals(4L, blob.getContent_offset());
-        Assertions.assertEquals(38L, blob.getContent_size_in_bytes());
-        Assertions.assertEquals(6L, blob.getRecord_count());
-        Assertions.assertEquals("/path/to/data-a.parquet", blob.getReferenced_data_file());
-    }
-
-    @Test
-    public void testPositionDeleteCarriesNoDeletionVector() throws Exception {
-        DataFile dataFile = mock(DataFile.class);
-        when(dataFile.location()).thenReturn("/d.parquet");
-        when(dataFile.format()).thenReturn(FileFormat.PARQUET);
-
-        DeleteFile posDelete = mock(DeleteFile.class);
-        when(posDelete.content()).thenReturn(FileContent.POSITION_DELETES);
-        when(posDelete.format()).thenReturn(FileFormat.PARQUET);
-        when(posDelete.path()).thenReturn("/pos-delete.parquet");
-        when(posDelete.fileSizeInBytes()).thenReturn(128L);
-
-        THdfsScanRange range = IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(posDelete));
-
-        TIcebergDeleteFile df = range.getDelete_files().get(0);
-        Assertions.assertFalse(df.isSetDeletion_vector(), "position deletes must not carry a DV blob");
-    }
-
-    @Test
-    public void testDeletionVectorMissingFieldFailFast() {
-        DataFile dataFile = mock(DataFile.class);
-        when(dataFile.location()).thenReturn("/d.parquet");
-        when(dataFile.format()).thenReturn(FileFormat.PARQUET);
-        DeleteFile dv = newDv("/d.parquet", "/x.puffin", null, 38L, 6L, 64L); // null offset
-        Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(dv)));
-    }
-
-    @Test
-    public void testDeletionVectorOnOrcDataFile() throws Exception {
-        // the ORC scanner applies deletion vectors like the parquet one, so the DV is sent as for parquet
-        DataFile dataFile = mock(DataFile.class);
-        when(dataFile.location()).thenReturn("/d.orc");
-        when(dataFile.format()).thenReturn(FileFormat.ORC);
-        DeleteFile dv = newDv("/d.orc", "/x.puffin", 4L, 38L, 6L, 64L);
-        THdfsScanRange range = IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(dv));
-        Assertions.assertEquals(1, range.getDelete_files().size());
-        Assertions.assertTrue(range.getDelete_files().get(0).isSetDeletion_vector());
-        Assertions.assertEquals(4L, range.getDelete_files().get(0).getDeletion_vector().getContent_offset());
-    }
-
-    // helper: construct a DV mock; offset accepts null (to test missing-field path)
-    private static DeleteFile newDv(String ref, String path, Long offset, Long size, long rc, long fsize) {
-        DeleteFile dv = mock(DeleteFile.class);
-        when(dv.content()).thenReturn(FileContent.POSITION_DELETES);
-        when(dv.format()).thenReturn(FileFormat.PUFFIN);
-        when(dv.referencedDataFile()).thenReturn(ref);
-        when(dv.path()).thenReturn(path);
-        when(dv.contentOffset()).thenReturn(offset);
-        when(dv.contentSizeInBytes()).thenReturn(size);
-        when(dv.recordCount()).thenReturn(rc);
-        when(dv.fileSizeInBytes()).thenReturn(fsize);
-        return dv;
->>>>>>> b68eb3f16aa... [BugFix][RB-225] Fix Iceberg branch read schema, time travel before an equality key rename, DVs on ORC, and _pos predicates (#66717)
     }
 
     @Test

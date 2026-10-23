@@ -14,19 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-=======
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
->>>>>>> b68eb3f16aa... [BugFix][RB-225] Fix Iceberg branch read schema, time travel before an equality key rename, DVs on ORC, and _pos predicates (#66717)
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
