@@ -51,6 +51,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
@@ -307,7 +308,8 @@ public class CoordinatorPreprocessor {
     private void validateExecutionDAG() throws StarRocksPlannerException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             DataSink sink = execFragment.getPlanFragment().getSink();
-            if (sink instanceof ResultSink && execFragment.getInstances().size() > 1) {
+            if (sink instanceof ResultSink && execFragment.getInstances().size() > 1
+                    && ((ResultSink) sink).getSinkType() != TResultSinkType.ARROW_FLIGHT_PROTOCAL) {
                 throw new StarRocksPlannerException("This sql plan has multi result sinks", ErrorType.INTERNAL_ERROR);
             }
 
