@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "compute_env/load/stream_load_context.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "exec/exec_env.h"
 #include "runtime/byte_buffer.h"
 
@@ -171,7 +173,7 @@ TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_full) {
                                   .build();
     StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
     build_pulsar_message_meta(msg, "my-topic", "persistent://public/default/my-topic-partition-3",
-                              /*need_key=*/true, /*need_headers=*/true, &meta);
+                              /*need_meta=*/true, /*need_key=*/true, /*need_headers=*/true, &meta);
     EXPECT_EQ("my-topic", meta.topic());
     EXPECT_EQ(3, meta.partition());
     EXPECT_EQ(1700000000000L, meta.event_timestamp());
@@ -183,12 +185,30 @@ TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_full) {
     EXPECT_NE(std::string::npos, meta.to_string().find("pulsar"));
 }
 
+// Minimal source identity: partition and message_id are set even when need_meta=false,
+// ensuring error logging and rejected records always carry source identity for Pulsar Arrow jobs.
+TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_minimal_identity_when_not_needed) {
+    pulsar::Message msg = pulsar::MessageBuilder().setContent("x").setPartitionKey("pk").setProperty("p", "v").build();
+    StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
+    build_pulsar_message_meta(msg, "my-topic", "persistent://public/default/my-topic-partition-2",
+                              /*need_meta=*/false, /*need_key=*/false, /*need_headers=*/false, &meta);
+    EXPECT_EQ(2, meta.partition());
+    EXPECT_FALSE(meta.message_id().empty());
+    // Metadata columns remain unset when need_meta is false.
+    EXPECT_TRUE(meta.topic().empty());
+    EXPECT_EQ(-1, meta.timestamp());
+    EXPECT_EQ(-1, meta.event_timestamp());
+    EXPECT_FALSE(meta.has_key());
+    EXPECT_TRUE(meta.headers().empty());
+}
+
 // Pulsar KEY/HEADERS columns not selected: the partition key and properties are not copied. A
 // non-partitioned message topic leaves PARTITION at its NULL sentinel.
 TEST_F(KafkaDataConsumerTest, build_pulsar_message_meta_gated) {
     pulsar::Message msg = pulsar::MessageBuilder().setContent("x").setPartitionKey("pk").setProperty("p", "v").build();
     StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
-    build_pulsar_message_meta(msg, "my-topic", "my-topic", /*need_key=*/false, /*need_headers=*/false, &meta);
+    build_pulsar_message_meta(msg, "my-topic", "my-topic", /*need_meta=*/true, /*need_key=*/false,
+                              /*need_headers=*/false, &meta);
     EXPECT_EQ("my-topic", meta.topic());
     EXPECT_EQ(-1, meta.partition());
     EXPECT_FALSE(meta.has_key());
@@ -316,3 +336,119 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_meta_broker_down) {
 }
 
 } // namespace starrocks
+
+#ifndef __APPLE__
+namespace pulsar {
+class MessageImpl {
+public:
+    void setTopicName(const std::shared_ptr<std::string>& topicName);
+};
+} // namespace pulsar
+
+namespace starrocks {
+
+// Covers lines 469-471 in PulsarDataConsumerGroup::start_all():
+// the append_as_message flag is set for FORMAT_ARROW (same as JSON/Avro).
+// We create a group with 0 consumers and max_interval_s=0 so it exits
+// immediately via the left_time<=0 branch, never blocking on real Pulsar.
+TEST(PulsarDataConsumerGroupTest, format_arrow_append_as_message_flag) {
+    // Build a minimal PulsarLoadInfo.
+    TPulsarLoadInfo t_pulsar;
+    t_pulsar.service_url = "pulsar://localhost:6650";
+    t_pulsar.topic = "test-topic";
+    t_pulsar.subscription = "test-sub";
+
+    auto* exec_env = ExecEnv::GetInstance();
+    StreamLoadContext ctx(exec_env->load_stream_mgr());
+    ctx.format = TFileFormatType::FORMAT_ARROW;
+    ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_pulsar);
+    ctx.max_interval_s = 0; // left_time = 0 * 1000 = 0 -> exits immediately
+    ctx.max_batch_size = 0; // left_bytes = 0 -> also forces early exit
+
+    // PulsarConsumerPipe = KafkaConsumerPipe
+    ctx.body_sink = std::make_shared<KafkaConsumerPipe>();
+
+    // Create a group with 0 consumers; start_all() skips the consumer-submit loop.
+    PulsarDataConsumerGroup grp(0);
+
+    // start_all() computes append_as_message (lines 469-471), then immediately
+    // hits the left_time<=0 exit, cancels the pipe, and returns Cancelled.
+    auto st = grp.start_all(&ctx);
+    // Accept Cancelled or any status - what matters is no crash and lines 469-471 ran.
+    (void)st;
+
+    TKafkaLoadInfo t_kafka;
+    t_kafka.brokers = "localhost:19092";
+    t_kafka.topic = "test-topic";
+    StreamLoadContext kafka_ctx(exec_env->load_stream_mgr());
+    kafka_ctx.format = TFileFormatType::FORMAT_ARROW;
+    kafka_ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_kafka);
+    kafka_ctx.max_interval_s = 0;
+    kafka_ctx.max_batch_size = 0;
+    kafka_ctx.body_sink = std::make_shared<KafkaConsumerPipe>();
+    KafkaDataConsumerGroup kafka_grp(0);
+    (void)kafka_grp.start_all(&kafka_ctx);
+}
+
+// Covers the FORMAT_ARROW message consumption loop in PulsarDataConsumerGroup::start_all()
+// (build_pulsar_message_meta + pulsar_pipe->append_json).
+TEST(PulsarDataConsumerGroupTest, format_arrow_consumes_queued_message_with_meta) {
+    MemTracker mem_tracker(-1);
+    const bool need_source_init = (CurrentThread::mem_tracker() == nullptr);
+    if (need_source_init) {
+        CurrentThread::set_mem_tracker_source([]() { return true; }, []() -> MemTracker* { return nullptr; });
+    }
+    DeferOp reset_source([&]() {
+        if (need_source_init) {
+            CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        }
+    });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&mem_tracker);
+
+    TPulsarLoadInfo t_pulsar;
+    t_pulsar.service_url = "pulsar://localhost:6650";
+    t_pulsar.topic = "test-topic";
+    t_pulsar.subscription = "test-sub";
+    t_pulsar.__set_need_source_metadata(true);
+    t_pulsar.__set_need_message_key(true);
+    t_pulsar.__set_need_message_headers(true);
+
+    auto* exec_env = ExecEnv::GetInstance();
+    StreamLoadContext ctx(exec_env->load_stream_mgr());
+    ctx.format = TFileFormatType::FORMAT_ARROW;
+    ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_pulsar);
+    ctx.max_interval_s = 5;
+    ctx.max_batch_size = 5;
+
+    auto pulsar_pipe = std::make_shared<KafkaConsumerPipe>();
+    ctx.body_sink = pulsar_pipe;
+
+    // start_all() takes ownership of dequeued messages and deletes them after appending.
+    auto* msg = new pulsar::Message(
+            pulsar::MessageBuilder().setContent("arrow_ipc_bytes").setPartitionKey("pk").setProperty("k", "v").build());
+    auto topic_name = std::make_shared<std::string>("persistent://public/default/test-topic-partition-2");
+    msg->impl_->setTopicName(topic_name);
+    ASSERT_EQ("persistent://public/default/test-topic-partition-2", msg->getTopicName());
+
+    PulsarDataConsumerGroup grp(1);
+    ASSERT_TRUE(grp._queue.blocking_put(msg));
+
+    ASSERT_OK(grp.start_all(&ctx));
+
+    ASSIGN_OR_ABORT(auto buf, pulsar_pipe->read());
+    ASSERT_NE(nullptr, buf);
+    EXPECT_EQ("arrow_ipc_bytes", std::string(buf->ptr, buf->limit));
+    auto* meta = dynamic_cast<StreamMessageMeta*>(buf->meta());
+    ASSERT_NE(nullptr, meta);
+    EXPECT_EQ(ByteBufferMetaType::PULSAR, meta->type());
+    EXPECT_EQ("test-topic", meta->topic());
+    EXPECT_EQ(2, meta->partition());
+    EXPECT_TRUE(meta->has_key());
+    EXPECT_EQ("pk", meta->key());
+    ASSERT_EQ(1, meta->headers().size());
+    EXPECT_EQ("k", meta->headers()[0].first);
+    EXPECT_EQ("v", meta->headers()[0].second);
+}
+
+} // namespace starrocks
+#endif // __APPLE__

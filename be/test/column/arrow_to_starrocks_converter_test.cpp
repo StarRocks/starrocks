@@ -24,13 +24,16 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "arrow/array/builder_base.h"
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/variant_column.h"
@@ -2494,5 +2497,389 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
 // to a parquet-scanner level test as a follow-up after upstream
 // (#73460/#73463) decoupled ArrowConvertContext from RuntimeState and the
 // rejected-records writer call site moved out of this translation unit.
+
+TEST_F(ArrowConverterTest, ValidateArrowColumnTypeUnwrapsDictionaryComplexType) {
+    auto struct_type = arrow::struct_({arrow::field("a", arrow::int32())});
+    auto dict_struct_type = arrow::dictionary(arrow::int8(), struct_type);
+    auto nested_dict_list_type =
+            arrow::dictionary(arrow::int16(), arrow::dictionary(arrow::int8(), arrow::list(arrow::int32())));
+
+    EXPECT_EQ(unwrap_arrow_dictionary_type(nullptr), nullptr);
+    EXPECT_EQ(unwrap_arrow_dictionary_type(dict_struct_type.get())->id(), arrow::Type::STRUCT);
+    EXPECT_EQ(unwrap_arrow_dictionary_type(nested_dict_list_type.get())->id(), arrow::Type::LIST);
+
+    TypeDescriptor int_type(TYPE_INT);
+    EXPECT_TRUE(validate_arrow_column_type(nullptr, int_type, "c1").is_invalid_argument());
+    Status st1 = validate_arrow_column_type(dict_struct_type.get(), int_type, "col_int");
+    EXPECT_TRUE(st1.is_invalid_argument()) << st1.to_string();
+
+    Status st2 = validate_arrow_column_type(nested_dict_list_type.get(), int_type, "col_int");
+    EXPECT_TRUE(st2.is_invalid_argument()) << st2.to_string();
+
+    Status st3 = validate_arrow_column_type(struct_type.get(), int_type, "col_int");
+    EXPECT_TRUE(st3.is_invalid_argument()) << st3.to_string();
+    EXPECT_TRUE(validate_arrow_column_type(arrow::large_list(arrow::int32()).get(), int_type, "col_int")
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::fixed_size_list(arrow::int32(), 2).get(), int_type, "col_int")
+                        .is_invalid_argument());
+    EXPECT_TRUE(validate_arrow_column_type(arrow::int32().get(), int_type, "col_int").ok());
+
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor(TYPE_JSON), "col_json").ok());
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor(TYPE_VARIANT), "col_variant").ok());
+    EXPECT_TRUE(
+            validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor::create_varchar_type(64), "col_varchar")
+                    .ok());
+    EXPECT_TRUE(
+            validate_arrow_column_type(dict_struct_type.get(), TypeDescriptor::create_char_type(64), "col_char").ok());
+
+    TypeDescriptor struct_desc(TYPE_STRUCT);
+    struct_desc.field_names = {"a"};
+    struct_desc.children.emplace_back(TYPE_INT);
+    EXPECT_TRUE(validate_arrow_column_type(dict_struct_type.get(), struct_desc, "col_struct").ok());
+
+    TypeDescriptor array_desc(TYPE_ARRAY);
+    array_desc.children.emplace_back(TYPE_INT);
+    EXPECT_TRUE(validate_arrow_column_type(nested_dict_list_type.get(), array_desc, "col_array").ok());
+}
+
+TEST_F(ArrowConverterTest, ClearCurrentColumnResetsNameAndTypeLength) {
+    ArrowConvertContext ctx;
+    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(64);
+    ctx.set_current_column("user_name", varchar_type);
+    EXPECT_EQ("user_name", ctx.current_column_name);
+    EXPECT_EQ(64, ctx.current_type_length);
+
+    ctx.clear_current_column();
+    EXPECT_TRUE(ctx.current_column_name.empty());
+    EXPECT_EQ(0, ctx.current_type_length);
+}
+
+PARALLEL_TEST(ArrowConverterTest, DictionaryCastRespectsBoundedMemoryPool) {
+    arrow::Int8Builder idx_builder;
+    for (int i = 0; i < 128; ++i) {
+        ASSERT_OK(idx_builder.Append(0));
+    }
+    std::shared_ptr<arrow::Array> indices;
+    ASSERT_OK(idx_builder.Finish(&indices));
+
+    arrow::StringBuilder dict_builder;
+    const std::string dict_val(64, 'a');
+    ASSERT_OK(dict_builder.Append(dict_val));
+    std::shared_ptr<arrow::Array> dictionary;
+    ASSERT_OK(dict_builder.Finish(&dictionary));
+
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+    ASSERT_OK_AND_ASSIGN(auto dict_array, arrow::DictionaryArray::FromArrays(dict_type, indices, dictionary));
+
+    TypeDescriptor varchar_desc = TypeDescriptor::create_varchar_type(128);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(dict_array->type().get(), &varchar_desc, true, &raw_type_desc,
+                                                     &conv_func, need_cast, true));
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowBoundedMemoryPool small_pool(1024);
+        ArrowConvertContext ctx;
+        ctx.memory_pool = &small_pool;
+        Status st = convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.message().find("Out of memory") != std::string::npos ||
+                    st.message().find("exceeds per-message limit") != std::string::npos)
+                << st.to_string();
+    }
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowBoundedMemoryPool large_pool(64 * 1024);
+        ArrowConvertContext ctx;
+        ctx.memory_pool = &large_pool;
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(128, col->size());
+        ASSERT_GE(large_pool.total_bytes_allocated(), 8192);
+    }
+
+    {
+        auto col = create_arrow_column_convert_dest(varchar_desc, raw_type_desc, need_cast, true);
+        Filter filter(128, 1);
+        ArrowConvertContext ctx;
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&conv_func, 128, dict_array.get(), col.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(128, col->size());
+    }
+}
+
+PARALLEL_TEST(ArrowConverterTest, ArrowBoundedMemoryPoolFullCoverage) {
+    class FailingDelegateMemoryPool final : public arrow::MemoryPool {
+    public:
+        bool fail_allocate = false;
+        bool fail_reallocate = false;
+
+        arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override {
+            if (fail_allocate) {
+                return arrow::Status::OutOfMemory("delegate allocate failure");
+            }
+            return arrow::default_memory_pool()->Allocate(size, alignment, out);
+        }
+
+        arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) override {
+            if (fail_reallocate) {
+                return arrow::Status::OutOfMemory("delegate reallocate failure");
+            }
+            return arrow::default_memory_pool()->Reallocate(old_size, new_size, alignment, ptr);
+        }
+
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) override {
+            arrow::default_memory_pool()->Free(buffer, size, alignment);
+        }
+
+        int64_t bytes_allocated() const override { return 0; }
+        int64_t max_memory() const override { return 0; }
+        int64_t total_bytes_allocated() const override { return 0; }
+        int64_t num_allocations() const override { return 0; }
+        std::string backend_name() const override { return "failing_delegate"; }
+    };
+
+    FailingDelegateMemoryPool delegate;
+    auto pool_ptr = std::make_unique<ArrowBoundedMemoryPool>(1024, &delegate);
+    ArrowBoundedMemoryPool& pool = *pool_ptr;
+    EXPECT_EQ("starrocks_bounded_arrow_pool", pool.backend_name());
+    EXPECT_EQ(0, pool.bytes_allocated());
+    EXPECT_EQ(0, pool.max_memory());
+    EXPECT_EQ(0, pool.total_bytes_allocated());
+    EXPECT_EQ(0, pool.num_allocations());
+
+    uint8_t* buf = nullptr;
+    EXPECT_TRUE(pool.Allocate(-1, 64, &buf).IsInvalid());
+    EXPECT_TRUE(pool.Allocate(2048, 64, &buf).IsCapacityError());
+    EXPECT_EQ(0, pool.bytes_allocated());
+
+    delegate.fail_allocate = true;
+    EXPECT_TRUE(pool.Allocate(128, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(0, pool.bytes_allocated());
+    delegate.fail_allocate = false;
+
+    ASSERT_OK(pool.Allocate(256, 64, &buf));
+    EXPECT_EQ(256, pool.bytes_allocated());
+    EXPECT_EQ(256, pool.max_memory());
+    EXPECT_EQ(256, pool.total_bytes_allocated());
+    EXPECT_EQ(1, pool.num_allocations());
+
+    EXPECT_TRUE(pool.Reallocate(256, -1, 64, &buf).IsInvalid());
+    EXPECT_TRUE(pool.Reallocate(256, 2048, 64, &buf).IsCapacityError());
+    EXPECT_EQ(256, pool.bytes_allocated());
+
+    delegate.fail_reallocate = true;
+    EXPECT_TRUE(pool.Reallocate(256, 512, 64, &buf).IsOutOfMemory());
+    EXPECT_EQ(256, pool.bytes_allocated());
+    delegate.fail_reallocate = false;
+
+    ASSERT_OK(pool.Reallocate(256, 512, 64, &buf));
+    EXPECT_EQ(512, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    ASSERT_OK(pool.Reallocate(512, 128, 64, &buf));
+    EXPECT_EQ(128, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    EXPECT_EQ(512, pool.total_bytes_allocated());
+
+    uint8_t* small_buf = nullptr;
+    ASSERT_OK(pool.Allocate(64, 64, &small_buf));
+    EXPECT_EQ(192, pool.bytes_allocated());
+    EXPECT_EQ(512, pool.max_memory());
+    pool.Free(small_buf, 64, 64);
+
+    pool.Free(buf, 128, 64);
+    EXPECT_EQ(0, pool.bytes_allocated());
+
+    std::unique_ptr<arrow::MemoryPool> base_pool = std::move(pool_ptr);
+    base_pool.reset();
+}
+
+PARALLEL_TEST(ArrowConverterTest, ArrowStatusToStatusMapping) {
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::OK()).ok());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::OutOfMemory("x")).is_mem_limit_exceeded());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::CapacityError("x")).is_internal_error());
+    EXPECT_TRUE(arrow_status_to_status(arrow::Status::Invalid("x")).is_internal_error());
+}
+
+namespace {
+
+std::shared_ptr<arrow::Array> make_int32_array(const std::vector<int32_t>& values) {
+    arrow::Int32Builder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return array;
+}
+
+std::shared_ptr<arrow::Array> make_offsets32(const std::vector<int32_t>& offsets) {
+    return make_int32_array(offsets);
+}
+
+std::shared_ptr<arrow::Array> make_string_array(const std::vector<std::string>& values) {
+    arrow::StringBuilder builder;
+    EXPECT_TRUE(builder.AppendValues(values).ok());
+    std::shared_ptr<arrow::Array> array;
+    EXPECT_TRUE(builder.Finish(&array).ok());
+    return array;
+}
+
+int64_t estimate_all(const std::shared_ptr<arrow::Array>& array) {
+    return estimate_arrow_array_output_bytes(*array, 0, array->length());
+}
+
+} // namespace
+
+TEST(ArrowOutputSizeEstimateTest, FixedWidthAndNullTypes) {
+    EXPECT_EQ(16, estimate_all(make_int32_array({1, 2, 3, 4})));
+
+    arrow::BooleanBuilder bool_builder;
+    ASSERT_TRUE(bool_builder.AppendValues(std::vector<bool>(8, true)).ok());
+    std::shared_ptr<arrow::Array> bools;
+    ASSERT_TRUE(bool_builder.Finish(&bools).ok());
+    EXPECT_EQ(8, estimate_all(bools));
+
+    // A NullArray occupies nothing on the wire but still materializes one value per row.
+    EXPECT_EQ(2'000'000'000, estimate_all(std::make_shared<arrow::NullArray>(2'000'000'000)));
+    EXPECT_EQ(0, estimate_arrow_array_output_bytes(*make_int32_array({1}), 0, 0));
+}
+
+TEST(ArrowOutputSizeEstimateTest, BinaryLikeTypes) {
+    // 2 rows * 4-byte offsets + 5 value bytes.
+    EXPECT_EQ(13, estimate_all(make_string_array({"ab", "cde"})));
+
+    arrow::LargeStringBuilder large_builder;
+    ASSERT_TRUE(large_builder.AppendValues({"ab", "cde"}).ok());
+    std::shared_ptr<arrow::Array> large;
+    ASSERT_TRUE(large_builder.Finish(&large).ok());
+    EXPECT_EQ(2 * 8 + 5, estimate_all(large));
+
+    arrow::StringViewBuilder view_builder;
+    ASSERT_TRUE(view_builder.Append(std::string(100, 'x')).ok());
+    ASSERT_TRUE(view_builder.Append("y").ok());
+    ASSERT_TRUE(view_builder.AppendNull().ok());
+    std::shared_ptr<arrow::Array> views;
+    ASSERT_TRUE(view_builder.Finish(&views).ok());
+    EXPECT_EQ(3 * 16 + 101, estimate_all(views));
+}
+
+TEST(ArrowOutputSizeEstimateTest, NestedTypesFollowTheReferencedChildRange) {
+    auto values = make_int32_array({1, 2, 3});
+    auto list = arrow::ListArray::FromArrays(*make_offsets32({0, 2, 3}), *values).ValueOrDie();
+    // 2 rows * 4-byte offsets + 3 ints.
+    EXPECT_EQ(2 * 4 + 12, estimate_all(list));
+    // Slicing only charges the child range the slice references.
+    EXPECT_EQ(1 * 4 + 4, estimate_arrow_array_output_bytes(*list, 1, 1));
+    EXPECT_EQ(1 * 4 + 4, estimate_all(list->Slice(1, 1)));
+
+    arrow::Int64Builder offsets64_builder;
+    ASSERT_TRUE(offsets64_builder.AppendValues({0, 2, 3}).ok());
+    std::shared_ptr<arrow::Array> offsets64;
+    ASSERT_TRUE(offsets64_builder.Finish(&offsets64).ok());
+    auto large_list = arrow::LargeListArray::FromArrays(*offsets64, *values).ValueOrDie();
+    EXPECT_EQ(2 * 8 + 12, estimate_all(large_list));
+
+    auto fixed_values = make_int32_array({1, 2, 3, 4, 5, 6});
+    auto fixed_list = arrow::FixedSizeListArray::FromArrays(fixed_values, 2).ValueOrDie();
+    EXPECT_EQ(3 + 24, estimate_all(fixed_list));
+
+    auto strings = make_string_array({"x", "yz"});
+    auto ints = make_int32_array({1, 2});
+    auto struct_array = arrow::StructArray::Make({ints, strings}, std::vector<std::string>{"a", "b"}).ValueOrDie();
+    EXPECT_EQ(2 + 8 + (2 * 4 + 3), estimate_all(struct_array));
+
+    auto keys = make_int32_array({1, 2, 3});
+    auto items = make_int32_array({4, 5, 6});
+    auto map = arrow::MapArray::FromArrays(make_offsets32({0, 2, 3}), keys, items).ValueOrDie();
+    // 2 rows * 4-byte offsets + entries struct (3 + 12 + 12).
+    EXPECT_EQ(2 * 4 + (3 + 12 + 12), estimate_all(map));
+}
+
+TEST(ArrowOutputSizeEstimateTest, ListOverNullChildIsChargedForEveryElement) {
+    // One row whose list holds two million NULL elements: a few bytes on the wire.
+    auto child = std::make_shared<arrow::NullArray>(2'000'000);
+    auto list = arrow::ListArray::FromArrays(*make_offsets32({0, 2'000'000}), *child).ValueOrDie();
+    EXPECT_EQ(4 + 2'000'000, estimate_all(list));
+}
+
+TEST(ArrowOutputSizeEstimateTest, DictionaryChargesTheExpandedValues) {
+    auto dict_type = arrow::dictionary(arrow::int8(), arrow::utf8());
+    auto make_dict = [&](const std::vector<std::string>& dict_values, const std::vector<int8_t>& indices,
+                         const std::vector<bool>& valid) {
+        arrow::Int8Builder idx_builder;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (valid[i]) {
+                EXPECT_TRUE(idx_builder.Append(indices[i]).ok());
+            } else {
+                EXPECT_TRUE(idx_builder.AppendNull().ok());
+            }
+        }
+        std::shared_ptr<arrow::Array> idx_array;
+        EXPECT_TRUE(idx_builder.Finish(&idx_array).ok());
+        return std::make_shared<arrow::DictionaryArray>(dict_type, idx_array, make_string_array(dict_values));
+    };
+
+    // 3 one-byte indices + (3+4) + (3+4) + (1+4) expanded bytes; the NULL index expands to nothing.
+    EXPECT_EQ(3 + 7 + 7 + 5, estimate_all(make_dict({"aaa", "b"}, {0, 0, 1}, {true, true, true})));
+    EXPECT_EQ(4 + 7 + 5, estimate_all(make_dict({"aaa", "b"}, {0, 1, 0, 0}, {true, true, false, false})));
+    // A single 1 KiB value referenced 4096 times is ~4 MiB once expanded.
+    EXPECT_GE(estimate_all(
+                      make_dict({std::string(1024, 'x')}, std::vector<int8_t>(4096, 0), std::vector<bool>(4096, true))),
+              4096 * 1024);
+    // An empty dictionary only costs the indices.
+    EXPECT_EQ(2, estimate_all(make_dict({}, {0, 0}, {false, false})));
+
+    arrow::LargeStringBuilder large_dict_builder;
+    ASSERT_TRUE(large_dict_builder.AppendValues({"aaa", "b"}).ok());
+    std::shared_ptr<arrow::Array> large_dict;
+    ASSERT_TRUE(large_dict_builder.Finish(&large_dict).ok());
+    arrow::Int8Builder idx_builder;
+    ASSERT_TRUE(idx_builder.AppendValues({0, 1}).ok());
+    std::shared_ptr<arrow::Array> idx;
+    ASSERT_TRUE(idx_builder.Finish(&idx).ok());
+    auto large_dict_array = std::make_shared<arrow::DictionaryArray>(
+            arrow::dictionary(arrow::int8(), arrow::large_utf8()), idx, large_dict);
+    EXPECT_EQ(2 + (3 + 8) + (1 + 8), estimate_all(large_dict_array));
+
+    // Fixed-width dictionary values are charged at their average width.
+    arrow::Int8Builder int_idx_builder;
+    ASSERT_TRUE(int_idx_builder.AppendValues({0, 1, 2, 0}).ok());
+    std::shared_ptr<arrow::Array> int_idx;
+    ASSERT_TRUE(int_idx_builder.Finish(&int_idx).ok());
+    auto int_dict = std::make_shared<arrow::DictionaryArray>(arrow::dictionary(arrow::int8(), arrow::int32()), int_idx,
+                                                             make_int32_array({10, 20, 30}));
+    EXPECT_EQ(4 + 4 * 4, estimate_all(int_dict));
+}
+
+TEST(ArrowOutputSizeEstimateTest, UnknownLayoutsAndLimitsAreConservative) {
+    // Layouts without a dedicated rule are charged a pointer-sized value per row.
+    arrow::BinaryViewBuilder binary_view_builder;
+    ASSERT_TRUE(binary_view_builder.Append("abc").ok());
+    std::shared_ptr<arrow::Array> binary_views;
+    ASSERT_TRUE(binary_view_builder.Finish(&binary_views).ok());
+    EXPECT_EQ(8, estimate_all(binary_views));
+
+    // Arithmetic saturates instead of overflowing.
+    std::vector<std::shared_ptr<arrow::Array>> huge_children;
+    for (int i = 0; i < 4; ++i) {
+        huge_children.push_back(std::make_shared<arrow::NullArray>(int64_t{1} << 62));
+    }
+    auto huge_struct =
+            arrow::StructArray::Make(huge_children, std::vector<std::string>{"a", "b", "c", "d"}).ValueOrDie();
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), estimate_all(huge_struct));
+
+    // Pathologically deep nesting is treated as unbounded.
+    std::shared_ptr<arrow::Array> nested = make_int32_array({1});
+    for (int i = 0; i < 70; ++i) {
+        nested = arrow::ListArray::FromArrays(*make_offsets32({0, 1}), *nested).ValueOrDie();
+    }
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), estimate_all(nested));
+}
 
 } // namespace starrocks

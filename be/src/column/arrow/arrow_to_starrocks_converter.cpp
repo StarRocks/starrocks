@@ -18,6 +18,8 @@
 #include <arrow/compute/api.h>
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <limits>
 #include <type_traits>
 
 #include "arrow/array/array_binary.h"
@@ -28,6 +30,7 @@
 #include "base/decimal_types.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/arrow/arrow_to_json_converter.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -131,9 +134,14 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
     if (array->type_id() == ArrowTypeId::DICTIONARY) {
         auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
         auto sliced_array = array->Slice(batch_start_idx, num_elements);
-        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        arrow::MemoryPool* pool = (conv_ctx != nullptr && conv_ctx->memory_pool != nullptr)
+                                          ? conv_ctx->memory_pool
+                                          : arrow::default_memory_pool();
+        arrow::compute::ExecContext exec_ctx(pool);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type(),
+                                                      arrow::compute::CastOptions::Safe(), &exec_ctx);
         if (!decoded_array_res.ok()) {
-            return Status::InternalError(decoded_array_res.status().ToString());
+            return arrow_status_to_status(decoded_array_res.status());
         }
         return convert_arrow_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0,
                                              chunk_start_idx, chunk_filter, conv_ctx);
@@ -1426,6 +1434,259 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
 MutableColumnPtr create_arrow_column_convert_dest(const TypeDescriptor& type_desc, const TypeDescriptor& raw_type_desc,
                                                   bool need_cast, bool is_nullable) {
     return ColumnHelper::create_column(need_cast ? raw_type_desc : type_desc, is_nullable);
+}
+
+const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type) {
+    const arrow::DataType* current = type;
+    while (current != nullptr && current->id() == arrow::Type::DICTIONARY) {
+        current = down_cast<const arrow::DictionaryType*>(current)->value_type().get();
+    }
+    return current;
+}
+
+Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
+                                  std::string_view col_name) {
+    if (arrow_type == nullptr) {
+        return Status::InvalidArgument("null Arrow type or slot descriptor");
+    }
+    const arrow::DataType* effective_type = unwrap_arrow_dictionary_type(arrow_type);
+    const auto arrow_id = effective_type->id();
+    const auto& lt = slot_type.type;
+    if ((arrow_id == arrow::Type::STRUCT || arrow_id == arrow::Type::MAP || arrow_id == arrow::Type::LIST ||
+         arrow_id == arrow::Type::LARGE_LIST || arrow_id == arrow::Type::FIXED_SIZE_LIST) &&
+        !slot_type.is_complex_type() && lt != TYPE_VARIANT && lt != TYPE_JSON && lt != TYPE_VARCHAR &&
+        lt != TYPE_CHAR) {
+        return Status::InvalidArgument(
+                strings::Substitute("column $0 of type $1 cannot be mapped from complex Arrow type $2", col_name,
+                                    type_to_string(lt), arrow_type->name()));
+    }
+    return Status::OK();
+}
+
+namespace {
+
+int64_t saturating_add(int64_t a, int64_t b) {
+    int64_t out = 0;
+    return __builtin_add_overflow(a, b, &out) ? std::numeric_limits<int64_t>::max() : out;
+}
+
+int64_t saturating_mul(int64_t a, int64_t b) {
+    int64_t out = 0;
+    return __builtin_mul_overflow(a, b, &out) ? std::numeric_limits<int64_t>::max() : out;
+}
+
+constexpr int kMaxEstimateDepth = 64;
+
+int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, int depth) {
+    if (length <= 0) {
+        return 0;
+    }
+    if (depth > kMaxEstimateDepth) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    const arrow::Type::type type_id = array.type_id();
+    switch (type_id) {
+    case arrow::Type::NA:
+        return length;
+    case arrow::Type::BINARY:
+    case arrow::Type::STRING: {
+        const auto& a = static_cast<const arrow::BinaryArray&>(array);
+        const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
+        return saturating_add(saturating_mul(length, sizeof(int32_t)), value_bytes);
+    }
+    case arrow::Type::LARGE_BINARY:
+    case arrow::Type::LARGE_STRING: {
+        const auto& a = static_cast<const arrow::LargeBinaryArray&>(array);
+        const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
+        return saturating_add(saturating_mul(length, sizeof(int64_t)), value_bytes);
+    }
+    case arrow::Type::STRING_VIEW: {
+        const auto& a = static_cast<const arrow::StringViewArray&>(array);
+        int64_t total = saturating_mul(length, sizeof(arrow::BinaryViewType::c_type));
+        for (int64_t i = begin; i < begin + length; ++i) {
+            if (!a.IsNull(i)) total = saturating_add(total, static_cast<int64_t>(a.GetView(i).size()));
+        }
+        return total;
+    }
+    case arrow::Type::LIST:
+    case arrow::Type::MAP: {
+        const auto& a = static_cast<const arrow::ListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(saturating_mul(length, sizeof(int32_t)),
+                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::LARGE_LIST: {
+        const auto& a = static_cast<const arrow::LargeListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(saturating_mul(length, sizeof(int64_t)),
+                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::FIXED_SIZE_LIST: {
+        const auto& a = static_cast<const arrow::FixedSizeListArray&>(array);
+        const int64_t first = a.value_offset(begin);
+        const int64_t last = a.value_offset(begin + length);
+        return saturating_add(length, estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+    }
+    case arrow::Type::STRUCT: {
+        const auto& a = static_cast<const arrow::StructArray&>(array);
+        int64_t total = length;
+        for (int i = 0; i < a.num_fields(); ++i) {
+            total = saturating_add(total, estimate_output_bytes(*a.field(i), begin, length, depth + 1));
+        }
+        return total;
+    }
+    case arrow::Type::DICTIONARY: {
+        const auto& a = static_cast<const arrow::DictionaryArray&>(array);
+        const auto& dictionary_type = static_cast<const arrow::DictionaryType&>(*array.type());
+        const auto& index_type = static_cast<const arrow::FixedWidthType&>(*dictionary_type.index_type());
+        const int64_t index_bytes = saturating_mul(length, std::max<int64_t>(1, index_type.bit_width() / 8));
+        const std::shared_ptr<arrow::Array> dictionary = a.dictionary();
+        const int64_t dictionary_length = dictionary->length();
+        if (dictionary_length <= 0) {
+            return index_bytes;
+        }
+        // Expansion is what the converters materialize per row. Binary-like dictionaries are summed exactly because
+        // a single huge value repeated by many indices is the classic amplification.
+        int64_t expanded = 0;
+        const arrow::Type::type value_id = dictionary->type_id();
+        if (value_id == arrow::Type::BINARY || value_id == arrow::Type::STRING) {
+            const auto& values = static_cast<const arrow::BinaryArray&>(*dictionary);
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int32_t)));
+            }
+        } else if (value_id == arrow::Type::LARGE_BINARY || value_id == arrow::Type::LARGE_STRING) {
+            const auto& values = static_cast<const arrow::LargeBinaryArray&>(*dictionary);
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int64_t)));
+            }
+        } else {
+            const int64_t dictionary_bytes = estimate_output_bytes(*dictionary, 0, dictionary_length, depth + 1);
+            const int64_t per_value = dictionary_bytes == std::numeric_limits<int64_t>::max()
+                                              ? dictionary_bytes
+                                              : (dictionary_bytes + dictionary_length - 1) / dictionary_length;
+            expanded = saturating_mul(length, per_value);
+        }
+        return saturating_add(index_bytes, expanded);
+    }
+    default:
+        break;
+    }
+    if (arrow::is_fixed_width(type_id)) {
+        const auto& fixed = static_cast<const arrow::FixedWidthType&>(*array.type());
+        return saturating_mul(length, std::max<int64_t>(1, fixed.bit_width() / 8));
+    }
+    // Layouts without a dedicated rule: charge a pointer-sized value per row.
+    return saturating_mul(length, 8);
+}
+
+} // namespace
+
+int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length) {
+    return estimate_output_bytes(array, begin, length, 0);
+}
+
+void ArrowConvertContext::clear_current_column() {
+    current_column_name.clear();
+    current_type_length = 0;
+}
+
+ArrowBoundedMemoryPool::ArrowBoundedMemoryPool(int64_t max_bytes, arrow::MemoryPool* delegate)
+        : _max_bytes(max_bytes), _delegate(delegate) {}
+
+ArrowBoundedMemoryPool::~ArrowBoundedMemoryPool() = default;
+
+arrow::Status ArrowBoundedMemoryPool::Allocate(int64_t size, int64_t alignment, uint8_t** out) {
+    if (size < 0) {
+        return arrow::Status::Invalid("Negative Arrow allocation size: ", size);
+    }
+    int64_t current = _bytes_allocated.fetch_add(size, std::memory_order_relaxed) + size;
+    if (_max_bytes > 0 && current > _max_bytes) {
+        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+        return arrow::Status::CapacityError("Arrow IPC decoded allocation of ", size,
+                                            " bytes exceeds per-message limit of ", _max_bytes,
+                                            " bytes (current allocated: ", current - size, ")");
+    }
+    arrow::Status st = _delegate->Allocate(size, alignment, out);
+    if (!st.ok()) {
+        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+        return st;
+    }
+    _total_bytes_allocated.fetch_add(size, std::memory_order_relaxed);
+    _num_allocations.fetch_add(1, std::memory_order_relaxed);
+    update_peak(current);
+    return arrow::Status::OK();
+}
+
+arrow::Status ArrowBoundedMemoryPool::Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) {
+    if (new_size < 0) {
+        return arrow::Status::Invalid("Negative Arrow reallocation size: ", new_size);
+    }
+    int64_t delta = new_size - old_size;
+    int64_t current = _bytes_allocated.fetch_add(delta, std::memory_order_relaxed) + delta;
+    if (_max_bytes > 0 && delta > 0 && current > _max_bytes) {
+        _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
+        return arrow::Status::CapacityError("Arrow IPC decoded reallocation of ", new_size,
+                                            " bytes exceeds per-message limit of ", _max_bytes, " bytes");
+    }
+    arrow::Status st = _delegate->Reallocate(old_size, new_size, alignment, ptr);
+    if (!st.ok()) {
+        _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
+        return st;
+    }
+    if (delta > 0) {
+        _total_bytes_allocated.fetch_add(delta, std::memory_order_relaxed);
+        update_peak(current);
+    }
+    return arrow::Status::OK();
+}
+
+void ArrowBoundedMemoryPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
+    _delegate->Free(buffer, size, alignment);
+    _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::bytes_allocated() const {
+    return _bytes_allocated.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::max_memory() const {
+    return _peak_bytes.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::total_bytes_allocated() const {
+    return _total_bytes_allocated.load(std::memory_order_relaxed);
+}
+
+int64_t ArrowBoundedMemoryPool::num_allocations() const {
+    return _num_allocations.load(std::memory_order_relaxed);
+}
+
+std::string ArrowBoundedMemoryPool::backend_name() const {
+    return "starrocks_bounded_arrow_pool";
+}
+
+void ArrowBoundedMemoryPool::update_peak(int64_t current) {
+    int64_t prev_peak = _peak_bytes.load(std::memory_order_relaxed);
+    while (current > prev_peak && !_peak_bytes.compare_exchange_weak(prev_peak, current, std::memory_order_relaxed)) {
+    }
+}
+
+Status arrow_status_to_status(const arrow::Status& st) {
+    if (st.ok()) {
+        return Status::OK();
+    }
+    if (st.IsOutOfMemory()) {
+        return Status::MemoryLimitExceeded(st.ToString());
+    }
+    return Status::InternalError(st.ToString());
 }
 
 } // namespace starrocks
