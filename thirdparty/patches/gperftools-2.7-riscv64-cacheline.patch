@@ -1,0 +1,14 @@
+diff --git a/src/base/basictypes.h b/src/base/basictypes.h
+index 42dbe5c..041aad1 100644
+--- a/src/base/basictypes.h
++++ b/src/base/basictypes.h
+@@ -381,6 +381,9 @@ class AssignAttributeStartEnd {
+ # elif (defined(__aarch64__))
+ #   define CACHELINE_ALIGNED __attribute__((aligned(64)))
+     // implementation specific, Cortex-A53 and 57 should have 64 bytes
++# elif (defined(__riscv))
++#   define CACHELINE_ALIGNED __attribute__((aligned(64)))
++    // RISC-V implementations (e.g. SpacemiT K3) typically have 64-byte cache lines
+ # elif (defined(__s390__))
+ #   define CACHELINE_ALIGNED __attribute__((aligned(256)))
+ # else

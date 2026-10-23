@@ -79,6 +79,12 @@ else()
         list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
     elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
         list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
+    elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "riscv64")
+        # Mirrors the RISCV component list in thirdparty/build-thirdparty.sh
+        # build_llvm(). No LLVMRISCVUtils: unlike AArch64, LLVM 18's RISCV
+        # target has no Utils component, and linking a nonexistent
+        # libLLVMRISCVUtils.a fails at link time.
+        list(APPEND LLVM_LIBRARIES LLVMRISCVCodeGen LLVMRISCVDesc LLVMRISCVInfo LLVMRISCVAsmParser LLVMRISCVDisassembler)
     endif()
 
     foreach(lib IN ITEMS ${LLVM_LIBRARIES})

@@ -320,4 +320,10 @@ static inline void divmodti3(int128_t x, int128_t y, int128_t& q, uint128_t& r) 
     r = (r ^ s_x) - s_x;
 }
 } // namespace starrocks
-#endif // defined(__x86_64__) && defined(COMPILER_GCC)
+#else
+// For non-x86_64 platforms (ARM, RISC-V, etc.), fall back to the portable C++
+// implementation. int128_arithmetics_common.h provides the same set of symbols
+// (Int128Wrapper, asm_add, asm_mul, multi3, udivmodti4, divmodti3, ...) so that
+// the rest of the codebase can include this header unconditionally.
+#include "types/int128_arithmetics_common.h"
+#endif // defined(__x86_64__) && defined(__GNUC__)
