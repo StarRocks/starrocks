@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
@@ -2220,6 +2221,45 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         "     TABLE: test_mv1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=1/1");
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testIcebergTimeTransformCompensationUsesRangePredicate() throws Exception {
+        // An iceberg table partitioned by day(ts) forces a list-partitioned mv. In UTC no generated partition
+        // column is created, so union compensation for a stale partition must still scan the whole day range of the
+        // base table instead of only the rows at `ts = <day start>`.
+        String mvName = "test_mv_iceberg_day_agg";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, date_trunc('day', ts) as dt, count(*) as cnt " +
+                " FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a GROUP BY id, date_trunc('day', ts);");
+        final MaterializedView mv = getMv(mvName);
+        Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
+        Assertions.assertTrue(mv.getPartitionColumns().stream().noneMatch(Column::isGeneratedColumn));
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
+
+        // make one base partition stale so the rewrite has to compensate it from the base table
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        mockIcebergMetadata.updatePartitions("partitioned_transforms_db", "t0_day",
+                Arrays.asList("ts_day=2022-01-03"));
+
+        String query = "select id, date_trunc('day', ts) as dt, count(*) as cnt " +
+                " from `iceberg0`.`partitioned_transforms_db`.`t0_day` group by id, date_trunc('day', ts);";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "UNION");
+        PlanTestBase.assertContains(plan, mvName);
+        // the stale day is compensated as a whole range, not as a single instant
+        PlanTestBase.assertContains(plan, "ts >= '2022-01-03 00:00:00'");
+        PlanTestBase.assertContains(plan, "ts < '2022-01-04 00:00:00'");
+        PlanTestBase.assertNotContains(plan, "ts = '2022-01-03 00:00:00'");
         starRocksAssert.dropMaterializedView(mvName);
     }
 }
