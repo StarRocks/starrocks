@@ -39,6 +39,7 @@ import org.apache.paimon.fs.SeekableInputStream;
 import org.apache.paimon.fs.local.LocalFileIO;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.schema.Schema;
+import org.apache.paimon.schema.SchemaChange;
 import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.table.AppendOnlyFileStoreTable;
 import org.apache.paimon.table.CatalogEnvironment;
@@ -47,6 +48,7 @@ import org.apache.paimon.table.FileStoreTableFactory;
 import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.TableQueryAuth;
 import org.apache.paimon.types.DataTypes;
@@ -292,6 +294,48 @@ class PaimonLimitTest {
                 assertThat(matches).containsExactlyInAnyOrder(4, 5, 6, 7, 12, 13, 14, 15);
             }
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"parquet", "orc"})
+    void testIncrementalScanAfterColumnRename(String format) throws Exception {
+        createTable(false, Map.of("file.format", format, "data-evolution.enabled", "false"));
+        writeManifests(1);
+        new SchemaManager(fileIO, table.location()).commitChanges(SchemaChange.renameColumn("id", "renamed_id"));
+        table = FileStoreTableFactory.create(fileIO, table.location());
+        BatchWriteBuilder builder = table.newBatchWriteBuilder();
+        try (BatchTableWrite write = builder.newWrite(); BatchTableCommit commit = builder.newCommit()) {
+            write.write(GenericRow.of(4, 0));
+            commit.commit(write.prepareCommit());
+        }
+        srTable = new PaimonTable("paimon", "db", "t", List.of(new Column("renamed_id", IntegerType.INT),
+                new Column("p", IntegerType.INT)), table);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(List.of("renamed_id", "p"))
+                .setLimit(10).setTableVersionRange(TvrTableSnapshot.of(table.latestSnapshot().get().id())).build();
+        List<Integer> ids = new ArrayList<>();
+        int oldSchemaFiles = 0;
+        int currentSchemaFiles = 0;
+        try (RemoteFileInfoSource source = metadata.getRemoteFilesAsync(srTable, params)) {
+            while (source.hasMoreOutput()) {
+                PaimonSplitsInfo batch = ((PaimonRemoteFileDesc) source.getOutput().getFiles().get(0)).getPaimonSplitsInfo();
+                for (var split : batch.getPaimonSplits()) {
+                    DataSplit dataSplit = (DataSplit) split;
+                    assertThat(dataSplit.dataFiles()).hasSize(1);
+                    if (dataSplit.dataFiles().get(0).schemaId() == table.schema().id()) {
+                        assertThat(dataSplit.convertToRawFiles()).isPresent();
+                        currentSchemaFiles++;
+                    } else {
+                        // AUTO must route this split through the SDK so renamed fields retain their values.
+                        assertThat(dataSplit.convertToRawFiles()).isEmpty();
+                        oldSchemaFiles++;
+                    }
+                }
+                ids.addAll(readIds(batch, 10));
+            }
+        }
+        assertThat(oldSchemaFiles).isEqualTo(1);
+        assertThat(currentSchemaFiles).isEqualTo(1);
+        assertThat(ids).containsExactlyInAnyOrder(0, 1, 2, 3, 4);
     }
 
     @Test

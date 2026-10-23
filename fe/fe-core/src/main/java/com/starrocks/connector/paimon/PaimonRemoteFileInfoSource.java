@@ -96,7 +96,11 @@ final class PaimonRemoteFileInfoSource implements RemoteFileInfoSource {
                         return DataSplit.builder().withSnapshot(snapshotId).withPartition(entry.partition())
                                 .withBucket(entry.bucket()).withTotalBuckets(entry.totalBuckets())
                                 .withBucketPath(reader.pathFactory().bucketPath(entry.partition(), entry.bucket()).toString())
-                                .withDataFiles(List.of(entry.file())).rawConvertible(true).isStreaming(false).build();
+                                .withDataFiles(List.of(entry.file()))
+                                // The native raw-file reader resolves columns by name, not Paimon field ID.
+                                // Older schemas need the SDK reader to apply renames and type evolution.
+                                .rawConvertible(entry.file().schemaId() == append.schema().id())
+                                .isStreaming(false).build();
                     }
                 };
             }
