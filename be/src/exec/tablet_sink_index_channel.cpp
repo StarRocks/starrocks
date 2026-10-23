@@ -278,16 +278,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
-<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.cpp
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
     const auto& dict_version = _runtime_state->load_dict_versions();
-=======
-    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict = fragment_dict_state->load_global_dicts();
-    const auto& dict_version = fragment_dict_state->load_dict_versions();
-    const auto& dict_identity = fragment_dict_state->load_dict_content_identities();
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511)):be/src/data_sink/tablet/tablet_sink_index_channel.cpp
+    const auto& dict_identity = _runtime_state->load_dict_content_identities();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
