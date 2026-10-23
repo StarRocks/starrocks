@@ -308,4 +308,56 @@ public class MVMirrorBasePartitionTest extends MVTestBase {
             Config.enable_mv_mirror_base_partition = original;
         }
     }
+
+    /**
+     * Reverse migration: an MV refreshed while the flag was on holds a coarse month partition.
+     * After disabling the flag, a bounded refresh inside that month must not drop the month while
+     * only creating the in-range day; the coarse partition and its history must survive.
+     */
+    @Test
+    public void testBoundedRefreshKeepsCoarseHistoryAfterDisablingMirror() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = true;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_c2", MAY_RANGE));
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_reverse\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_c2 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+
+                        // initial full refresh with mirror enabled -> one coarse month partition
+                        refreshMV(DB_NAME, mv);
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+
+                        // disable mirror and refresh only one day inside the month
+                        Config.enable_mv_mirror_base_partition = false;
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.getProperties().put(TaskRun.PARTITION_START, "2021-05-15");
+                        taskRun.getProperties().put(TaskRun.PARTITION_END, "2021-05-16");
+                        taskRun.getProperties().put(TaskRun.FORCE, "true");
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "bounded refresh did not succeed");
+
+                        // the coarse month cannot be replaced atomically inside a one-day range, so it
+                        // must be kept and refreshed as a whole instead of being dropped
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
 }

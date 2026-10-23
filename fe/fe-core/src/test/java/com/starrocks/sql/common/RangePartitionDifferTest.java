@@ -19,16 +19,26 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -65,6 +75,15 @@ public class RangePartitionDifferTest {
         Mockito.when(mv.getPartitionInfo()).thenReturn(Mockito.mock(PartitionInfo.class));
         Mockito.when(mv.getTableProperty()).thenReturn(Mockito.mock(TableProperty.class));
         return new RangePartitionDiffer(mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh(), rangeToInclude);
+    }
+
+    private static FunctionCallExpr dateTrunc(String granularity) {
+        List<Expr> children = new ArrayList<>();
+        children.add(new StringLiteral(granularity));
+        children.add(new SlotRef(new TableName("db1", "table1"), "k1"));
+        FunctionCallExpr expr = new FunctionCallExpr("date_trunc", children);
+        expr.setType(TypeFactory.createType(PrimitiveType.DATETIME));
+        return expr;
     }
 
     private static PCellSortedSet fineToCoarseSrc() throws AnalysisException {
@@ -116,6 +135,33 @@ public class RangePartitionDifferTest {
         // the whole replacement component is left untouched: no day created, month not dropped
         Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
         Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
+    }
+
+    /**
+     * Reverse migration through the production entry point: the mirror flag is already off, so the
+     * eager mapper is selected, but the MV still holds the coarse month partition created while the
+     * flag was on. The coarse-to-fine shape change must still be detected from the existing MV
+     * partitions, otherwise a bounded refresh into one day drops the whole month.
+     */
+    @Test
+    public void testCoarseToFineDetectedWhenMirrorDisabled() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            // base table still has a merged month partition; eager expands it into daily ranges
+            PCellSortedSet base = cells(Map.of("p202105", range("2021-05-01", "2021-06-01")));
+            // mv holds the coarse month partition from the mirror era
+            PCellSortedSet mv = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+
+            PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(
+                    base, mv, dateTrunc("day"), differ(range("2021-05-15", "2021-05-16")));
+
+            // the whole replacement component is left untouched: no day created, month not dropped
+            Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
+            Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
     }
 
     /**

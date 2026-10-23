@@ -93,9 +93,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @param applyAtomicReplacement when {@code true}, a bounded refresh replaces a partition set
      *                               atomically: a component that contains both additions and deletions
      *                               and is not entirely inside the refresh range is left untouched.
-     *                               This is only needed for the mirror mapper, which re-shapes base
-     *                               partitions into a different granularity; the default mappings are
-     *                               granularity-preserving and keep the previous behavior.
+     *                               This is only needed for a shape change: the mirror mapper, or an
+     *                               MV that still holds coarse mirror partitions after the mapper is
+     *                               disabled. The default mappings are granularity-preserving and keep
+     *                               the previous behavior.
      */
     public PartitionDiff diff(PCellSortedSet srcRangeMap,
                               PCellSortedSet dstRangeMap,
