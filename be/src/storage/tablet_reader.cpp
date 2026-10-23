@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -153,13 +154,12 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Compaction flat json paths exists: " << read_params.column_access_paths->size();
-        return Status::OK();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
     }
-
-    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
-           read_params.column_access_paths->empty());
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
         auto segments = rowset->segments();
@@ -171,7 +171,8 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
