@@ -15,6 +15,20 @@
 import re
 
 from alembic import util as alembic_util
+from sqlalchemy import testing
+
+
+STRUCT_FIELDS_BACKTICKED = testing.fails_on(
+    "starrocks>=4.1",
+    "StarRocks 4.1 reports STRUCT fields with backticked names, which the type parser rejects; reflecting the "
+    "column warns, which the testing plugin raises as an error, and leaves it NullType with no result processor",
+)
+TOLERATE_UNPARSED_STRUCT_REFLECTION = testing.emits_warning(r"Did not recognize type 'struct<")
+"""For tests whose checks on other columns hold while STRUCT_FIELDS_BACKTICKED leaves a STRUCT column NullType.
+
+Their STRUCT columns pass without being compared; the tests marked STRUCT_FIELDS_BACKTICKED track that bug.
+"""
+
 
 def alembic_runs_dialect_comparators_first(config: object) -> bool:
     """Whether Alembic runs the comparators in its global registry ahead of its own.
