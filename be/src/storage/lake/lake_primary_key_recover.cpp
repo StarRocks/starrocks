@@ -55,7 +55,6 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
             FileMetaPB file_meta;
             file_meta.set_name(it->name());
             file_meta.set_shared(it->shared());
-            file_meta.set_version(it->version());
             _metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
         dels->erase(inherited, dels->end());
@@ -64,7 +63,7 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
     // it holds nothing, and an empty ordinary rowset is not a valid shape, so drop it.
     auto* rowsets = _metadata->mutable_rowsets();
     auto emptied = std::stable_partition(rowsets->begin(), rowsets->end(), [](const RowsetMetadataPB& rowset) {
-        return rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0;
+        return rowset.has_delete_predicate() || rowset.segments_size() > 0 || rowset.del_files_size() > 0;
     });
     for (auto it = emptied; it != rowsets->end(); ++it) {
         _metadata->mutable_rowset_to_schema()->erase(it->id());
