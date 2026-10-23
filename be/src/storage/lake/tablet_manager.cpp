@@ -75,6 +75,7 @@ static bvar::LatencyRecorder g_put_tablet_metadata_latency("lake", "put_tablet_m
 static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
+static bvar::Adder<uint64_t> g_segment_cache_schema_reject_total("lake", "segment_cache_schema_reject_total");
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bundle_tablet_meta_cnt");
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
@@ -357,6 +358,31 @@ Status TabletManager::parse_shard_properties(int64_t tablet_id,
     return Status::OK();
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status TabletManager::resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                               int64_t* index_id) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
+        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
+        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
+        auto msg = fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
+                               shard_info_or.status().message());
+        // StarMgr answers NOT_EXIST for a dropped shard, which starlet surfaces as absl NotFound: version 1
+        // of the tablet does not exist. Other failures (starlet not ready, a failed StarMgr RPC) may be
+        // transient and must not be mistaken for missing metadata.
+        if (absl::IsNotFound(shard_info_or.status())) {
+            return Status::NotFound(msg);
+        }
+        return Status::InternalError(msg);
+    }
+    return parse_shard_properties(tablet_id, shard_info_or.value().properties, table_id, partition_id, index_id);
+}
+#endif // USE_STAROS
+
 StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t tablet_id) {
     TEST_ERROR_POINT("TabletManager::construct_initial_metadata");
 #ifdef BE_TEST
@@ -371,19 +397,7 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     int64_t table_id = -1;
     int64_t partition_id = -1;
     int64_t index_id = -1;
-    auto worker = get_staros_worker();
-    if (worker == nullptr) {
-        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
-        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
-        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
-    }
-    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
-    if (!shard_info_or.ok()) {
-        return Status::InternalError(fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
-                                                 shard_info_or.status().message()));
-    }
-    RETURN_IF_ERROR(
-            parse_shard_properties(tablet_id, shard_info_or.value().properties, &table_id, &partition_id, &index_id));
+    RETURN_IF_ERROR(resolve_shard_properties(tablet_id, &table_id, &partition_id, &index_id));
 
     ASSIGN_OR_RETURN(auto resp,
                      _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));
@@ -995,9 +1009,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     if (metadata_or.status().is_not_found() && wants_initial_version && !shared_initial_attempted) {
         // Last-resort: this tablet has no version-1 key of its own, so try the partition-shared
         // object. Reached on any read that carries no hint, and on a partition whose shared layout FE
-        // does not hint: one built under Config.lake_enable_tablet_creation_optimization rather than
-        // `file_bundling`, or a range-distribution partition created before FE stopped giving those
-        // tables the shared layout.
+        // does not hint: one built by an older FE under Config.lake_enable_tablet_creation_optimization
+        // rather than `file_bundling`, or a range-distribution partition created before FE stopped giving
+        // those tables the shared layout. FE has since retired that config, but nothing else identifies
+        // the partitions it built -- they are not `file_bundling` -- so this fallback is the only way their
+        // version 1 resolves. Do not remove it while such partitions may still exist.
         //
         // Reached only after the tablet's own key missed, which is what the ordering invariant above
         // requires, and it memoizes nothing about the layout: the object itself is cached (see
@@ -1964,14 +1980,39 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, tablet_schema, this);
         if (fill_meta_cache) {
+            TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_insert", &segment);
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
             if (auto cached_segment = _metacache->cache_segment_if_absent(cache_key, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
+        }
+    }
+    if (tablet_schema != nullptr) {
+        const auto cached_schema = segment->tablet_schema_share_ptr();
+        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
+            cached_schema->schema_version() != tablet_schema->schema_version() ||
+            cached_schema->num_columns() != tablet_schema->num_columns()) {
+            // A physical lookup hit can still be unusable for this request's schema.
+            // Count the final cache winner, including an insert-if-absent race.
+            g_segment_cache_schema_reject_total << 1;
+            // Never mutate a Segment held by another reader. With cache filling enabled, replace
+            // only the entry we just checked so subsequent requests can reuse this schema. A racing
+            // replacement or eviction must not be overwritten; serve this request privately instead.
+            auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
+            auto replacement = std::make_shared<Segment>(fs, segment_info, segment_id, tablet_schema,
+                                                         fill_meta_cache ? this : nullptr);
+            if (fill_meta_cache) {
+                TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_replace", nullptr);
+                if (!_metacache->replace_segment_if_matches(cache_key, segment.get(), replacement)) {
+                    replacement = std::make_shared<Segment>(std::move(fs), segment_info, segment_id,
+                                                            std::move(tablet_schema), /*tablet_manager=*/nullptr);
+                }
+            }
+            segment = std::move(replacement);
         }
     }
     // segment->open will read the footer, and it is time-consuming.

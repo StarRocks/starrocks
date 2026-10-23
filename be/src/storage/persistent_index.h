@@ -446,8 +446,8 @@ public:
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size, IOStat* stat = nullptr);
 
-    // batch check that none of |keys| already exist in this immutable index. Keys are grouped
-    // internally by the index's own shard layout (_shard_info_by_length)
+    // Check that none of |keys| already exist (including tombstones). Group keys by the index's
+    // own shard layout and reuse get() for Bloom filtering and page/shard reads.
     Status check_not_exist(size_t n, const Slice* keys);
 
     // get Immutable index file size;
@@ -564,14 +564,6 @@ private:
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
-
-    Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
     bool _need_bloom_filter(size_t idx_begin, size_t idx_end, std::vector<KeysInfo>& keys_info_by_shard) const;
 
@@ -734,11 +726,13 @@ public:
     virtual Status replace(size_t n, const Slice* keys, const IndexValue* values,
                            const std::vector<uint32_t>& replace_indexes);
 
-    // batch insert, return error if key already exists
+    // Batch insert. Always reject duplicates in L0; check immutable indexes only when
+    // skip_pindex_l1_l2_check_in_insert is false.
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
+    // |check_l1|: also check the base L1 when immutable-index checks are enabled; temporary L1 and L2
+    // are always checked in that mode. May imply heavy IO costs.
     Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase

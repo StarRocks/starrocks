@@ -551,7 +551,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
+    public static final String BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR =
+            "broadcast_mem_exceeded_penalty_factor";
+    public static final double MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR = 1_000_000.0;
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
+    public static final String BROADCAST_MEM_THRESHOLD = "broadcast_mem_threshold";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
@@ -712,6 +716,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING =
+            "enable_iceberg_eq_delete_runtime_filter_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
@@ -2023,8 +2029,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
 
+    // Cost penalty for estimated broadcast inputs above the memory threshold.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)
+    private double broadcastMemExceededPenaltyFactor = 1000.0;
+
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
+
+    // Estimated broadcast bytes per backend above which the optimizer applies a cost penalty.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_THRESHOLD)
+    private long broadcastMemThreshold = 2147483648L; // 2GB
 
     @VariableMgr.VarAttr(name = BROADCAST_RIGHT_TABLE_SCALE_FACTOR, flag = VariableMgr.INVISIBLE)
     private double broadcastRightTableScaleFactor = 10.0;
@@ -3516,7 +3530,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
-    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
+    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = true;
+
+    // Let a runtime filter on an identity partition column skip the equality delete files of the partitions it rejects.
+    @VarAttr(name = ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING)
+    private boolean enableIcebergEqDeleteRuntimeFilterPruning = true;
 
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
@@ -3690,6 +3708,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergEqDeleteWithPartitionEvolution(boolean enableReadIcebergEqDeleteWithPartitionEvolution) {
         this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
+    }
+
+    public boolean isEnableIcebergEqDeleteRuntimeFilterPruning() {
+        return enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public void setEnableIcebergEqDeleteRuntimeFilterPruning(boolean enableIcebergEqDeleteRuntimeFilterPruning) {
+        this.enableIcebergEqDeleteRuntimeFilterPruning = enableIcebergEqDeleteRuntimeFilterPruning;
     }
 
     public boolean enablePaimonColumnStatistics() {
@@ -4899,12 +4925,43 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.cboMaxReorderNodeUseExhaustive;
     }
 
+    public double getBroadcastMemExceededPenaltyFactor() {
+        return broadcastMemExceededPenaltyFactor;
+    }
+
+    public void setBroadcastMemExceededPenaltyFactor(double multiplier) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        this.broadcastMemExceededPenaltyFactor = checkBroadcastMemExceededPenaltyFactor(multiplier);
+    }
+
+    public static double checkBroadcastMemExceededPenaltyFactor(double multiplier) {
+        if (!Double.isFinite(multiplier) || multiplier < 1.0 || multiplier > MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, multiplier,
+                    "a finite number in [1.0, " + MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR + "]");
+        }
+        return multiplier;
+    }
+
     public long getBroadcastRowCountLimit() {
         return broadcastRowCountLimit;
     }
 
     public void setBroadcastRowCountLimit(long broadcastRowCountLimit) {
         this.broadcastRowCountLimit = broadcastRowCountLimit;
+    }
+
+    public long getBroadcastMemThreshold() {
+        return broadcastMemThreshold;
+    }
+
+    public void setBroadcastMemThreshold(long broadcastMemThreshold) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (broadcastMemThreshold < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_THRESHOLD, broadcastMemThreshold, "a non-negative integer");
+        }
+        this.broadcastMemThreshold = broadcastMemThreshold;
     }
 
     public double getBroadcastRightTableScaleFactor() {

@@ -650,6 +650,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+### `star_client_get_shard_info_batch_size`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中，FE 需要一次性确定大量 tablet 所在的计算节点时（例如为大表规划查询或导入、AutoVacuum 清理分区、FE 删除 tablet），单次向 StarMgr 查询的 tablet 数量上限。超出该数量时，FE 会将查询拆分为多次请求依次发送，每次最多包含该数量的 tablet。StarMgr 处理每次请求时都持有 tablet 元数据锁，期间 StarMgr 的元数据变更以及 Follower FE 上的 StarMgr 元数据回放都会被阻塞。如果一次请求就查询大表的全部 tablet，阻塞可能长达数秒。调小该值可以缩短每次阻塞的时间，代价是请求次数增加。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - 默认值: true
@@ -803,7 +812,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。Range 分布的表不使用该优化：这类表的每个 tablet 都有自己的键范围，元数据始终按 tablet 单独创建。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，云原生表或物化视图在创建分区时如何写入初始 tablet 元数据，仅由表属性 `file_bundling` 决定：开启 `file_bundling` 时，同一物理分区下的所有 tablet 共用一份 tablet 元数据（Range 分布的表除外，这类表的每个 tablet 都有各自的键范围）；未开启时，每个 tablet 各写一份。rollup 和 schema 变更作业始终为每个 tablet 单独写入元数据。如果开启了表属性 `light_weight_tablet_creation`，以上两种情况在创建时都不写入初始 tablet 元数据。此前，开启该参数后，未开启 `file_bundling` 的表也会使用共享的 tablet 元数据，这类表上的 rollup 或 schema 变更作业可能覆盖同一分区中原有索引的 tablet 元数据。该参数开启期间创建的分区仍可正常读取。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`

@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
@@ -108,7 +109,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
-        Map<String, String> maskedParams = new HashMap<>(params);
+        // Sort the keys so that the output does not depend on the HashMap iteration order of the JDK.
+        Map<String, String> maskedParams = new TreeMap<>(params);
         addMaskForCredential(maskedParams);
         return gson.toJson(maskedParams);
     }

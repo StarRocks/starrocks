@@ -262,6 +262,16 @@ StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* cont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// A conversion near the DATETIME bounds can leave the 0000..9999 range, e.g.
+// convert_tz('9999-12-31 23:00:00', '-05:00', 'UTC'); return NULL instead of an invalid DATETIME.
+void append_valid_or_null(ColumnBuilder<TYPE_DATETIME>& result, const TimestampValue& ts) {
+    if (ts.is_valid()) {
+        result.append(ts);
+    } else {
+        result.append_null();
+    }
+}
+
 } // namespace
 
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
@@ -293,7 +303,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
             TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
             ts.from_unix_second(ts.to_unix_second() + offset, usec);
-            result.append(ts);
+            append_valid_or_null(result, ts);
             continue;
         }
 
@@ -312,7 +322,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
                           ts_value2.second(), ts_value2.microsecond());
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -355,7 +365,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
 
         TimestampValue ts;
         ts.from_unix_second(unix_sec + offset, usec);
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));

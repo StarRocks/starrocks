@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
+#include <exception>
+
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/thread/threadpool.h"
@@ -138,24 +140,31 @@ void OlapTableSinkOperator::_submit_close() const {
                          ? state->query_execution_services()->execution->load_sink_close_thread_pool
                          : nullptr;
     if (pool != nullptr) {
-        auto task = std::make_shared<CancellableRunnable>(
-                [close_task, query_id = state->query_id(), fragment_instance_id = state->fragment_instance_id()]() {
-                    SCOPED_SET_TRACE_INFO(0, query_id, fragment_instance_id);
-                    close_task();
-                },
-                [this]() {
-                    // Dropped by the pool while it shuts down: fail the load and let the driver finish.
-                    _close_status = Status::Cancelled("olap table sink close dropped by a stopping thread pool");
-                    _close_done.store(true, std::memory_order_release);
-                });
-        // The queue is unbounded, so this only fails when the pool is shutting down.
-        auto st = pool->submit(std::move(task));
-        if (st.ok()) {
-            restore_close_ownership.cancel();
-            return;
+        try {
+            auto task = std::make_shared<CancellableRunnable>(
+                    [close_task, query_id = state->query_id(), fragment_instance_id = state->fragment_instance_id()]() {
+                        SCOPED_SET_TRACE_INFO(0, query_id, fragment_instance_id);
+                        close_task();
+                    },
+                    [this]() {
+                        // Dropped by the pool while it shuts down: fail the load and let the driver finish.
+                        _close_status = Status::Cancelled("olap table sink close dropped by a stopping thread pool");
+                        _close_done.store(true, std::memory_order_release);
+                    });
+            // The queue is unbounded, so a non-OK status only occurs when the pool is shutting down.
+            auto st = pool->submit(std::move(task));
+            if (st.ok()) {
+                restore_close_ownership.cancel();
+                return;
+            }
+            LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
+                         << print_id(state->fragment_instance_id()) << ", error=" << st;
+        } catch (const std::exception& e) {
+            // Allocation/enqueue exceptions mean the pool did not accept the task. They must not escape the
+            // pipeline poller thread, which has no exception handler. Use the same fallback as a rejected submit.
+            LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
+                         << print_id(state->fragment_instance_id()) << ", error=" << e.what();
         }
-        LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
-                     << print_id(state->fragment_instance_id()) << ", error=" << st;
     }
     close_task();
     restore_close_ownership.cancel();

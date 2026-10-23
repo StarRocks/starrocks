@@ -22,6 +22,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"
@@ -331,13 +332,34 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
-        Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        st = StorageEnv::GetInstance()->lake_primary_key_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#endif
-        return st;
+        runtime_env_ptr->refresh_update_mem_limit();
+        StorageEngine::instance()->update_manager()->refresh_mem_limits();
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_mem_limits();
+        }
+        LOG(INFO) << "Set update_memory_limit_percent: " << config::update_memory_limit_percent
+                  << ", update mem limit: " << runtime_env_ptr->update_mem_tracker()->limit();
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_preload_memory_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_preload_mem_limit();
+            LOG(INFO) << "Set lake_pk_preload_memory_limit_percent: " << config::lake_pk_preload_memory_limit_percent
+                      << ", preload mem limit: " << primary_key_mgr->update_state_mem_tracker()->limit();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_index_block_cache_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_block_cache_mem_limit();
+            LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                      << config::lake_pk_index_block_cache_limit_percent
+                      << ", block cache capacity: " << primary_key_mgr->block_cache()->cache()->get_capacity();
+        }
+        return Status::OK();
     });
     registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
         auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();

@@ -21,6 +21,8 @@ import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallHeaders;
+import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
@@ -196,6 +198,45 @@ class ArrowFlightSqlAuthenticatorTest {
 
             // Token rejected because FE host is not valid
             assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownLocalTokenRejectedWhenProxyEnabled() {
+        // first call after JWT expiry, then a retry once the session is gone
+        String[] messages = {"bearer token [10.0.6.7|some-uuid] is no longer valid: the credential it was opened " +
+                "with has expired, please authenticate again", "invalid bearer token [10.0.6.7|some-uuid]"};
+        for (String message : messages) {
+            assertLocalTokenRejected(message);
+        }
+    }
+
+    private void assertLocalTokenRejected(String message) {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        String localToken = "10.0.6.7|some-uuid";
+        doThrow(new IllegalArgumentException(message)).when(sessionManager).validateToken(localToken);
+        when(sessionManager.isLocalToken(localToken)).thenReturn(true);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+
+            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            Frontend mockFe = mock(Frontend.class);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
+            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
+            when(mockFe.getHost()).thenReturn("10.0.6.7");
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + localToken);
+
+            FlightRuntimeException e = assertThrows(FlightRuntimeException.class, () -> authenticator.authenticate(headers));
+            assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
+            assertEquals(message, e.status().description());
         }
     }
 }

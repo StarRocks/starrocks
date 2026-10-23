@@ -29,6 +29,7 @@
 namespace starrocks {
 
 class Cache;
+class RandomAccessFile;
 class TxnLogPB_OpWrite;
 
 namespace lake {
@@ -47,10 +48,15 @@ public:
 
     void update_memory_usage();
 
+    void set_capacity(int64_t cache_limit);
+
     Cache* cache() { return _cache.get(); }
 
 private:
+    // Protects _memory_usage and its sync to _mem_tracker.
     std::mutex _mutex;
+    // Serializes set_capacity() so the cache capacity and the tracker limit change together.
+    std::mutex _capacity_mutex;
     size_t _memory_usage{0};
     std::unique_ptr<Cache> _cache;
     std::unique_ptr<MemTracker> _mem_tracker;
@@ -93,10 +99,17 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
-    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
-                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
-                                  ChunkPtr* out_chunk);
+    // Materialize one batch of inserted rows out of an already-opened source segment. The segment is
+    // opened once per source segment by `_open_upsert_source_segment` and reused across batches;
+    // re-opening it per batch would re-parse the footer and rebuild a column reader for every column
+    // of the schema each time.
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Segment* segment,
+                                  RandomAccessFile* read_file, const std::vector<uint32_t>& insert_rowids,
+                                  const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk);
+
+    Status _open_upsert_source_segment(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
+                                       Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                       SegmentPtr* segment, std::unique_ptr<RandomAccessFile>* read_file);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePersistentIndex& index,
@@ -186,7 +199,15 @@ public:
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
+    // Re-derive the index cache capacity, the block cache capacity and the update/compaction state tracker
+    // limits from the current primary key mem tracker limit, after it changed.
+    void refresh_mem_limits();
+
+    // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
+    void refresh_preload_mem_limit();
+
+    // Re-apply lake_pk_index_block_cache_limit_percent to the primary index sstable block cache.
+    void refresh_block_cache_mem_limit();
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
@@ -254,6 +275,9 @@ public:
     int64_t get_index_memory_size(int64_t tablet_id) const;
 
 private:
+    int64_t _calc_preload_mem_limit() const;
+    int64_t _calc_block_cache_mem_limit() const;
+
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,

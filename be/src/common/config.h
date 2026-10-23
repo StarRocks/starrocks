@@ -504,6 +504,8 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
+// Maximum number of level -1 rowsets selected per size-tiered primary key compaction. Values below 2 are treated as 2.
+CONF_mInt64(max_update_compaction_num_level_minus_one_rowsets, "10000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
@@ -989,7 +991,8 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 // Metadata cache limit for shared-nothing mode. Not working for PK table now.
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
@@ -1692,6 +1695,19 @@ CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
 // the legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
+// Whether a Primary Key publish reads the base segments it needs through the segment metacache
+// (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
+// read in UpdateManager::get_column_values -- row-mode partial update and condition update alike,
+// since both re-read old values from the same segments and pay the same cost. The static open
+// neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
+// reader for every column of the tablet schema, a cost paid again on each publish for base segments
+// that a high frequency update stream keeps touching. The cache is used only while the tablet's base
+// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
+// always uses the static open: it reads this transaction's own segment through a schema restricted
+// to the partial-update columns, which must never be published into the cache. Set to false to
+// restore the static open everywhere.
+CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
@@ -1814,7 +1830,8 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // existed (or by the replication path, which cannot compute it) carry none and are always accepted.
 // Writing the checksum is unconditional; this only controls verification, as an escape hatch.
 CONF_mBool(lake_enable_del_file_crc_check, "true");
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
@@ -2034,6 +2051,9 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(l0_snapshot_size, "16777216");
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,

@@ -117,7 +117,8 @@ CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
 // Default: false (conservative, validates all conditions even within same transaction)
 CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // If enable_retry_apply is set to true, the system will attempt retries when apply fails.
 // Retry scenarios for apply operations include the following cases:
@@ -184,7 +185,8 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // ever becomes a concern on a hot read path.
 CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
 
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
@@ -216,6 +218,10 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(max_tmp_l1_num, "10");
 
 CONF_mBool(enable_parallel_get_and_bf, "false");
+
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");

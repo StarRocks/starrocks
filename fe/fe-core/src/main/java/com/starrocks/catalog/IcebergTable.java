@@ -266,12 +266,15 @@ public class IcebergTable extends Table {
             fieldIdToIndex.put(fields.get(i).fieldId(), i);
         }
 
-        // Keep the returned indexes aligned with sortOrder.fields() order.
+        // Keep the returned indexes aligned with sortOrder.fields() order: callers pair indexes.get(i) with
+        // sortOrder.fields().get(i). A sort field whose source is not a top-level column (e.g. a struct subfield)
+        // ends the list, since skipping it would shift every later direction and null order onto the wrong column.
         for (SortField sortField : sortOrder.fields()) {
             Integer idx = fieldIdToIndex.get(sortField.sourceId());
-            if (idx != null) {
-                indexes.add(idx);
+            if (idx == null) {
+                break;
             }
+            indexes.add(idx);
         }
 
         return indexes;
@@ -476,6 +479,13 @@ public class IcebergTable extends Table {
         return table;
     }
 
+    // Pin the source table's read view on a table the planner derives from it over the same native table
+    // (the equality-delete rewrite builds such tables), so a time-travel read keeps the snapshot schema in
+    // the derived scans and their descriptors. Only for a freshly built, not yet shared table.
+    public void inheritReadView(IcebergTable source) {
+        this.readView = source.readView;
+    }
+
     /**
      * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
      * query to plan and run on. The published object is shared by every query and read without the meta lock,
@@ -512,6 +522,7 @@ public class IcebergTable extends Table {
         Schema schema = getReadSchema();
         return getReadSpec().fields().stream()
                 .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .filter(IcebergApiConverter::isKnownPartitionTransform)
                 .collect(Collectors.toList());
     }
 
@@ -559,7 +570,7 @@ public class IcebergTable extends Table {
             // missing columns in historical files. write-default is irrelevant for reads.
             Types.NestedField field = iceSchema.findField(column.getName());
             if (field != null) {
-                String initialDefault = IcebergApiConverter.toInitialDefaultValueString(field);
+                String initialDefault = IcebergApiConverter.toReadInitialDefaultValueString(field);
                 if (initialDefault != null) {
                     tc.setDefault_value(initialDefault);
                 } else {

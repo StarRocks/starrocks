@@ -59,6 +59,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
+
 /**
  * Registers existing files as Iceberg equality delete files, the delete-side counterpart of add_files.
  * Each file under {@code location} must contain every column named in {@code equality_columns}; a row of
@@ -141,10 +143,12 @@ public class AddEqualityDeleteFilesProcedure extends IcebergTableProcedure {
                             "is not supported");
         }
         checkNoLiveDataInOtherSpecs(table);
-        // with this session variable the scan reads equality deletes that span several specs
+        // with this session variable the scan reads equality deletes that span several specs, except on a table with
+        // a real column named $partition_key
         ConnectContext connectContext = context.context();
         if (connectContext == null ||
-                !connectContext.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
+                !connectContext.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution() ||
+                table.schema().caseInsensitiveFindField(PARTITION_KEY) != null) {
             checkNoEqualityDeletesInOtherSpecs(table);
         }
         int[] equalityFieldIds = resolveEqualityFieldIds(table.schema(), equalityColumnsArg.getVarchar());

@@ -107,5 +107,17 @@ public interface WorkerProvider {
      */
     long selectBackupWorker(long workerId);
 
+    /**
+     * Same as {@link #selectBackupWorker(long)}, but lets the provider make the backup a function of the data being
+     * routed, e.g. the tablet id, so that the same data keeps going to the same backup worker.
+     *
+     * @param affinityKey a stable key of the data routed to {@code workerId}, see
+     *                    {@link com.starrocks.qe.WorkerProviderHelper#combineAffinityKey}
+     * @return -1, no available backup worker
+     */
+    default long selectBackupWorker(long workerId, long affinityKey) {
+        return selectBackupWorker(workerId);
+    }
+
     ComputeResource getComputeResource();
 }

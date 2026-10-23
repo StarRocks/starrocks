@@ -487,6 +487,13 @@ private:
     static Status parse_shard_properties(int64_t tablet_id,
                                          const std::unordered_map<std::string, std::string>& properties,
                                          int64_t* table_id, int64_t* partition_id, int64_t* index_id);
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Resolve (table_id, partition_id, index_id) of |tablet_id| from its StarOS shard info. NotFound when
+    // the shard does not exist, so a dropped tablet's version 1 reads as missing like any other version.
+    // Exposed for unit tests.
+    static Status resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                           int64_t* index_id);
+#endif // USE_STAROS
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     static Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);

@@ -649,6 +649,15 @@ This topic introduces the following types of FE configurations:
 - Description:
 - Introduced in: -
 
+### `star_client_get_shard_info_batch_size`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the FE looks up in one StarMgr request when it resolves the Compute Nodes of many tablets at once in a shared-data cluster, for example when it plans a query or a load on a large table, or when AutoVacuum cleans up a partition or the FE deletes tablets. A larger lookup is split into consecutive requests of at most this many tablets. StarMgr holds a lock on its tablet metadata while it answers one request, which blocks StarMgr metadata changes and, on Follower FEs, the replay of StarMgr metadata. A request for all tablets of a large table can therefore stall them for seconds. A smaller value shortens each stall at the cost of more requests. Values less than `1` are treated as `1`.
+- Introduced in: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - Default: true
@@ -793,7 +802,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Tables that use range distribution never use the optimization: each of their tablets carries its own key range, so its metadata is always created per tablet. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, the table property `file_bundling` alone decides how a cloud-native table or materialized view writes the initial tablet metadata of a new partition: with `file_bundling` enabled, all tablets under a physical partition share a single tablet metadata (except in a table that uses range distribution, whose tablets each carry their own key range); otherwise, each tablet gets its own. Rollup and schema-change jobs always write the metadata per tablet. If the table property `light_weight_tablet_creation` is enabled, no initial tablet metadata is written at creation time in either case. Previously, enabling this parameter also gave the shared tablet metadata to tables without `file_bundling`, where a rollup or schema-change job could overwrite the tablet metadata of the existing index in the same partition. Partitions created while this parameter was enabled remain readable.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`

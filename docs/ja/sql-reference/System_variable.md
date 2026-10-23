@@ -259,11 +259,35 @@ MySQL クライアント互換性のために使用されます。実際の用�
 ### blacklist_backup_routing
 
 * **スコープ**: Session
-* **説明**: 共有データ（shared-data）モードでは、スキャンに対してプランが優先する compute node が、現在のクエリで利用可能なワーカーに含まれない場合（例：ノードがダウンしている、またはホストの blocklist に載っているなど）、プランナーはバックアップ用の compute node を選ぶ必要があります。この変数は、（プライマリ以外の）候補ノードのうち、バックアップをどのように選ぶかを設定します。`RANDOM` は候補集合から一様乱択でサンプリングします。`CIRCULAR` はプライマリからソート済みの compute node ID のリング上を走査し、最初に見つかった候補ノードを選びます（決定的）。バックアップとして選べるノードは `skip_black_list` にも依存します。デフォルトではホスト blocklist 上のノードは除外されます。`skip_black_list` が `true` の場合、blocklist に載っていても、（例：生存しておりウェアハウスで利用可能など）他の条件を満たせばバックアップとして選ばれることがあります。
+* **説明**: 共有データ（shared-data）モードでは、スキャンに対してプランが優先する compute node が、現在のクエリで利用可能なワーカーに含まれない場合（例：ノードがダウンしている、またはホストの blocklist に載っているなど）、プランナーはバックアップ用の compute node を選ぶ必要があります。この変数は、（プライマリ以外の）候補ノードのうち、バックアップをどのように選ぶかを設定します。`RANDOM` は候補集合から一様乱択でサンプリングします。`CIRCULAR` はプライマリからソート済みの compute node ID のリング上を走査し、最初に見つかった候補ノードを選びます（決定的）。`TABLET_HASH` は tablet とノードのハッシュ（rendezvous hashing）が最大となる候補ノードを選びます。利用できないノードの tablet は他のノードに均等に分散され、同じ tablet はクエリをまたいで常に同じバックアップに送られるため、そのデータは 1 つのバックアップノードにだけキャッシュされます。Colocate スキャンでは、tablet の代わりに Colocation Group とバケットでハッシュを計算するため、グループ内のすべてのテーブルで同じバケットが同じバックアップに送られます。FE 間でも、候補ノードの集合が同じであれば同じ tablet に対して同じバックアップが選ばれます。ロード（例：`INSERT`）が書き込む tablet の compute node が利用できない場合にも、この変数に従ってバックアップが選ばれます。バックアップとして選べるノードは `skip_black_list` にも依存します。デフォルトではホスト blocklist 上のノードは除外されます。`skip_black_list` が `true` の場合、blocklist に載っていても、（例：生存しておりウェアハウスで利用可能など）他の条件を満たせばバックアップとして選ばれることがあります。
 * **デフォルト**: `CIRCULAR`
 * **データ型**: String
-* **有効な値**: `CIRCULAR`, `RANDOM`
+* **有効な値**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
 * **導入バージョン**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **説明**: 各 BE/CN のビルド側の推定サイズがブロードキャストのメモリしきい値を超えた場合に、CPU、メモリ、ネットワークコストへ適用する倍率。`1.0` に設定すると、このペナルティを無効にします。
+* **スコープ**: Session, Global
+* **デフォルト**: `1000.0`
+* **データ型**: Double
+* **有効な値**: `[1.0, 1000000.0]` の範囲内の有限数値。この範囲外の値、数値でない値、`NaN`、無限大は拒否されます。
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定できます。例：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **説明**: オプティマイザがブロードキャストプランにペナルティを適用するビルド側の推定サイズのしきい値。このしきい値は各 BE に送信される推定バイト数に適用され、その値がしきい値を超えるとペナルティを適用します。推定サイズがしきい値と等しい場合はペナルティを適用しません。これはオプティマイザのしきい値であり、実行時のメモリ制限ではありません。`exec_mem_limit` とは独立しており、`broadcast_row_limit` は引き続きブロードキャスト選択の行数チェックを制御します。`0` に設定すると、推定サイズが正のすべてのブロードキャストにペナルティを適用します。
+* **スコープ**: Session, Global
+* **デフォルト**: `2147483648`（2 GiB）
+* **単位**: バイト
+* **データ型**: long
+* **有効な値**: [0, 9223372036854775807]
 
 ### catalog
 
@@ -654,6 +678,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: リソースグループレベルの[クエリキュー](../administration/management/resource_management/query_queues.md)を有効にするかどうか。
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **説明**: Runtime Filter で Iceberg テーブルの Equality Delete ファイルをスキップできるかどうか。テーブルのパーティション仕様（Partition Spec）が一度も変更されておらず、すべてのパーティションフィールドがクエリで読み取る INT、DATE、または STRING 列の identity 変換である場合に適用されます。この場合、Join がこれらの列に対して生成する Runtime Filter は、除外したパーティションの Equality Delete ファイルをスキップします。`false` に設定すると、すべての Equality Delete ファイルを適用します。たとえば、この変数名を含むエラーでクエリが失敗した場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.2
 
 ### enable_incremental_mv
 
@@ -1318,7 +1348,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### paimon_reader_mode
 
-* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。
+
+  * `AUTO`: StarRocks が適切な Reader を自動的に選択します。
+  * `JNI`: JNI 経由で Paimon Java Reader を使用します。
+  * `NATIVE`: 対応可能な場合は StarRocks ファイル Reader を使用し、それ以外は対応可能な paimon-cpp Reader を必要とします。JNI にフォールバックせず、対応できない場合はエラーになります。
+  * `paimon_force_jni_reader=true` は `JNI` の選択と同等で、この変数の設定より優先されます。
 * **デフォルト**: AUTO
 * **データ型**: String
 * **導入バージョン**: v4.2

@@ -21,18 +21,9 @@
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "exprs/function_context.h"
-#include "runtime/memory/memory_allocator.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 namespace {
-Status checkpoint(void* pointer) {
-    auto* state = static_cast<RuntimeState*>(pointer);
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("ST_CoverageSimplify"));
-    return state->check_mem_limit("ST_CoverageSimplify");
-}
-
 const Column* unwrap(const Column* column, size_t& position, bool& null) {
     null = column->only_null();
     if (column->is_constant()) {
@@ -97,7 +88,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
     };
     if (!planar(args[0]) || !planar(result) || !is_geo_semantically_compatible(*args[0].geo_type, *result.geo_type))
         return Status::InvalidArgument("ST_CoverageSimplify requires compatible planar GEOMETRY CRS descriptors");
-    if (!ctx->state()) return Status::InvalidArgument("ST_CoverageSimplify requires a runtime state");
     ASSIGN_OR_RETURN(state.tolerance, tolerance(ctx));
     ASSIGN_OR_RETURN(state.boundary, boundary(ctx));
     if (state.tolerance && state.boundary &&
@@ -105,7 +95,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
          !std::isfinite(*state.tolerance * *state.tolerance)))
         return Status::InvalidArgument(
                 "ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance squared");
-    RETURN_IF_ERROR(checkpoint(ctx->state()));
     state.initialized = true;
     return Status::OK();
 }
@@ -120,11 +109,9 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
                                                  int64_t start, int64_t end) const {
     if (!input || start < 0 || end < start || (!input->is_constant() && uint64_t(end) > input->size()))
         return Status::InvalidArgument("ST_CoverageSimplify invalid input partition");
-    ASSIGN_OR_RETURN(state.core,
-                     GeoCoverageSimplify::create(memory::get_default_allocator(), {}, {ctx->state(), checkpoint}));
+    ASSIGN_OR_RETURN(state.core, GeoCoverageSimplify::create());
     const bool skip = !state.tolerance || !state.boundary;
     for (int64_t row = start; row < end; ++row) {
-        if ((row - start) % 128 == 0) RETURN_IF_ERROR(checkpoint(ctx->state()));
         size_t position = row;
         bool null;
         const auto* physical = unwrap(input, position, null);

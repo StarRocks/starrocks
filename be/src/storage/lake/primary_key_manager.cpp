@@ -14,6 +14,8 @@
 
 #include "storage/lake/primary_key_manager.h"
 
+#include <algorithm>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -39,11 +41,13 @@
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/pk_index_utils.h"
 #include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/rows_mapper.h"
@@ -87,9 +91,7 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
-    const int64_t primary_key_mem_limit = _primary_key_mem_tracker->limit();
-    const int64_t preload_mem_limit =
-            primary_key_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
@@ -98,11 +100,9 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    _index_cache.set_capacity(primary_key_mem_limit);
+    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, _calc_block_cache_mem_limit());
 
-    const int64_t block_cache_mem_limit =
-            primary_key_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
-    _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
+    refresh_mem_limits();
 }
 
 PrimaryKeyManager::~PrimaryKeyManager() {
@@ -122,6 +122,18 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
         : _cache(new_lru_cache(cache_limit)) {
     _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::set_capacity(int64_t cache_limit) {
+    {
+        // Config-update callbacks run outside the registry lock, so serialize the paired writes to keep the
+        // tracker limit and the cache capacity consistent across concurrent resizes. Use a dedicated lock so
+        // that shrinking, which frees the evicted blocks, does not block update_memory_usage() on publish.
+        std::lock_guard<std::mutex> lg(_capacity_mutex);
+        _mem_tracker->set_limit(cache_limit);
+        _cache->set_capacity(cache_limit);
+    }
+    update_memory_usage();
 }
 
 void PersistentIndexBlockCache::update_memory_usage() {
@@ -761,40 +773,50 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
     return Status::OK();
 }
 
+Status PrimaryKeyManager::_open_upsert_source_segment(const TxnLogPB_OpWrite& op_write,
+                                                      const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                                      const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                                      SegmentPtr* segment,
+                                                      std::unique_ptr<RandomAccessFile>* read_file) {
+    FileInfo info;
+    const auto& segment_meta = op_write.rowset().segment_metas(seg);
+    info.path = segment_meta.filename();
+    if (segment_meta.has_bundle_file_offset()) {
+        info.bundle_file_offset = segment_meta.bundle_file_offset();
+        info.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        info.encryption_meta = segment_meta.encryption_meta();
+    }
+
+    FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
+    if (info.size.has_value()) file_info.size = info.size;
+    if (info.bundle_file_offset.has_value()) file_info.bundle_file_offset = info.bundle_file_offset;
+
+    // This is a segment this transaction just wrote and reads exactly once, so it is deliberately kept
+    // out of the metacache: there is nothing for a later reader to reuse.
+    ASSIGN_OR_RETURN(*segment, Segment::open(fs, file_info, seg, tschema));
+    RandomAccessFileOptions opts;
+    if (!file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+        opts.encryption_info = std::move(unwrap);
+    }
+    ASSIGN_OR_RETURN(*read_file, fs->new_random_access_file_with_bundling(opts, file_info));
+    return Status::OK();
+}
+
 Status PrimaryKeyManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
-                                                 Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                                 Segment* segment, RandomAccessFile* read_file,
                                                  const std::vector<uint32_t>& insert_rowids,
                                                  const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
     auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
     {
-        FileInfo info;
-        const auto& segment_meta = op_write.rowset().segment_metas(seg);
-        info.path = segment_meta.filename();
-        if (segment_meta.has_bundle_file_offset()) {
-            info.bundle_file_offset = segment_meta.bundle_file_offset();
-            info.size = segment_meta.size();
-        }
-        if (segment_meta.has_encryption_meta()) {
-            info.encryption_meta = segment_meta.encryption_meta();
-        }
-
-        FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
-        if (info.size.has_value()) file_info.size = info.size;
-        if (info.bundle_file_offset.has_value()) file_info.bundle_file_offset = info.bundle_file_offset;
-
-        ASSIGN_OR_RETURN(auto segment, Segment::open(fs, file_info, seg, tschema));
-        RandomAccessFileOptions opts;
-        if (!file_info.encryption_meta.empty()) {
-            ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
-            opts.encryption_info = std::move(unwrap);
-        }
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file_with_bundling(opts, file_info));
-        iter_opts.read_file = raf.get();
+        iter_opts.read_file = read_file;
 
         for (uint32_t cid : update_cids) {
             const TabletColumn& col = tschema->column(cid);
@@ -935,13 +957,21 @@ Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_
         MutableColumnPtr pk_column_for_upsert;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column_for_upsert, pk_encoding_type));
 
+        // Opened once for all batches of this source segment: the footer parse and the per-column
+        // reader construction cost scale with the schema width and would otherwise be repeated for
+        // every batch of `column_mode_partial_update_insert_batch_size` rows.
+        SegmentPtr source_segment;
+        std::unique_ptr<RandomAccessFile> source_read_file;
+        RETURN_IF_ERROR(
+                _open_upsert_source_segment(op_write, tschema, tablet, fs, seg, &source_segment, &source_read_file));
+
         for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
             size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
             std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
                                                       insert_rowids.begin() + batch_end);
             ChunkPtr full_chunk;
-            RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
-                                                   &full_chunk));
+            RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, source_segment.get(), source_read_file.get(),
+                                                   batch_insert_rowids, update_cids, &full_chunk));
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -1841,9 +1871,54 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         }
     }
 
-    auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
-                                         const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
-                                         const std::vector<uint32_t>& read_column_ids) -> Status {
+    // Two invariants govern `allow_segment_cache`; both are about what a *later* reader of the shared
+    // object sees, not about what this function reads back.
+    //
+    //   - `segment_id_in_rowset` must be the segment's index inside its rowset, not its rssid.
+    //     SegmentIterator derives the delvec and DCG keys as `rowset_id + segment->id()`
+    //     (segment_iterator.cpp), so caching an object built with the rssid makes every later query
+    //     look the delvec up under `rowset_id + rssid`, find nothing, and stop masking the rows the
+    //     partial update superseded -- duplicate primary keys.
+    //   - `tablet_schema` must match the full rowset schema. The current logical schema can omit a
+    //     physically stored column after a metadata-only DROP. Segment builds `_column_readers` from
+    //     its construction schema, so caching that narrower schema would make an older reader get
+    //     defaults instead of the stored data. Keep such opens private to this publish.
+    //
+    // Callers that cannot honour both must pass `allow_segment_cache=false`.
+    // Sized from every base segment of the tablet, not just the ones this call reads. A publish runs
+    // one get_column_values() per source segment, and when a load is key-sorted those source segments
+    // touch largely disjoint base segments, so each call's own subset can fit while their union is
+    // several times the cache. Successive publishes also walk different subsets of the same tablet, so
+    // the set that has to stay resident for the cache to pay off is the tablet's, not one call's.
+    const size_t publish_segment_count = params.container.rssid_to_file().size();
+    // A Segment's metacache footprint is dominated by one ColumnReader per schema column, so it scales
+    // with the column count rather than the row count. Estimating that structurally, instead of
+    // sampling an opened Segment, is what lets the decision exist before the first insert: a sampled
+    // value can only be read back after the segment it was meant to gate has already been cached, so
+    // the first segment of every call would bypass the gate entirely -- and with a key-sorted load,
+    // where a source segment's keys land in a single base segment, that first segment is the only one
+    // there is and the gate never applies at all.
+    //
+    // Calibrated on a cluster: 200 segments of a 1000-column table occupied ~200MB of metacache, i.e.
+    // ~1KiB per column. Columns of wider types carry more metadata than the INT columns measured
+    // there, so this can under-estimate; this constant is the knob to raise if that ever shows up.
+    constexpr size_t kEstimatedSegmentBytesPerColumn = 1024;
+    const size_t estimated_segment_bytes = params.tablet_schema->num_columns() * kEstimatedSegmentBytesPerColumn;
+    // Child readers and ZSTD compression dictionaries are not covered by the top-level column
+    // estimate. Existing files can retain dictionaries even when new dictionary writes are disabled.
+    // Check the full construction schema, even for a scalar-only projection, before any cache insert.
+    const auto& schema_columns = params.tablet_schema->columns();
+    const bool use_segment_cache_for_schema =
+            config::lake_pk_partial_update_use_segment_cache &&
+            std::none_of(schema_columns.begin(), schema_columns.end(), [](const TabletColumn& column) {
+                const auto type = column.type();
+                return column.use_zstd_compression() || type == TYPE_JSON || type == TYPE_ARRAY || type == TYPE_MAP ||
+                       type == TYPE_STRUCT;
+            });
+    auto fetch_values_from_segment =
+            [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
+                const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
+                const std::vector<uint32_t>& read_column_ids, bool allow_segment_cache) -> Status {
         FileInfo file_info{.path = params.tablet->segment_location(segment_info.path),
                            .encryption_meta = segment_info.encryption_meta};
         if (segment_info.size.has_value()) {
@@ -1852,7 +1927,41 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         if (segment_info.bundle_file_offset.has_value()) {
             file_info.bundle_file_offset = segment_info.bundle_file_offset;
         }
-        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+        file_info.fs = fs;
+        StatusOr<SegmentPtr> segment;
+        auto* tablet_mgr = params.tablet->tablet_mgr();
+        bool use_segment_cache = allow_segment_cache && tablet_mgr != nullptr && use_segment_cache_for_schema;
+        if (use_segment_cache) {
+            // Take the cache path only while this publish's own base segments can fit in it. A publish
+            // reads every base segment holding a row it updates, so once that set exceeds the cache
+            // there is nothing to gain: entries are evicted as fast as they are filled, the hit rate
+            // stays at zero, and the tablet metadata and schemas sharing the cache get flushed out
+            // with it. Going through TabletManager::load_segment anyway would also be strictly more
+            // expensive than the static open, because it hands the Segment a TabletManager and every
+            // column index load then calls update_cache_size(), which walks all of the segment's
+            // column readers and takes a cache lock. The static open leaves that pointer null and
+            // skips the whole accounting path.
+            //
+            // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
+            // evicts to stay under capacity, so it reports room even while it thrashes.
+            const size_t cache_capacity = tablet_mgr->metacache()->capacity();
+            const size_t shard_capacity = cache_capacity / kNumShards + (cache_capacity % kNumShards != 0);
+            // Even a single segment can fit the aggregate capacity yet exceed its shard's budget.
+            // Such an entry evicts itself as its charge grows and cannot be reused by later publishes.
+            use_segment_cache = estimated_segment_bytes > 0 && estimated_segment_bytes <= shard_capacity &&
+                                publish_segment_count <= cache_capacity / estimated_segment_bytes;
+        }
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
+        if (use_segment_cache) {
+            // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
+            // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
+            // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
+            // keep the data-cache behaviour identical to the static Segment::open below.
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
+                                               /*fill_meta_cache=*/true, tablet_schema);
+        } else {
+            segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
+        }
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
                          << segment.status();
@@ -1924,9 +2033,23 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
-        // pass the actual segment_id to properly handle DCG reading
-        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid,
-                                                  params.tablet_schema, rowids, column_ids));
+        // `rssid` addresses the segment across the whole tablet and is what the DCG bookkeeping above is
+        // keyed by; `rssid - rowset_id` is its index inside its own rowset, which is what a Segment
+        // object must carry as its id. Both maps are filled together by
+        // RssidFileInfoContainer::add_rssid_to_file and keyed by `rowset_id + segment_idx`, so the
+        // membership check above covers this lookup too.
+        const auto rowset_id = params.container.rssid_to_rowid().at(rssid);
+        const auto& schema_pins = params.metadata->rowset_to_schema();
+        const auto pin = schema_pins.find(rowset_id);
+        bool allow_segment_cache = params.metadata->schema().id() == params.tablet_schema->id();
+        if (pin != schema_pins.end()) {
+            allow_segment_cache = pin->second == params.tablet_schema->id() &&
+                                  params.metadata->historical_schemas().contains(pin->second);
+        }
+        // Keep the current schema for read ordinals, DCG lookup and casts even when the rowset's
+        // construction schema differs. Bypass both cache lookup and insertion in that case.
+        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid, rssid - rowset_id,
+                                                  params.tablet_schema, rowids, column_ids, allow_segment_cache));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -1947,9 +2070,13 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         if (segment_meta.has_encryption_meta()) {
             info.encryption_meta = segment_meta.encryption_meta();
         }
-        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id,
+        // `auto_increment_state->schema` covers only the partial-update columns, and the file is this
+        // transaction's own segment, read once. Keep it off the metacache: there is nothing to reuse,
+        // and a cached narrow Segment would make later readers of this file miss the columns it omits.
+        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id, segment_id,
                                                   // use partial segment column offset id to get the column
-                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id));
+                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id,
+                                                  /*allow_segment_cache=*/false));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "PrimaryKeyManager get_column_values " << cost_str.str();
@@ -2321,11 +2448,30 @@ int64_t PrimaryKeyManager::get_primary_index_data_version(int64_t tablet_id) {
     return 0;
 }
 
-Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
-    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
-    return Status::OK();
+int64_t PrimaryKeyManager::_calc_preload_mem_limit() const {
+    const int32_t preload_mem_percent = std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * preload_mem_percent / 100;
+}
+
+int64_t PrimaryKeyManager::_calc_block_cache_mem_limit() const {
+    const int32_t block_cache_mem_percent = std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0);
+    return _primary_key_mem_tracker->limit() * block_cache_mem_percent / 100;
+}
+
+void PrimaryKeyManager::refresh_block_cache_mem_limit() {
+    _block_cache->set_capacity(_calc_block_cache_mem_limit());
+}
+
+void PrimaryKeyManager::refresh_preload_mem_limit() {
+    const int64_t preload_mem_limit = _calc_preload_mem_limit();
+    _update_state_mem_tracker->set_limit(preload_mem_limit);
+    _compaction_state_mem_tracker->set_limit(preload_mem_limit);
+}
+
+void PrimaryKeyManager::refresh_mem_limits() {
+    refresh_preload_mem_limit();
+    _index_cache.set_capacity(_primary_key_mem_tracker->limit());
+    refresh_block_cache_mem_limit();
 }
 
 void PrimaryKeyManager::_print_memory_stats() {

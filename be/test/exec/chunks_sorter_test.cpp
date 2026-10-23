@@ -785,6 +785,50 @@ TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
     EXPECT_EQ(expected, result);
 }
 
+// A VARCHAR topn filter built from values, then overrun by NULLs sorted first: the updater has to drop the slice bounds
+// it built, taking update_to_empty_and_not_null for ROW_NUMBER (open interval, NULLs are not kept) and
+// update_to_all_null for RANK (close interval, only NULLs are kept). Both run under the slice lock.
+TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
+    for (auto topn_type : {TTopNType::ROW_NUMBER, TTopNType::RANK}) {
+        auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+        std::vector<bool> is_asc{true};
+        std::vector<bool> is_null_first{true};
+        std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
+        DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+        ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+
+        auto pool = std::make_unique<ObjectPool>();
+        constexpr size_t kLimit = 2;
+        constexpr size_t kMaxBufferedRows = 1;
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, kLimit, topn_type,
+                                kMaxBufferedRows);
+        sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                             pool->add(new MemTracker(1L << 62, "", nullptr)));
+
+        Chunk::SlotHashMap slot_map{{0, 0}};
+        ASSERT_OK(sorter.update(
+                _runtime_state.get(),
+                std::make_shared<Chunk>(
+                        Columns{build_large_offsets_varchar_column({"bravo", "charlie", "delta"}, true)}, slot_map)));
+        auto* filters = sorter.runtime_filters(pool.get());
+        ASSERT_TRUE(filters != nullptr);
+        ASSERT_EQ(1, filters->size());
+        auto* rf = down_cast<MinMaxRuntimeFilter<TYPE_VARCHAR>*>(filters->back());
+        ASSERT_FALSE(rf->is_empty_range());
+        ASSERT_TRUE(rf->has_null());
+
+        ASSERT_OK(sorter.update(
+                _runtime_state.get(),
+                std::make_shared<Chunk>(Columns{build_large_offsets_varchar_column({"echo"}, true, 2)}, slot_map)));
+        filters = sorter.runtime_filters(pool.get());
+        ASSERT_TRUE(filters != nullptr);
+        ASSERT_EQ(rf, filters->back());
+        ASSERT_TRUE(rf->is_empty_range());
+        ASSERT_EQ(topn_type == TTopNType::RANK, rf->has_null());
+    }
+}
+
 // _partial_sort checks the concatenated and the sorted chunk with capacity_limit_reached(), which replaced
 // upgrade_if_overflow(). It must accept a BinaryColumn whose payload exceeds 4GB: only the row count is limited. The
 // column borrows a 1-byte buffer and is never read, so nothing close to 4GB is allocated.
