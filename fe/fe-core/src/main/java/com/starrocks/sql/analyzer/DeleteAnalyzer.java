@@ -228,7 +228,11 @@ public class DeleteAnalyzer {
      *   INSERT INTO iceberg_delete_sink
      *   SELECT _file, _pos FROM table WHERE condition
      */
-    private static void analyzeIcebergTable(DeleteStmt deleteStatement, Table table, ConnectContext session) {
+    private static void analyzeIcebergTable(DeleteStmt deleteStatement, IcebergTable table, ConnectContext session) {
+        if (table.getFormatVersion() > 2) {
+            throw new SemanticException("DELETE is not supported for Iceberg V3 tables: " +
+                    "writing deletion vectors is not supported");
+        }
         deleteStatement.setTable(table);
 
         if (deleteStatement.getWherePredicate() == null) {
@@ -293,7 +297,7 @@ public class DeleteAnalyzer {
 
         // Handle Iceberg table delete
         if (table instanceof IcebergTable) {
-            analyzeIcebergTable(deleteStatement, table, session);
+            analyzeIcebergTable(deleteStatement, (IcebergTable) table, session);
             return;
         }
 
