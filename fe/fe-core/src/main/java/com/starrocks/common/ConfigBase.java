@@ -219,21 +219,34 @@ public class ConfigBase {
         return map;
     }
 
+    private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{([^\\}]*)\\}");
+
+    // Replaces ${NAME} with the system property or environment variable NAME.
+    // $${NAME} is an escape and is kept as the literal ${NAME}, e.g. for a DN pattern with ${USER}.
     private void replacedByEnv() throws InvalidConfException {
-        Pattern pattern = Pattern.compile("\\$\\{([^\\}]*)\\}");
+        Pattern pattern = Pattern.compile("(\\$?)" + ENV_PLACEHOLDER.pattern());
         for (String key : props.stringPropertyNames()) {
             String value = props.getProperty(key);
             Matcher m = pattern.matcher(value);
+            StringBuilder sb = new StringBuilder();
             while (m.find()) {
-                String envValue = System.getProperty(m.group(1));
-                envValue = (envValue != null) ? envValue : System.getenv(m.group(1));
-                if (envValue != null) {
-                    value = value.replace("${" + m.group(1) + "}", envValue);
+                String name = m.group(2);
+                String replacement;
+                if (!m.group(1).isEmpty()) {
+                    replacement = "${" + name + "}";
                 } else {
-                    throw new InvalidConfException("no such env variable: " + m.group(1));
+                    String envValue = System.getProperty(name);
+                    envValue = (envValue != null) ? envValue : System.getenv(name);
+                    if (envValue == null) {
+                        throw new InvalidConfException("no such env variable: " + name + " (referenced by " + key +
+                                "; write $${" + name + "} to keep a literal ${" + name + "})");
+                    }
+                    replacement = envValue;
                 }
+                m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
             }
-            props.setProperty(key, value);
+            m.appendTail(sb);
+            props.setProperty(key, sb.toString());
         }
     }
 
@@ -566,6 +579,9 @@ public class ConfigBase {
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 
+        // Escape ${NAME} so that the next start keeps the value instead of substituting it from the environment.
+        // Only a complete placeholder is escaped: replacedByEnv() keeps a ${ without a closing } as it is.
+        String fileValue = ENV_PLACEHOLDER.matcher(value).replaceAll("\\$$0");
         boolean keyExists = false;
         // Keep the original configuration file format
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(configPath))) {
@@ -577,7 +593,7 @@ public class ConfigBase {
                     keyExists = true;
                     writer.write(comment);
                     writer.newLine();
-                    writer.write(key + " = " + value);
+                    writer.write(key + " = " + fileValue);
                     writer.newLine();
                     continue;
                 }
@@ -590,7 +606,7 @@ public class ConfigBase {
                 writer.newLine();
                 writer.write(comment);
                 writer.newLine();
-                writer.write(key + " = " + value);
+                writer.write(key + " = " + fileValue);
                 writer.newLine();
             }
         }
