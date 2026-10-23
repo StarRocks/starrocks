@@ -1,0 +1,116 @@
+-- name: test_decimal_sum_overflow
+DROP DATABASE IF EXISTS test_decimal_sum_overflow;
+-- result:
+-- !result
+CREATE DATABASE test_decimal_sum_overflow;
+-- result:
+-- !result
+USE test_decimal_sum_overflow;
+-- result:
+-- !result
+CREATE TABLE d38 (k int, a decimal(38,0)) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO d38 VALUES (1, 99999999999999999999999999999999999999), (1, 99999999999999999999999999999999999999);
+-- result:
+-- !result
+CREATE TABLE d38s (k int, a decimal(38,2)) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO d38s VALUES (1, 1.25), (1, 2.50), (2, -3.75);
+-- result:
+-- !result
+CREATE TABLE win (k int, a decimal(38,0)) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO win VALUES (1, 90000000000000000000000000000000000000), (2, -90000000000000000000000000000000000000), (3, -90000000000000000000000000000000000000), (4, 90000000000000000000000000000000000000);
+-- result:
+-- !result
+CREATE TABLE bigint_t (k int, b bigint) PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO bigint_t VALUES (1, 9223372036854775807), (1, 9223372036854775807);
+-- result:
+-- !result
+SELECT SUM(a) FROM d38;
+-- result:
+-140282366920938463463374607431768211458
+-- !result
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+-- result:
+1	-140282366920938463463374607431768211458
+-- !result
+SELECT SUM(a) OVER () FROM d38;
+-- result:
+-140282366920938463463374607431768211458
+-140282366920938463463374607431768211458
+-- !result
+SELECT SUM(a) + 0 FROM d38;
+-- result:
+-140282366920938463463374607431768211458
+-- !result
+SET sql_mode = 'ERROR_IF_OVERFLOW';
+-- result:
+-- !result
+SELECT SUM(a) FROM d38;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SELECT SUM(a) OVER () FROM d38;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SELECT SUM(a) + 0 FROM d38;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SELECT k, SUM(a) OVER (ORDER BY k ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM win ORDER BY k;
+-- result:
+1	90000000000000000000000000000000000000
+2	0
+3	-90000000000000000000000000000000000000
+4	-90000000000000000000000000000000000000
+-- !result
+SET enable_sort_aggregate = true;
+-- result:
+-- !result
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SET enable_sort_aggregate = false;
+-- result:
+-- !result
+SELECT * FROM (SELECT k, row_number() OVER (PARTITION BY k ORDER BY k) AS rn, SUM(a) OVER (PARTITION BY k) AS s FROM d38) t WHERE rn <= 1;
+-- result:
+[REGEX]E: \(1064, .*The 'sum' operation involving decimal values overflows.*
+-- !result
+SELECT SUM(a) FROM d38s;
+-- result:
+0.00
+-- !result
+SELECT k, SUM(a) FROM d38s GROUP BY k ORDER BY k;
+-- result:
+1	3.75
+2	-3.75
+-- !result
+SELECT SUM(a) OVER (ORDER BY k) FROM d38s ORDER BY 1;
+-- result:
+0.00
+3.75
+3.75
+-- !result
+SELECT SUM(b) FROM bigint_t;
+-- result:
+-2
+-- !result
+SET sql_mode = 'ONLY_FULL_GROUP_BY';
+-- result:
+-- !result
+DROP DATABASE test_decimal_sum_overflow;
+-- result:
+-- !result
