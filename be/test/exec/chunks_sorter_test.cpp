@@ -38,6 +38,7 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
+#include "util/defer_op.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -657,6 +658,47 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 //     }
 //     ASSERT_EQ(total_bytes, output_bytes);
 // }
+
+// A VARCHAR topn filter built from values, then overrun by NULLs sorted first: the updater has to drop the slice bounds
+// it built, taking update_to_empty_and_not_null for ROW_NUMBER (open interval, NULLs are not kept) and
+// update_to_all_null for RANK (close interval, only NULLs are kept). Both run under the slice lock.
+TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
+    for (auto topn_type : {TTopNType::ROW_NUMBER, TTopNType::RANK}) {
+        auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+        std::vector<bool> is_asc{true};
+        std::vector<bool> is_null_first{true};
+        std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
+        DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+        ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+
+        auto pool = std::make_unique<ObjectPool>();
+        constexpr size_t kLimit = 2;
+        constexpr size_t kMaxBufferedRows = 1;
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, kLimit, topn_type,
+                                kMaxBufferedRows);
+        sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                             pool->add(new MemTracker(1L << 62, "", nullptr)));
+
+        Chunk::SlotHashMap slot_map{{0, 0}};
+        ColumnPtr values = ColumnTestHelper::build_nullable_column<Slice>({"bravo", "charlie", "delta"}, {0, 0, 0});
+        ASSERT_OK(sorter.update(_runtime_state.get(), std::make_shared<Chunk>(Columns{values}, slot_map)));
+        auto* filters = sorter.runtime_filters(pool.get());
+        ASSERT_TRUE(filters != nullptr);
+        ASSERT_EQ(1, filters->size());
+        auto* rf = down_cast<MinMaxRuntimeFilter<TYPE_VARCHAR>*>(filters->back());
+        ASSERT_FALSE(rf->is_empty_range());
+        ASSERT_TRUE(rf->has_null());
+
+        ColumnPtr nulls = ColumnTestHelper::build_nullable_column<Slice>({"echo", "", ""}, {0, 1, 1});
+        ASSERT_OK(sorter.update(_runtime_state.get(), std::make_shared<Chunk>(Columns{nulls}, slot_map)));
+        filters = sorter.runtime_filters(pool.get());
+        ASSERT_TRUE(filters != nullptr);
+        ASSERT_EQ(rf, filters->back());
+        ASSERT_TRUE(rf->is_empty_range());
+        ASSERT_EQ(topn_type == TTopNType::RANK, rf->has_null());
+    }
+}
 
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {

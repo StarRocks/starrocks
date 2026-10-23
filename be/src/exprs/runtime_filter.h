@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <mutex>
 #include <numeric>
 #include <sstream>
+#include <type_traits>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -602,9 +604,13 @@ public:
     bool left_close_interval() const { return _left_close_interval; }
     bool right_close_interval() const { return _right_close_interval; }
 
-    bool is_empty_range() const { return _min > _max; }
+    bool is_empty_range() const {
+        MinMaxLock lk(_slice_mutex);
+        return _is_empty_range();
+    }
 
     bool is_full_range() const {
+        MinMaxLock lk(_slice_mutex);
         if constexpr (IsSlice<CppType>) {
             return _min == Slice::min_value() && _max == Slice::max_value();
         } else if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
@@ -680,7 +686,8 @@ public:
     void update_to_all_null() {
         DCHECK(_has_null);
 
-        if (is_empty_range()) {
+        MinMaxLock lk(_slice_mutex);
+        if (_is_empty_range()) {
             return;
         }
         _init_min_max();
@@ -688,7 +695,8 @@ public:
     }
 
     void update_to_empty_and_not_null() {
-        if (!is_empty_range() || _has_null) {
+        MinMaxLock lk(_slice_mutex);
+        if (!_is_empty_range() || _has_null) {
             _init_min_max();
             _has_null = false;
             _update_version();
@@ -985,6 +993,13 @@ public:
         return dst - begin;
     }
 
+    // Deliberately not locked, unlike the other readers of _min / _max: every evaluate_min_max()
+    // overload is `if constexpr (!IsSlice<CppType>)`, so a slice filter passes every row through
+    // without ever looking at the bounds, and a bound that is not a slice owns no storage another
+    // thread can free. Taking the lock here would protect nothing and serialize the probe drivers
+    // against each other for the length of a chunk, since they all share one filter object. A
+    // slice comparison added below would need the bounds copied out under the lock first -- do not
+    // just wrap the call.
     void evaluate(const Column* input_column, RunningContext* ctx) const override {
         t_evaluate<true>(input_column, ctx);
     }
@@ -998,6 +1013,10 @@ public:
     }
 
 private:
+    // Callers already hold _slice_mutex. is_empty_range() is a bound comparison, and for a slice
+    // that is a memcmp through _min.data / _max.data, which update_min_max() reallocates.
+    bool _is_empty_range() const { return _min > _max; }
+
     void _init_min_max() {
         if constexpr (IsSlice<CppType>) {
             _min = Slice::max_value();
@@ -1055,11 +1074,11 @@ private:
 
     void _merge_min_max(const MinMaxRuntimeFilter* rf) {
         if (rf->_has_min_max) {
+            MinMaxLock lk(_slice_mutex);
             _min = std::min(_min, rf->_min);
             _max = std::max(_max, rf->_max);
 
             if constexpr (IsSlice<CppType>) {
-                std::lock_guard<std::mutex> lk(_slice_mutex);
                 // maybe we are refering to another runtime filter instance
                 // for security we have to copy that back to our instance.
                 if (_min.size != 0 && _min.data != _slice_min.data()) {
@@ -1077,6 +1096,15 @@ private:
     }
 
 private:
+    // Only a slice bound owns backing storage -- _slice_min / _slice_max -- that one thread can
+    // reallocate while another reads through _min / _max. Every other CppType is a self-contained
+    // value whose load and store cannot tear into a freed buffer, so those types must not pay for
+    // a mutex they do not need.
+    struct NoLock {
+        explicit NoLock(std::mutex&) {}
+    };
+    using MinMaxLock = std::conditional_t<IsSlice<CppType>, std::lock_guard<std::mutex>, NoLock>;
+
     CppType _min;
     CppType _max;
     std::string _slice_min;
