@@ -358,8 +358,11 @@ public class ConfigBase {
                 }
                 break;
             case "default_mv_refresh_mode":
+<<<<<<< HEAD
                 // Must accept exactly what PropertyAnalyzer#analyzeRefreshMode accepts for the
                 // refresh_mode property: AUTO is implemented but deliberately not selectable.
+=======
+>>>>>>> a85b944419f... [BugFix][RB-685] Report PCT for materialized views created without refresh_mode (#66671)
                 if (!confVal.equalsIgnoreCase("PCT") && !confVal.equalsIgnoreCase("INCREMENTAL")) {
                     throw new InvalidConfException("'default_mv_refresh_mode' must be one of PCT or INCREMENTAL. "
                             + "Current value: " + confVal);
