@@ -134,7 +134,8 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                         "api_key", "export-test-secret"), "");
         GlobalStateMgr.getCurrentState().getAIProviderMgr().replayCreateProvider(provider);
         try {
-            String sql = "select ai_complete('http_export_provider', 'explicit-model', cast(k1 as varchar)) from "
+            String sql = "select ai_complete(provider => 'http_export_provider', model => 'explicit-model', prompt "
+                    + "=> cast(k1 as varchar)) from "
                     + DB_NAME + "." + TABLE_NAME;
             Request request = new Request.Builder()
                     .post(RequestBody.create(JSON, new JSONObject().put("sql", sql).toString()))

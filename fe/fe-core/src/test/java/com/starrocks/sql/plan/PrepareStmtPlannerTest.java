@@ -268,7 +268,8 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 "endpoint", "https://models.example.test/v1/chat/completions",
                 "model", "first-model", "api_key", "first-test-key", "timeout_ms", "1200"), "");
         PreparedQuery prepared = prepare(
-                "select ai_complete('" + name + "', 'explicit-model', ?) from tprimary where pk = ?");
+                "select ai_complete(provider => '" + name
+                        + "', model => 'explicit-model', prompt => ?) from tprimary where pk = ?");
         try {
             ExecPlan first = execute(prepared, new StringLiteral("first prompt"), bigint(1));
             TAIProvider firstConfiguration = preparedConfiguration(first).deepCopy();
@@ -315,7 +316,7 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePrepareStmt(true);
         try {
             StatementBase statement = SqlParser.parseSingleStatement(
-                    "prepare unresolved_provider from select " + function + "(?, 'model', 'prompt')",
+                    "prepare unresolved_provider from select " + function + "('prompt', ?, 'model')",
                     connectContext.getSessionVariable().getSqlMode());
             SemanticException error = Assertions.assertThrows(SemanticException.class,
                     () -> Analyzer.analyze(statement, connectContext));

@@ -180,8 +180,9 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "rpc_retry_provider";
         manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_complete('" + name + "', 'explicit-model', ai_complete('" + name + "', "
-                    + "'explicit-model', k1)) from t7";
+            String sql = "select ai_complete(provider => '" + name
+                    + "', model => 'explicit-model', prompt => ai_complete(provider => '" + name
+                    + "', model => 'explicit-model', prompt => k1)) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             assertProviderConfiguration(original, "original");
@@ -206,7 +207,8 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
             assertProviderConfiguration(altered, "altered");
             assertProviderConfiguration(original, "original");
             SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
-            Assertions.assertEquals("AI functions require an OPENAI provider protocol, not ANTHROPIC", error.getDetailMsg());
+            Assertions.assertEquals("AI functions only support an OPENAI provider protocol now, not ANTHROPIC",
+                    error.getDetailMsg());
         } finally {
             manager.dropProvider(name, true);
         }
@@ -218,7 +220,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "schema_retry_provider";
         String originalId = manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_complete('" + name + "', 'explicit-model', k1) from t7";
+            String sql = "select ai_complete(provider => '" + name + "', model => 'explicit-model', prompt => k1) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             assertProviderConfiguration(original, "original");
@@ -257,7 +259,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         String name = "lake_meta_retry_provider";
         manager.createProvider(name, AIProviderType.CHAT, providerProperties("original"), "");
         try {
-            String sql = "select ai_complete('" + name + "', 'explicit-model', k1) from t7";
+            String sql = "select ai_complete(provider => '" + name + "', model => 'explicit-model', prompt => k1) from t7";
             StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
             ExecPlan original = getExecPlan(sql);
             ExecuteExceptionHandler.RetryContext retry =

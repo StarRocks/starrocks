@@ -59,8 +59,8 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
         boolean original = connectContext.getSessionVariable().isCboUseDBLock();
         connectContext.getSessionVariable().setCboUseDBLock(useDatabaseLock);
         try {
-            assertProviderPlan(plan("INSERT INTO tprimary (pk, v1, v2) "
-                    + "SELECT pk1, ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3), v4 FROM tprimary1"));
+            assertProviderPlan(plan("INSERT INTO tprimary (pk, v1, v2) SELECT pk1, ai_complete(provider => '"
+                    + PROVIDER_NAME + "', model => 'explicit-model', prompt => v3), v4 FROM tprimary1"));
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(original);
         }
@@ -68,22 +68,21 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
 
     @Test
     public void testUpdateAssignmentBindings() {
-        assertProviderPlan(plan("UPDATE tprimary SET v1 = ai_complete('" + PROVIDER_NAME
-                + "', 'explicit-model', v1) WHERE pk = 1"));
+        assertProviderPlan(plan("UPDATE tprimary SET v1 = ai_complete(provider => '" + PROVIDER_NAME
+                + "', model => 'explicit-model', prompt => v1) WHERE pk = 1"));
     }
 
     @Test
     public void testDeleteUncorrelatedSubqueryBindings() {
-        assertProviderPlan(plan("DELETE FROM tprimary WHERE v1 IN "
-                + "(SELECT ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3) FROM tprimary1)"));
+        assertProviderPlan(plan("DELETE FROM tprimary WHERE v1 IN (SELECT ai_complete(provider => '" + PROVIDER_NAME
+                + "', model => 'explicit-model', prompt => v3) FROM tprimary1)"));
     }
 
     @Test
     public void testMergeSourceSubqueryBindings() {
-        assertProviderPlan(plan("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                + "USING (SELECT pk1 AS id, ai_complete('" + PROVIDER_NAME + "', 'explicit-model', v3) AS data "
-                + "FROM tprimary1) AS s "
-                + "ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data"));
+        assertProviderPlan(plan("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING (SELECT pk1 AS id, "
+                + "ai_complete(provider => '" + PROVIDER_NAME + "', model => 'explicit-model', prompt => v3) AS "
+                + "data FROM tprimary1) AS s ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data"));
     }
 
     @Test
@@ -103,11 +102,10 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
             } finally {
                 connectContext.setCurrentCatalog(originalCatalog);
             }
-            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                    + "USING (SELECT pk1 AS id, ai_complete('" + PROVIDER_NAME
-                    + "', 'explicit-model', v3) AS data "
-                    + "FROM tprimary1) AS s "
-                    + "ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = s.data";
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING (SELECT pk1 AS id, "
+                    + "ai_complete(provider => '" + PROVIDER_NAME
+                    + "', model => 'explicit-model', prompt => v3) AS data FROM tprimary1) AS s ON t.id = s.id "
+                    + "WHEN MATCHED THEN UPDATE SET data = s.data";
             ErrorReportException functionDenied = Assertions.assertThrows(ErrorReportException.class,
                     () -> plan(sql, caller));
             Assertions.assertTrue(functionDenied.getMessage().contains("AI FUNCTION"), functionDenied.getMessage());
@@ -127,30 +125,31 @@ public class AIProviderDmlPlanTest extends PlanTestBase {
 
     @Test
     public void testConditionalUpdateRemainsUnsupported() {
-        assertRejected("UPDATE tprimary SET v1 = CASE WHEN pk = 1 THEN ai_complete('"
-                + PROVIDER_NAME + "', 'explicit-model', v1) ELSE v1 END WHERE pk > 0", "conditional expression");
+        assertRejected("UPDATE tprimary SET v1 = CASE WHEN pk = 1 THEN ai_complete(provider => '"
+                + PROVIDER_NAME + "', model => 'explicit-model', prompt => v1) ELSE v1 END WHERE pk > 0",
+                "conditional expression");
     }
 
     @Test
     public void testCorrelatedDeleteRemainsUnsupported() {
-        assertRejected("DELETE FROM tprimary WHERE v1 IN (SELECT ai_complete('" + PROVIDER_NAME
-                + "', 'explicit-model', v3) FROM tprimary1 WHERE pk1 = tprimary.pk)", "correlated AI function");
+        assertRejected("DELETE FROM tprimary WHERE v1 IN (SELECT ai_complete(provider => '" + PROVIDER_NAME
+                + "', model => 'explicit-model', prompt => v3) FROM tprimary1 WHERE pk1 = tprimary.pk)",
+                "correlated AI function");
     }
 
     @Test
     public void testConditionalMergeAssignmentRemainsUnsupported() {
-        assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                + "USING (SELECT 1 AS id, 'prompt' AS data) AS s ON t.id = s.id "
-                + "WHEN MATCHED THEN UPDATE SET data = ai_complete('" + PROVIDER_NAME + "', 'explicit-model', s.data)",
+        assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING (SELECT 1 AS id, 'prompt' AS data) "
+                + "AS s ON t.id = s.id WHEN MATCHED THEN UPDATE SET data = ai_complete(provider => '" + PROVIDER_NAME
+                + "', model => 'explicit-model', prompt => s.data)",
                 "conditional expression");
     }
 
     @Test
     public void testMergeJoinConditionRemainsUnsupported() {
-        assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t "
-                + "USING (SELECT 1 AS id, 'prompt' AS data) AS s "
-                + "ON t.data = ai_complete('" + PROVIDER_NAME + "', 'explicit-model', s.data) "
-                + "WHEN MATCHED THEN UPDATE SET data = s.data", "JOIN ON clause");
+        assertRejected("MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING (SELECT 1 AS id, 'prompt' AS data) "
+                + "AS s ON t.data = ai_complete(provider => '" + PROVIDER_NAME + "', model => 'explicit-model', "
+                + "prompt => s.data) WHEN MATCHED THEN UPDATE SET data = s.data", "JOIN ON clause");
     }
 
     private static ExecPlan plan(String sql) {

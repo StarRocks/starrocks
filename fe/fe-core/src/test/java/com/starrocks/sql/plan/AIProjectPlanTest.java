@@ -135,9 +135,9 @@ public class AIProjectPlanTest extends PlanTestBase {
 
     @Test
     public void testAITranslateAutoDetectSourceLanguagePreservesInvocation() throws Exception {
-        for (String prefix : List.of("", "'explicit-model', ", "'test_default_chat', 'explicit-model', ")) {
+        for (String suffix : List.of("", ", '', 'explicit-model'", ", 'test_default_chat', 'explicit-model'")) {
             for (String source : List.of("''", "NULL", "cast(NULL as varchar)")) {
-                ExecPlan plan = getExecPlan("select ai_translate(" + prefix + "'hello', " + source + ", 'zh')");
+                ExecPlan plan = getExecPlan("select ai_translate('hello', " + source + ", 'zh'" + suffix + ")");
                 TAIProjectNode node = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 Assertions.assertEquals("ai_translate",
                         findOnlyAIExpression(node.getSlot_map()).getNodes().get(0).getFn().getName().getFunction_name());
@@ -147,8 +147,8 @@ public class AIProjectPlanTest extends PlanTestBase {
 
     @Test
     public void testAICompleteNullOptionsPreserveInvocation() throws Exception {
-        for (String prefix : List.of("", "'explicit-model', ", "'test_default_chat', 'explicit-model', ")) {
-            ExecPlan plan = getExecPlan("select ai_complete(" + prefix + "'hello', cast(NULL as map<varchar,json>))");
+        for (String provider : List.of("NULL", "''", "'test_default_chat'")) {
+            ExecPlan plan = getExecPlan("select ai_complete('hello', " + provider + ", 'explicit-model', cast(NULL as json))");
             TAIProjectNode node = findOnlyAIProjectThriftNode(plan).getAi_project_node();
             Assertions.assertEquals("ai_complete",
                     findOnlyAIExpression(node.getSlot_map()).getNodes().get(0).getFn().getName().getFunction_name());
@@ -230,7 +230,7 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
                 Assertions.assertEquals(embedding ? 200134 : 200104, call.getFn().getId());
-                Assertions.assertEquals(embedding ? 1 : 2, call.getNum_children());
+                Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
                 String configId = call.getAi_provider_id();
                 Assertions.assertEquals(configId, call.getAi_provider_id());
                 TExprNode fileArgument = expression.getNodes().get(embedding ? 1 : 2);
@@ -456,7 +456,7 @@ public class AIProjectPlanTest extends PlanTestBase {
     public void testExplainContainsOnlySemanticArgumentsAndNoConfiguration() throws Exception {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         String optimizerExplain = Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
-        assertUnaryAIComplete(optimizerExplain);
+        assertNormalizedAIComplete(optimizerExplain);
         List<String> explains = List.of(
                 optimizerExplain,
                 execPlan.getExplainString(TExplainLevel.NORMAL),
@@ -718,6 +718,36 @@ public class AIProjectPlanTest extends PlanTestBase {
         Assertions.assertTrue(limits.stream()
                         .anyMatch(limit -> limit.getLimit() == 5 && limit.getOffset() == 3),
                 Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTopNProjectionDependenciesForTextAndEmbedding(boolean enabled) throws Exception {
+        boolean oldEnabled = connectContext.getSessionVariable().isEnableAITopnPushdown();
+        String oldEmbeddingEndpoint = AIProviderTestUtil.embeddingProperty("endpoint");
+        String oldEmbeddingModel = AIProviderTestUtil.embeddingProperty("model");
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        try {
+            connectContext.getSessionVariable().setEnableAITopnPushdown(enabled);
+            for (String sql : List.of(
+                    "select k1, ai_embed(k2) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(k2) from t7 order by k1 desc limit 1 offset 1",
+                    "select k1, ai_sentiment(k2) from t7 order by k1 limit 1",
+                    "select k1, array_length(ai_embed(k2)) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(ai_complete(k2)) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(concat(k2, 'x')), ai_embed(concat(k2, 'x')) from t7 order by k1 limit 1")) {
+                ExecPlan plan = getExecPlan(sql);
+                Assertions.assertFalse(findPhysicalOperators(plan.getPhysicalPlan(),
+                        OperatorType.PHYSICAL_AI_PROJECT).isEmpty(), sql);
+                com.starrocks.sql.optimizer.validate.InputDependenciesChecker.getInstance()
+                        .validate(plan.getPhysicalPlan(), null);
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableAITopnPushdown(oldEnabled);
+            AIProviderTestUtil.setEmbeddingProperty("model", oldEmbeddingModel);
+            AIProviderTestUtil.setEmbeddingProperty("endpoint", oldEmbeddingEndpoint);
+        }
     }
 
     @ParameterizedTest
@@ -1103,13 +1133,13 @@ public class AIProjectPlanTest extends PlanTestBase {
         return aiExpressions.get(0);
     }
 
-    private static void assertUnaryAIComplete(String explain) {
+    private static void assertNormalizedAIComplete(String explain) {
         int start = explain.indexOf("ai_complete(");
         Assertions.assertTrue(start >= 0, explain);
         while (start >= 0) {
             int end = explain.indexOf(')', start);
             Assertions.assertTrue(end > start, explain);
-            Assertions.assertFalse(explain.substring(start, end).contains(","), explain);
+            Assertions.assertTrue(explain.substring(start, end).contains(", '', '', json_object("), explain);
             start = explain.indexOf("ai_complete(", end);
         }
     }

@@ -111,7 +111,7 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
     @ParameterizedTest
     @CsvSource(value = {
             "ai_complete | ai_complete('prompt')",
-            "ai_complete | ai_complete('model', 'prompt', map{'temperature': 0.5})",
+            "ai_complete | ai_complete(prompt => 'prompt', model => 'model', options => json_object('temperature', 0.5))",
             "ai_embed | ai_embed('prompt')",
             "ai_sentiment | ai_sentiment('prompt')",
             "ai_classify | ai_classify('prompt', ['label'])",
@@ -141,14 +141,14 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
         executeAsRoot("REVOKE USAGE ON AI PROVIDER test_default_chat FROM '" + user + "'");
         assertAnalysisDenied("SELECT ai_complete('prompt')", caller, "AI PROVIDER");
-        assertAnalysisDenied("SELECT ai_complete('model', 'prompt')", caller, "AI PROVIDER");
+        assertAnalysisDenied("SELECT ai_complete(prompt => 'prompt', model => 'model')", caller, "AI PROVIDER");
         executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
         analyze("SELECT ai_complete('prompt')", caller);
     }
 
     @Test
     public void testProviderAndFunctionRequireSeparateUsage() throws Exception {
-        String sql = "SELECT ai_complete('ai_authorization_provider', 'explicit-model', 'prompt')";
+        String sql = "SELECT ai_complete(provider => 'ai_authorization_provider', model => 'explicit-model', prompt => 'prompt')";
         executeAsRoot("GRANT USAGE ON AI PROVIDER ai_authorization_provider TO '" + user + "'");
         assertAnalysisDenied(sql, caller, "AI FUNCTION");
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");

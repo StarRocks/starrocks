@@ -85,7 +85,7 @@ public class PushDownTopNBelowAIProjectRuleTest {
     @ParameterizedTest
     @CsvSource({"0, PARTIAL", "1, PARTIAL", "4, PARTIAL", "5, FINAL", "6, FINAL", "9223372036854775807, FINAL"})
     public void testThresholdControlsBothProjectionShapes(long threshold, SortPhase expectedPhase) {
-        optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
+        optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
         for (boolean withProject : List.of(false, true)) {
             OptExpression input = input(withProject);
             OptExpression child = input.inputAt(0);
@@ -129,7 +129,7 @@ public class PushDownTopNBelowAIProjectRuleTest {
     @ParameterizedTest
     @CsvSource({"false, 0", "true, 0", "false, 1000", "true, 1000"})
     public void testRewriteTreePreservesOrderingOutputsAndAIOccurrences(boolean withProject, long threshold) {
-        optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
+        optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
         OptExpression input = input(withProject);
         Projection projection = new Projection(Map.of(answer, answer));
         input.getOp().setProjection(projection);
@@ -293,12 +293,12 @@ public class PushDownTopNBelowAIProjectRuleTest {
         long oldThreshold = optimizerContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit();
         try {
             for (long threshold : new long[] {0, 1000}) {
-                optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(threshold);
+                optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(threshold);
                 Assertions.assertFalse(rule.check(input, optimizerContext));
                 Assertions.assertTrue(rule.transform(input, optimizerContext).isEmpty());
             }
         } finally {
-            optimizerContext.getSessionVariable().setAITopnPushdownMaxGlobalLimit(oldThreshold);
+            optimizerContext.getSessionVariable().setAiTopnPushdownMaxGlobalLimit(oldThreshold);
         }
     }
 }

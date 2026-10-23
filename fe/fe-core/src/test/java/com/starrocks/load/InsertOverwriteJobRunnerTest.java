@@ -183,8 +183,9 @@ public class InsertOverwriteJobRunnerTest {
                         context.setQueryId(UUIDUtil.genUUID());
                         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
                         context.getSessionVariable().setOptimizerExecuteTimeout(300000000);
-                        String sql = "insert overwrite " + tableName + " select k1, ai_complete('"
-                                + providerName + "', 'explicit-model', cast(k2 as varchar)) from t2";
+                        String sql = "insert overwrite " + tableName + " select k1, ai_complete(provider => '"
+                                + providerName + "', model => 'explicit-model', prompt => cast(k2 as "
+                                + "varchar)) from t2";
                         InsertStmt statement = (InsertStmt) SqlParser.parseSingleStatement(
                                 sql, context.getSessionVariable().getSqlMode());
                         AtomicReference<ExecPlan> originalPlan = new AtomicReference<>();
@@ -226,8 +227,8 @@ public class InsertOverwriteJobRunnerTest {
                         Assertions.assertTrue(table.getTempPartitions().isEmpty());
                         Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().getJobNum());
 
-                        String nextSql = "select ai_complete('" + providerName + "', 'explicit-model', cast(k2 as "
-                                + "varchar)) from t2";
+                        String nextSql = "select ai_complete(provider => '" + providerName
+                                + "', model => 'explicit-model', prompt => cast(k2 as varchar)) from t2";
                         if (change.equals("drop")) {
                             Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
                             Assertions.assertTrue(context.getState().getErrorMessage()

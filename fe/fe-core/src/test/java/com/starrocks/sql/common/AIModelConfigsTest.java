@@ -42,7 +42,7 @@ public class AIModelConfigsTest {
             Assertions.assertEquals(provider.getId(), wire.getId());
             Assertions.assertEquals(provider.getName(), wire.getName());
             Assertions.assertEquals(TAIProviderProtocol.OPENAI, wire.getProtocol());
-            Assertions.assertFalse(wire.getParams().containsKey("protocol"));
+            Assertions.assertEquals(provider.getParams().get("protocol"), wire.getParams().get("protocol"));
             Assertions.assertEquals("OpEnAi", provider.getParams().get("protocol"));
         });
         Assertions.assertEquals(TAIProviderProtocol.OPENAI, provider(AIProviderType.CHAT).toThrift().getProtocol());
@@ -62,7 +62,7 @@ public class AIModelConfigsTest {
             Map<String, String> originalParams = provider.getParams();
             TAIProvider wire = provider.toThrift();
             Assertions.assertEquals(wireProtocol, wire.getProtocol());
-            Assertions.assertFalse(wire.getParams().containsKey("protocol"));
+            Assertions.assertEquals(provider.getParams().get("protocol"), wire.getParams().get("protocol"));
             Assertions.assertEquals(originalParams, provider.getParams());
         });
     }
