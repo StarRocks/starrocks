@@ -101,7 +101,6 @@ void DeltaWriter::_garbage_collection() {
     if (_tablet != nullptr) {
         rollback_status = _storage_engine->txn_manager()->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id,
                                                                        _with_rollback_log);
-        _tablet->remove_in_writing_data_size(_opt.txn_id);
     }
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
@@ -512,7 +511,8 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  replica_state_name(_replica_state)));
     }
 
-    _tablet->add_in_writing_data_size(_opt.txn_id, segment_pb.data_size());
+    _storage_engine->txn_manager()->add_in_writing_data_size(_opt.partition_id, _tablet, _opt.txn_id,
+                                                             segment_pb.data_size());
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet->tablet_id());
     int64_t duration_ns = 0;
     {
@@ -592,7 +592,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                         std::move(_mem_table), eos,
                         [replicate_token, this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
-                                _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                                _storage_engine->txn_manager()->add_in_writing_data_size(_opt.partition_id, _tablet,
+                                                                                         _opt.txn_id, seg->data_size());
                             }
                             if (_opt.immutable_tablet_size > 0 &&
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
@@ -617,7 +618,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                 return _flush_token->submit(
                         std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
-                                _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                                _storage_engine->txn_manager()->add_in_writing_data_size(_opt.partition_id, _tablet,
+                                                                                         _opt.txn_id, seg->data_size());
                             }
                             if (_opt.immutable_tablet_size > 0 &&
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
@@ -636,7 +638,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
             return _flush_token->submit(std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t f) {
                 if (seg) {
-                    _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                    _storage_engine->txn_manager()->add_in_writing_data_size(_opt.partition_id, _tablet, _opt.txn_id,
+                                                                             seg->data_size());
                 }
                 if (_opt.immutable_tablet_size > 0 &&
                     _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
