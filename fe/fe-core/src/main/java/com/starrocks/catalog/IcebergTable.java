@@ -478,6 +478,13 @@ public class IcebergTable extends Table {
         return table;
     }
 
+    // Pin the source table's read view on a table the planner derives from it over the same native table
+    // (the equality-delete rewrite builds such tables), so a time-travel read keeps the snapshot schema in
+    // the derived scans and their descriptors. Only for a freshly built, not yet shared table.
+    public void inheritReadView(IcebergTable source) {
+        this.readView = source.readView;
+    }
+
     /**
      * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
      * query to plan and run on. The published object is shared by every query and read without the meta lock,

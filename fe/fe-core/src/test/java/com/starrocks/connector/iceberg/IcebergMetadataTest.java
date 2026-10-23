@@ -5152,6 +5152,64 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testBranchReadUsesCurrentSchema() throws Exception {
+        // A branch is read with the table's current schema; a tag keeps the schema of its snapshot.
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        String createCatalog = "CREATE EXTERNAL CATALOG iceberg_branch_catalog PROPERTIES(\"type\"=\"iceberg\", " +
+                "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        new StarRocksAssert().withCatalog(createCatalog);
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        mockedNativeTableB.manageSnapshots().createTag("tag_s1", s1).createBranch("branch_s1", s1).commit();
+        // Rename k2, and drop and re-add k1 under the same name (a new field id), after the branch head.
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.updateSchema().deleteColumn("k1").commit();
+        mockedNativeTableB.updateSchema().addColumn("k1", Types.IntegerType.get()).commit();
+        mockedNativeTableB.refresh();
+        Schema currentSchema = mockedNativeTableB.schema();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+        };
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        QueryStatement branchStmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(
+                "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'branch_s1'");
+        Assertions.assertEquals(List.of("k2_renamed", "k1"), branchStmt.getQueryRelation().getColumnOutputNames());
+        TableRelation branchRelation = (TableRelation) ((SelectRelation) branchStmt.getQueryRelation()).getRelation();
+        Assertions.assertEquals(Optional.of(s1), branchRelation.getTvrVersionRange().end());
+        Schema branchReadSchema = ((IcebergTable) branchRelation.getTable()).getReadSchema();
+        Assertions.assertEquals(currentSchema.schemaId(), branchReadSchema.schemaId());
+        Assertions.assertEquals(currentSchema.findField("k1").fieldId(), branchReadSchema.findField("k1").fieldId());
+
+        // branch-4.1 does not render the parsed time travel clause back to SQL (#72061 is not backported),
+        // so skip the deparse/reparse round trip: it would read the current schema instead of the tag's.
+        QueryStatement tagStmt = (QueryStatement) AnalyzeTestUtil.analyzeWithoutTestView(
+                "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'tag_s1'");
+        Assertions.assertEquals(List.of("k1", "k2"), tagStmt.getQueryRelation().getColumnOutputNames());
+        TableRelation tagRelation = (TableRelation) ((SelectRelation) tagStmt.getQueryRelation()).getRelation();
+        Schema tagReadSchema = ((IcebergTable) tagRelation.getTable()).getReadSchema();
+        Assertions.assertNotEquals(currentSchema.findField("k1").fieldId(), tagReadSchema.findField("k1").fieldId());
+    }
+
+    @Test
     public void testTimeTravelSnapshotSchemaThroughExternalTablePreparse() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
