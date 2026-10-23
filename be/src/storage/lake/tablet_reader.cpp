@@ -15,6 +15,11 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <future>
+<<<<<<< HEAD
+=======
+#include <limits>
+#include <unordered_set>
+>>>>>>> 8b57d0a ([BugFix] Read every JSON column of a vertical compaction through a flat layout (#81080))
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -220,13 +225,38 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Lake Compaction flat json paths exists: " << read_params.column_access_paths->size();
-        return Status::OK();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
     }
+<<<<<<< HEAD
 
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
+=======
+    // Bail out before touching any segment when this read has no JSON column: get_segments() below
+    // loads every input segment, so on JSON-free tables this path would fully load the whole input
+    // set for nothing (500 wide segments ≈ 350MB). Without a held set it also loads them with
+    // fill_metadata_cache=true, pushing that whole set into the shared metacache and evicting
+    // neighbors' entries; a compaction task that holds its inputs reuses them here instead
+    // (Rowset::get_segments_checked).
+    bool has_json_column = false;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        if (col.type() == LogicalType::TYPE_JSON && _schema.get_field_by_name(std::string(col.name())) != nullptr &&
+            !columns_with_path.contains(i)) {
+            has_json_column = true;
+            break;
+        }
+    }
+    if (!has_json_column) {
+        return Status::OK();
+    }
+
+    // get_non_null_segments() drops lost-segment placeholders (experimental_lake_ignore_lost_segment).
+>>>>>>> 8b57d0a ([BugFix] Read every JSON column of a vertical compaction through a flat layout (#81080))
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
         auto segments = rowset->get_segments();
@@ -238,7 +268,8 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
