@@ -76,7 +76,7 @@ subprojects {
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.18.1")
         set("ranger.version", "2.9.0")
-        set("zookeeper.version", "3.9.5")
+        set("zookeeper.version", "3.9.6")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
