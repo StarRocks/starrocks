@@ -158,6 +158,12 @@ description: "Alphabetical s"
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compactions that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 
 - Unit: Count

@@ -277,6 +277,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 
+    REGISTER_STARROCKS_METRIC(flat_json_compaction_streaming_total);
+
     // data cache metrics
     REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
     REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
