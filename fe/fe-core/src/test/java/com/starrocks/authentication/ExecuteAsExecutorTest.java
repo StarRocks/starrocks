@@ -339,7 +339,7 @@ public class ExecuteAsExecutorTest {
                     new UserRef("u1", "%", false, NodePosition.ZERO), true,
                     new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
                             false, NodePosition.ZERO),
-                    null, null, List.of(), Map.of(), NodePosition.ZERO));
+                    List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
             AuthenticationHandler.authenticate(context,
@@ -394,7 +394,7 @@ public class ExecuteAsExecutorTest {
                     new UserRef("u1", "%", false, NodePosition.ZERO), true,
                     new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
                             false, NodePosition.ZERO),
-                    null, null, List.of(), Map.of(), NodePosition.ZERO));
+                    List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
             AuthenticationHandler.authenticate(context,
