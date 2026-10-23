@@ -287,6 +287,7 @@ public class StatisticsCollectionTrigger {
 
     private void prepareAnalyzeJobForLoad() {
         TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        // The broker-load publisher already holds the table WRITE lock when useLock is false.
         Locker locker = new Locker();
         if (useLock) {
             locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
@@ -342,17 +343,16 @@ public class StatisticsCollectionTrigger {
                     LOG.debug("Statistics collection not triggered for DML type: {}", dmlType);
                 }
             }
+            if (partitionIds.isEmpty()) {
+                return;
+            }
+            // Partition row counts traverse mutable subpartition maps, so read them before releasing the lock.
+            analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
         } finally {
             if (useLock) {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
             }
         }
-        if (partitionIds.isEmpty()) {
-            return;
-        }
-
-        analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
-
         if (analyzeType != SAMPLE) {
             partitionTabletRowCounts.clear();
         }
