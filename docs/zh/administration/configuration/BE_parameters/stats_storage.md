@@ -763,6 +763,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：主键表单次 Compaction 合并的最大 Rowset 数。
 - 引入版本：-
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- 默认值：10000
+- 类型：Int
+- 单位：Rowset
+- 是否动态：是
+- 描述：主键表 size-tiered 合并时，单次选入的 level=-1 Rowset 最大数量；配置小于 2 时按 2 生效。level=-1 包括零行或估算有效字节为零的 Rowset。与其他层同时合并时，此配置不限制总输入数。
+- 引入版本：-
+
 ### memory_limitation_per_thread_for_schema_change
 
 - 默认值：2
@@ -1130,6 +1139,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：Bytes
 - 是否动态：是
 - 描述：Size-tiered Compaction 策略中，最小 Level 的大小，小于此数值的 Rowset 会直接触发 Compaction。
+- 引入版本：-
+
+### skip_pindex_l1_l2_check_in_insert
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在存算一体集群中，向本地持久化主键索引执行 insert 时，是否跳过不可变 L1/L2 文件的重复键检查。默认值 `true` 表示仅检查 L0 memtable，避免这些检查带来的磁盘读取，与存算分离集群的云原生主键索引行为对齐。设置为 `false` 可恢复不可变索引检查。此配置控制索引内部的一致性检查，不改变主键表 SQL INSERT 语句的更新语义。
 - 引入版本：-
 
 ### snapshot_expire_time_sec

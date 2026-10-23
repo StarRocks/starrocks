@@ -117,7 +117,8 @@ CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
 // Default: false (conservative, validates all conditions even within same transaction)
 CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // If enable_retry_apply is set to true, the system will attempt retries when apply fails.
 // Retry scenarios for apply operations include the following cases:
@@ -217,6 +218,10 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(max_tmp_l1_num, "10");
 
 CONF_mBool(enable_parallel_get_and_bf, "false");
+
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");

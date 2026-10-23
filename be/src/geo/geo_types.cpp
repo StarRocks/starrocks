@@ -39,6 +39,7 @@
 #include <s2/s2cap.h>
 #include <s2/s2cell.h>
 #include <s2/s2earth.h>
+#include <s2/s2edge_crosser.h>
 #include <s2/s2edge_distances.h>
 #include <s2/s2error.h>
 #include <s2/s2latlng.h>
@@ -396,6 +397,36 @@ bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
     index.Add(std::make_unique<S2LaxLoopShape>(points));
     S2Error error;
     return !s2shapeutil::FindSelfIntersection(index, &error);
+}
+
+bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
+    // A paired sweep over 4..512 vertices favored direct checks at every tested size.
+    constexpr size_t kMaxDirectVertices = 512;
+    // Raw size bounds the converted size; retain the old path without converting twice.
+    if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
+
+    std::vector<S2Point> points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+    // Preserve the existing non-index checks without changing the H3 validity path.
+    for (const auto& point : points) {
+        if (!S2::IsUnitLength(point)) return false;
+    }
+    const size_t n = points.size();
+    for (size_t i = 0; i < n; ++i) {
+        const auto& next = points[(i + 1) % n];
+        if (points[i] == next || points[i] == -next) return false;
+    }
+    // FindCrossingError for one chain rejects interior crossings and repeated end vertices.
+    // Adjacent edges share an endpoint, so their CrossingSign is zero; their ends differ.
+    for (size_t i = 0; i + 2 < n; ++i) {
+        S2EdgeCrosser crosser(&points[i], &points[i + 1], &points[i + 2]);
+        const size_t end = i == 0 ? n - 1 : n;
+        for (size_t j = i + 2; j < end; ++j) {
+            const auto& next = points[j + 1 == n ? 0 : j + 1];
+            if (points[i + 1] == next || crosser.CrossingSign(&next) > 0) return false;
+        }
+    }
+    return true;
 }
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {

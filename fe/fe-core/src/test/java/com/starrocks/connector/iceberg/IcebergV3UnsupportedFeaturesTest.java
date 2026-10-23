@@ -255,7 +255,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     }
 
     @Test
-    public void testToPartitionFieldFailsOnUnsupportedTransform() {
+    public void testToPartitionFieldShowsUnsupportedTransform() {
         // Create a partition spec with a known transform, then test with unknown transform string
         // We use a mock PartitionField to simulate an unsupported V3 multi-arg transform
         org.apache.iceberg.PartitionField mockField = mock(org.apache.iceberg.PartitionField.class);
@@ -270,11 +270,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 Types.NestedField.required(1, "id", Types.IntegerType.get()));
         when(mockSpec.schema()).thenReturn(schema);
 
-        StarRocksConnectorException ex = Assertions.assertThrows(
-                StarRocksConnectorException.class,
-                () -> toPartitionField(mockSpec, mockField, false));
-        Assertions.assertTrue(ex.getMessage().contains("Unsupported partition transform"),
-                "Expected unsupported transform error, got: " + ex.getMessage());
+        // Shown as is, so SHOW CREATE TABLE and ALTER TABLE keep working on such a table.
+        Assertions.assertEquals("range[10, 20](`id`)", toPartitionField(mockSpec, mockField, false));
     }
 
     @Test

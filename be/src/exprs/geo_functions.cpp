@@ -1480,6 +1480,17 @@ StatusOr<ColumnPtr> geo_measure(FunctionContext* context, const Columns& columns
     return output;
 }
 
+static ALWAYS_NOINLINE StatusOr<bool> geography_is_valid(const WkbGeometry& geometry) {
+    if (geometry.empty) return true;
+    if (geometry.type == WkbGeometryType::POLYGON && geometry.rings.size() == 1) {
+        GeoCoordinateList coordinates;
+        coordinates.list.reserve(geometry.rings[0].size());
+        for (const auto& point : geometry.rings[0]) coordinates.add({point.x, point.y});
+        return GeoPolygon::is_valid_ring_direct(coordinates);
+    }
+    return spherical_is_valid(geometry);
+}
+
 template <LogicalType Type>
 StatusOr<ColumnPtr> geo_validity(FunctionContext* context, const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -1502,7 +1513,7 @@ StatusOr<ColumnPtr> geo_validity(FunctionContext* context, const Columns& column
         ASSIGN_OR_RETURN(const auto* geometry,
                          unary_geometry(input, row, semantics, prepared, &constant_geometry, &varying_geometry));
         if constexpr (Type == TYPE_GEOGRAPHY) {
-            ASSIGN_OR_RETURN(auto valid, spherical_is_valid(*geometry));
+            ASSIGN_OR_RETURN(auto valid, geography_is_valid(*geometry));
             result.append(valid);
         } else {
             ASSIGN_OR_RETURN(auto valid, planar_is_valid(*geometry));

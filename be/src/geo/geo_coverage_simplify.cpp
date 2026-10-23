@@ -16,14 +16,12 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
-#include <map>
-#include <memory_resource>
 #include <numeric>
+#include <span>
 #include <variant>
 #include <vector>
 
@@ -35,6 +33,8 @@
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
+#include "base/hash/hash_util.hpp"
+#include "base/phmap/phmap.h"
 #include "geo/geo_exact_arithmetic.h"
 #include "types/geo_wkb.h"
 
@@ -47,13 +47,6 @@ using Key = std::pair<uint32_t, uint32_t>;
 struct Stop {
     Status status;
 };
-// Lives independently before the public object and survives its destructor.
-// The entire state/public-object allocation has one captured allocator owner.
-struct StateAllocation {
-    memory::Allocator* allocator;
-    void* raw;
-    size_t bytes;
-};
 [[noreturn]] void invalid(const char* message) {
     throw Stop{Status::InvalidArgument(message)};
 }
@@ -64,109 +57,28 @@ uint32_t index(size_t size) {
     return static_cast<uint32_t>(size);
 }
 
-// Tracked individually freed allocations, including temporary peaks. An aligned
-// view retains its raw allocation header; accounting uses the underlying size
-// class before alloc, not requested WKB length or a model expansion estimate.
-class Memory final : public std::pmr::memory_resource {
-public:
-    explicit Memory(memory::Allocator* allocator) : allocator(allocator) {}
-    void retain(size_t count) {
-        size_t current = used.load(std::memory_order_relaxed);
-        while (!used.compare_exchange_weak(current, current + count, std::memory_order_relaxed)) {
-        }
-        size_t previous = peak.load(std::memory_order_relaxed);
-        while (previous < current + count &&
-               !peak.compare_exchange_weak(previous, current + count, std::memory_order_relaxed)) {
-        }
+// These maps are lookup-only: IDs are assigned on first encounter, never by
+// hash iteration.
+struct LookupHash {
+    size_t operator()(const std::pair<double, double>& key) const {
+        const std::array<uint64_t, 2> bits{key.first == 0 ? 0 : std::bit_cast<uint64_t>(key.first),
+                                           key.second == 0 ? 0 : std::bit_cast<uint64_t>(key.second)};
+        return HashUtil::murmur_hash64A(bits, 0);
     }
-    void release(size_t count) { used.fetch_sub(count, std::memory_order_relaxed); }
-    memory::Allocator* allocator;
-    // The algorithm is single-owner. Immutable native output buffers can be
-    // released by independent downstream workers after it has finished.
-    std::atomic<size_t> used{0}, peak{0};
-
-private:
-    struct Header {
-        void* raw;
-        size_t requested;
-        size_t charged;
-    };
-    void* do_allocate(size_t count, size_t alignment) override {
-        if (alignment > std::numeric_limits<size_t>::max() - sizeof(Header) ||
-            count > std::numeric_limits<size_t>::max() - alignment - sizeof(Header))
-            throw std::bad_alloc();
-        const size_t request = count + alignment + sizeof(Header);
-        const int64_t size_class = allocator->nallox(request);
-        if (size_class <= 0 || uint64_t(size_class) < request) throw std::bad_alloc();
-        retain(size_class);
-        void* raw;
-        try {
-            raw = allocator->alloc(request);
-        } catch (...) {
-            release(size_class);
-            throw;
-        }
-        if (raw == nullptr) {
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        void* aligned = static_cast<char*>(raw) + sizeof(Header);
-        size_t space = request - sizeof(Header);
-        if (std::align(alignment, count, aligned, space) == nullptr) {
-            allocator->free(raw, request);
-            release(size_class);
-            throw std::bad_alloc();
-        }
-        auto* header = static_cast<Header*>(aligned) - 1;
-        *header = {raw, request, size_t(size_class)};
-        return aligned;
-    }
-    void do_deallocate(void* pointer, size_t, size_t) override {
-        auto header = *(static_cast<Header*>(pointer) - 1);
-        allocator->free(header.raw, header.requested);
-        release(header.charged);
-    }
-    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override { return this == &other; }
-};
-
-// Only default construction needs the scoped resource. Each allocator instance
-// captures its owner, including multiprecision rebound/temporary allocations;
-// later frees never consult this TLS variable. No simultaneous mutable use of a
-// partition is allowed, but sequential movement between workers is supported.
-thread_local std::pmr::memory_resource* construction_memory = nullptr;
-struct MemoryScope {
-    std::pmr::memory_resource* previous;
-    explicit MemoryScope(Memory& memory) : previous(construction_memory) { construction_memory = &memory; }
-    ~MemoryScope() { construction_memory = previous; }
-};
-template <class T>
-struct Alloc {
-    using value_type = T;
-    std::pmr::memory_resource* memory = construction_memory;
-    Alloc() = default;
-    explicit Alloc(std::pmr::memory_resource* m) : memory(m) {}
-    template <class U>
-    Alloc(const Alloc<U>& other) : memory(other.memory) {}
-    T* allocate(size_t n) {
-        if (!memory || n > std::numeric_limits<size_t>::max() / sizeof(T)) throw std::bad_alloc();
-        return static_cast<T*>(memory->allocate(n * sizeof(T), alignof(T)));
-    }
-    void deallocate(T* pointer, size_t n) { memory->deallocate(pointer, n * sizeof(T), alignof(T)); }
-    template <class U>
-    bool operator==(const Alloc<U>& other) const {
-        return memory == other.memory;
-    }
-    template <class U>
-    bool operator!=(const Alloc<U>& other) const {
-        return !(*this == other);
+    size_t operator()(const Key& key) const {
+        const uint64_t bits = uint64_t(key.first) << 32 | key.second;
+        return HashUtil::murmur_hash64A(bits, 0);
     }
 };
+template <class K, class V>
+using Map = phmap::flat_hash_map<K, V, LookupHash>;
 // Finite binary64 scaled by 2^1074 has <2098 bits; determinants <4199,
 // ring sums with native WKB positions <4219. 16384 checked bits also cover
-// tolerance^2 and doubled midpoint samples. Dynamic limbs use the tracked allocator.
+// tolerance^2 and doubled midpoint samples. Dynamic limbs use the standard allocator.
 using DynamicInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<128, 16384, boost::multiprecision::signed_magnitude,
-                                               boost::multiprecision::checked, Alloc<boost::multiprecision::limb_type>>,
+                                               boost::multiprecision::checked,
+                                               std::allocator<boost::multiprecision::limb_type>>,
         boost::multiprecision::et_off>;
 using FixedInteger = boost::multiprecision::number<
         boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::signed_magnitude,
@@ -191,14 +103,54 @@ struct Binary64 {
         }
     }
 };
+using NativeInteger = __int128;
+using boost::multiprecision::abs;
+NativeInteger abs(NativeInteger value) {
+    return value < 0 ? -value : value;
+}
+unsigned bit_width128(unsigned __int128 value) {
+    const auto upper = uint64_t(value >> 64);
+    return upper ? 64 + std::bit_width(upper) : std::bit_width(uint64_t(value));
+}
+// Strict bit bound of the exact binary64 difference in the 2^1074 scale.
+// Nearby endpoints use unsigned arithmetic; wider gaps use a conservative
+// exponent bound. No rounded subtraction participates in fast-path admission.
+unsigned difference_high_bit(double left, double right) {
+    const Binary64 a(left), b(right);
+    const unsigned ah = a.significand ? a.shift + std::bit_width(a.significand) : 0;
+    const unsigned bh = b.significand ? b.shift + std::bit_width(b.significand) : 0;
+    if (!ah || !bh) return std::max(ah, bh);
+    const unsigned shift = std::min(a.shift, b.shift), high = std::max(ah, bh);
+    if (high - shift > 127) return high + 1;
+    const unsigned __int128 av = (unsigned __int128)(a.significand) << (a.shift - shift);
+    const unsigned __int128 bv = (unsigned __int128)(b.significand) << (b.shift - shift);
+    const unsigned __int128 delta = a.negative != b.negative ? av + bv : (av < bv ? bv - av : av - bv);
+    return delta ? shift + bit_width128(delta) : 0;
+}
 struct ArithmeticBounds {
-    unsigned common_shift = 2098, high_bit = 0;
+    unsigned common_shift = 2098, high_bit = 0, extent_high = 0;
     uint32_t positions = 0;
     void include(double value) {
         const Binary64 parts(value);
         if (!parts.significand) return;
         common_shift = std::min(common_shift, parts.shift);
         high_bit = std::max(high_bit, parts.shift + unsigned(std::bit_width(parts.significand)));
+    }
+    void include_ring(double xmin, double ymin, double xmax, double ymax) {
+        extent_high = std::max({extent_high, difference_high_bit(xmin, xmax), difference_high_bit(ymin, ymax)});
+    }
+    bool native(double tolerance) const {
+        const unsigned coordinate_bits = high_bit ? high_bit - common_shift : 0;
+        const Binary64 t(tolerance);
+        const unsigned tolerance_high = t.significand ? t.shift + std::bit_width(t.significand) : 0;
+        const unsigned local_high = std::max(extent_high, tolerance_high);
+        const unsigned b = local_high ? local_high - common_shift : 0;
+        // Absolute coordinates/doubled midpoint sums fit signed128. Every edge
+        // stays within an original ring bbox. Overlapping edge boxes span at
+        // most twice the largest ring extent; contact determinants use <2b+3
+        // bits. Ring-local area partials and removals use <2b+bit_width(N)+3.
+        // Six guard bits also cover doubled midpoint determinants and 2*t*t.
+        return coordinate_bits + 2 <= 127 && 2 * b + std::bit_width(positions) + 6 <= 127;
     }
     bool fixed() const {
         const unsigned b = high_bit ? high_bit - common_shift : 0;
@@ -230,7 +182,13 @@ Key key(uint32_t a, uint32_t b) {
 using BoxPoint = bg::model::d2::point_xy<long double>;
 using Box = bg::model::box<BoxPoint>;
 using Item = std::pair<Box, uint32_t>;
-using Tree = bgi::rtree<Item, bgi::quadratic<16>, bgi::indexable<Item>, bgi::equal_to<Item>, Alloc<Item>>;
+using Tree = bgi::rtree<Item, bgi::quadratic<16>>;
+Tree insertion_tree(const std::vector<Item>& items) {
+    Tree tree;
+    for (const auto& item : items) tree.insert(item);
+    return tree;
+}
+
 // query() traverses recursively with stack storage. qbegin() in Boost 1.80
 // instead owns an uncustomizable std::vector path stack, so it is not used.
 template <class F>
@@ -240,7 +198,7 @@ struct QueryOutput {
     QueryOutput& operator++() { return *this; }
     QueryOutput operator++(int) { return *this; }
     QueryOutput& operator=(const Item& item) {
-        (*visitor)(item);
+        (*visitor)(item.second);
         return *this;
     }
 };
@@ -248,6 +206,365 @@ template <class F>
 void query(const Tree& tree, const Box& box, F&& visitor) {
     tree.query(bgi::intersects(box), QueryOutput<std::remove_reference_t<F>>{&visitor});
 }
+
+// A cell scan is at most four 16-entry R-tree leaves; linear overflow is
+// limited to one leaf. 64 cells per item leaves about 3x the observed query
+// work on large rings, while rejecting sparse, wide-query partitions.
+constexpr size_t kMaxGridCellEntries = 64;
+constexpr size_t kMaxGridOverflow = 16;
+constexpr size_t kGridQueryCellsPerItem = 64;
+// Measured maxima are 6 cells on coverage_10k and 40 on the 2048-edge rings.
+// A single wider query promotes the index, without a running work counter.
+constexpr size_t kMaxGridQueryCells = 64;
+
+template <class F>
+void query_ordered(const Tree& tree, const Box& box, std::vector<uint32_t>& candidates, F&& visitor) {
+    candidates.clear();
+    query(tree, box, [&](uint32_t id) { candidates.push_back(id); });
+    std::sort(candidates.begin(), candidates.end());
+    for (uint32_t id : candidates) visitor(id);
+}
+
+struct CellRange {
+    size_t x0, y0, x1, y1;
+    size_t size() const { return (x1 - x0 + 1) * (y1 - y0 + 1); }
+    bool short_box() const { return x1 - x0 <= 1 && y1 - y0 <= 1; }
+};
+
+// Rounded monotone cell assignment selects candidates only; topology stays exact.
+// The span term bounds cell storage by O(N), including thin partitions.
+struct Grid {
+    double xmin = 0, ymin = 0, inverse = 0;
+    size_t nx = 0, ny = 0, links = 0;
+    std::vector<size_t> counts;
+    static Grid layout(const std::vector<Item>& items, bool edges) {
+        Grid result;
+        if (items.empty()) return result;
+        double xmin = std::numeric_limits<double>::infinity(), ymin = xmin;
+        double xmax = -xmin, ymax = -xmin;
+        std::vector<double> lengths;
+        if (edges) lengths.reserve(items.size());
+        for (const auto& item : items) {
+            const double x0 = bg::get<bg::min_corner, 0>(item.first), y0 = bg::get<bg::min_corner, 1>(item.first);
+            const double x1 = bg::get<bg::max_corner, 0>(item.first), y1 = bg::get<bg::max_corner, 1>(item.first);
+            xmin = std::min(xmin, x0);
+            ymin = std::min(ymin, y0);
+            xmax = std::max(xmax, x1);
+            ymax = std::max(ymax, y1);
+            if (edges) lengths.push_back(std::max(x1 - x0, y1 - y0));
+        }
+        const double dx = xmax - xmin, dy = ymax - ymin;
+        double width = std::max(dx, dy) / std::sqrt(double(items.size()));
+        if (edges) {
+            auto middle = lengths.begin() + lengths.size() / 2;
+            std::nth_element(lengths.begin(), middle, lengths.end());
+            width = std::max(width, *middle);
+        }
+        const double scale = 1 / width;
+        if (std::isfinite(dx) && std::isfinite(dy) && width > 0 && std::isfinite(width) && scale > 0 &&
+            std::isfinite(scale)) {
+            result.xmin = xmin;
+            result.ymin = ymin;
+            result.inverse = scale;
+            result.nx = size_t(dx * scale) + 1;
+            result.ny = size_t(dy * scale) + 1;
+        }
+        return result;
+    }
+    CellRange range(double x0, double y0, double x1, double y1) const {
+        auto cell = [&](double value, double origin, size_t count) {
+            return size_t(std::clamp((value - origin) * inverse, 0.0, double(count - 1)));
+        };
+        return {cell(x0, xmin, nx), cell(y0, ymin, ny), cell(x1, xmin, nx), cell(y1, ymin, ny)};
+    }
+    bool fits(const std::vector<Item>& items, const std::vector<Item>& edges, size_t nodes) {
+        if (!nx) return false;
+        counts.assign(nx * ny + 1, 0);
+        size_t overflow = 0;
+        size_t remaining = kGridQueryCellsPerItem * items.size(), width = 1, height = 1;
+        const auto cell_range = [&](const Item& item) {
+            return range(bg::get<bg::min_corner, 0>(item.first), bg::get<bg::min_corner, 1>(item.first),
+                         bg::get<bg::max_corner, 0>(item.first), bg::get<bg::max_corner, 1>(item.first));
+        };
+        const auto query_work = [&](const CellRange& r) {
+            if (r.size() > remaining) return false;
+            remaining -= r.size();
+            width = std::max(width, r.x1 - r.x0 + 1);
+            height = std::max(height, r.y1 - r.y0 + 1);
+            return true;
+        };
+        for (const auto& item : items) {
+            const auto r = cell_range(item);
+            if (&items == &edges && !query_work(r)) return false;
+            if (!r.short_box()) {
+                if (++overflow > kMaxGridOverflow) return false;
+            } else {
+                links += r.size();
+                for (size_t y = r.y0; y <= r.y1; ++y)
+                    for (size_t x = r.x0; x <= r.x1; ++x)
+                        if (++counts[y * nx + x + 1] > kMaxGridCellEntries) return false;
+            }
+        }
+        if (&items != &edges)
+            for (const auto& edge : edges)
+                if (!query_work(cell_range(edge))) return false;
+        // A first removal triangle spans two adjacent original edges. Their
+        // cell spans bound each triangle by (2*width-1)*(2*height-1), without
+        // another pass over the graph's node/occurrence adjacency.
+        return (2 * width - 1) * (2 * height - 1) <= remaining / nodes;
+    }
+};
+
+size_t grid_cell(double value, double origin, double inverse, size_t count) {
+    return size_t(std::clamp((value - origin) * inverse, 0.0, double(count - 1)));
+}
+
+class EdgeGrid {
+    static constexpr size_t absent = std::numeric_limits<size_t>::max();
+    struct Entry {
+        double xmin, ymin, xmax, ymax;
+        std::array<size_t, 4> links{};
+        size_t overflow = absent;
+        uint64_t seen = 0;
+        unsigned count = 0;
+        bool active = true;
+    };
+    struct Link {
+        size_t next, previous, cell;
+        uint32_t edge;
+    };
+    Tree fallback;
+    std::vector<Entry> entries;
+    std::vector<Link> links;
+    std::vector<size_t> heads;
+    std::vector<uint32_t> overflow, candidates;
+    size_t free = absent, nx = 0, ny = 0;
+    double xmin = 0, ymin = 0, inverse = 0;
+    uint64_t epoch = 0;
+    bool overflow_indexed = false;
+    size_t cell(double value, double origin, size_t count) const { return grid_cell(value, origin, inverse, count); }
+    static Entry entry(const Box& box) {
+        return {double(bg::get<bg::min_corner, 0>(box)), double(bg::get<bg::min_corner, 1>(box)),
+                double(bg::get<bg::max_corner, 0>(box)), double(bg::get<bg::max_corner, 1>(box))};
+    }
+    static Box box(const Entry& e) { return {{e.xmin, e.ymin}, {e.xmax, e.ymax}}; }
+    void append(const Item& item) {
+        Entry e = entry(item.first);
+        const size_t x0 = cell(e.xmin, xmin, nx), x1 = cell(e.xmax, xmin, nx);
+        const size_t y0 = cell(e.ymin, ymin, ny), y1 = cell(e.ymax, ymin, ny);
+        if (x1 - x0 > 1 || y1 - y0 > 1) {
+            e.overflow = overflow.size();
+            overflow.push_back(item.second);
+            if (overflow_indexed) fallback.insert(item);
+        } else {
+            for (size_t y = y0; y <= y1; ++y) {
+                for (size_t x = x0; x <= x1; ++x) {
+                    const size_t c = y * nx + x;
+                    size_t id = free;
+                    if (id == absent) {
+                        id = links.size();
+                        links.push_back({});
+                    } else {
+                        free = links[id].next;
+                    }
+                    links[id] = {heads[c], absent, c, item.second};
+                    if (heads[c] != absent) links[heads[c]].previous = id;
+                    heads[c] = id;
+                    e.links[e.count++] = id;
+                }
+            }
+        }
+        entries.push_back(e);
+    }
+
+    void index_overflow() {
+        std::vector<Item> items;
+        items.reserve(overflow.size());
+        for (uint32_t id : overflow) {
+            items.push_back({box(entries[id]), id});
+        }
+        fallback = Tree(items.begin(), items.end());
+        overflow_indexed = true;
+    }
+
+public:
+    void build(const std::vector<Item>& items, Grid layout, size_t nodes) {
+        xmin = layout.xmin;
+        ymin = layout.ymin;
+        inverse = layout.inverse;
+        nx = layout.nx;
+        ny = layout.ny;
+        if (!nx) {
+            fallback = insertion_tree(items);
+            return;
+        }
+        heads = std::move(layout.counts);
+        heads.pop_back();
+        std::fill(heads.begin(), heads.end(), absent);
+        // Each removed node creates at most one fresh chord. Admission also
+        // counted the initial links, so neither array needs a guessed capacity.
+        entries.reserve(items.size() + nodes);
+        links.reserve(layout.links);
+        for (const auto& item : items) append(item);
+    }
+    bool is_grid() const { return nx != 0; }
+    void use_tree() {
+        std::vector<Item> items;
+        items.reserve(entries.size());
+        for (uint32_t i = 0; i < entries.size(); ++i)
+            if (entries[i].active) items.push_back({box(entries[i]), i});
+        fallback = insertion_tree(items);
+        nx = ny = 0;
+        entries.clear();
+        links.clear();
+        heads.clear();
+        overflow.clear();
+    }
+    void erase_tree(const Item& item) { fallback.remove(item); }
+    void insert(const Item& item) {
+        if (nx) {
+            append(item);
+            // A runtime promotion copies at most 17 entries.
+            if (!overflow_indexed && overflow.size() > kMaxGridOverflow) index_overflow();
+        } else {
+            fallback.insert(item);
+        }
+    }
+    void erase(uint32_t id) {
+        auto& e = entries[id];
+        for (unsigned i = 0; i < e.count; ++i) {
+            const size_t id = e.links[i];
+            auto& link = links[id];
+            if (link.previous == absent)
+                heads[link.cell] = link.next;
+            else
+                links[link.previous].next = link.next;
+            if (link.next != absent) links[link.next].previous = link.previous;
+            link.next = free;
+            free = id;
+        }
+        if (e.overflow != absent) {
+            // The grid filters stale overflow entries; full-tree mode removes them.
+            const uint32_t last = overflow.back();
+            overflow[e.overflow] = last;
+            entries[last].overflow = e.overflow;
+            overflow.pop_back();
+        }
+        e.active = false;
+    }
+    template <class F>
+    void visit(const Box& query_box, F&& visitor) {
+        if (!nx) {
+            query_ordered(fallback, query_box, candidates, visitor);
+            return;
+        }
+        const Entry q = entry(query_box);
+        // Queries are bounded by graph/heap indices, far below 2^64 per run.
+        ++epoch;
+        candidates.clear();
+        auto collect = [&](uint32_t id) {
+            auto& e = entries[id];
+            if (!e.active || e.seen == epoch) return;
+            e.seen = epoch;
+            if (e.xmin <= q.xmax && q.xmin <= e.xmax && e.ymin <= q.ymax && q.ymin <= e.ymax) candidates.push_back(id);
+        };
+        const size_t x0 = cell(q.xmin, xmin, nx), x1 = cell(q.xmax, xmin, nx);
+        const size_t y0 = cell(q.ymin, ymin, ny), y1 = cell(q.ymax, ymin, ny);
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > kMaxGridQueryCells) {
+            use_tree();
+            query_ordered(fallback, query_box, candidates, visitor);
+            return;
+        }
+        for (size_t y = y0; y <= y1; ++y)
+            for (size_t x = x0; x <= x1; ++x)
+                for (size_t id = heads[y * nx + x]; id != absent; id = links[id].next) collect(links[id].edge);
+        if (overflow_indexed)
+            query(fallback, query_box, collect);
+        else
+            for (uint32_t id : overflow) collect(id);
+        std::sort(candidates.begin(), candidates.end());
+        for (uint32_t id : candidates) visitor(id);
+    }
+};
+template <class F>
+void query(EdgeGrid& grid, const Box& box, F&& visitor) {
+    grid.visit(box, std::forward<F>(visitor));
+}
+
+// Point cells are immutable; the kernel filters inactive nodes. Promotion
+// copies only active nodes, and subsequent removals update the R-tree.
+class PointGrid {
+    struct Point {
+        double x, y;
+        uint32_t id;
+    };
+    Tree fallback;
+    std::vector<Point> points;
+    std::vector<size_t> offsets;
+    double xmin = 0, ymin = 0, inverse = 0;
+    size_t nx = 0, ny = 0;
+    size_t xcell(double x) const { return grid_cell(x, xmin, inverse, nx); }
+    size_t ycell(double y) const { return grid_cell(y, ymin, inverse, ny); }
+
+public:
+    void build(const std::vector<Item>& items, Grid layout) {
+        xmin = layout.xmin;
+        ymin = layout.ymin;
+        inverse = layout.inverse;
+        nx = layout.nx;
+        ny = layout.ny;
+        if (!nx) {
+            fallback = insertion_tree(items);
+            return;
+        }
+        offsets = std::move(layout.counts);
+        std::partial_sum(offsets.begin(), offsets.end(), offsets.begin());
+        std::vector<size_t> next(offsets);
+        points.resize(items.size());
+        for (const auto& item : items) {
+            const double x = bg::get<bg::min_corner, 0>(item.first), y = bg::get<bg::min_corner, 1>(item.first);
+            points[next[ycell(y) * nx + xcell(x)]++] = {x, y, item.second};
+        }
+    }
+    template <class Active>
+    void use_tree(Active&& active) {
+        std::vector<Item> items;
+        items.reserve(points.size());
+        for (const auto& p : points)
+            if (active(p.id)) items.push_back({{{p.x, p.y}, {p.x, p.y}}, p.id});
+        fallback = insertion_tree(items);
+        nx = ny = 0;
+        points.clear();
+        offsets.clear();
+    }
+    void erase(uint32_t id, double x, double y) {
+        if (!nx) fallback.remove({{{x, y}, {x, y}}, id});
+    }
+    template <class F, class Active>
+    void visit(const Box& box, F&& visitor, Active&& active) {
+        if (!nx) {
+            query(fallback, box, visitor);
+            return;
+        }
+        const double x0 = bg::get<bg::min_corner, 0>(box), y0 = bg::get<bg::min_corner, 1>(box);
+        const double x1 = bg::get<bg::max_corner, 0>(box), y1 = bg::get<bg::max_corner, 1>(box);
+        const size_t cx0 = xcell(x0), cy0 = ycell(y0), cx1 = xcell(x1), cy1 = ycell(y1);
+        if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > kMaxGridQueryCells) {
+            use_tree(active);
+            query(fallback, box, visitor);
+            return;
+        }
+        for (size_t y = cy0; y <= cy1; ++y)
+            for (size_t x = cx0; x <= cx1; ++x) {
+                const size_t cell = y * nx + x;
+                for (size_t i = offsets[cell]; i < offsets[cell + 1]; ++i) {
+                    const auto& p = points[i];
+                    if (x0 <= p.x && p.x <= x1 && y0 <= p.y && p.y <= y1) visitor(p.id);
+                }
+            }
+    }
+};
+
 template <class Integer>
 Box bounds(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b) {
     return {{std::min(a.x, b.x), std::min(a.y, b.y)}, {std::max(a.x, b.x), std::max(a.y, b.y)}};
@@ -261,8 +578,21 @@ enum class Contact { NONE, ENDPOINT, TJUNCTION, CROSS, OVERLAP };
 template <class Integer>
 Contact contact(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, const NumericPoint<Integer>& c,
                 const NumericPoint<Integer>& d) {
-    const int ac = sign(orientation(a, b, c)), ad = sign(orientation(a, b, d));
-    const int ca = sign(orientation(c, d, a)), cb = sign(orientation(c, d, b));
+    auto equal = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
+        return p.x == q.x && p.y == q.y;
+    };
+    int ac = 0, ad = 0, ca = 0, cb = 0;
+    const bool shared_c = equal(a, c) || equal(b, c);
+    if (shared_c || equal(a, d) || equal(b, d)) {
+        // With a shared endpoint, a non-collinear pair meets only there.
+        // Collinear pairs still use the original closed-interval test below.
+        if (orientation(a, b, shared_c ? d : c) != 0) return Contact::ENDPOINT;
+    } else {
+        ac = sign(orientation(a, b, c));
+        ad = sign(orientation(a, b, d));
+        ca = sign(orientation(c, d, a));
+        cb = sign(orientation(c, d, b));
+    }
     if (ac * ad < 0 && ca * cb < 0) return Contact::CROSS;
     if (ac == 0 && ad == 0 && ca == 0 && cb == 0) {
         auto less = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
@@ -277,9 +607,7 @@ Contact contact(const NumericPoint<Integer>& a, const NumericPoint<Integer>& b, 
         if (less(hi, lo)) return Contact::NONE;
         if (less(lo, hi)) return Contact::OVERLAP;
     }
-    auto equal = [](const NumericPoint<Integer>& p, const NumericPoint<Integer>& q) {
-        return p.x == q.x && p.y == q.y;
-    };
+
     if ((ac == 0 && between(c, a, b) && !equal(c, a) && !equal(c, b)) ||
         (ad == 0 && between(d, a, b) && !equal(d, a) && !equal(d, b)) ||
         (ca == 0 && between(a, c, d) && !equal(a, c) && !equal(a, d)) ||
@@ -311,17 +639,15 @@ struct RingIndex {
     uint32_t first, xmin, xmax, ymin, ymax;
 };
 struct LocationIndex {
-    std::pmr::vector<EdgeInterval> edges;
-    std::pmr::vector<RingIndex> rings;
-    explicit LocationIndex(Memory& memory) : edges(&memory), rings(&memory) {}
+    std::vector<EdgeInterval> edges;
+    std::vector<RingIndex> rings;
 };
 template <class Integer>
 struct NumericNode {
     NumericPoint<Integer> point;
-    std::pmr::vector<uint32_t> occurrences;
-    uint32_t version = 0;
+    uint32_t first = 0, count = 0, version = 0;
     bool fixed = false, active = true;
-    NumericNode(NumericPoint<Integer> p, Memory& m) : point(std::move(p)), occurrences(&m) {}
+    explicit NumericNode(NumericPoint<Integer> p) : point(std::move(p)) {}
 };
 struct Edge {
     uint32_t a, b;
@@ -330,11 +656,10 @@ struct Edge {
     bool active = true;
 };
 struct Row {
-    std::pmr::vector<uint8_t> bytes;
+    std::vector<uint8_t> bytes;
     size_t output_first = 0, output_size = 0;
     uint32_t first = 0, count = 0;
     bool null = false, multi = false;
-    explicit Row(Memory& m) : bytes(&m) {}
 };
 template <class Integer>
 struct NumericCandidate {
@@ -378,7 +703,7 @@ public:
     size_t components = 0;
 };
 template <class T>
-void write(std::pmr::vector<uint8_t>& output, T value) {
+void write(std::vector<uint8_t>& output, T value) {
     if constexpr (std::endian::native != std::endian::little) {
         auto* raw = reinterpret_cast<uint8_t*>(&value);
         std::reverse(raw, raw + sizeof(T));
@@ -387,34 +712,12 @@ void write(std::pmr::vector<uint8_t>& output, T value) {
     output.insert(output.end(), bytes, bytes + sizeof(T));
 }
 struct Partition {
-    Memory memory;
-    GeoCoverageCheckpoint checkpoint;
-    std::pmr::vector<Row> rows;
-    std::pmr::vector<uint8_t> output_bytes;
-    size_t input_bytes = 0, calls = 0, external = 0, since_check = 0;
+    std::vector<Row> rows;
+    std::vector<uint8_t> output_bytes;
+    size_t input_bytes = 0, calls = 0;
     bool finished = false, failed = false, null_parameter = false;
     ArithmeticBounds arithmetic;
-    Partition(memory::Allocator* allocator, GeoCoverageCheckpoint checkpoint, size_t metadata)
-            : memory(allocator), checkpoint(std::move(checkpoint)), rows(&memory), output_bytes(&memory) {
-        memory.retain(metadata);
-    }
-    void check() {
-        since_check = 0;
-        if (checkpoint.check) {
-            auto status = checkpoint.check(checkpoint.context);
-            if (!status.ok()) throw Stop{std::move(status)};
-        }
-    }
-    void tick(size_t count = 1) {
-        // Preserve the 128-unit query-state polling cadence without bounding total kernel work.
-        constexpr size_t kCheckInterval = 128;
-        if (count >= kCheckInterval - since_check)
-            check();
-        else
-            since_check += count;
-    }
     void preflight(Reader& reader, bool child) {
-        check();
         const GeoWkbLimits native_limits;
         if (reader.bytes.size > native_limits.max_bytes)
             invalid("ST_CoverageSimplify exceeds native WKB payload limit");
@@ -433,7 +736,6 @@ struct Partition {
         if (n > (reader.bytes.size - reader.position) / (type == 3 ? 4 : 9))
             invalid("ST_CoverageSimplify truncated WKB components");
         for (uint32_t i = 0; i < n; ++i) {
-            tick();
             if (type == 6) {
                 preflight(reader, true);
                 continue;
@@ -445,13 +747,19 @@ struct Partition {
             arithmetic.positions = std::max(arithmetic.positions, positions);
             if (positions > (reader.bytes.size - reader.position) / 16)
                 invalid("ST_CoverageSimplify truncated WKB ring");
+            double xmin = std::numeric_limits<double>::infinity(), ymin = xmin;
+            double xmax = -xmin, ymax = -xmin;
             for (uint32_t j = 0; j < positions; ++j) {
-                tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
                 if (!std::isfinite(x) || !std::isfinite(y)) invalid("ST_CoverageSimplify nonfinite XY coordinate");
                 arithmetic.include(x);
                 arithmetic.include(y);
+                xmin = std::min(xmin, x);
+                ymin = std::min(ymin, y);
+                xmax = std::max(xmax, x);
+                ymax = std::max(ymax, y);
             }
+            if (positions) arithmetic.include_ring(xmin, ymin, xmax, ymax);
         }
     }
 };
@@ -463,42 +771,28 @@ struct Kernel {
     using Ring = NumericRing<Integer>;
     using Candidate = NumericCandidate<Integer>;
     using CandidateLess = NumericCandidateLess<Integer>;
-    Partition& partition;
-    Memory& memory;
-    std::pmr::vector<Row>& rows;
-    std::pmr::vector<uint8_t>& output_bytes;
+    std::vector<Row>& rows;
+    std::vector<uint8_t>& output_bytes;
     size_t& input_bytes;
     size_t& calls;
     unsigned shift;
-    std::pmr::vector<Node> nodes;
-    std::pmr::vector<Occurrence> occurrences;
-    std::pmr::vector<Ring> rings;
-    std::pmr::vector<Component> components;
-    std::pmr::map<std::pair<double, double>, uint32_t> node_map;
-    std::pmr::map<Key, uint32_t> edge_map;
-    std::pmr::vector<Edge> edges;
-    std::pmr::vector<Candidate> heap;
-    Tree edge_tree, node_tree;
+    std::vector<Node> nodes;
+    std::vector<Occurrence> occurrences;
+    std::vector<uint32_t> node_occurrence_ids;
+    std::vector<Ring> rings;
+    std::vector<Component> components;
+    Map<std::pair<double, double>, uint32_t> node_map;
+    Map<Key, uint32_t> edge_map;
+    std::vector<Edge> edges;
+    std::vector<Candidate> heap;
+    EdgeGrid edge_tree;
+    PointGrid node_tree;
     Kernel(Partition& partition, unsigned shift)
-            : partition(partition),
-              memory(partition.memory),
-              rows(partition.rows),
+            : rows(partition.rows),
               output_bytes(partition.output_bytes),
               input_bytes(partition.input_bytes),
               calls(partition.calls),
-              shift(shift),
-              nodes(&memory),
-              occurrences(&memory),
-              rings(&memory),
-              components(&memory),
-              node_map(&memory),
-              edge_map(&memory),
-              edges(&memory),
-              heap(&memory),
-              edge_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)),
-              node_tree(bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)) {}
-    void check() { partition.check(); }
-    void tick(size_t count = 1) { partition.tick(count); }
+              shift(shift) {}
     Integer scaled(double value) const {
         if constexpr (std::is_same_v<Integer, DynamicInteger>) {
             return geo_exact::scaled_binary64<Integer>(value);
@@ -520,7 +814,7 @@ struct Kernel {
         auto [it, fresh] = node_map.emplace(std::make_pair(x, y), 0);
         if (fresh) {
             it->second = index(nodes.size());
-            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)}, memory);
+            nodes.emplace_back(Point{x, y, scaled(x), scaled(y)});
         }
         return it->second;
     }
@@ -532,7 +826,6 @@ struct Kernel {
             if (positions < 4) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t first = kAbsent, previous = kAbsent, first_node = kAbsent, last_node = kAbsent;
             for (uint32_t j = 0; j < positions; ++j) {
-                tick();
                 double x = reader.number<double>(little), y = reader.number<double>(little);
                 const uint32_t node = intern(x, y);
                 if (j == 0) first_node = node;
@@ -545,7 +838,6 @@ struct Kernel {
                 if (node == last_node) continue;
                 uint32_t occurrence = index(occurrences.size());
                 occurrences.push_back({node, ring, previous, kAbsent});
-                nodes[node].occurrences.push_back(occurrence);
                 if (previous != kAbsent)
                     occurrences[previous].next = occurrence;
                 else
@@ -560,7 +852,6 @@ struct Kernel {
             if (previous != first && last_node == first_node) {
                 const uint32_t trailing = previous;
                 previous = occurrences[trailing].previous;
-                nodes[first_node].occurrences.pop_back();
                 occurrences.pop_back();
             }
             occurrences[first].previous = previous;
@@ -569,18 +860,25 @@ struct Kernel {
             if (rings.back().count < 3) invalid("ST_CoverageSimplify degenerate polygon ring");
             uint32_t o = first;
             do {
-                tick();
                 const auto& a = nodes[occurrences[o].node].point;
                 const auto& b = nodes[occurrences[occurrences[o].next].node].point;
-                rings.back().area += a.ex * b.ey - a.ey * b.ex;
+                if constexpr (std::is_same_v<Integer, NativeInteger>) {
+                    // Translate this closed sum exactly, retaining original
+                    // coordinates for every predicate and output byte.
+                    const auto& origin = nodes[first_node].point;
+                    rings.back().area +=
+                            (a.ex - origin.ex) * (b.ey - origin.ey) - (a.ey - origin.ey) * (b.ex - origin.ex);
+                } else {
+                    rings.back().area += a.ex * b.ey - a.ey * b.ex;
+                }
                 o = occurrences[o].next;
             } while (o != first);
             if (rings.back().area == 0) invalid("ST_CoverageSimplify zero-area polygon ring");
         }
     }
     void decode() {
+        node_map.reserve(input_bytes / 16);
         for (uint32_t r = 0; r < rows.size(); ++r) {
-            check();
             auto& row = rows[r];
             row.first = components.size();
             if (row.null) continue;
@@ -599,19 +897,30 @@ struct Kernel {
             row.count = components.size() - row.first;
             reader.done();
         }
-        for (uint32_t n = 0; n < nodes.size(); ++n) {
-            tick();
-            node_tree.insert({bounds(nodes[n].point, nodes[n].point), n});
+        // Occurrences are complete after seam deduplication. Preserve their
+        // encounter order in one flat adjacency array, without per-node heaps.
+        node_occurrence_ids.resize(occurrences.size());
+        for (const auto& occurrence : occurrences) {
+            ++nodes[occurrence.node].count;
+        }
+        uint32_t first = 0;
+        for (auto& node : nodes) {
+            node.first = first;
+            first += node.count;
+            node.count = 0;
+        }
+        for (uint32_t o = 0; o < occurrences.size(); ++o) {
+            auto& node = nodes[occurrences[o].node];
+            node_occurrence_ids[node.first + node.count++] = o;
         }
     }
-    void add_edge(uint32_t occurrence) {
-        tick();
+    void add_edge(uint32_t occurrence, bool indexed = true) {
         uint32_t a = occurrences[occurrence].node, b = occurrences[occurrences[occurrence].next].node;
         auto [it, fresh] = edge_map.emplace(key(a, b), 0);
         if (fresh) {
             it->second = index(edges.size());
             edges.push_back({std::min(a, b), std::max(a, b)});
-            edge_tree.insert({bounds(nodes[a].point, nodes[b].point), it->second});
+            if (indexed) edge_tree.insert({bounds(nodes[a].point, nodes[b].point), it->second});
         }
         auto& edge = edges[it->second];
         if (edge.count == 2) invalid("ST_CoverageSimplify more than two coverage edge owners");
@@ -619,31 +928,42 @@ struct Kernel {
     }
     void erase_edge(uint32_t id) {
         auto& edge = edges[id];
-        // Boost 1.80 remove() owns an uncustomizable underflow std::vector.
-        // Keep old indexed items, mark inactive and filter queries. At most
-        // one new edge per removed node, hence bounded storage, without that
-        // default allocator bypass. The charged traversal includes stale items.
+        if (edge_tree.is_grid())
+            edge_tree.erase(id);
+        else
+            edge_tree.erase_tree({bounds(nodes[edge.a].point, nodes[edge.b].point), id});
         edge_map.erase(key(edge.a, edge.b));
         edge.active = false;
     }
     void graph() {
-        for (uint32_t o = 0; o < occurrences.size(); ++o) add_edge(o);
-        std::pmr::vector<unsigned> degree(nodes.size(), 0, &memory);
+        edge_map.reserve(occurrences.size());
+        for (uint32_t o = 0; o < occurrences.size(); ++o) add_edge(o, false);
+        std::vector<Item> items;
+        items.reserve(edges.size());
+        for (uint32_t i = 0; i < edges.size(); ++i) {
+            items.push_back({bounds(nodes[edges[i].a].point, nodes[edges[i].b].point), i});
+        }
+        std::vector<Item> points;
+        points.reserve(nodes.size());
+        for (uint32_t n = 0; n < nodes.size(); ++n) points.push_back({bounds(nodes[n].point, nodes[n].point), n});
+        auto edges_grid = Grid::layout(items, true), points_grid = Grid::layout(points, false);
+        const bool use_grid =
+                edges_grid.fits(items, items, nodes.size()) && points_grid.fits(points, items, nodes.size());
+        edge_tree.build(items, use_grid ? std::move(edges_grid) : Grid{}, nodes.size());
+        node_tree.build(points, use_grid ? std::move(points_grid) : Grid{});
+        std::vector<unsigned> degree(nodes.size(), 0);
         for (const auto& edge : edges) {
-            tick();
             ++degree[edge.a];
             ++degree[edge.b];
         }
         for (size_t i = 0; i < nodes.size(); ++i) {
-            tick();
             nodes[i].fixed = degree[i] != 2;
         }
     }
     LocationIndex prepare_locations() {
-        LocationIndex result(memory);
+        LocationIndex result;
         size_t count = 0;
         for (const auto& ring : rings) {
-            tick();
             count += ring.count;
         }
         result.edges.reserve(count);
@@ -652,7 +972,6 @@ struct Kernel {
             uint32_t o = ring.first, n = occurrences[o].node;
             RingIndex entry{index(result.edges.size()), n, n, n, n};
             do {
-                tick();
                 uint32_t a = occurrences[o].node, b = occurrences[occurrences[o].next].node;
                 const auto& p = nodes[a].point;
                 if (p.x < nodes[entry.xmin].point.x) entry.xmin = a;
@@ -664,13 +983,11 @@ struct Kernel {
             } while (o != ring.first);
             auto first = result.edges.begin() + entry.first;
             std::sort(first, result.edges.end(), [&](const EdgeInterval& a, const EdgeInterval& b) {
-                tick();
                 double ay = nodes[a.ymin].point.y, by = nodes[b.ymin].point.y;
                 return ay != by ? ay < by : a.occurrence < b.occurrence;
             });
             uint32_t ymax = first->ymax;
             for (auto it = first; it != result.edges.end(); ++it) {
-                tick();
                 if (nodes[it->ymax].point.y > nodes[ymax].point.y) ymax = it->ymax;
                 it->ymax = ymax; // Prefix maximum, not this edge's upper endpoint.
             }
@@ -680,23 +997,19 @@ struct Kernel {
     }
     // Exact doubled edge-midpoint classification; no rounded sample or epsilon.
     int location(const Integer& x, const Integer& y, const Ring& ring, const LocationIndex& locations) {
-        tick(); // Bbox rejection must still poll across successive midpoint queries.
         const auto& box = locations.rings[&ring - rings.data()];
         if (x < 2 * nodes[box.xmin].point.ex || x > 2 * nodes[box.xmax].point.ex || y < 2 * nodes[box.ymin].point.ey ||
             y > 2 * nodes[box.ymax].point.ey)
             return -1;
         auto first = locations.edges.begin() + box.first, last = first + ring.count;
         first = std::lower_bound(first, last, y, [&](const EdgeInterval& edge, const Integer& value) {
-            tick();
             return 2 * nodes[edge.ymax].point.ey < value;
         });
         last = std::upper_bound(first, last, y, [&](const Integer& value, const EdgeInterval& edge) {
-            tick();
             return value < 2 * nodes[edge.ymin].point.ey;
         });
         bool inside = false;
         for (auto it = first; it != last; ++it) {
-            tick();
             uint32_t o = it->occurrence;
             const auto& a = nodes[occurrences[o].node].point;
             const auto& b = nodes[occurrences[occurrences[o].next].node].point;
@@ -748,16 +1061,30 @@ struct Kernel {
         return sign(ring.area) * (ring.hole ? -1 : 1) * (occurrence.node == edge.a ? 1 : -1);
     }
     void validate() {
-        check();
+        try {
+            validate_index(edge_tree);
+        } catch (const Stop& error) {
+            if (!error.status.is_invalid_argument()) throw;
+            // Packing changes traversal order. On invalid input replay the old
+            // insertion order to retain the first diagnostic of the old index.
+            Tree original;
+            for (uint32_t i = 0; i < edges.size(); ++i) {
+                original.insert({bounds(nodes[edges[i].a].point, nodes[edges[i].b].point), i});
+            }
+            validate_index(original);
+            throw;
+        }
+    }
+    template <class SpatialIndex>
+    void validate_index(SpatialIndex& spatial_edges) {
         // Contact incidence forest detects disconnected interiors (e.g. a hole
         // touching its shell twice) without a quadratic ring-pair allocation.
-        std::pmr::vector<uint32_t> parent(rings.size(), &memory);
+        std::vector<uint32_t> parent(rings.size());
         std::iota(parent.begin(), parent.end(), 0);
-        std::pmr::map<Key, uint32_t> contacts(&memory);
-        std::pmr::map<Key, bool> links(&memory);
+        Map<Key, uint32_t> contacts;
+        Map<Key, bool> links;
         auto root = [&](uint32_t id) {
             while (parent[id] != id) {
-                tick();
                 parent[id] = parent[parent[id]];
                 id = parent[id];
             }
@@ -778,7 +1105,6 @@ struct Kernel {
         for (uint32_t i = 0; i < edges.size(); ++i) {
             auto& edge = edges[i];
             if (!edge.active) continue;
-            tick();
             if (edge.count == 2) {
                 const auto& a = rings[occurrences[edge.owners[0]].ring];
                 const auto& b = rings[occurrences[edge.owners[1]].ring];
@@ -786,12 +1112,9 @@ struct Kernel {
                     side(edge.owners[0], edge) == side(edge.owners[1], edge))
                     invalid("ST_CoverageSimplify overlapping polygon boundary owners");
             }
-            tick(edge_tree.size()); // Conservative bound includes index traversal.
-            query(edge_tree, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](const Item& item) {
-                uint32_t j = item.second;
+            query(spatial_edges, bounds(nodes[edge.a].point, nodes[edge.b].point), [&](uint32_t j) {
                 if (j <= i || !edges[j].active) return;
                 const auto& other = edges[j];
-                tick();
                 Contact c =
                         contact(nodes[edge.a].point, nodes[edge.b].point, nodes[other.a].point, nodes[other.b].point);
                 if (c == Contact::NONE) return;
@@ -813,7 +1136,7 @@ struct Kernel {
             });
         }
         const auto locations = prepare_locations();
-        Tree polygons{bgi::quadratic<16>(), bgi::indexable<Item>(), bgi::equal_to<Item>(), Alloc<Item>(&memory)};
+        Tree polygons;
         for (uint32_t c = 0; c < components.size(); ++c) {
             const auto& component = components[c];
             if (component.count == 0) continue;
@@ -830,9 +1153,8 @@ struct Kernel {
             const auto& bounds = locations.rings[component.first];
             Box box{{nodes[bounds.xmin].point.x, nodes[bounds.ymin].point.y},
                     {nodes[bounds.xmax].point.x, nodes[bounds.ymax].point.y}};
-            tick(components.size());
-            query(polygons, box, [&](const Item& item) {
-                const auto& other = components[item.second];
+            query(polygons, box, [&](uint32_t other_id) {
+                const auto& other = components[other_id];
                 for (uint32_t r = 0; r < component.count; ++r)
                     if (relation(rings[component.first + r], other, locations) > 0)
                         invalid("ST_CoverageSimplify overlapping coverage interiors");
@@ -842,13 +1164,15 @@ struct Kernel {
             });
             polygons.insert({box, c});
         }
-        check();
+    }
+    std::span<const uint32_t> node_occurrences(uint32_t n) const {
+        return std::span<const uint32_t>(node_occurrence_ids).subspan(nodes[n].first, nodes[n].count);
     }
     bool candidate(uint32_t n, bool boundary, uint32_t& a, uint32_t& c) {
         auto& node = nodes[n];
-        if (node.fixed || !node.active || node.occurrences.empty()) return false;
+        if (node.fixed || !node.active || node.count == 0) return false;
         bool first = true;
-        for (uint32_t o : node.occurrences) {
+        for (uint32_t o : node_occurrences(n)) {
             const auto& occurrence = occurrences[o];
             if (!occurrence.active || rings[occurrence.ring].count <= 3) return false;
             const uint32_t left = occurrences[occurrence.previous].node, right = occurrences[occurrence.next].node;
@@ -868,7 +1192,7 @@ struct Kernel {
     void enqueue(uint32_t n, bool boundary, const Integer& floor) {
         uint32_t a, c;
         if (!candidate(n, boundary, a, c)) return;
-        Integer area = boost::multiprecision::abs(orientation(nodes[a].point, nodes[n].point, nodes[c].point));
+        Integer area = abs(orientation(nodes[a].point, nodes[n].point, nodes[c].point));
         if (area < floor) area = floor;
         heap.push_back({std::move(area), n, nodes[n].version});
         std::push_heap(heap.begin(), heap.end(), CandidateLess{});
@@ -878,12 +1202,9 @@ struct Kernel {
         const auto& q = nodes[n].point;
         const auto& r = nodes[c].point;
         uint32_t left = edge_map.at(key(a, n)), right = edge_map.at(key(n, c));
-        tick(edge_tree.size());
         bool safe = true;
-        query(edge_tree, bounds(p, r), [&](const Item& item) {
-            uint32_t id = item.second;
+        query(edge_tree, bounds(p, r), [&](uint32_t id) {
             if (id == left || id == right || !edges[id].active || !safe) return;
-            tick();
             const auto& e = edges[id];
             auto kind = contact(p, r, nodes[e.a].point, nodes[e.b].point);
             if (kind != Contact::NONE && kind != Contact::ENDPOINT) safe = false;
@@ -894,19 +1215,19 @@ struct Kernel {
         if (area != 0) {
             Box box{{std::min({p.x, q.x, r.x}), std::min({p.y, q.y, r.y})},
                     {std::max({p.x, q.x, r.x}), std::max({p.y, q.y, r.y})}};
-            tick(nodes.size());
-            query(node_tree, box, [&](const Item& item) {
-                uint32_t id = item.second;
-                if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
-                tick();
-                const auto& point = nodes[id].point;
-                int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
-                    z = sign(orientation(r, p, point));
-                if ((x >= 0 && y >= 0 && z >= 0) || (x <= 0 && y <= 0 && z <= 0)) safe = false;
-            });
+            node_tree.visit(
+                    box,
+                    [&](uint32_t id) {
+                        if (id == a || id == n || id == c || !nodes[id].active || !safe) return;
+                        const auto& point = nodes[id].point;
+                        int x = sign(orientation(p, q, point)), y = sign(orientation(q, r, point)),
+                            z = sign(orientation(r, p, point));
+                        if ((x >= 0 && y >= 0 && z >= 0) || (x <= 0 && y <= 0 && z <= 0)) safe = false;
+                    },
+                    [&](uint32_t id) { return nodes[id].active; });
             if (!safe) return false;
         }
-        for (uint32_t o : nodes[n].occurrences) {
+        for (uint32_t o : node_occurrences(n)) {
             const auto& occurrence = occurrences[o];
             const auto& ring = rings[occurrence.ring];
             Integer next = ring.area - orientation(nodes[occurrences[occurrence.previous].node].point, q,
@@ -918,7 +1239,7 @@ struct Kernel {
     void remove(uint32_t n, uint32_t a, uint32_t c) {
         erase_edge(edge_map.at(key(a, n)));
         erase_edge(edge_map.at(key(n, c)));
-        for (uint32_t o : nodes[n].occurrences) {
+        for (uint32_t o : node_occurrences(n)) {
             auto& occurrence = occurrences[o];
             auto& ring = rings[occurrence.ring];
             auto& previous = occurrences[occurrence.previous];
@@ -931,6 +1252,7 @@ struct Kernel {
             occurrence.active = false;
             add_edge(occurrence.previous);
         }
+        node_tree.erase(n, nodes[n].point.x, nodes[n].point.y);
         nodes[n].active = false;
         ++nodes[a].version;
         ++nodes[c].version;
@@ -940,11 +1262,9 @@ struct Kernel {
         const Integer t = scaled(tolerance), threshold = 2 * t * t;
         Integer floor = 0;
         for (uint32_t n = 0; n < nodes.size(); ++n) {
-            tick();
             enqueue(n, boundary, floor);
         }
         while (!heap.empty()) {
-            tick();
             std::pop_heap(heap.begin(), heap.end(), CandidateLess{});
             Candidate next = std::move(heap.back());
             heap.pop_back();
@@ -959,7 +1279,7 @@ struct Kernel {
         }
         validate();
     }
-    void emit_polygon(std::pmr::vector<uint8_t>& output, const Component& component) {
+    void emit_polygon(std::vector<uint8_t>& output, const Component& component) {
         write<uint8_t>(output, 1);
         write<uint32_t>(output, 3);
         write<uint32_t>(output, component.count);
@@ -968,7 +1288,6 @@ struct Kernel {
             write<uint32_t>(output, ring.count + 1);
             uint32_t o = ring.first;
             do {
-                tick();
                 const auto& p = nodes[occurrences[o].node].point;
                 write<double>(output, p.x);
                 write<double>(output, p.y);
@@ -984,7 +1303,6 @@ struct Kernel {
         // allocation gives the window adapter contiguous read-only backing.
         output_bytes.reserve(input_bytes);
         for (auto& row : rows) {
-            check();
             row.output_first = output_bytes.size();
             if (row.null) continue;
             if (unchanged) {
@@ -999,80 +1317,48 @@ struct Kernel {
             }
             row.output_size = output_bytes.size() - row.output_first;
         }
-        check();
     }
 };
 
 } // namespace
 
 struct GeoCoverageSimplify::Impl : Partition {
-    using Partition::Partition;
-    // Destroy numerical storage before its captured resource. Dispatch once,
+    // Dispatch once,
     // only after every row and tolerance have contributed to the same bound.
-    std::variant<std::monostate, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
+    std::variant<std::monostate, Kernel<NativeInteger>, Kernel<FixedInteger>, Kernel<DynamicInteger>> kernel;
     void run(double tolerance, bool boundary) {
         arithmetic.include(tolerance);
-        if (arithmetic.fixed())
+        if (arithmetic.native(tolerance))
             kernel.emplace<1>(*this, arithmetic.common_shift).run(tolerance, boundary);
+        else if (arithmetic.fixed())
+            kernel.emplace<2>(*this, arithmetic.common_shift).run(tolerance, boundary);
         else
-            kernel.emplace<2>(*this, 0).run(tolerance, boundary);
+            kernel.emplace<3>(*this, 0).run(tolerance, boundary);
     }
 };
 
-StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create(memory::Allocator* allocator,
-                                                                           GeoCoverageCheckpoint checkpoint) {
-    if (!allocator) return Status::InvalidArgument("ST_CoverageSimplify requires an allocator");
-    const size_t request = sizeof(StateAllocation) + sizeof(GeoCoverageSimplify) + sizeof(Impl) +
-                           alignof(StateAllocation) + alignof(Impl);
-    const int64_t metadata = allocator->nallox(request);
-    void* raw = nullptr;
-    Impl* impl = nullptr;
+GeoCoverageSimplify::GeoCoverageSimplify(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
+GeoCoverageSimplify::~GeoCoverageSimplify() = default;
+
+StatusOr<std::unique_ptr<GeoCoverageSimplify>> GeoCoverageSimplify::create() {
     try {
-        raw = allocator->alloc(request);
-        if (!raw) throw std::bad_alloc();
-        void* public_location = static_cast<char*>(raw) + sizeof(StateAllocation);
-        size_t space = request - sizeof(StateAllocation);
-        std::align(alignof(StateAllocation), sizeof(GeoCoverageSimplify), public_location, space);
-        new (static_cast<char*>(public_location) - sizeof(StateAllocation)) StateAllocation{allocator, raw, request};
-        void* impl_location = static_cast<char*>(public_location) + sizeof(GeoCoverageSimplify);
-        space = request - (static_cast<char*>(impl_location) - static_cast<char*>(raw));
-        std::align(alignof(Impl), sizeof(Impl), impl_location, space);
-        impl = new (impl_location) Impl(allocator, checkpoint, metadata);
-        impl->check();
-        auto* result = new (public_location) GeoCoverageSimplify(impl);
-        return std::unique_ptr<GeoCoverageSimplify>(result);
-    } catch (const Stop& stop) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
-        return stop.status;
+        auto impl = std::make_unique<Impl>();
+        return std::unique_ptr<GeoCoverageSimplify>(new GeoCoverageSimplify(std::move(impl)));
     } catch (const std::bad_alloc&) {
-        if (impl) impl->~Impl();
-        if (raw) allocator->free(raw, request);
         return Status::MemoryLimitExceeded("ST_CoverageSimplify state allocation failed");
     }
-}
-GeoCoverageSimplify::~GeoCoverageSimplify() {
-    _impl->~Impl();
-}
-void GeoCoverageSimplify::operator delete(void* pointer) noexcept {
-    auto* header = reinterpret_cast<StateAllocation*>(static_cast<char*>(pointer) - sizeof(StateAllocation));
-    auto allocation = *header;
-    header->~StateAllocation();
-    allocation.allocator->free(allocation.raw, allocation.bytes);
 }
 Status GeoCoverageSimplify::append(std::optional<Slice> wkb) {
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
-        s.check();
         index(s.rows.size());
         if (wkb) {
             Reader reader(*wkb);
             s.preflight(reader, false);
             reader.done();
         }
-        s.rows.emplace_back(s.memory);
+        s.rows.emplace_back();
         auto& row = s.rows.back();
         row.null = !wkb;
         if (wkb) {
@@ -1096,8 +1382,6 @@ Status GeoCoverageSimplify::finish(std::optional<double> tolerance, std::optiona
     auto& s = *_impl;
     if (s.finished || s.failed) return Status::InvalidArgument("ST_CoverageSimplify partition is closed");
     try {
-        MemoryScope scope(s.memory);
-        s.check();
         s.null_parameter = !tolerance || !boundary;
         if (!s.null_parameter) {
             if (!std::isfinite(*tolerance) || *tolerance < 0 || !std::isfinite(*tolerance * *tolerance))
@@ -1131,32 +1415,8 @@ StatusOr<Slice> GeoCoverageSimplify::result_buffer() const {
     if (!_impl->finished || _impl->failed) return Status::InvalidArgument("ST_CoverageSimplify result unavailable");
     return Slice(reinterpret_cast<const char*>(_impl->output_bytes.data()), _impl->output_bytes.size());
 }
-std::pmr::memory_resource* GeoCoverageSimplify::resource() {
-    return &_impl->memory;
-}
-Status GeoCoverageSimplify::retain_external(size_t bytes) {
-    try {
-        _impl->memory.retain(bytes);
-        _impl->external += bytes;
-        return Status::OK();
-    } catch (const Stop& stop) {
-        _impl->failed = true;
-        return stop.status;
-    }
-}
-void GeoCoverageSimplify::release_external(size_t bytes) {
-    const size_t release = std::min(bytes, _impl->external);
-    _impl->external -= release;
-    _impl->memory.release(release);
-}
 size_t GeoCoverageSimplify::rows() const {
     return _impl->rows.size();
-}
-size_t GeoCoverageSimplify::memory_usage() const {
-    return _impl->memory.used;
-}
-size_t GeoCoverageSimplify::peak_memory_usage() const {
-    return _impl->memory.peak;
 }
 size_t GeoCoverageSimplify::kernel_calls() const {
     return _impl->calls;

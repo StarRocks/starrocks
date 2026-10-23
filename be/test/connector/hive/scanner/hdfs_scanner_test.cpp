@@ -376,6 +376,56 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     EXPECT_FALSE(status.ok());
 }
 
+// An Iceberg TIME initial-default arrives as "HH:MM[:SS[.ffffff]]" and is stored as whole seconds.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithTimeDefault) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "01:02:03.999999");
+    ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[1]->id(), "10:15");
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 2));
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ("[3723, 36900]", chunk->debug_row(1));
+}
+
+// FE sends a TIMESTAMP default as LocalDateTime#toString (seconds omitted when zero) and a TIMESTAMPTZ
+// default with microseconds.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDatetimeDefault) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "2024-06-15 10:30");
+    ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[1]->id(),
+                                                                    "2023-11-15 06:13:20.000000");
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    EXPECT_EQ("[2024-06-15 10:30:00, 2023-11-15 06:13:20]", chunk->debug_row(0));
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithInvalidTimeDefault) {
+    for (const char* value : {"", "01", "01:02:03:04", "24:00:00", "01:60", "01:02:x"}) {
+        SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)}, {""}};
+        auto* tuple_desc = _create_tuple_desc(descs);
+        HdfsScannerContext ctx;
+        ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
+        ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), value);
+
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        EXPECT_FALSE(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1).ok()) << value;
+    }
+}
+
 TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMicros) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);

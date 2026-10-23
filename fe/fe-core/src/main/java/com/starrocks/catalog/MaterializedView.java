@@ -749,7 +749,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
     // otherwise the incremental refresh may cause incorrect result.
     // Keys of IvmOpUtils.ENCODE_ROW_ID_FUNCTION_MAP, chosen by IvmOpUtils.deduceEncodeRowIdVersion():
-    // 0 is encode_sort_key, 1 is encode_fingerprint_sha256.
+    // 0 is encode_sort_key, 1 is encode_fingerprint_sha256, 2 is encode_fingerprint_sha256_v2.
     // "No row id" is not a value here -- it is expressed by the mv having no __ROW_ID__ column, so the
     // default 0 is indistinguishable from an append-only mv. Test for the column, not for this field.
     @SerializedName(value = "encodeRowIdVersion")
@@ -2708,6 +2708,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+        // The property is authoritative: images checkpointed before ALTER replay applied it carry a stale field.
+        if (tableProperty != null) {
+            String staleness = tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+            if (staleness != null) {
+                maxMVRewriteStaleness = Integer.parseInt(staleness);
+            }
+        }
         List<Column> partitionCols = getPartitionColumns();
         if (CollectionUtils.isEmpty(partitionCols)) {
             return;

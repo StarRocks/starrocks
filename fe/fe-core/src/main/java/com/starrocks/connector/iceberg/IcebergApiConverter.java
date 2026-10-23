@@ -23,6 +23,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -89,6 +90,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -375,11 +377,11 @@ public class IcebergApiConverter {
             }
             Column column = new Column(field.name(), srType, field.isOptional());
             column.setComment(field.doc());
-            // Prioritize write-default (used for INSERT) over initial-default (used for backfill)
+            // The column default is what INSERT writes for an omitted column: only the write-default. Without
+            // one, the spec writes NULL; the initial-default only fills older data files on read.
             String writeDefault = toWriteDefaultValueString(field);
-            String defaultVal = writeDefault != null ? writeDefault : toInitialDefaultValueString(field);
-            if (defaultVal != null) {
-                column.setDefaultValue(defaultVal);
+            if (writeDefault != null) {
+                column.setDefaultValue(writeDefault);
             }
             fullSchema.add(column);
         }
@@ -388,6 +390,24 @@ public class IcebergApiConverter {
 
     public static String toInitialDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, false);
+    }
+
+    private static final DateTimeFormatter READ_DEFAULT_DATETIME_FORMATTER =
+            // uuuu is the proleptic year: yyyy (year of era) would print year 0 as 0001.
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSS");
+
+    // The initial-default sent to BE to fill a column or subfield missing from a data file. BE reads a
+    // TIMESTAMPTZ value from a file in the session time zone, so its default is formatted in that zone too.
+    // Call it only when the plan is built, not for a cached schema.
+    public static String toReadInitialDefaultValueString(Types.NestedField field) {
+        if (field.type() instanceof Types.TimestampType timestampType && timestampType.shouldAdjustToUTC() &&
+                field.initialDefault() != null) {
+            long micros = ((Number) field.initialDefault()).longValue();
+            return DateTimeUtil.timestamptzFromMicros(micros)
+                    .atZoneSameInstant(TimeUtils.getTimeZone().toZoneId())
+                    .format(READ_DEFAULT_DATETIME_FORMATTER);
+        }
+        return toInitialDefaultValueString(field);
     }
 
 
@@ -581,12 +601,8 @@ public class IcebergApiConverter {
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
-        String initialDefault = toInitialDefaultValueString(nestedField);
-        // A TIMESTAMPTZ default is a UTC wall time here, while BE reads timestamptz in the session time zone;
-        // leave it unset so the subfield keeps reading NULL instead of a shifted value.
-        boolean isTimestampTz = nestedField.type() instanceof Types.TimestampType &&
-                ((Types.TimestampType) nestedField.type()).shouldAdjustToUTC();
-        if (initialDefault != null && !isTimestampTz) {
+        String initialDefault = toReadInitialDefaultValueString(nestedField);
+        if (initialDefault != null) {
             tIcebergSchemaField.setInitial_default(initialDefault);
         }
         // Preserve external semantics independently of SQL type conversion.
@@ -922,7 +938,9 @@ public class IcebergApiConverter {
             return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
-        throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+        // An unknown transform is shown as is (SHOW CREATE TABLE, ALTER TABLE lookups). Reads skip it
+        // (readSchemaPartitionFields) and writes reject it (checkPartitionTransformsWritable).
+        return prefix + format("%s(%s)", transform, escapedName);
     }
 
     public static List<StructField> getPartitionColumns(List<PartitionField> fields, Schema schema) {

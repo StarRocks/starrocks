@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
-#include <cstdlib>
 #include <limits>
 #include <thread>
 
@@ -25,31 +24,6 @@
 
 namespace starrocks {
 namespace {
-// Size-class allocator with explicit ownership and deterministic failure
-// injection. It does not stand in for runtime/query memory tracker validation.
-class TestAllocator final : public memory::Allocator {
-public:
-    size_t live = 0, peak = 0, allocations = 0, fail_after = std::numeric_limits<size_t>::max();
-    void* alloc(size_t size, size_t = 0) override {
-        if (allocations++ >= fail_after) return nullptr;
-        size_t rounded = nallox(size);
-        void* p = std::malloc(rounded);
-        if (p) {
-            live += rounded;
-            peak = std::max(peak, live);
-        }
-        return p;
-    }
-    void free(void* pointer, size_t size) override {
-        if (pointer) {
-            live -= nallox(size);
-            std::free(pointer);
-        }
-    }
-    void* realloc(void*, size_t, size_t, size_t = 0) override { return nullptr; }
-    int64_t nallox(size_t size, int = 0) const override { return (size + 63) / 64 * 64; }
-    MemoryKind memory_kind() const override { return MemoryKind::kMalloc; }
-};
 constexpr auto kCartesian = WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
 std::string wkb(const std::string& text) {
     WkbGeometry geometry;
@@ -76,8 +50,8 @@ std::vector<std::string> adjacent() {
     return {wkb("POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))"),
             wkb("POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))")};
 }
-std::unique_ptr<GeoCoverageSimplify> make(TestAllocator& allocator, GeoCoverageCheckpoint checkpoint = {}) {
-    auto result = GeoCoverageSimplify::create(&allocator, std::move(checkpoint));
+std::unique_ptr<GeoCoverageSimplify> make() {
+    auto result = GeoCoverageSimplify::create();
     EXPECT_TRUE(result.ok()) << result.status();
     return result.ok() ? std::move(result).value() : nullptr;
 }
@@ -88,9 +62,26 @@ void append(GeoCoverageSimplify& coverage, const std::vector<std::string>& rows)
     }
 }
 
+std::vector<std::string> horizontal_strips(size_t count) {
+    std::vector<std::string> result;
+    result.reserve(count);
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    for (size_t i = 0; i < count; ++i) {
+        polygon.rings = {{{0, double(i)},
+                          {0, double(i + 1)},
+                          {double(count), double(i + 1)},
+                          {double(count), double(i)},
+                          {0, double(i)}}};
+        std::string bytes;
+        EXPECT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        result.push_back(std::move(bytes));
+    }
+    return result;
+}
+
 TEST(GeoCoverageTest, JointSeamAndBoundaryFlag) {
-    TestAllocator allocator;
-    auto coverage = make(allocator);
+    auto coverage = make();
     ASSERT_NE(coverage, nullptr);
     auto inputs = adjacent();
     append(*coverage, inputs);
@@ -105,13 +96,11 @@ TEST(GeoCoverageTest, JointSeamAndBoundaryFlag) {
     ASSERT_EQ(positions(b), 5);
     EXPECT_EQ(coverage->rows(), 2);
     EXPECT_EQ(coverage->kernel_calls(), 1);
-    EXPECT_GT(coverage->peak_memory_usage(), 0);
+
     coverage.reset();
-    EXPECT_EQ(allocator.live, 0);
 }
 TEST(GeoCoverageTest, DefaultMatchesTrue) {
-    TestAllocator allocator;
-    auto a = make(allocator), b = make(allocator);
+    auto a = make(), b = make();
     auto inputs = adjacent();
     append(*a, inputs);
     append(*b, inputs);
@@ -121,8 +110,7 @@ TEST(GeoCoverageTest, DefaultMatchesTrue) {
         EXPECT_EQ(a->result(i)->value().to_string(), b->result(i)->value().to_string());
 }
 TEST(GeoCoverageTest, ZeroValidatesAndPreservesOriginalWkb) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     auto inputs = adjacent();
     append(*c, inputs);
     ASSERT_TRUE(c->finish(0).ok());
@@ -145,8 +133,7 @@ TEST(GeoCoverageTest, RepeatedClosingCoordinatesInShellsAndHoles) {
         ASSERT_GT(positions(decoded(Slice(repeated))), positions(decoded(Slice(control))));
         for (double tolerance : {0.0, 1.0}) {
             for (bool boundary : {false, true}) {
-                TestAllocator allocator;
-                auto c = make(allocator), expected = make(allocator);
+                auto c = make(), expected = make();
                 ASSERT_TRUE(c->append(Slice(repeated)).ok());
                 ASSERT_TRUE(expected->append(Slice(control)).ok());
                 auto status = c->finish(tolerance, boundary);
@@ -159,7 +146,6 @@ TEST(GeoCoverageTest, RepeatedClosingCoordinatesInShellsAndHoles) {
                     EXPECT_EQ(output, expected->result(0)->value().to_string());
                 c.reset();
                 expected.reset();
-                EXPECT_EQ(allocator.live, 0);
             }
         }
     }
@@ -171,8 +157,7 @@ TEST(GeoCoverageTest, RepeatedClosingCoordinatesOnSharedCoverageEdges) {
                                            wkb("POLYGON ((2 0,2 2,4 2,4 0,2 0))")};
     for (double tolerance : {0.0, 1.0}) {
         for (bool boundary : {false, true}) {
-            TestAllocator allocator;
-            auto c = make(allocator), expected = make(allocator);
+            auto c = make(), expected = make();
             append(*c, repeated);
             append(*expected, control);
             auto status = c->finish(tolerance, boundary);
@@ -192,8 +177,7 @@ TEST(GeoCoverageTest, CircularDeduplicationDoesNotRepairInvalidRings) {
         SCOPED_TRACE(text);
         const auto input = wkb(text);
         for (double tolerance : {0.0, 1.0}) {
-            TestAllocator allocator;
-            auto c = make(allocator);
+            auto c = make();
             ASSERT_TRUE(c->append(Slice(input)).ok());
             EXPECT_FALSE(c->finish(tolerance).ok());
             EXPECT_FALSE(c->result(0).ok());
@@ -201,8 +185,7 @@ TEST(GeoCoverageTest, CircularDeduplicationDoesNotRepairInvalidRings) {
     }
 }
 TEST(GeoCoverageTest, RowMappingNullEmptyMultiAndIslands) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     ASSERT_TRUE(c->append(std::nullopt).ok());
     auto empty = wkb("MULTIPOLYGON EMPTY"),
          multi = wkb("MULTIPOLYGON (((0 0,0 2,1 2,2 2,2 0,0 0)),((10 0,10 2,12 2,12 0,10 0)))");
@@ -218,8 +201,7 @@ TEST(GeoCoverageTest, RowMappingNullEmptyMultiAndIslands) {
 }
 TEST(GeoCoverageTest, NullParameterSkipsKernel) {
     for (bool null_tolerance : {false, true}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         append(*c, adjacent());
         ASSERT_TRUE(c->finish(null_tolerance ? std::optional<double>{} : 1,
                               null_tolerance ? std::optional<bool>{true} : std::optional<bool>{})
@@ -232,8 +214,7 @@ TEST(GeoCoverageTest, NullParameterSkipsKernel) {
 TEST(GeoCoverageTest, InvalidParametersEvenEmpty) {
     for (double tolerance :
          {-1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN(), 1e200}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         auto empty = wkb("POLYGON EMPTY");
         ASSERT_TRUE(c->append(Slice(empty)).ok());
         EXPECT_FALSE(c->finish(tolerance).ok());
@@ -249,24 +230,21 @@ TEST(GeoCoverageTest, InvalidCoverageNotBypassedByZero) {
             {"POLYGON ((0 0,3 3,0 3,3 0,0 0))"},
             {"POLYGON ((0 0,0 4,4 4,4 0,0 0),(5 5,5 6,6 6,6 5,5 5))"}};
     for (const auto& text : invalid) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         for (const auto& row : text) ASSERT_TRUE(c->append(Slice(wkb(row))).ok());
         EXPECT_FALSE(c->finish(0).ok()) << text[0];
         EXPECT_FALSE(c->result(0).ok());
     }
 }
 TEST(GeoCoverageTest, FreeBoundaryAndHoleFrozen) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     auto input = wkb("POLYGON ((0 0,0 8,4 8,8 8,8 0,0 0),(2 2,3 2,4 2,4 4,2 4,2 2))");
     ASSERT_TRUE(c->append(Slice(input)).ok());
     ASSERT_TRUE(c->finish(1e6, false).ok());
     EXPECT_EQ(c->result(0)->value().to_string(), input);
 }
 TEST(GeoCoverageTest, JunctionAndOriginalPointContactRemain) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     std::vector<std::string> inputs{wkb("POLYGON ((0 0,0 4,2 4,2 2,2 0,0 0))"), wkb("POLYGON ((2 2,2 4,4 4,4 2,2 2))"),
                                     wkb("POLYGON ((2 0,2 2,4 2,4 0,2 0))")};
     append(*c, inputs);
@@ -279,8 +257,7 @@ TEST(GeoCoverageTest, JunctionAndOriginalPointContactRemain) {
     }
 }
 TEST(GeoCoverageTest, MoreThanTenThousandRowsRetainMapping) {
-    TestAllocator allocator;
-    auto coverage = make(allocator);
+    auto coverage = make();
     const auto empty = wkb("POLYGON EMPTY");
     const auto polygon = wkb("POLYGON ((0 0,0 2,2 2,2 0,0 0))");
     constexpr size_t count = 10001;
@@ -297,87 +274,10 @@ TEST(GeoCoverageTest, MoreThanTenThousandRowsRetainMapping) {
         EXPECT_EQ(result->value().to_string(), i == count - 1 ? polygon : empty);
     }
     coverage.reset();
-    EXPECT_EQ(allocator.live, 0);
 }
-TEST(GeoCoverageTest, AllocationFailureAndCancellationCleanup) {
-    for (size_t fail_after : {0, 3, 10, 100}) {
-        TestAllocator allocator;
-        allocator.fail_after = fail_after;
-        auto created = GeoCoverageSimplify::create(&allocator);
-        if (!created.ok()) {
-            EXPECT_EQ(allocator.live, 0);
-            continue;
-        }
-        auto c = std::move(created).value();
-        auto inputs = adjacent();
-        Status status = Status::OK();
-        for (const auto& input : inputs) {
-            status = c->append(Slice(input));
-            if (!status.ok()) break;
-        }
-        if (status.ok()) status = c->finish(1);
-        if (!status.ok()) {
-            EXPECT_FALSE(c->result(0).ok());
-        }
-        c.reset();
-        EXPECT_EQ(allocator.live, 0);
-    }
-    TestAllocator allocator;
-    bool cancelled = false;
-    GeoCoverageCheckpoint checkpoint{
-            &cancelled, [](void* context) {
-                return *static_cast<bool*>(context) ? Status::Cancelled("coverage test cancellation") : Status::OK();
-            }};
-    auto c = make(allocator, checkpoint);
-    append(*c, adjacent());
-    cancelled = true;
-    EXPECT_TRUE(c->finish(1).is_cancelled());
-    EXPECT_FALSE(c->result(0).ok());
-    c.reset();
-    EXPECT_EQ(allocator.live, 0);
-}
-TEST(GeoCoverageTest, KernelPollingRetainsCancellationAndMemoryErrors) {
-    WkbGeometry polygon;
-    polygon.type = WkbGeometryType::POLYGON;
-    auto& ring = polygon.rings.emplace_back();
-    // A zero-area ring would fail in decode before the next explicit check.
-    for (int i = 0; i < 512; ++i) ring.push_back({double(i), 0});
-    ring.push_back({0, 0});
-    std::string input;
-    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &input, kCartesian).ok());
-    for (bool memory_error : {false, true}) {
-        struct State {
-            bool armed = false;
-            int checks = 0;
-            bool memory_error;
-        } state{false, 0, memory_error};
-        GeoCoverageCheckpoint checkpoint{
-                &state, [](void* context) {
-                    auto& state = *static_cast<State*>(context);
-                    // Entry and row checks precede the coordinate-loop poll.
-                    if (state.armed && ++state.checks == 3) {
-                        return state.memory_error ? Status::MemoryLimitExceeded("coverage test memory limit")
-                                                  : Status::Cancelled("coverage test cancellation");
-                    }
-                    return Status::OK();
-                }};
-        TestAllocator allocator;
-        auto coverage = make(allocator, checkpoint);
-        ASSERT_NE(coverage, nullptr);
-        ASSERT_TRUE(coverage->append(Slice(input)).ok());
-        state.armed = true;
-        const auto status = coverage->finish(1, false);
-        EXPECT_EQ(state.checks, 3);
-        EXPECT_EQ(status.is_mem_limit_exceeded(), memory_error) << status;
-        EXPECT_EQ(status.is_cancelled(), !memory_error) << status;
-        EXPECT_FALSE(coverage->result(0).ok());
-        coverage.reset();
-        EXPECT_EQ(allocator.live, 0);
-    }
-}
+
 TEST(GeoCoverageTest, SequentialWorkerMigration) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     append(*c, adjacent());
     Status status;
     std::thread worker([&] { status = c->finish(1); });
@@ -385,17 +285,15 @@ TEST(GeoCoverageTest, SequentialWorkerMigration) {
     ASSERT_TRUE(status.ok()) << status;
     std::thread closer([&] { c.reset(); });
     closer.join();
-    EXPECT_EQ(allocator.live, 0);
 }
 TEST(GeoCoverageTest, UnsupportedMalformedAndUnclosedWkb) {
     for (const auto& value : {wkb("POINT (1 2)"), std::string("bad"), wkb("GEOMETRYCOLLECTION EMPTY")}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         EXPECT_FALSE(c->append(Slice(value)).ok());
         EXPECT_EQ(c->kernel_calls(), 0);
     }
-    TestAllocator allocator;
-    auto c = make(allocator);
+
+    auto c = make();
     auto polygon = wkb("POLYGON ((0 0,0 2,2 2,2 0,0 0))");
     double last = 1;
     memcpy(polygon.data() + polygon.size() - 16, &last, 8);
@@ -406,15 +304,14 @@ TEST(GeoCoverageTest, UnsupportedMalformedAndUnclosedWkb) {
 TEST(GeoCoverageTest, NativeWkbCapabilityAndStructuralLimits) {
     auto polygon = wkb("POLYGON ((0 0,0 2,2 2,2 0,0 0))");
     for (uint32_t tag : {1003u, 2003u, 3003u, 0x20000003u}) {
-        TestAllocator allocator;
-        auto coverage = make(allocator);
+        auto coverage = make();
         auto value = polygon;
         memcpy(value.data() + 1, &tag, sizeof(tag));
         EXPECT_FALSE(coverage->append(Slice(value)).ok());
         EXPECT_EQ(coverage->kernel_calls(), 0);
     }
-    TestAllocator allocator;
-    auto coverage = make(allocator);
+
+    auto coverage = make();
     std::string declared = polygon.substr(0, 9);
     uint32_t count = 1000001;
     memcpy(declared.data() + 5, &count, sizeof(count));
@@ -433,8 +330,7 @@ TEST(GeoCoverageTest, BigEndianZeroPreservesBytesAndPositiveEmitsNativeWkb) {
     for (size_t offset = 13; offset < big.size(); offset += 8)
         std::reverse(big.begin() + offset, big.begin() + offset + 8);
     for (double tolerance : {0.0, 1.0}) {
-        TestAllocator allocator;
-        auto coverage = make(allocator);
+        auto coverage = make();
         ASSERT_TRUE(coverage->append(Slice(big)).ok());
         ASSERT_TRUE(coverage->finish(tolerance).ok());
         auto result = coverage->result(0)->value();
@@ -483,8 +379,8 @@ TEST(GeoCoverageTest, ExactThresholdAndWholePartitionArithmetic) {
             for (int form = 0; form < 3; ++form) {
                 SCOPED_TRACE(::testing::Message() << "x=" << std::hexfloat << test.x << " tolerance=" << test.tolerance
                                                   << " fallback=" << fallback << " form=" << form);
-                TestAllocator allocator;
-                auto c = make(allocator);
+
+                auto c = make();
                 std::vector<std::string> inputs;
                 for (const auto& row : source) {
                     auto geometry = decoded(Slice(row));
@@ -508,7 +404,6 @@ TEST(GeoCoverageTest, ExactThresholdAndWholePartitionArithmetic) {
                     EXPECT_EQ(c->result(2)->value().to_string(), subnormal);
                 }
                 c.reset();
-                EXPECT_EQ(allocator.live, 0);
             }
 }
 TEST(GeoCoverageTest, ExactArithmeticAtCapacityBoundary) {
@@ -520,8 +415,8 @@ TEST(GeoCoverageTest, ExactArithmeticAtCapacityBoundary) {
             for (int form = 0; form < 3; ++form) {
                 SCOPED_TRACE(::testing::Message()
                              << "power=" << power << " tolerance=" << tolerance << " form=" << form);
-                TestAllocator allocator;
-                auto c = make(allocator);
+
+                auto c = make();
                 const auto square = transformed_wkb("POLYGON ((0 0,0 1,1 1,1 0,0 0))", std::ldexp(1.0, power), 0);
                 ASSERT_TRUE(c->append(Slice(square)).ok());
                 ASSERT_TRUE(c->append(Slice(unit)).ok());
@@ -530,7 +425,6 @@ TEST(GeoCoverageTest, ExactArithmeticAtCapacityBoundary) {
                 EXPECT_EQ(c->result(0)->value().to_string(), square);
                 EXPECT_EQ(c->result(1)->value().to_string(), unit);
                 c.reset();
-                EXPECT_EQ(allocator.live, 0);
             }
 }
 TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) {
@@ -547,8 +441,8 @@ TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) 
                 for (bool boundary : {false, true}) {
                     SCOPED_TRACE(::testing::Message() << "scale=" << scale << " offset=" << offset << " tolerance="
                                                       << tolerance << " boundary=" << boundary << " input=" << text[0]);
-                    TestAllocator allocator;
-                    auto c = make(allocator);
+
+                    auto c = make();
                     std::vector<std::string> inputs;
                     for (const auto& row : text) inputs.push_back(transformed_wkb(row, scale, offset));
                     append(*c, inputs);
@@ -558,8 +452,7 @@ TEST(GeoCoverageTest, ExactMidpointRangesPreserveBoundaryAndHoleClassification) 
 }
 TEST(GeoCoverageTest, ExactMidpointRangesKeepNearlyCollinearSharedEdges) {
     for (double offset : {0.0, 1e6, 2e7}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         for (const auto& input : adjacent()) {
             auto geometry = decoded(Slice(input));
             for (auto& ring : geometry.rings)
@@ -585,8 +478,7 @@ TEST(GeoCoverageTest, ExactMidpointRangesDoNotHideNestedInteriors) {
     for (double offset : {0.0, 1e6, 2e7, -2e7})
         for (const auto& text : cases)
             for (double tolerance : {0.0, 0.25}) {
-                TestAllocator allocator;
-                auto c = make(allocator);
+                auto c = make();
                 for (const auto& row : text) ASSERT_TRUE(c->append(Slice(transformed_wkb(row, 1, offset))).ok());
                 const auto status = c->finish(tolerance);
                 EXPECT_FALSE(status.ok());
@@ -600,13 +492,18 @@ std::vector<std::string> interval_coverage() {
             "POLYGON ((7 15,9 15,9 17,7 17,7 15))", "POLYGON ((7.5 1.5,8.5 1.5,8 2.5,7.5 1.5))"};
 }
 TEST(GeoCoverageTest, RingIntervalsRetainLongEdgesHolesAndClosedBounds) {
-    const std::pair<double, double> transforms[] = {
-            {1, 0}, {1, -2e7}, {1, 2e7}, {2 * std::numeric_limits<double>::denorm_min(), 0}, {1e150, 0}, {1e307, 0}};
+    const std::pair<double, double> transforms[] = {{1, 0},
+                                                    {1, -2e7},
+                                                    {1, 2e7},
+                                                    {2 * std::numeric_limits<double>::denorm_min(), 0},
+                                                    {1e150, 0},
+                                                    {std::ldexp(1.0, 1017), 0},
+                                                    {std::ldexp(1.0, 1019), 0},
+                                                    {1e307, 0}};
     for (const auto& [scale, offset] : transforms)
         for (bool reverse : {false, true})
             for (int form = 0; form < 3; ++form) {
-                TestAllocator allocator;
-                auto c = make(allocator);
+                auto c = make();
                 std::vector<std::string> inputs;
                 for (const auto& text : interval_coverage()) {
                     auto geometry = decoded(Slice(transformed_wkb(text, scale, offset)));
@@ -623,63 +520,23 @@ TEST(GeoCoverageTest, RingIntervalsRetainLongEdgesHolesAndClosedBounds) {
                 for (size_t row = 0; row < inputs.size(); ++row)
                     EXPECT_EQ(c->result(row)->value().to_string(), inputs[row]);
                 c.reset();
-                EXPECT_EQ(allocator.live, 0);
             }
 }
 TEST(GeoCoverageTest, RingIntervalsDoNotSkipContainingLongEdges) {
     for (double offset : {0.0, -2e7, 2e7}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         for (const auto& text : {interval_coverage()[0], std::string("POLYGON ((1 14,3 14,2 15,1 14))")})
             ASSERT_TRUE(c->append(Slice(transformed_wkb(text, 1, offset))).ok());
         const auto status = c->finish(0);
         EXPECT_FALSE(status.ok());
         EXPECT_NE(status.to_string().find("overlapping coverage interiors"), std::string::npos) << status;
         c.reset();
-        EXPECT_EQ(allocator.live, 0);
     }
 }
-TEST(GeoCoverageTest, RingPreparationUnwindsAtEveryCheckpoint) {
-    for (bool allocation_failure : {false, true}) {
-        size_t total = 0;
-        for (size_t attempt = 0; attempt <= total; ++attempt) {
-            TestAllocator allocator;
-            struct State {
-                size_t checks = 0, stop;
-                bool allocation_failure, armed = false;
-                TestAllocator* allocator;
-            } state{0, attempt == 0 ? std::numeric_limits<size_t>::max() : attempt, allocation_failure, false,
-                    &allocator};
-            GeoCoverageCheckpoint checkpoint{&state, [](void* context) {
-                                                 auto& s = *static_cast<State*>(context);
-                                                 if (!s.armed || ++s.checks != s.stop) return Status::OK();
-                                                 if (!s.allocation_failure)
-                                                     return Status::Cancelled("ring preparation test");
-                                                 s.allocator->fail_after = s.allocator->allocations;
-                                                 return Status::OK();
-                                             }};
-            auto c = make(allocator, checkpoint);
-            for (const auto& text : interval_coverage()) ASSERT_TRUE(c->append(Slice(wkb(text))).ok());
-            state.checks = 0;
-            state.armed = true;
-            const auto status = c->finish(0.125);
-            if (attempt == 0) {
-                ASSERT_TRUE(status.ok()) << status;
-                total = state.checks;
-            } else if (!allocation_failure) {
-                EXPECT_TRUE(status.is_cancelled()) << attempt << " " << status;
-            } else {
-                EXPECT_TRUE(status.ok() || status.is_mem_limit_exceeded()) << attempt << " " << status;
-            }
-            c.reset();
-            EXPECT_EQ(allocator.live, 0) << attempt;
-        }
-    }
-}
+
 TEST(GeoCoverageTest, ExactValidityAtExtremeScales) {
     for (double scale : {std::ldexp(1.0, -1070), 1e150, 1e300}) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         for (const auto& input : adjacent()) {
             auto geometry = decoded(Slice(input));
             for (auto& ring : geometry.rings)
@@ -696,8 +553,7 @@ TEST(GeoCoverageTest, ExactValidityAtExtremeScales) {
     }
 }
 TEST(GeoCoverageTest, GeneratedGridKeepsSharedJunctionsAndReducesEdges) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+    auto c = make();
     size_t before = 0;
     for (int y = 0; y < 3; ++y)
         for (int x = 0; x < 3; ++x) {
@@ -728,11 +584,10 @@ TEST(GeoCoverageTest, GeneratedGridKeepsSharedJunctionsAndReducesEdges) {
     EXPECT_LT(after, before);
     EXPECT_EQ(c->kernel_calls(), 1);
 }
-TEST(GeoCoverageTest, ConcurrentPartitionsOwnAllocatorsAndMapping) {
+TEST(GeoCoverageTest, ConcurrentPartitionsKeepMapping) {
     auto inputs = adjacent();
     auto run = [&](bool reverse) {
-        TestAllocator allocator;
-        auto c = make(allocator);
+        auto c = make();
         auto data = inputs;
         if (reverse) std::reverse(data.begin(), data.end());
         append(*c, data);
@@ -743,15 +598,13 @@ TEST(GeoCoverageTest, ConcurrentPartitionsOwnAllocatorsAndMapping) {
         for (const auto& point : output.rings[0]) xmin = std::min(xmin, point.x);
         EXPECT_EQ(xmin, reverse ? 4 : 0);
         c.reset();
-        EXPECT_EQ(allocator.live, 0);
     };
     std::thread first([&] { run(false); }), second([&] { run(true); });
     first.join();
     second.join();
 }
-TEST(GeoCoverageTest, ContiguousOutputAndResourceFollowPartitionOwner) {
-    TestAllocator allocator;
-    auto c = make(allocator);
+TEST(GeoCoverageTest, ContiguousOutputFollowsPartitionLifetime) {
+    auto c = make();
     ASSERT_TRUE(c->append(std::nullopt).ok());
     append(*c, adjacent());
     ASSERT_TRUE(c->finish(1, false).ok());
@@ -761,14 +614,255 @@ TEST(GeoCoverageTest, ContiguousOutputAndResourceFollowPartitionOwner) {
     EXPECT_EQ(first.data, buffer.data);
     EXPECT_EQ(first.data + first.size, second.data);
     EXPECT_EQ(first.size + second.size, buffer.size);
-    const auto retained = c->memory_usage();
-    void* pointer = c->resource()->allocate(127, alignof(std::max_align_t));
-    EXPECT_GT(c->memory_usage(), retained);
-    std::thread downstream([&] { c->resource()->deallocate(pointer, 127, alignof(std::max_align_t)); });
-    downstream.join();
-    EXPECT_EQ(c->memory_usage(), retained);
-    c.reset();
-    EXPECT_EQ(allocator.live, 0);
 }
+
+TEST(GeoCoverageTest, DenseClusterAndRemoteComponentKeepCoverage) {
+    std::vector<std::string> inputs;
+    inputs.reserve(10001);
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto square = [&](double x, double y) {
+        polygon.rings = {{{x, y}, {x, y + 1}, {x + 1, y + 1}, {x + 1, y}, {x, y}}};
+        std::string bytes;
+        EXPECT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+    };
+    for (int y = 0; y < 100; ++y)
+        for (int x = 0; x < 100; ++x) square(x, y);
+    // The remote square widens both grids until all local entries share a cell.
+    square(1e9, 0);
+    for (int form = 0; form < 3; ++form) {
+        SCOPED_TRACE(form);
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < inputs.size(); ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+    }
+}
+
+TEST(GeoCoverageTest, DensePointCellRetainsNodeInsideRemovalTriangle) {
+    // As in PointIndexKeepsNodeInsideRemovalTriangle, the island must prevent
+    // removing the notch. A remote component and dense local grid exercise the
+    // point-tree fallback as well as the edge-tree fallback.
+    std::vector<std::string> inputs{wkb("POLYGON ((0 0,0 10,2 9,4 10,4 0,0 0))"),
+                                    wkb("POLYGON ((1.75 9.5,2 9.75,2.25 9.5,1.75 9.5))")};
+    for (int y = 0; y < 10; ++y)
+        for (int x = 20; x < 30; ++x) {
+            WkbGeometry polygon;
+            polygon.type = WkbGeometryType::POLYGON;
+            polygon.rings = {{{double(x), double(y)},
+                              {double(x), y + 1.0},
+                              {x + 1.0, y + 1.0},
+                              {x + 1.0, double(y)},
+                              {double(x), double(y)}}};
+            std::string bytes;
+            ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+            inputs.push_back(std::move(bytes));
+        }
+    inputs.push_back(wkb("POLYGON ((1e9 0,1e9 1,1000000001 1,1000000001 0,1e9 0))"));
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(2) : c->finish(2, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        // The notched shell and its island are preserved. Other polygons may
+        // simplify at tolerance2, so only these two rows have fixed output.
+        for (size_t i = 0; i < 2; ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+    }
+}
+
+TEST(GeoCoverageTest, LongChordsAfterSubdivisionKeepBytes) {
+    // Initially short edges fit the grid. Removing collinear vertices creates
+    // chords spanning more than 64 cells and repeatedly replaces overflow edges.
+    constexpr size_t count = 64, segments = 16 * count, vertical = 8;
+    std::vector<std::string> inputs, expected;
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    for (size_t i = 0; i < count; ++i) {
+        const double x = (39 * i) % count, y = 3 * i;
+        std::vector<WkbCoordinate> ring{{x, y}};
+        ring.reserve(2 * segments + 2 * vertical + 1);
+        for (size_t j = 1; j <= vertical; ++j) ring.push_back({x, y + 2.0 * j / vertical});
+        for (size_t j = 1; j <= segments; ++j) ring.push_back({x + double(count) * j / segments, y + 2});
+        for (size_t j = 1; j <= vertical; ++j) ring.push_back({x + count, y + 2 - 2.0 * j / vertical});
+        for (size_t j = 1; j <= segments; ++j) ring.push_back({x + count - double(count) * j / segments, y});
+        polygon.rings = {std::move(ring)};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+        polygon.rings = {{{x, y}, {x, y + 2}, {x + count, y + 2}, {x + count, y}, {x, y}}};
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        expected.push_back(std::move(bytes));
+    }
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < count; ++i)
+            EXPECT_EQ(c->result(i)->value().to_string(), form == 0 ? inputs[i] : expected[i]);
+    }
+}
+
+TEST(GeoCoverageTest, SparseWideRectanglesKeepBytes) {
+    // Disjoint staggered rectangles with split vertical sides: long-edge
+    // queries cross many sparsely occupied short-edge cells (Copilot case).
+    constexpr size_t count = 64000, step = 39553; // floor(0.61803 * count).
+    std::vector<std::string> inputs;
+    inputs.reserve(count);
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    for (size_t i = 0; i < count; ++i) {
+        const double x = (step * i) % count, y = 3 * i;
+        polygon.rings = {
+                {{x, y}, {x, y + 1}, {x, y + 2}, {x + count, y + 2}, {x + count, y + 1}, {x + count, y}, {x, y}}};
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, kCartesian).ok());
+        inputs.push_back(std::move(bytes));
+    }
+    for (int form = 0; form < 3; ++form) {
+        auto c = make();
+        append(*c, inputs);
+        const auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+        ASSERT_TRUE(status.ok()) << status;
+        for (size_t i = 0; i < count; ++i) {
+            auto expected = decoded(Slice(inputs[i]));
+            if (form != 0) {
+                auto& ring = expected.rings[0];
+                ring.erase(ring.begin() + 4);
+                ring.erase(ring.begin() + 1);
+            }
+            std::string bytes;
+            ASSERT_TRUE(WkbCodec::to_wkb(expected, &bytes, kCartesian).ok());
+            EXPECT_EQ(c->result(i)->value().to_string(), bytes);
+        }
+    }
+}
+
+TEST(GeoCoverageTest, LongEdgeOverflowKeepsStripCoverage) {
+    // N horizontal strips tile an N x N square. Their N+1 horizontal edges
+    // overflow the short-edge grid; cover both sides of the linear-list limit.
+    for (size_t count : {8, 32, 10000}) {
+        const auto inputs = horizontal_strips(count);
+        for (bool boundary : {false, true}) {
+            SCOPED_TRACE(count);
+
+            auto c = make();
+            append(*c, inputs);
+            const auto status = c->finish(0.0005, boundary);
+            ASSERT_TRUE(status.ok()) << status;
+            for (size_t i = 0; i < count; ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+            c.reset();
+        }
+    }
+}
+
+TEST(GeoCoverageTest, LocalIntegerBoundsKeepBytesAcrossNativeAndFallbackScales) {
+    const std::vector<std::string> source{"POLYGON ((0 0,0 4,2 4,2 2,2 0,0 0))", "POLYGON ((2 0,2 2,2 4,4 4,4 0,2 0))"};
+    const std::vector<std::string> expected{"POLYGON ((0 0,0 4,2 4,2 0,0 0))", "POLYGON ((2 0,2 4,4 4,4 0,2 0))"};
+    // With tolerance0.0005 these dyadic scales straddle the signed128 bound.
+    // Translation changes absolute-coordinate bits without changing topology.
+    for (double scale : {1.0 / 256, 1.0 / 32, 1.0 / 16})
+        for (double offset : {0.0, -2e7, 2e7})
+            for (bool reverse : {false, true})
+                for (int form = 0; form < 3; ++form) {
+                    auto c = make();
+                    auto transformed = [&](const std::string& text) {
+                        auto geometry = decoded(Slice(transformed_wkb(text, scale, offset)));
+                        if (reverse)
+                            for (auto& ring : geometry.rings) std::reverse(ring.begin(), ring.end());
+                        std::string bytes;
+                        EXPECT_TRUE(WkbCodec::to_wkb(geometry, &bytes, kCartesian).ok());
+                        return bytes;
+                    };
+                    for (const auto& text : source) {
+                        const auto bytes = transformed(text);
+                        ASSERT_TRUE(c->append(Slice(bytes)).ok());
+                    }
+                    auto status = form == 2 ? c->finish(0.0005) : c->finish(0.0005, form == 1);
+                    ASSERT_TRUE(status.ok()) << status << " " << scale << " " << offset << " " << form;
+                    for (size_t i = 0; i < source.size(); ++i)
+                        EXPECT_EQ(c->result(i)->value().to_string(), transformed(expected[i]));
+                    c.reset();
+                }
+}
+
+TEST(GeoCoverageTest, LargeDegenerateCoordinatesRetainControlledError) {
+    auto c = make();
+    const auto input = wkb("POLYGON ((1e300 1e300,1e300 1e300,1e300 1e300,1e300 1e300))");
+    ASSERT_TRUE(c->append(Slice(input)).ok());
+    const auto status = c->finish(0.0005);
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(status.to_string().find("degenerate polygon ring"), std::string::npos);
+    c.reset();
+}
+
+TEST(GeoCoverageTest, SharedEndpointStillRejectsCollinearOverlap) {
+    for (double offset : {0.0, -2e7, 2e7}) {
+        auto c = make();
+        for (const auto& text : {"POLYGON ((0 0,0 4,4 4,4 0,0 0))", "POLYGON ((0 0,0 2,2 2,2 0,0 0))"}) {
+            const auto input = transformed_wkb(text, 1.0 / 32, offset);
+            ASSERT_TRUE(c->append(Slice(input)).ok());
+        }
+        const auto status = c->finish(0.0005);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_NE(status.to_string().find("invalid coverage crossing or mismatched subdivision"), std::string::npos);
+        c.reset();
+    }
+}
+
+TEST(GeoCoverageTest, PointIndexKeepsNodeInsideRemovalTriangle) {
+    // The small island is outside the notched shell, but inside the triangle
+    // filled by removing (2,9). Other shell candidates exceed tolerance2.
+    const std::vector<std::string> source{"POLYGON ((0 0,0 10,2 9,4 10,4 0,0 0))",
+                                          "POLYGON ((1.75 9.5,2 9.75,2.25 9.5,1.75 9.5))"};
+    for (double scale : {1.0, 1.0 / 256})
+        for (double offset : {0.0, -2e7, 2e7})
+            for (bool reverse : {false, true})
+                for (bool fallback : {false, true})
+                    for (int form = 0; form < 3; ++form) {
+                        auto c = make();
+                        std::vector<std::string> inputs;
+                        for (const auto& text : source) inputs.push_back(transformed_wkb(text, scale, offset));
+                        if (reverse) std::reverse(inputs.begin(), inputs.end());
+                        if (fallback) {
+                            auto triangle = decoded(Slice(wkb("POLYGON ((20 0,24 0,24 1,20 0))")));
+                            triangle.rings[0][2].y = std::numeric_limits<double>::denorm_min();
+                            std::string value;
+                            ASSERT_TRUE(WkbCodec::to_wkb(triangle, &value, kCartesian).ok());
+                            inputs.push_back(value);
+                        }
+                        append(*c, inputs);
+                        auto status = form == 2 ? c->finish(2 * scale) : c->finish(2 * scale, form == 1);
+                        ASSERT_TRUE(status.ok()) << status << " " << scale << " " << offset << " " << fallback;
+                        for (size_t i = 0; i < inputs.size(); ++i)
+                            EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+                        c.reset();
+                    }
+}
+
+TEST(GeoCoverageTest, PointIndexRetainsWideRangeTriangleGuard) {
+    auto c = make();
+    std::vector<std::string> inputs{wkb("POLYGON ((0 0,0 10,2 9,4 10,4 0,0 0))"),
+                                    wkb("POLYGON ((1.75 9.5,2 9.75,2.25 9.5,1.75 9.5))")};
+    // The partition span overflows binary64, while each original coordinate is
+    // finite. The wide index must still find the island in the removal triangle.
+    for (double x : {-1e308, 1e308}) {
+        const double delta = std::ldexp(1.0, 975);
+        WkbGeometry triangle;
+        triangle.type = WkbGeometryType::POLYGON;
+        triangle.rings.push_back({{x, x}, {x + delta, x}, {x, x + delta}, {x, x}});
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(triangle, &bytes, kCartesian).ok());
+        inputs.push_back(bytes);
+    }
+    append(*c, inputs);
+    const auto status = c->finish(2);
+    ASSERT_TRUE(status.ok()) << status;
+    for (size_t i = 0; i < inputs.size(); ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
+    c.reset();
+}
+
 } // namespace
 } // namespace starrocks

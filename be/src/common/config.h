@@ -504,6 +504,8 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
+// Maximum number of level -1 rowsets selected per size-tiered primary key compaction. Values below 2 are treated as 2.
+CONF_mInt64(max_update_compaction_num_level_minus_one_rowsets, "10000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
@@ -989,7 +991,8 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 // Metadata cache limit for shared-nothing mode. Not working for PK table now.
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
@@ -2035,6 +2038,9 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(l0_snapshot_size, "16777216");
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,

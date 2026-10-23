@@ -332,13 +332,15 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
-        Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        st = StorageEnv::GetInstance()->lake_primary_key_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#endif
-        return st;
+        runtime_env_ptr->refresh_update_mem_limit();
+        StorageEngine::instance()->update_manager()->refresh_mem_limits();
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_mem_limits();
+        }
+        LOG(INFO) << "Set update_memory_limit_percent: " << config::update_memory_limit_percent
+                  << ", update mem limit: " << runtime_env_ptr->update_mem_tracker()->limit();
+        return Status::OK();
     });
     registry->register_callback("lake_pk_preload_memory_limit_percent", [=]() -> Status {
         auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();

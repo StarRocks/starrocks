@@ -7,7 +7,7 @@ CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_1 type = s3 LOCATIONS
 -- !result
 DESC STORAGE VOLUME 'storage_volume_default_1';
 -- result:
-storage_volume_default_1	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint"}	false	comment
+storage_volume_default_1	S3	false	s3://xxx	{"aws.s3.endpoint":"endpoint","aws.s3.region":"us-west-2","aws.s3.use_aws_sdk_default_behavior":"true"}	false	comment
 -- !result
 CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_default_2 type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
 -- result:
@@ -24,7 +24,7 @@ SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
 -- !result
 DESC STORAGE VOLUME 'storage_volume_default_1';
 -- result:
-storage_volume_default_1	S3	true	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint1"}	true	comment
+storage_volume_default_1	S3	true	s3://xxx	{"aws.s3.endpoint":"endpoint1","aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true"}	true	comment
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 -- result:
@@ -47,7 +47,7 @@ SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 -- !result
 DESC STORAGE VOLUME 'storage_volume_default_2';
 -- result:
-storage_volume_default_2	S3	true	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint1"}	true	comment
+storage_volume_default_2	S3	true	s3://xxx	{"aws.s3.endpoint":"endpoint1","aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true"}	true	comment
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 -- result:
