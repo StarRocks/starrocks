@@ -136,10 +136,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             throw new StarRocksConnectorException("Equality delete files aren't supported for tables with partition evolution." +
                     "You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it");
         }
-        if (hasPartitionEvolution && (table.schema().caseInsensitiveFindField(PARTITION_KEY) != null ||
-                icebergTable.getReadSchema().caseInsensitiveFindField(PARTITION_KEY) != null)) {
-            // without the partition key the anti join cannot keep a partitioned delete inside its own spec; a
-            // time-travel read may still see such a column that the current schema has dropped
+        if (hasPartitionEvolution && table.schema().caseInsensitiveFindField(PARTITION_KEY) != null) {
+            // without the partition key the anti join cannot keep a partitioned delete inside its own spec
             throw new StarRocksConnectorException("Equality delete files that span partition specs aren't supported " +
                     "for a table with a column named " + PARTITION_KEY);
         }

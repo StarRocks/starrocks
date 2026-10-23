@@ -14,26 +14,19 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-<<<<<<< HEAD
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
-=======
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
->>>>>>> 286f2ac ([BugFix] Fix Iceberg reads and inserts on tables with partition evolution (#81401))
+import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
->>>>>>> 286f2ac ([BugFix] Fix Iceberg reads and inserts on tables with partition evolution (#81401))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -229,7 +222,7 @@ public class IcebergEqualityDeleteRewriteRuleTest {
     }
 
     private static OptExpression runTransform(Table nativeTable, Set<IcebergDeleteSchema> deleteSchemas) {
-        List<Column> columns = List.of(new Column("id", IntegerType.INT, true), new Column("p", StringType.STRING, true));
+        List<Column> columns = List.of(new Column("id", Type.INT, true), new Column("p", Type.STRING, true));
         IcebergTable icebergTable = new IcebergTable(1L, "t1", "iceberg_catalog", null, "db1", "t1", "",
                 columns, nativeTable, ImmutableMap.of());
         ColumnRefFactory factory = new ColumnRefFactory();
