@@ -47,7 +47,7 @@ Alembic は **現在の StarRocks スキーマ** と **SQLAlchemy モデル** �
 ### 前提条件
 
 - StarRocks Python クライアント: 1.3.2 以上
-- `SQLAlchemy`: 1.4 以上（SQLAlchemy 2.0 が推奨され、`sqlacodegen` を使用するには必須）
+- `SQLAlchemy`: 1.4 以上。ビュー、マテリアライズドビュー、Alembic の autogenerate、`sqlacodegen` には SQLAlchemy 2.0 が必要です。
 - `Alembic`: 1.16 以上
 
 ### StarRocks Python クライアントのインストール
