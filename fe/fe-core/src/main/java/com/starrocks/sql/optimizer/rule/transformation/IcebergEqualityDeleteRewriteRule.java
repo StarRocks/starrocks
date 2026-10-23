@@ -176,7 +176,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             List<Integer> equalityIds = allIds.get(i);
             String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds);
             List<String> columnNames = equalityIds.stream()
-                    .map(id -> table.schema().findColumnName(id))
+                    .map(id -> findEqualityColumnName(icebergTable, id))
                     .toList();
             List<Column> deleteColumns = columnNames.stream().map(icebergTable::getColumn).collect(Collectors.toList());
             IcebergTable equalityDeleteTable = new IcebergTable(
@@ -184,6 +184,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                     icebergTable.getCatalogName(), icebergTable.getResourceName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), EQUALITY_DELETE_TABLE_COMMENT, deleteColumns,
                     icebergTable.getNativeTable(), ImmutableMap.of());
+            equalityDeleteTable.inheritReadView(icebergTable);
 
             ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumn = ImmutableMap.builder();
             ImmutableMap.Builder<Column, ColumnRefOperator> columnToColRef = ImmutableMap.builder();
@@ -340,7 +341,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 noDeleteTable.getCatalogName(), noDeleteTable.getResourceName(), noDeleteTable.getCatalogDBName(),
                 noDeleteTable.getCatalogTableName(), "iceberg_table_with_delete", noDeleteTable.getFullSchema(),
                 noDeleteTable.getNativeTable(), ImmutableMap.of());
-        Table nativeTable = noDeleteTable.getNativeTable();
+        withDeleteIcebergTable.inheritReadView(noDeleteTable);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
@@ -349,7 +350,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
                 .distinct()
-                .map(fieldId -> nativeTable.schema().findColumnName(fieldId))
+                .map(fieldId -> findEqualityColumnName(noDeleteTable, fieldId))
                 .map(withDeleteIcebergTable::getColumn)
                 .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
@@ -476,10 +477,21 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         return false;
     }
 
+    // Equality columns are resolved by field id under the schema the query reads with: the targeted snapshot's
+    // schema for time travel, so a key renamed or dropped since then still resolves.
+    private static String findEqualityColumnName(IcebergTable icebergTable, int fieldId) {
+        String name = icebergTable.getReadSchema().findColumnName(fieldId);
+        if (name == null) {
+            throw new StarRocksConnectorException("Equality delete column with field id %s is not in the read schema " +
+                    "of table %s", fieldId, icebergTable.getCatalogTableName());
+        }
+        return name;
+    }
+
     // equality table name format : origin_table_name + "_eq_delete_" + [pk1_pk2_pk3_..._]
     private String buildEqualityDeleteTableName(IcebergTable icebergTable, List<Integer> equalityIds) {
         return icebergTable.getCatalogTableName() + "_eq_delete_" + equalityIds.stream()
-                        .map(id -> icebergTable.getNativeTable().schema().findColumnName(id))
+                        .map(id -> findEqualityColumnName(icebergTable, id))
                         .collect(Collectors.joining("_"));
     }
 }
