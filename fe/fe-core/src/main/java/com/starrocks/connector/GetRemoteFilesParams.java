@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
@@ -35,6 +36,8 @@ public class GetRemoteFilesParams {
     private boolean enableColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
+    private ConnectorIndexResult connectorIndexResult;
+    private boolean disableGlobalIndex;
     // Bounded-cost statistics-scan budgets. Each cap <= 0 means that dimension is unlimited; all three
     // <= 0 (the default) disables the whole mechanism, so ordinary reads are byte-for-byte unaffected.
     // A lazy split iterator that carries any positive cap accumulates as it emits tasks and stops early
@@ -56,6 +59,8 @@ public class GetRemoteFilesParams {
         this.enableColumnStats = builder.enableColumnStats;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
+        this.connectorIndexResult = builder.connectorIndexResult;
+        this.disableGlobalIndex = builder.disableGlobalIndex;
         this.scanBytesCap = builder.scanBytesCap;
         this.scanFilesCap = builder.scanFilesCap;
         this.scanRowsCap = builder.scanRowsCap;
@@ -84,6 +89,8 @@ public class GetRemoteFilesParams {
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
                 .setUsedForDelete(usedForDelete)
+                .setConnectorIndexResult(connectorIndexResult)
+                .setDisableGlobalIndex(disableGlobalIndex)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
                 .setScanRowsCap(scanRowsCap);
@@ -173,6 +180,18 @@ public class GetRemoteFilesParams {
         return usedForDelete;
     }
 
+    public ConnectorIndexResult getConnectorIndexResult() {
+        return connectorIndexResult;
+    }
+
+    public void setConnectorIndexResult(ConnectorIndexResult connectorIndexResult) {
+        this.connectorIndexResult = connectorIndexResult;
+    }
+
+    public boolean isDisableGlobalIndex() {
+        return disableGlobalIndex;
+    }
+
     public long getScanBytesCap() {
         return scanBytesCap;
     }
@@ -204,6 +223,8 @@ public class GetRemoteFilesParams {
         private boolean enableColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
+        private ConnectorIndexResult connectorIndexResult;
+        private boolean disableGlobalIndex;
         private long scanBytesCap = -1;
         private long scanFilesCap = -1;
         private long scanRowsCap = -1;
@@ -265,6 +286,16 @@ public class GetRemoteFilesParams {
 
         public Builder setUsedForDelete(boolean usedForDelete) {
             this.usedForDelete = usedForDelete;
+            return this;
+        }
+
+        public Builder setConnectorIndexResult(ConnectorIndexResult connectorIndexResult) {
+            this.connectorIndexResult = connectorIndexResult;
+            return this;
+        }
+
+        public Builder setDisableGlobalIndex(boolean disableGlobalIndex) {
+            this.disableGlobalIndex = disableGlobalIndex;
             return this;
         }
 

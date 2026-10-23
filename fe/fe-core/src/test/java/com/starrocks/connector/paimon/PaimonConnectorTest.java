@@ -87,6 +87,19 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testIndexMetadataCacheMaximumSizeProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        properties.put(PaimonConnector.PAIMON_INDEX_META_CACHE_MAX_ENTRIES, "7");
+        new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+
+        properties.put(PaimonConnector.PAIMON_INDEX_META_CACHE_MAX_ENTRIES, "0");
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+    }
+
+    @Test
     public void testCacheOptionsCanBeOverridden() {
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.type", "filesystem");

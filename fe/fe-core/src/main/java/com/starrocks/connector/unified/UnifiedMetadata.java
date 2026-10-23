@@ -39,6 +39,11 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexResult;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -244,6 +249,23 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     @Override
     public ConnectorMetadata delegateFor(Table table) {
         return metadataOfTable(table);
+    }
+
+    @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        return metadataOfTable(table).getIndexMetadata(table, versionRange);
+    }
+
+    @Override
+    public Optional<ConnectorIndexResult> evaluateIndex(
+            Table table, IndexCondition condition, TvrVersionRange versionRange) {
+        return metadataOfTable(table).evaluateIndex(table, condition, versionRange);
+    }
+
+    @Override
+    public List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
+        return metadataOfTable(table).getIndexShards(table, snapshotId, requiredIndexes);
     }
 
     @Override

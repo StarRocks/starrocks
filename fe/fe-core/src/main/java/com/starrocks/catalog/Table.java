@@ -140,7 +140,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("LANCE")
         LANCE,
         @SerializedName("FLUSS")
-        FLUSS;
+        FLUSS,
+        @SerializedName("INDEX")
+        INDEX;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
