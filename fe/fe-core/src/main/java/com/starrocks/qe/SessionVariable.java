@@ -3528,7 +3528,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
-    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
+    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = true;
 
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
