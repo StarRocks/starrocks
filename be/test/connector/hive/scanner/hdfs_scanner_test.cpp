@@ -1050,6 +1050,9 @@ TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithParquetPositionDelete) {
     ASSERT_OK(scanner->open(_runtime_state));
     std::vector<std::pair<std::string, int64_t>> rows;
     ASSERT_OK(read_keys_and_row_positions(scanner.get(), _runtime_state, *tuple_desc, &rows));
+    // The delete builder needs a runtime profile, but the scanner's own counters are created by HiveDataSource,
+    // which this test does not build; clear the profile so close() skips update_counter().
+    ctx->profile.runtime_profile = nullptr;
     scanner->close();
 
     // `_pos` is the row's position in the whole file, so it keeps counting across batches and stripes,
