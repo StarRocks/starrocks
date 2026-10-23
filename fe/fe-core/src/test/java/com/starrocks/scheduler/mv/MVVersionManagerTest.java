@@ -177,7 +177,13 @@ public class MVVersionManagerTest {
         when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
         when(externalBaseTable.getId()).thenReturn(3000L);
         BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+<<<<<<< HEAD
         TableSnapshotInfo snapshot = new TableSnapshotInfo(baseTableInfo, externalBaseTable);
+=======
+        when(baseTableInfo.matchTable(externalBaseTable)).thenReturn(true);
+        mv.setBaseTableInfos(List.of(baseTableInfo));
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(baseTableInfo, externalBaseTable);
+>>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
         snapshot.getRefreshedPartitionInfos().put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
 
         // p3 no longer exists in the base table, so the version map entry must be pruned.
