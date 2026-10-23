@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https:#www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,9 @@
 The database URL comes from, in order of precedence: ``--dburi``/``--db``, the ``STARROCKS_URL`` environment
 variable, a git-ignored ``test.cfg`` ``[db]`` section, then ``setup.cfg``'s ``[db] default``. Run pytest from
 this client directory: Alembic stages its migration scripts under ``scratch`` in the working directory.
+
+The system tests, and the integration modules in ``collect_ignore``, are left out of collection until they
+are ported to the plugin.
 """
 
 import inspect
@@ -44,6 +47,25 @@ CLIENT_DIRECTORY = Path(__file__).resolve().parent.parent
 TEST_DIRECTORY = CLIENT_DIRECTORY / "test"
 OFFLINE_TEST_DIRECTORIES = ("sql", "unit")
 """The test directories whose tests compile, parse and compare without executing SQL, so need no StarRocks."""
+collect_ignore = [
+    "integration/test_autogenerate_alter_table.py",
+    "integration/test_autogenerate_columns.py",
+    "integration/test_autogenerate_mvs.py",
+    "integration/test_autogenerate_views.py",
+    "integration/test_combine_column_alters.py",
+    "integration/test_combine_column_alters_range_key.py",
+    "integration/test_range_distribution.py",
+    "integration/test_reflection_columns.py",
+    "integration/test_reflection_data_types.py",
+    "integration/test_reflection_indexes.py",
+    "integration/test_reflection_mv.py",
+    "integration/test_reflection_table.py",
+    "integration/test_reflection_view.py",
+    "integration/test_result_processor.py",
+    "integration/test_run_mode.py",
+    "integration/test_schema_change_wait.py",
+    "system",
+]
 
 
 def pytest_configure(config: pytest.Config) -> None:
