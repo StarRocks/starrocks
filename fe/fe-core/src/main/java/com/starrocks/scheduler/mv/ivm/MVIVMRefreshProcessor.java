@@ -595,6 +595,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
+<<<<<<< HEAD
                 boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
                 try {
                     // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
@@ -605,6 +606,30 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     mvContext.setExecPlan(execPlan);
                 } finally {
                     ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
+=======
+                // Nothing to carry means nothing to attach: an empty set is what the planner already defaults
+                // to, so a refresh that prunes nothing leaves the ConnectContext exactly as it found it.
+                QueryMaterializationContext queryMVContext = null;
+                if (!excludedMvPartitions.isEmpty()) {
+                    // Every optimizer run detaches the context from ctx, and IvmRefreshDefinition.derive() may
+                    // have run one.
+                    queryMVContext = ctx.getQueryMVContext();
+                    if (queryMVContext == null) {
+                        queryMVContext = new QueryMaterializationContext();
+                        ctx.setQueryMVContext(queryMVContext);
+                    }
+                }
+                try {
+                    if (queryMVContext != null) {
+                        queryMVContext.setIvmExcludedMvPartitions(excludedMvPartitions);
+                    }
+                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                    mvContext.setExecPlan(execPlan);
+                } finally {
+                    if (queryMVContext != null) {
+                        queryMVContext.setIvmExcludedMvPartitions(null);
+                    }
+>>>>>>> 8d50d13592e... [BugFix][RB-683] Authorize the incremental MV refresh as the creator, like the PCT refresh (#66639)
                 }
             }
             return insertStmt;
