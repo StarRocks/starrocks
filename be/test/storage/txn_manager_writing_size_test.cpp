@@ -95,7 +95,7 @@ public:
         if (with_data) {
             auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
             auto chunk = ChunkFactory::new_chunk(schema, 1);
-            chunk->columns()[0]->append_datum(Datum(static_cast<int32_t>(txn_id)));
+            chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(txn_id)));
             CHECK_OK(writer->add_chunk(*chunk));
         }
         CHECK_OK(writer->flush());
