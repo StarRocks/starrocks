@@ -21,11 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Version;
-import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
->>>>>>> 817dd58 ([BugFix] Build the Iceberg REST catalog user agent without NodeMgr (#80660))
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
