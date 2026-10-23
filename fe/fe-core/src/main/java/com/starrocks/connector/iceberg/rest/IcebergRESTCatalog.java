@@ -21,6 +21,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Version;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+>>>>>>> 817dd58 ([BugFix] Build the Iceberg REST catalog user agent without NodeMgr (#80660))
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
@@ -29,7 +34,6 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -126,7 +130,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         }
         restCatalogProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
-                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         viewEndpointsEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_VIEW_ENDPOINTS_ENABLED, true);
