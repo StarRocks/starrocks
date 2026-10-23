@@ -296,6 +296,38 @@ class TestCreateTableCompiler:
         expected = "CREATE TABLE dist_random_tbl(log_id BIGINT) DISTRIBUTED BY RANDOM BUCKETS 4"
         assert normalize_sql(sql) == normalize_sql(expected)
 
+    @pytest.mark.parametrize("distributed_by", ["RANGE", "range", "RANGE BUCKETS 4"])
+    def test_range_distribution_omits_clause(self, distributed_by, caplog):
+        """RANGE has no DISTRIBUTED BY syntax: StarRocks applies it when the clause is omitted."""
+        tbl = Table('dist_range_tbl', MetaData(), Column('k1', Integer), Column('v', Integer),
+                    starrocks_duplicate_key='k1',
+                    starrocks_distributed_by=distributed_by)
+        with caplog.at_level(logging.WARNING, logger="starrocks.dialect"):
+            sql = self._compile_table(tbl)
+        expected = "CREATE TABLE dist_range_tbl(k1 INTEGER, v INTEGER) DUPLICATE KEY(k1)"
+        assert normalize_sql(sql) == normalize_sql(expected)
+        assert ("BUCKETS is ignored" in caplog.text) == ("BUCKETS" in distributed_by)
+        assert "requires a key type or ORDER BY" not in caplog.text
+
+    def test_range_distribution_with_order_by(self, caplog):
+        tbl = Table('dist_range_order_tbl', MetaData(), Column('k1', Integer),
+                    starrocks_order_by='k1',
+                    starrocks_distributed_by='RANGE')
+        with caplog.at_level(logging.WARNING, logger="starrocks.dialect"):
+            sql = self._compile_table(tbl)
+        expected = "CREATE TABLE dist_range_order_tbl(k1 INTEGER) ORDER BY(k1)"
+        assert normalize_sql(sql) == normalize_sql(expected)
+        assert "requires a key type or ORDER BY" not in caplog.text
+
+    def test_range_distribution_without_key_warns(self, caplog):
+        """Without a key type or ORDER BY, StarRocks falls back to RANDOM distribution."""
+        tbl = Table('dist_range_nokey_tbl', MetaData(), Column('k1', Integer),
+                    starrocks_distributed_by='RANGE')
+        with caplog.at_level(logging.WARNING, logger="starrocks.dialect"):
+            sql = self._compile_table(tbl)
+        assert normalize_sql(sql) == normalize_sql("CREATE TABLE dist_range_nokey_tbl(k1 INTEGER)")
+        assert "requires a key type or ORDER BY" in caplog.text
+
     def test_order_by(self):
         self.logger.info("Testing ORDER BY clause")
         tbl = Table('orderby_tbl', self.metadata, Column('k1', Integer), Column('k2', String(50)),
