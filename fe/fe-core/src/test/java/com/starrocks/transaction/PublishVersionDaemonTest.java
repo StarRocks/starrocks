@@ -1006,4 +1006,28 @@ public class PublishVersionDaemonTest {
         // Once A's back-off elapses the batch runs again.
         Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 1000));
     }
+
+    @Test
+    public void testCountPartitionsBackingOff() {
+        long now = 1_000_000L;
+        long tableId = 77L;
+        PartitionCommitInfo waiting = new PartitionCommitInfo(500L, 2, 0);
+        waiting.markPublishFailed(now);
+        PartitionCommitInfo fresh = new PartitionCommitInfo(501L, 2, 0);
+        PartitionCommitInfo recovered = new PartitionCommitInfo(502L, 2, 0);
+        recovered.markPublishFailed(now - 60_000);
+
+        TransactionStateBatch batch = new TransactionStateBatch(
+                Lists.newArrayList(stateWith(1L, tableId, waiting, fresh, recovered)));
+        // Only the partition that failed inside the retry interval counts.
+        Assertions.assertEquals(1, PublishVersionDaemon.countPartitionsBackingOff(Lists.newArrayList(batch), now));
+        Assertions.assertEquals(0,
+                PublishVersionDaemon.countPartitionsBackingOff(Lists.newArrayList(batch), now + 1000));
+
+        // The same partition carried by two transactions of a batch is one partition.
+        TransactionStateBatch twoTxns = new TransactionStateBatch(Lists.newArrayList(
+                stateWith(1L, tableId, waiting), stateWith(2L, tableId, new PartitionCommitInfo(500L, 3, 0))));
+        Assertions.assertEquals(1, PublishVersionDaemon.countPartitionsBackingOff(Lists.newArrayList(twoTxns), now));
+        Assertions.assertEquals(0, PublishVersionDaemon.countPartitionsBackingOff(Lists.newArrayList(), now));
+    }
 }
