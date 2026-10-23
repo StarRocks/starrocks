@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -834,7 +835,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return transactionStateList;
     }
 
-    public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
+    /**
+     * Check whether there is a COMMITTED but not yet VISIBLE transaction on the given target.
+     *
+     * @param physicalPartitionId physical partition id, NOT a logical partition id: commit info is keyed
+     *                            by {@link PartitionCommitInfo#getPhysicalPartitionId()}. Pass null to
+     *                            check the whole table.
+     */
+    public boolean existCommittedTxns(Long dbId, Long tableId, Long physicalPartitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (dbTransactionMgr == null) {
             // The database transaction manager may be absent if the database was dropped concurrently.
@@ -842,25 +850,110 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             // this lock-free (e.g. the online optimize visibility gate).
             return false;
         }
-        if (tableId == null && partitionId == null) {
+        if (tableId == null && physicalPartitionId == null) {
             return !dbTransactionMgr.getCommittedTxnList().isEmpty();
         }
 
         for (TransactionState transactionState : dbTransactionMgr.getCommittedTxnList()) {
             if (transactionState.getTableIdList().contains(tableId)) {
-                if (partitionId == null) {
+                if (physicalPartitionId == null) {
                     return true;
                 }
                 // getTableCommitInfo is @Nullable: a committed txn can list the table in its tableIdList
                 // before its TableCommitInfo is populated, so guard against NPE here (this method is called
                 // lock-free, e.g. by the online optimize visibility gate).
                 TableCommitInfo tableCommitInfo = transactionState.getTableCommitInfo(tableId);
-                if (tableCommitInfo != null && tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
+                if (tableCommitInfo != null
+                        && tableCommitInfo.getPartitionCommitInfo(physicalPartitionId) != null) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * The given physical partitions that a COMMITTED, not yet VISIBLE transaction of the table covers, looked up
+     * in one pass, see {@link DatabaseTransactionMgr#getPhysicalPartitionsWithCommittedTxns(long, Set)}.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Set<Long> getPhysicalPartitionsWithCommittedTxns(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        return dbTransactionMgr == null ? Collections.emptySet()
+                : dbTransactionMgr.getPhysicalPartitionsWithCommittedTxns(tableId, physicalPartitionIds);
+    }
+
+    /**
+     * Find the running transactions that may write to any of the given physical partitions.
+     * See {@link #getConflictingTxnIdsByPartition(long, long, Set)}.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public List<Long> getConflictingTxnIds(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        Set<Long> conflictingTxnIds = Sets.newLinkedHashSet();
+        getConflictingTxnIdsByPartition(dbId, tableId, physicalPartitionIds).values()
+                .forEach(conflictingTxnIds::addAll);
+        return Lists.newArrayList(conflictingTxnIds);
+    }
+
+    /**
+     * Find, per physical partition, the running transactions that may write to it.
+     * See {@link DatabaseTransactionMgr#getConflictingTxnIdsByPartition(long, Set)}.
+     * <p>
+     * That lookup sees only the transactions the database transaction manager holds. A statement of an explicit
+     * transaction (BEGIN ... COMMIT) registers its write targets on the transaction while its plan is built, through
+     * the planning layout reservation of its tablet sink, but the transaction joins the manager, and the table its
+     * table list, only afterwards, right before the statement starts writing (TransactionStmtExecutor#loadData).
+     * The explicit transactions that reserved a layout on the table are looked at as well, so that a partition
+     * replaced in between is not one that the statement then writes into.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        Map<Long, List<Long>> conflictingTxnIds = dbTransactionMgr == null ? Maps.newHashMap()
+                : Maps.newHashMap(dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds));
+        long now = System.currentTimeMillis();
+        for (TransactionState plannedTxn : getExplicitTxnsPlannedOn(dbId, tableId)) {
+            // Once the transaction has joined the database transaction manager, the state there is the current one:
+            // a transition such as an abort replaces it with a copy, while the explicit transaction keeps the state
+            // it began with. Before that, the session is the only one that ends it, so stop at its timeout.
+            TransactionState txn = dbTransactionMgr == null ? null
+                    : dbTransactionMgr.getTransactionState(plannedTxn.getTransactionId());
+            if (txn == null && !plannedTxn.isTimeout(now)) {
+                txn = plannedTxn;
+            }
+            if (txn == null || !txn.isRunning()) {
+                continue;
+            }
+            for (Long physicalPartitionId : DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, physicalPartitionIds)) {
+                List<Long> txnIds = conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList());
+                // reported already if the transaction has joined the database transaction manager
+                if (!txnIds.contains(txn.getTransactionId())) {
+                    txnIds.add(txn.getTransactionId());
+                }
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    // Collected under the lock that guards the planning layout reservations, and evaluated by the caller outside of it
+    private List<TransactionState> getExplicitTxnsPlannedOn(long dbId, long tableId) {
+        List<Long> tableIds = List.of(tableId);
+        List<TransactionState> explicitTxns = Lists.newArrayList();
+        synchronized (explicitTxnStateLock) {
+            for (ExplicitTxnState explicitTxnState : explicitTxnStateMap.values()) {
+                TransactionState txn = explicitTxnState.getTransactionState();
+                if (txn != null && explicitTxnState.hasPlanningLayoutReservation(dbId, tableIds)) {
+                    explicitTxns.add(txn);
+                }
+            }
+        }
+        return explicitTxns;
     }
 
     /**
