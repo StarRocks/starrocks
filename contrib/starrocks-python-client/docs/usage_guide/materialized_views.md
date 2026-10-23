@@ -2,6 +2,8 @@
 
 This document explains how to define and manage materialized views in StarRocks using the `starrocks-sqlalchemy` dialect and Alembic.
 
+Materialized views need SQLAlchemy 2.0.
+
 ## Defining a Materialized View
 
 To define a materialized view, you use the `starrocks.schema.MaterializedView` object.
