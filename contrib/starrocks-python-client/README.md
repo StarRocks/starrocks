@@ -286,7 +286,7 @@ For a full tutorial on advanced topics like data migrations, handling complex ty
 
 ### Tests
 
-Every test runs under [SQLAlchemy's testing plugin](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst), against a running StarRocks cluster. A single `pytest` run covers the StarRocks tests in `test/sql`, `test/unit` and `test/integration`, SQLAlchemy's dialect compliance suite (`test/test_suite.py`) and Alembic's dialect suite (`test/test_suite_alembic.py`). `test/conftest.py` leaves the system tests out until they are ported to the plugin.
+Every test runs under [SQLAlchemy's testing plugin](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst), against a running StarRocks cluster. A single `pytest` run covers the StarRocks tests in `test/sql`, `test/unit`, `test/integration` and `test/system`, SQLAlchemy's dialect compliance suite (`test/test_suite.py`) and Alembic's dialect suite (`test/test_suite_alembic.py`).
 
 #### Setting Up
 
@@ -322,13 +322,13 @@ Run `pytest` from this directory:
 pytest
 ```
 
-`pyproject.toml` runs the tests on four `pytest-xdist` workers. Each worker gets its own databases, created from the configured one and dropped at the end, so the workers do not interfere; pass `-n0` to run serially against the configured database. Alembic's suite keeps its scripts in a `scratch` directory here (`scratch_<worker>` under `pytest-xdist`), so do not run two serial runs from this directory at once.
+`pyproject.toml` runs the tests on four `pytest-xdist` workers. Each worker gets its own databases, created from the configured one and dropped at the end, so the workers do not interfere; pass `-n0` to run serially against the configured database. The system tests keep Alembic's scripts in a `scratch` directory here (`scratch_<worker>` under `pytest-xdist`), so do not run two serial runs from this directory at once.
 
 Every test needs a reachable cluster, the ones in `test/sql` and `test/unit` included, because the plugin connects when the session starts.
 
 Tests that StarRocks itself cannot support are skipped. Tests that fail because of a known bug, in the dialect or in StarRocks, are marked `fails_on`, or `fails_if` with a condition, and the reason, so a fix shows up as an unexpected pass. Such a test is reported as passed when it fails as expected; run with `-n0 -s` to see each "failed as expected" line and its reason, since the `pytest-xdist` workers don't pass a test's output on.
 
-The tests need SQLAlchemy 1.4.47 or later on 1.4, or 2.0.33 or later below 2.1, and were last run on 1.4.54 and 2.0.55. Before 2.0.33, SQLAlchemy's dialect suite in `test/test_suite.py` stops at collection. Before 1.4.47, `pytest` stops before any test runs: the testing package of Alembic 1.17 or later, which pip installs on 1.4, imports a part of SQLAlchemy's testing package that 1.4.47 added. On 1.4, SQLAlchemy's compliance suite and the compile, reflection, comparison and rendering tests run; Alembic's suite and the tests that build `View` or `MaterializedView` objects or need SQLAlchemy 2.0's inspector need SQLAlchemy 2.0 and are skipped.
+The tests need SQLAlchemy 1.4.47 or later on 1.4, or 2.0.33 or later below 2.1, and were last run on 1.4.54 and 2.0.55. Before 2.0.33, SQLAlchemy's dialect suite in `test/test_suite.py` stops at collection. Before 1.4.47, `pytest` stops before any test runs: the testing package of Alembic 1.17 or later, which pip installs on 1.4, imports a part of SQLAlchemy's testing package that 1.4.47 added. On 1.4, SQLAlchemy's compliance suite and the compile, reflection, comparison and rendering tests run; Alembic's suite, the system tests, and the tests that build `View` or `MaterializedView` objects or need SQLAlchemy 2.0's inspector need SQLAlchemy 2.0 and are skipped.
 
 SQLAlchemy 2.1 is untested, so the `test` extra installs SQLAlchemy below 2.1. SQLAlchemy 2.1.6 adds suite tests that the dialect does not pass yet.
 
@@ -371,6 +371,7 @@ The shared pieces:
 - `starrocks/requirements.py` holds the `Requirements` class. Both suites consult it, and so do `__requires__` and `testing.requires.<name>` in the StarRocks tests.
 - A skip or `fails_on` mark that several tests share is a module-level constant named after its cause, defined before the first test that uses it, or in `test/util.py` when several modules share it. A mark on one test can be written inline. `test/util.py` also holds the shared helpers.
 - Join the shared marks a test carries into one with `+`, as in `@(TRANSACTIONS_NEED_3_5 + SQL_TRANSACTION_SWITCH_NEEDS_4_0)`, which makes a new mark. Stacked as separate decorators, SQLAlchemy adds every mark above the innermost one to that mark itself, so a shared innermost mark, from `test/util.py` or a module-level constant, would carry them to every other test that uses it. Marks can be stacked over an inline mark or a `testing.requires.<name>` one, which is the test's own.
+- `test/system/lifecycle.py` holds the base class and helpers for the system tests.
 
 #### Writing Tests
 
