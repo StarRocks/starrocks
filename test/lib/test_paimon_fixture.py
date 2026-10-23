@@ -36,6 +36,24 @@ class PaimonReaderTest(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 client.assert_paimon_reader("select * from t", "t", "native")
 
+    def test_mixed_readers_and_selection_reasons(self):
+        prefix = "Paimon.metadata.reader.t."
+        def trace(native=1, jni=2, reason=1):
+            return {"status": True, "result": [(prefix + "paimonNativeReaderReadNum: " + str(native),),
+                    (prefix + "jniReaderReadNum: " + str(jni),), (prefix + "starRocksNativeReaderReadNum: 0",),
+                    (prefix + "selectionReason.INDEXED_SPLIT: " + str(reason),)]}
+        self.client.execute_sql.return_value = trace()
+        self.client.assert_paimon_readers("select * from t", "t", "native, jni", "INDEXED_SPLIT")
+        for result in (trace(native=0), trace(jni=0), trace(reason=0), {"status": True, "result": []}):
+            self.client.execute_sql.return_value = result
+            with self.assertRaises(AssertionError):
+                self.client.assert_paimon_readers("select * from t", "t", "native,jni", "INDEXED_SPLIT")
+        self.client.execute_sql.return_value = trace()
+        with self.assertRaises(AssertionError):
+            self.client.assert_paimon_readers("select * from t", "t", "native,jni", "FILE_FORMAT")
+        with self.assertRaises(ValueError):
+            self.client.assert_paimon_readers("select * from t", "t", "native,unknown")
+
     def test_native_profile_restores_settings_on_failure(self):
         client = self.client
         client.execute_sql.side_effect = [

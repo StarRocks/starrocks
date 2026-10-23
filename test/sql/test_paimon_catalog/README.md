@@ -28,6 +28,21 @@ These cases read fixed tables from
 | `global_index_v1` | Two rows with a B-tree global index and one later row outside index coverage |
 | `pk_dv_{parquet,orc,avro}_v1` | 1,000 initial rows followed by update/delete/insert; actual deletion vectors retained |
 
+The reader-boundary cases additionally use these fixed tables:
+
+| Table | Boundary |
+| --- | --- |
+| `reader_json_v1`, `reader_per_level_v1` | JSON data files and an unsupported per-level format configuration |
+| `reader_aggregate_product_v1` | Unsupported native `product` aggregation uses JNI |
+| `reader_timestamp9_v1`, `reader_orc_legacy_v1` | Nanosecond timestamps and legacy ORC timestamp encoding |
+| `reader_pk_nullable_map_orc_v1`, `reader_nullable_map_avro_v1` | Nullable MAP keys on SDK reads; the ORC table retains unmerged primary-key files |
+| `reader_schema_cast_v1` | INT-to-STRING evolution outside native compatibility rules |
+| `reader_bitmap64_dv_v1` | Real bitmap64 DV files plus INT-to-STRING evolution, preventing raw-file bypass of the SDK check |
+| `reader_fallback_same_v1`, `reader_fallback_json_v1`, `reader_fallback_schema_v1` | Matching schemas, incompatible fallback format, and schema mismatch rejection |
+| `reader_mixed_partitions_v1` | One scan reads a Parquet partition with raw files and an Avro partition with native |
+| `reader_partial_groups_v1`, `reader_partial_retract_v1` | Independent sequence groups, composite ordering, late older updates, and field-level retraction |
+| `reader_partial_delete_v1`, `reader_partial_ignore_delete_v1` | Partial-update whole-row removal and ignored deletes; NULL updates preserve prior fields |
+
 The persistent warehouse is `oss://${oss_bucket}/ci_catalog_test_data/paimon/`. Upload the
 complete `paimon_test.db` directory before running these cases, preserving all
 schema, snapshot, manifest and data files:
@@ -79,6 +94,10 @@ function: assert_paimon_native_profile("select id, amount, note from paimon_read
   `TRACE VALUES EXTERNAL`. Use the table name without the catalog/database prefix.
   The expected reader must have a positive counter; the other readers must have
   zero counters. Missing counters or mixed routes fail the assertion.
+- `assert_paimon_readers(query, table, expected, reasons="")` checks a complete
+  comma-separated reader set, such as `"starrocks,native"`, and optional positive
+  selection reasons, such as `"RAW_FILES,NATIVE_SUPPORTED"`. Unexpected readers,
+  absent expected readers, and missing or zero reason counters fail the assertion.
 - `assert_paimon_native_profile(query)` executes the query with synchronous
   profiling and requires a BE `PaimonNativeReader` section. Use it when expecting
   paimon-cpp execution. It restores the previous profile settings afterward.
@@ -114,9 +133,11 @@ rows to verify results as well as the reader path.
 | `file_formats` | Parquet/ORC/Avro append-only results and reader routes |
 | `parquet_compaction`, `orc_compaction` | Two L0 files versus one compacted file; final rows, predicates, aggregates and AUTO route |
 | `statistics_append_only`, `statistics_primary_key` | Planner metadata source, row count, min/max, NULL fraction and NDV; missing-statistics fallback |
-| `reader_fallback` | AUTO selection for FILE/VARIANT, forced JNI rejection, and projection excluding unsupported columns |
+| `reader_fallback`, `reader_compatibility` | FILE/VARIANT routing and ordinary-table compatibility fallback, with reader reasons, final rows, and explicit NATIVE rejection |
+| `fallback_branches`, `mixed_readers` | Real branch snapshots, main-only scans, schema mismatch rejection, and mixed raw/native execution without missing or duplicate rows |
+| `partial_update_groups` | Independent/composite sequence groups, projection excluding sequence columns, field-level retract, whole-row removal, and ignored delete |
 | `merge_first_row`, `merge_partial_update`, `merge_aggregation` | Parquet/ORC/Avro merge semantics, NULLs, aggregates and routing; deduplicate cases are in `primary_key_merge` |
-| `global_index` | Indexed and unindexed matches under FULL search; AUTO/NATIVE use native, explicit JNI and the legacy force flag use JNI |
+| `global_index` | Indexed-only, unindexed-only, and mixed matches under FULL search, with explicit INDEXED_SPLIT reason assertions; forced JNI stays on Java |
 | `system_table_routing` | Snapshot/schema system tables use JNI in AUTO/JNI; explicit NATIVE reports the unsupported split protocol |
 | `deletion_vectors` | Parquet/ORC/Avro × NATIVE/JNI/AUTO; deleted and superseded rows excluded from results, predicates and aggregates |
 
@@ -143,8 +164,8 @@ for the verified versions, compatibility boundaries and fallback reasons.
 
 The merge fixtures distinguish full-row replacement from partial updates using
 NULL inputs. Aggregation covers `sum` and `max`; first-row covers the compacted
-result. They do not cover every aggregation function, partial-update sequence
-group, or delete policy. The global-index fixture checks FULL mode includes rows
+result. The boundary cases extend this with `product` fallback, independent/composite
+sequence groups, and representative delete policies; they do not cover every option combination. The global-index fixture checks FULL mode includes rows
 written after index creation; these cases do not build or refresh indexes at runtime.
 
 Run the reader assertion helper tests from `test/` with
@@ -173,3 +194,14 @@ Statistics cases enable `enable_paimon_column_statistics` and disable
 Missing column statistics are checked as unknown, not treated as exact values.
 Predicate TRACE checks use the FE Paimon plan filters and actual file-pruning
 counts; they do not by themselves prove BE row-group-level filter execution.
+
+Reader compatibility tests follow the shared native compatibility funnel: explicit
+NATIVE fails when those checks reject the input, including conservative timestamp
+or MAP-key checks. It does not bypass those checks. Paimon 2.0 rejects differing
+main/fallback logical row types before reader selection; that case expects the
+schema error in AUTO, NATIVE, and JNI rather than successful JNI reads.
+
+The legacy ORC timestamp case checks fractional microseconds and NULLs rather than
+complete timestamp strings: legacy decoding depends on the reader JVM default time
+zone, which is not fixed by the SQL session time zone. Routing assertions still
+require `ORC_LEGACY_TIMESTAMP` and explicit NATIVE rejection.

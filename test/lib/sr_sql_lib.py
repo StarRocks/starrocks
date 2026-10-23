@@ -788,20 +788,29 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
     def assert_paimon_reader(self, query, table, expected):
-        """Assert FE scan routing using existing per-table EXTERNAL trace counters."""
+        """Assert one reader and reject empty scans or mixed routes."""
+        self.assert_paimon_readers(query, table, expected)
+
+    def assert_paimon_readers(self, query, table, expected, reasons=""):
+        """Assert the complete reader set and optional positive selection-reason counters."""
         counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
                     "starrocks": "starRocksNativeReaderReadNum"}
-        if expected not in counters:
-            raise ValueError("expected reader must be native, jni, or starrocks")
+        readers = {reader.strip() for reader in expected.split(",")}
+        if not readers or not readers <= counters.keys():
+            raise ValueError("expected readers must be native, jni, or starrocks")
         result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
         if not result["status"]:
             raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
         trace = "\n".join(str(value) for row in result["result"] for value in row)
+        prefix = "Paimon.metadata.reader.%s." % table
         for reader, counter in counters.items():
-            key = "Paimon.metadata.reader.%s.%s" % (table, counter)
-            values = re.findall(re.escape(key) + r"\s*:\s*(\d+)", trace)
-            if not values or any((int(value) > 0) != (reader == expected) for value in values):
-                raise AssertionError("expected %s reader for %s; trace:\n%s" % (expected, table, trace))
+            values = re.findall(re.escape(prefix + counter) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader in readers) for value in values):
+                raise AssertionError("expected %s readers for %s; trace:\n%s" % (expected, table, trace))
+        for reason in filter(None, (item.strip() for item in reasons.split(","))):
+            values = re.findall(re.escape(prefix + "selectionReason." + reason) + r"\s*:\s*(\d+)", trace)
+            if not values or any(int(value) <= 0 for value in values):
+                raise AssertionError("expected %s reason for %s; trace:\n%s" % (reason, table, trace))
 
     def assert_paimon_native_profile(self, query):
         """Verify an executed paimon-cpp scan, using the existing BE profile section."""

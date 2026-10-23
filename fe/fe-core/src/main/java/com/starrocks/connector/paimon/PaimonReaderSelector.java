@@ -140,7 +140,7 @@ public final class PaimonReaderSelector {
         if (PaimonSplitUtils.isGlobalIndexSplit(split) && !selector.schema.primaryKeys().isEmpty()) {
             return new Decision(Reader.JNI, Reason.PRIMARY_KEY_INDEXED_SPLIT);
         }
-        
+
         Reason initialization = checkNativeInitialization();
         if (initialization != Reason.NATIVE_SUPPORTED) {
             return new Decision(Reader.JNI, initialization);
