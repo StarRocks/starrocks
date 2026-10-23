@@ -32,6 +32,11 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexResult;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -132,6 +137,23 @@ public interface ConnectorMetadata {
      */
     default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
+    }
+
+    /** Returns connector-neutral index capabilities exposed for the table at the requested version. */
+    default ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        return ConnectorIndexMetadata.empty();
+    }
+
+    /** Evaluates an optional index candidate request without removing the original scan predicate. */
+    default Optional<ConnectorIndexResult> evaluateIndex(
+            Table table, IndexCondition condition, TvrVersionRange versionRange) {
+        return Optional.empty();
+    }
+
+    /** Returns physical index shards only if every requested field fully covers the pinned snapshot. */
+    default List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
+        return List.of();
     }
 
     /**

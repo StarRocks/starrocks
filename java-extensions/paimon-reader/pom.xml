@@ -134,6 +134,35 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--
+              paimon-s3 2.0.0 embeds dnsjava's Java 18 InetAddressResolver service
+              descriptor without making the provider loadable from the embedded plugin
+              layout. On JDK 21 this breaks S3 initialization before the first request.
+              Keep the Maven artifact immutable and sanitize only the packaged copy so
+              Java falls back to the JDK resolver.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <execution>
+                        <id>sanitize-paimon-s3-service-provider</id>
+                        <phase>package</phase>
+                        <configuration>
+                            <target>
+                                <exec executable="${java.home}/bin/java" failonerror="true">
+                                    <arg value="${project.basedir}/../../build-support/SanitizePaimonS3Jar.java"/>
+                                    <arg value="${project.build.directory}/paimon-reader-lib/paimon-s3-${paimon.version}.jar"/>
+                                </exec>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

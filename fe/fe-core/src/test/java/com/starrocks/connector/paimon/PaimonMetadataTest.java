@@ -40,6 +40,10 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
+import com.starrocks.connector.index.ConnectorIndexDescriptor;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
@@ -84,6 +88,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -106,6 +111,7 @@ import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
+import org.apache.paimon.index.IndexFileMeta;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
@@ -173,7 +179,9 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1088,6 +1096,14 @@ public class PaimonMetadataTest {
 
             PaimonMetadata fullMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable starRocksTable = (PaimonTable) fullMetadata.getTable(
+                    context, identifier.getDatabaseName(), identifier.getObjectName());
+            ConnectorIndexMetadata discovered = fullMetadata.getIndexMetadata(
+                    starRocksTable, TvrTableSnapshot.of(snapshotId));
+            ConnectorIndexDescriptor btree = discovered.findDescriptor(0, IndexType.RANGE).orElseThrow();
+            assertEquals("btree", btree.getProvider());
+            assertTrue(btree.supports(Operation.EQUAL));
+
             PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId);
             assertTrue(fullSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1, 3), readIds((FileStoreTable) catalog.getTable(identifier), fullSplits));
@@ -1100,8 +1116,86 @@ public class PaimonMetadataTest {
             assertTrue(fastSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds((FileStoreTable) catalog.getTable(identifier), fastSplits));
 
+            // The index manifest is bound to field id 0 in the snapshot schema. A metadata-only
+            // rename does not create a new snapshot, so discovery must expose the current name
+            // without matching the historical descriptor by name.
+            catalog.alterTable(identifier, SchemaChange.renameColumn("id", "renamed_id"), false);
+            PaimonMetadata renamedMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable renamedTable = (PaimonTable) renamedMetadata.getTable(
+                    context, identifier.getDatabaseName(), identifier.getObjectName());
+            ConnectorIndexMetadata renamedDiscovery = renamedMetadata.getIndexMetadata(
+                    renamedTable, TvrTableSnapshot.of(snapshotId));
+            assertEquals(0, renamedDiscovery.getCurrentFieldId("renamed_id").orElseThrow());
+            assertTrue(renamedDiscovery.getCurrentFieldId("id").isEmpty());
+            ConnectorIndexDescriptor renamedDescriptor = renamedDiscovery
+                    .findDescriptor(0, IndexType.RANGE).orElseThrow();
+            assertEquals("renamed_id", renamedDescriptor.getColumnName());
+
             catalog.dropTable(identifier, true);
             catalog.dropDatabase(identifier.getDatabaseName(), true, true);
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testStatisticsRespectGlobalIndexScanStage() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_statistics_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        Identifier identifier = Identifier.create("test_db", "indexed_table");
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT()).column("payload", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true").build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1, BinaryString.fromString("matching")),
+                    GenericRow.of(2, BinaryString.fromString("other")));
+            buildBtreeIndex(nativeTable, "id", tmpDir);
+            long snapshotId = nativeTable.latestSnapshot().orElseThrow().id();
+            assertTrue(nativeTable.statistics().isEmpty());
+            PaimonMetadata metadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            ColumnRefOperator id = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, id, ConstantOperator.createInt(1));
+            OptimizerContext optimizer = OptimizerFactory.mockContext(context, new ColumnRefFactory());
+            List<GetRemoteFilesParams> requests = new ArrayList<>();
+            List<PaimonSplitsInfo> plannedSplits = new ArrayList<>();
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public List<RemoteFileInfo> getRemoteFiles(Table scanTable, GetRemoteFilesParams params) {
+                    requests.add(params);
+                    List<RemoteFileInfo> files = metadata.getRemoteFiles(scanTable, params);
+                    plannedSplits.add(((PaimonRemoteFileDesc) files.get(0).getFiles().get(0)).getPaimonSplitsInfo());
+                    return files;
+                }
+            };
+            // Cover both disabled column statistics and missing Paimon statistics. Warm the
+            // SDK split cache first to verify that stages 0/2 cannot reuse indexed splits.
+            for (boolean columnStatistics : List.of(false, true)) {
+                context.getSessionVariable().setEnablePaimonColumnStatistics(columnStatistics);
+                for (int stage : List.of(1, 0, 2, 1)) {
+                    context.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
+                    metadata.getTableStatistics(optimizer, table, Map.of(id, new Column("id", IntegerType.INT)),
+                            null, predicate, -1, TvrTableSnapshot.of(snapshotId));
+                    GetRemoteFilesParams request = requests.get(requests.size() - 1);
+                    List<Split> splits = plannedSplits.get(plannedSplits.size() - 1).getPaimonSplits();
+                    assertEquals(stage != 1, request.isDisableGlobalIndex(), "statistics stage " + stage);
+                    assertFalse(splits.isEmpty());
+                    if (stage == 1) {
+                        assertTrue(splits.stream().allMatch(IndexedSplit.class::isInstance));
+                    } else {
+                        assertTrue(splits.stream().noneMatch(IndexedSplit.class::isInstance));
+                    }
+                }
+            }
+            assertEquals(8, requests.size());
         } finally {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
@@ -1229,6 +1323,274 @@ public class PaimonMetadataTest {
         return ((PaimonRemoteFileDesc) remoteFile.getFiles().get(0)).getPaimonSplitsInfo();
     }
 
+    @Test
+    public void testDistributedScalarCoverageAndResultGuardsWithRealIndex() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_distributed_index_");
+        Identifier identifier = Identifier.create("test_db", "indexed_table");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT()).column("payload", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true").build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1, BinaryString.fromString("indexed")),
+                    GenericRow.of(2, BinaryString.fromString("other")));
+            buildBtreeIndex(nativeTable, "id", tmpDir);
+            long indexedSnapshot = nativeTable.latestSnapshot().orElseThrow().id();
+            PaimonMetadata metadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            assertFalse(metadata.getIndexShards(table, indexedSnapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertTrue(metadata.getIndexShards(table, indexedSnapshot, Map.of(1, IndexType.RANGE)).isEmpty());
+            assertTrue(metadata.getIndexShards(table, indexedSnapshot, Map.of(0, IndexType.BITMAP)).isEmpty());
+
+            org.apache.paimon.utils.RoaringNavigableMap64 rowIds = new org.apache.paimon.utils.RoaringNavigableMap64();
+            rowIds.add(0L);
+            PaimonGlobalIndexResult selected = new PaimonGlobalIndexResult(
+                    nativeTable.location().toString(), "main", indexedSnapshot,
+                    org.apache.paimon.globalindex.GlobalIndexResult.create(rowIds));
+            ColumnRefOperator id = new ColumnRefOperator(11, IntegerType.INT, "id", true);
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, id, ConstantOperator.createInt(1));
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "payload")).setPredicate(predicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(indexedSnapshot)).build();
+            PaimonSplitsInfo regular = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            params.setConnectorIndexResult(selected);
+            PaimonSplitsInfo selectedSplits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertNotSame(regular, selectedSplits);
+            assertTrue(selectedSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of(1), readIds(nativeTable, selectedSplits));
+            // Scored ANN results keep both row selection and scores in the native IndexedSplit.
+            // This tests SDK split integration, not native Lumina search or recall.
+            GetRemoteFilesParams scoredParams = params.copy();
+            scoredParams.setPredicate(null);
+            scoredParams.setConnectorIndexResult(new PaimonGlobalIndexResult(
+                    nativeTable.location().toString(), "main", indexedSnapshot,
+                    org.apache.paimon.globalindex.ScoredGlobalIndexResult.create(rowIds, rowId -> 0.75f)));
+            PaimonSplitsInfo scoredSplits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, scoredParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertTrue(scoredSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of(1), readIds(nativeTable, scoredSplits));
+            List<Float> scores = new ArrayList<>();
+            scoredSplits.getPaimonSplits().stream().map(IndexedSplit.class::cast).forEach(split -> {
+                for (float score : split.scores()) {
+                    scores.add(score);
+                }
+            });
+            assertEquals(List.of(0.75f), scores);
+            assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
+                    selected, nativeTable, "other-branch", TvrTableSnapshot.of(indexedSnapshot)).isEmpty());
+            assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(selected, nativeTable, "main",
+                    com.starrocks.common.tvr.TvrTableDelta.of(indexedSnapshot - 1, indexedSnapshot)).isEmpty());
+            PaimonGlobalIndexResult wrongTable = new PaimonGlobalIndexResult(
+                    nativeTable.location() + "/other", "main", indexedSnapshot, selected.getResult());
+            assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
+                    wrongTable, nativeTable, "main", TvrTableSnapshot.of(indexedSnapshot)).isEmpty());
+            createEmptyPrimaryKeyTable(catalog, "primary_key_table");
+            FileStoreTable primaryKey = (FileStoreTable) catalog.getTable(Identifier.create("test_db", "primary_key_table"));
+            PaimonGlobalIndexResult primaryKeyResult = new PaimonGlobalIndexResult(
+                    primaryKey.location().toString(), "main", indexedSnapshot, selected.getResult());
+            assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
+                    primaryKeyResult, primaryKey, "main", TvrTableSnapshot.of(indexedSnapshot)).isEmpty());
+
+            writeRows(nativeTable, GenericRow.of(3, BinaryString.fromString("unindexed")));
+            long appendedSnapshot = nativeTable.latestSnapshot().orElseThrow().id();
+            assertTrue(metadata.getIndexShards(table, appendedSnapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
+                    selected, nativeTable, "main", TvrTableSnapshot.of(appendedSnapshot)).isEmpty());
+            assertFalse(metadata.getIndexShards(table, indexedSnapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+            ScalarOperator appendedPredicate = new InPredicateOperator(false, List.of(
+                    id, ConstantOperator.createInt(1), ConstantOperator.createInt(3)));
+            GetRemoteFilesParams staleResult = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "payload")).setPredicate(appendedPredicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot))
+                    .setConnectorIndexResult(selected).build();
+            PaimonSplitsInfo fallback = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, staleResult)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertEquals(List.of(1, 3), readIds(nativeTable, fallback));
+
+            GetRemoteFilesParams disabled = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "payload")).setPredicate(appendedPredicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(appendedSnapshot)).setDisableGlobalIndex(true)
+                    .setConnectorIndexResult(selected).build();
+            PaimonSplitsInfo noIndex = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, disabled)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertTrue(noIndex.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of(1, 3), readIds(nativeTable, noIndex));
+
+            catalog.alterTable(identifier, SchemaChange.renameColumn("id", "renamed_id"), false);
+            // A new query must bind against the refreshed schema, not this query's table cache.
+            metadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable renamed = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            assertEquals(0, metadata.getIndexMetadata(renamed, TvrTableSnapshot.of(indexedSnapshot))
+                    .getCurrentFieldId("renamed_id").orElseThrow());
+            assertFalse(metadata.getIndexShards(renamed, indexedSnapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+            catalog.dropTable(identifier, true);
+            catalog.dropDatabase("test_db", true, true);
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testScalarIndexRejectsTypeEvolutionWithRealIndex() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_type_evolution_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            for (org.apache.paimon.types.DataType promoted : List.of(DataTypes.BIGINT(), DataTypes.STRING())) {
+                Identifier identifier = Identifier.create("test_db", "indexed_table");
+                catalog.createTable(identifier, Schema.newBuilder()
+                        .column("id", DataTypes.INT()).column("payload", DataTypes.STRING())
+                        .option(CoreOptions.BUCKET.key(), "-1")
+                        .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                        .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true").build(), false);
+                FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+                writeRows(nativeTable, GenericRow.of(1, BinaryString.fromString("one")),
+                        GenericRow.of(2, BinaryString.fromString("two")));
+                buildBtreeIndex(nativeTable, "id", tmpDir);
+                long snapshot = nativeTable.latestSnapshot().orElseThrow().id();
+                PaimonIndexMetadataCache cache = new PaimonIndexMetadataCache(java.time.Duration.ofMinutes(1));
+                PaimonMetadata before = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                        new ConnectorProperties(ConnectorType.PAIMON), cache);
+                PaimonTable oldTable = (PaimonTable) before.getTable(context, "test_db", "indexed_table");
+                assertFalse(before.getIndexMetadata(oldTable, TvrTableSnapshot.of(snapshot)).getDescriptors().isEmpty());
+                assertFalse(before.getIndexShards(oldTable, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+
+                catalog.alterTable(identifier, SchemaChange.updateColumnType("id", promoted), false);
+                nativeTable = (FileStoreTable) catalog.getTable(identifier);
+                PaimonMetadata after = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                        new ConnectorProperties(ConnectorType.PAIMON), cache);
+                PaimonTable table = (PaimonTable) after.getTable(context, "test_db", "indexed_table");
+                // Metadata-only ALTER: the snapshot and cached manifest are unchanged.
+                assertEquals(snapshot, nativeTable.latestSnapshot().orElseThrow().id());
+                assertTrue(after.getIndexMetadata(table, TvrTableSnapshot.of(snapshot)).getDescriptors().isEmpty());
+                assertTrue(after.getIndexShards(table, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+
+                // A new snapshot now names the new schema but retains the old INT index.
+                buildBtreeIndex(nativeTable, "payload", tmpDir);
+                snapshot = nativeTable.latestSnapshot().orElseThrow().id();
+                assertEquals(nativeTable.schema().id(), nativeTable.latestSnapshot().orElseThrow().schemaId());
+                assertTrue(after.getIndexMetadata(table, TvrTableSnapshot.of(snapshot)).getDescriptors().stream()
+                        .noneMatch(descriptor -> descriptor.getFieldId() == 0));
+                assertTrue(after.getIndexShards(table, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+                assertFalse(after.getIndexShards(table, snapshot, Map.of(1, IndexType.RANGE)).isEmpty());
+
+                if (promoted.equals(DataTypes.BIGINT())) {
+                    ColumnRefOperator id = new ColumnRefOperator(11, IntegerType.BIGINT, "id", true);
+                    GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                            .setFieldNames(List.of("id", "payload"))
+                            .setPredicate(new BinaryPredicateOperator(BinaryType.LT, id,
+                                    ConstantOperator.createBigint(2147483648L)))
+                            .setTableVersionRange(TvrTableSnapshot.of(snapshot)).setDisableGlobalIndex(true).build();
+                    PaimonSplitsInfo splits = ((PaimonRemoteFileDesc) after.getRemoteFiles(table, params)
+                            .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                    List<Long> ids = new ArrayList<>();
+                    try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(nativeTable.newReadBuilder()
+                            .withFilter(splits.getPredicate()).newRead().executeFilter()
+                            .createReader(splits.getPaimonSplits()))) {
+                        while (rows.hasNext()) {
+                            ids.add(rows.next().getLong(0));
+                        }
+                    }
+                    Collections.sort(ids);
+                    assertEquals(List.of(1L, 2L), ids);
+                }
+                catalog.dropTable(identifier, true);
+            }
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testBigintAndNullOnlyIndexesRemainEligible() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_bigint_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            Identifier identifier = Identifier.create("test_db", "indexed_table");
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.BIGINT()).column("empty", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true").build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(2147483648L, null), GenericRow.of(null, null));
+            buildBtreeIndex(nativeTable, "id", tmpDir);
+            buildBtreeIndex(nativeTable, "empty", tmpDir);
+            long snapshot = nativeTable.latestSnapshot().orElseThrow().id();
+            PaimonMetadata metadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            assertEquals(2, metadata.getIndexMetadata(table, TvrTableSnapshot.of(snapshot)).getDescriptors().size());
+            assertFalse(metadata.getIndexShards(table, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertFalse(metadata.getIndexShards(table, snapshot, Map.of(1, IndexType.RANGE)).isEmpty());
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testMixedProvidersUseSdkPlanningEvenWhenNotDiscovered() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_mixed_indexes_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        Identifier identifier = Identifier.create("test_db", "mixed_table");
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT()).column("payload", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true").build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1, BinaryString.fromString("indexed")));
+            buildBtreeIndex(nativeTable, "id", tmpDir);
+            long btreeOnly = nativeTable.latestSnapshot().orElseThrow().id();
+            PaimonMetadata metadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "mixed_table");
+            assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
+
+            // Both indexes cover all rows. The guard must reject provider ambiguity alone.
+            buildScalarIndex(nativeTable, "id", tmpDir, "bitmap");
+            long mixed = nativeTable.latestSnapshot().orElseThrow().id();
+            assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
+
+            // Discovery intentionally ignores full-text providers. Coverage must still inspect the
+            // original manifest, including providers absent from the advertised descriptors.
+            new MockUp<IndexFileMeta>() {
+                @Mock
+                public String indexType(Invocation invocation) {
+                    String provider = invocation.proceed();
+                    return "bitmap".equals(provider) ? "full-text" : provider;
+                }
+            };
+            ConnectorIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));
+            assertEquals(1, discovered.getDescriptors().size());
+            assertEquals("btree", discovered.getDescriptors().get(0).getProvider());
+            assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
     private static void writeRows(FileStoreTable table, GenericRow... rows) throws Exception {
         BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder();
         try (BatchTableWrite write = writeBuilder.newWrite();
@@ -1242,7 +1604,12 @@ public class PaimonMetadataTest {
 
     private static void buildBtreeIndex(FileStoreTable table, String fieldName, java.nio.file.Path tmpDir)
             throws Exception {
-        SortedGlobalIndexBuilder builder = new SortedGlobalIndexBuilder(table, "btree").withIndexField(fieldName);
+        buildScalarIndex(table, fieldName, tmpDir, "btree");
+    }
+
+    private static void buildScalarIndex(FileStoreTable table, String fieldName, java.nio.file.Path tmpDir, String provider)
+            throws Exception {
+        SortedGlobalIndexBuilder builder = new SortedGlobalIndexBuilder(table, provider).withIndexField(fieldName);
         List<DataSplit> dataSplits = builder.scan().orElseThrow().getRight();
         List<CommitMessage> commitMessages = new ArrayList<>();
         IOManager ioManager = new IOManagerImpl(tmpDir.toString());
