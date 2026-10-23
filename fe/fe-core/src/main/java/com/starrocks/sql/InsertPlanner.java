@@ -1494,8 +1494,14 @@ public class InsertPlanner {
                 }
             }
         }
-        checkPartitionInsertValid(targetTable);
-        return true;
+        // constant partition values make a static insert only under identity transforms; otherwise the insert stays
+        // dynamic, and the sink computes the transformed partition values
+        return !hasNonIdentityPartitionTransform(targetTable);
+    }
+
+    private static boolean hasNonIdentityPartitionTransform(Table targetTable) {
+        return targetTable instanceof IcebergTable icebergTable && icebergTable.isPartitioned() &&
+                icebergTable.getNativeTable().spec().fields().stream().anyMatch(field -> !field.transform().isIdentity());
     }
 
     /**
