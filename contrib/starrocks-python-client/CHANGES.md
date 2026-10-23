@@ -3,6 +3,8 @@ Version history
 
 **Unreleased**
 
+- Run every test, with SQLAlchemy's and Alembic's dialect suites, in one `pytest` run under SQLAlchemy's testing plugin, on SQLAlchemy 2.0 and 1.4 and in parallel, and the compiler and unit tests without a cluster, with `--db offline` (by @rad-pat)
+
 **1.3.5**
 
 - Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (#80015 by @chris-celerdata)
