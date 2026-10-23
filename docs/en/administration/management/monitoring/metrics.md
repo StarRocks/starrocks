@@ -25,3 +25,5 @@ Monitoring metrics are listed alphabetically in these files:
 - [q - r](./metric_details/q-r.md)
 - [s](./metric_details/s.md)
 - [t - z](./metric_details/t-z.md)
+
+ADBC queries use `catalog_type="adbc"` on the existing FE per-catalog query counters and latency histograms, and on the BE/CN scan-byte and scan-row counters. This label identifies ADBC traffic separately from the internal catalog. See [ADBC catalog](../../../data_source/catalog/adbc_catalog.md).

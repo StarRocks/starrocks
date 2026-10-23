@@ -538,7 +538,8 @@ enum TTableType {
     BENCHMARK_TABLE = 34,
     ICEBERG_PROPERTIES_TABLE = 35,
     LANCE_TABLE = 36,
-    FLUSS_TABLE = 37
+    FLUSS_TABLE = 37,
+    ADBC_TABLE = 38
 }
 
 enum TKeysType {

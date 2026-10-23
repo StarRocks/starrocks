@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
@@ -371,6 +372,21 @@ public class Explain {
             PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- JDBC-SCAN [")
                     .append(scan.getTable().getName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalADBCScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            PhysicalADBCScanOperator scan = (PhysicalADBCScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- ADBC-SCAN [")
+                    .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
