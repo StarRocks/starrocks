@@ -550,26 +550,9 @@ public class TaskRunHistoryTest {
         params3.setQuery_id(" UNION SELECT 1 -- ");
         history.lookup(params3);
     }
-<<<<<<< HEAD
-    private static String tenantValues(int count) {
-        Set<PListCell> cells = new LinkedHashSet<>();
-        for (int i = 0; i < count; i++) {
-            cells.add(new PListCell("tenant-" + i + ".com"));
-        }
-        return PListCell.batchSerialize(cells);
-    }
-
-    private static int totalOf(String partitionValues) {
-        return JsonParser.parseString(partitionValues).getAsJsonObject().get("total").getAsInt();
-    }
-
-    @Test
-    public void testArchiveShrinksListPartitionValues() {
-=======
 
     @Test
     public void testArchiveRedactsCredentialsInDefinition() {
->>>>>>> 41eaa96 ([BugFix] Mask credentials in task run definitions archived to task_run_history (#80447))
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -584,7 +567,59 @@ public class TaskRunHistoryTest {
             }
         };
 
-<<<<<<< HEAD
+        String accessKey = "FAKEACCESSKEY0000REPRO";
+        String secretKey = "FAKE_SECRET_KEY_FOR_REPRO_ONLY";
+        String definition = "INSERT INTO FILES('path' = 's3://repro-bucket/repro/', 'format' = 'csv', " +
+                "'aws.s3.access_key' = '" + accessKey + "', 'aws.s3.secret_key' = '" + secretKey + "') SELECT 1 AS n";
+
+        boolean oldMask = Config.enable_task_info_mask_credential;
+        try {
+            Config.enable_task_info_mask_credential = true;
+            archiveOneRun("q1", definition);
+            assertEquals(1, inserts.size());
+            Assertions.assertFalse(inserts.get(0).contains(accessKey), inserts.get(0));
+            Assertions.assertFalse(inserts.get(0).contains(secretKey), inserts.get(0));
+            Assertions.assertTrue(inserts.get(0).contains("s3://repro-bucket/repro/"), inserts.get(0));
+            Assertions.assertTrue(inserts.get(0).contains("***"), inserts.get(0));
+
+            // With masking turned off the history keeps the raw definition, same as information_schema.task_runs.
+            Config.enable_task_info_mask_credential = false;
+            archiveOneRun("q2", definition);
+            assertEquals(2, inserts.size());
+            Assertions.assertTrue(inserts.get(1).contains(secretKey), inserts.get(1));
+        } finally {
+            Config.enable_task_info_mask_credential = oldMask;
+        }
+    }
+
+    private static String tenantValues(int count) {
+        Set<PListCell> cells = new LinkedHashSet<>();
+        for (int i = 0; i < count; i++) {
+            cells.add(new PListCell("tenant-" + i + ".com"));
+        }
+        return PListCell.batchSerialize(cells);
+    }
+
+    private static int totalOf(String partitionValues) {
+        return JsonParser.parseString(partitionValues).getAsJsonObject().get("total").getAsInt();
+    }
+
+    @Test
+    public void testArchiveShrinksListPartitionValues() {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        List<String> inserts = Lists.newArrayList();
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public void executeDML(String sql) {
+                inserts.add(sql);
+            }
+        };
+
         TaskRunStatus batchRun = new TaskRunStatus();
         batchRun.setExpireTime(System.currentTimeMillis() + 10000);
         batchRun.setQueryId("q_batch");
@@ -626,32 +661,6 @@ public class TaskRunHistoryTest {
         assertEquals(shortValues, shortRun.getMvTaskRunExtraMessage().getNextPartitionValues());
     }
 
-=======
-        String accessKey = "FAKEACCESSKEY0000REPRO";
-        String secretKey = "FAKE_SECRET_KEY_FOR_REPRO_ONLY";
-        String definition = "INSERT INTO FILES('path' = 's3://repro-bucket/repro/', 'format' = 'csv', " +
-                "'aws.s3.access_key' = '" + accessKey + "', 'aws.s3.secret_key' = '" + secretKey + "') SELECT 1 AS n";
-
-        boolean oldMask = Config.enable_task_info_mask_credential;
-        try {
-            Config.enable_task_info_mask_credential = true;
-            archiveOneRun("q1", definition);
-            assertEquals(1, inserts.size());
-            Assertions.assertFalse(inserts.get(0).contains(accessKey), inserts.get(0));
-            Assertions.assertFalse(inserts.get(0).contains(secretKey), inserts.get(0));
-            Assertions.assertTrue(inserts.get(0).contains("s3://repro-bucket/repro/"), inserts.get(0));
-            Assertions.assertTrue(inserts.get(0).contains("***"), inserts.get(0));
-
-            // With masking turned off the history keeps the raw definition, same as information_schema.task_runs.
-            Config.enable_task_info_mask_credential = false;
-            archiveOneRun("q2", definition);
-            assertEquals(2, inserts.size());
-            Assertions.assertTrue(inserts.get(1).contains(secretKey), inserts.get(1));
-        } finally {
-            Config.enable_task_info_mask_credential = oldMask;
-        }
-    }
-
     private static void archiveOneRun(String queryId, String definition) {
         TaskRunHistory history = new TaskRunHistory();
         TaskRunStatus run = new TaskRunStatus();
@@ -663,5 +672,4 @@ public class TaskRunHistoryTest {
         history.addHistory(run);
         history.vacuum(true);
     }
->>>>>>> 41eaa96 ([BugFix] Mask credentials in task run definitions archived to task_run_history (#80447))
 }
