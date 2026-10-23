@@ -489,7 +489,7 @@ This topic introduces the following types of FE configurations:
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
-### `lake_compaction_mode`
+### `lake_compaction_admission_mode`
 
 - Default: `NORMAL`
 - Type: String

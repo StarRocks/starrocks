@@ -108,7 +108,7 @@ public class CompactionScheduler extends Daemon {
         this.disabledIds = Collections.unmodifiableSet(new HashSet<>());
 
         disableTableOrPartitionId(disableIdsStr);
-        updateCompactionAllowlist(Config.lake_compaction_mode, Config.lake_compaction_allow_table_ids);
+        updateCompactionAllowlist(Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
     }
 
     @Override
