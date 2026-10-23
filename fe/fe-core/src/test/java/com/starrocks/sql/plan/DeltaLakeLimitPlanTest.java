@@ -153,10 +153,8 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
         ExecPlan plan = plan("select id from " + TABLE + " limit 10");
         assertEquals(0, metadata.statisticsCalls);
         assertEquals(0, convertedFiles());
-        assertTrue(Tracers.printVars().contains("DELTA_LAKE.limitStatistics"));
         DeltaLakeScanNode scan = (DeltaLakeScanNode) plan.getScanNodes().get(0);
         assertEquals(10, scan.getLimit());
-        assertEquals(10, scan.getCardinality());
         assertEquals(500, scan.getScanRangeLocations(500).size());
         assertEquals(500, convertedFiles());
         assertTrue(scan.hasMoreScanRanges());
@@ -168,6 +166,22 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
         scan.clear();
         assertEquals(500, convertedFiles());
         assertTrue(Tracers.printScopeTimer().contains("DELTA_LAKE.readScanFileBatch"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "select id from %s limit 10",
+            "select id from %s where id > 1 limit 10",
+            "select id from %s",
+            "select id from %s order by id limit 10",
+            "select count(*) from %s limit 10"
+    })
+    public void testExistingSingleTableStatisticsSwitch(String sql) throws Exception {
+        connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(true);
+        ExecPlan plan = plan(String.format(sql, TABLE));
+        assertEquals(0, metadata.statisticsCalls);
+        assertEquals(0, convertedFiles());
+        plan.getScanNodes().forEach(scan -> scan.clear());
     }
 
     @Test
@@ -209,7 +223,6 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
         assertEquals(0, metadata.statisticsCalls);
         DeltaLakeScanNode scan = (DeltaLakeScanNode) plan.getScanNodes().get(0);
         assertEquals(30, scan.getLimit());
-        assertEquals(30, scan.getCardinality());
         List<TScanRangeLocations> firstBatch = scan.getScanRangeLocations(5);
         scan.setReachLimit();
         scan.prepareRetry();
@@ -222,6 +235,7 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
     @ParameterizedTest
     @ValueSource(strings = {
             "select id from %s",
+            "select id from %s limit 10",
             "select id from %s where id > 1 limit 10",
             "select id from %s order by id limit 10",
             "select count(*) from %s limit 10",
@@ -230,7 +244,8 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
             "select (select max(id) from deltalake_catalog.deltalake_db.tbl) from %s limit 10",
             "select a.id from %s a join deltalake_catalog.deltalake_db.tbl b on a.id = b.id limit 10"
     })
-    public void testOtherQueriesRetainMetadataStatistics(String sql) throws Exception {
+    public void testMetadataStatisticsRemainEnabled(String sql) throws Exception {
+        connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(false);
         ExecPlan plan = plan(String.format(sql, TABLE));
         assertTrue(metadata.statisticsCalls > 0);
         assertTrue(convertedFiles() >= FILE_COUNT);
@@ -238,7 +253,16 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testJoinRetainsStatisticsWithSingleTableSwitchEnabled() throws Exception {
+        ExecPlan plan = plan("select a.id from " + TABLE + " a join " + TABLE + " b on a.id = b.id limit 10");
+        assertTrue(metadata.statisticsCalls > 0);
+        assertTrue(convertedFiles() >= FILE_COUNT);
+        plan.getScanNodes().forEach(scan -> scan.clear());
+    }
+
+    @Test
     public void testExplicitColumnStatisticsRetainsEnumeration() throws Exception {
+        connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(false);
         connectContext.getSessionVariable().setEnableDeltaLakeColumnStatistics(true);
         ExecPlan plan = plan("select id from " + TABLE + " limit 10");
         assertTrue(metadata.statisticsCalls > 0);
@@ -248,6 +272,7 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testNonIncrementalScanRetainsEnumeration() throws Exception {
+        connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(false);
         connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(false);
         ExecPlan plan = plan("select id from " + TABLE + " limit 10");
         assertTrue(metadata.statisticsCalls > 0);
@@ -256,7 +281,7 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testFastPathPreservesQueryDumpStatistics() throws Exception {
+    public void testSkippedMetadataStatisticsPreserveQueryDump() throws Exception {
         DumpInfo savedDump = connectContext.getDumpInfo();
         QueryDumpInfo dump = new QueryDumpInfo(connectContext);
         connectContext.setDumpInfo(dump);
@@ -264,7 +289,7 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
             ExecPlan plan = plan("select id from " + TABLE + " limit 10");
             assertEquals(0, metadata.statisticsCalls);
             assertFalse(dump.getTableStatisticsMap().isEmpty());
-            assertTrue(dump.getExternalTableRowCountMap().containsValue(10L));
+            assertFalse(dump.getExternalTableRowCountMap().isEmpty());
             plan.getScanNodes().forEach(scan -> scan.clear());
         } finally {
             connectContext.setDumpInfo(savedDump);
@@ -288,7 +313,8 @@ public class DeltaLakeLimitPlanTest extends ConnectorPlanTestBase {
         try {
             ExecPlan plan = plan("select id from " + TABLE + " limit 10");
             assertEquals(0, metadata.statisticsCalls);
-            assertFalse(Tracers.printVars().contains("DELTA_LAKE.limitStatistics"));
+            // Collected statistics take priority over the default single-table estimate.
+            assertEquals(10, plan.getScanNodes().get(0).getCardinality());
             plan.getScanNodes().forEach(scan -> scan.clear());
         } finally {
             FeConstants.runningUnitTest = savedUnitTest;

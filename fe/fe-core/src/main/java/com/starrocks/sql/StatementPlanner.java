@@ -435,6 +435,7 @@ public class StatementPlanner {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setMvTransformerContext(mvTransformerContext);
             optimizerContext.setStatement(stmt);
+            optimizerContext.setSourceTablesCount(collectSourceTablesCount(session, queryStmt));
             if (isShortCircuit) {
                 optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
             }
