@@ -626,12 +626,13 @@ public class ConfigTest {
             for (String valid : List.of("pct", "PCT", "Pct", "incremental", "INCREMENTAL")) {
                 Config.setMutableConfig("default_mv_refresh_mode", valid, false, "");
                 Assertions.assertEquals(valid, Config.default_mv_refresh_mode);
-                // Every accepted value must survive the parse that MaterializedView#getRefreshMode
-                // performs on it for any MV without an explicit refresh_mode property.
-                Assertions.assertNotNull(MaterializedView.RefreshMode.valueOf(valid.toUpperCase(Locale.ROOT)));
             }
 
+<<<<<<< HEAD
             // AUTO parses as an enum constant but is not selectable, matching the refresh_mode property.
+=======
+            // AUTO is a valid refresh_mode property but not a valid default.
+>>>>>>> a85b944419f... [BugFix][RB-685] Report PCT for materialized views created without refresh_mode (#66671)
             for (String invalid : List.of("auto", "AUTO", "incrementall", "hybrid", "", " ")) {
                 Config.setMutableConfig("default_mv_refresh_mode", "pct", false, "");
                 Assertions.assertThrows(DdlException.class, () ->
@@ -655,7 +656,8 @@ public class ConfigTest {
             Config.setMutableConfig("default_mv_refresh_mode", "incremental", false, "");
 
             MaterializedView mv = new MaterializedView();
-            mv.setTableProperty(new TableProperty(Maps.newHashMap()).buildMVRefreshMode());
+            mv.setTableProperty(new TableProperty(Maps.newHashMap(ImmutableMap.of(
+                    PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental"))).buildMVRefreshMode());
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getRefreshMode());
 
             Assertions.assertEquals("incremental",

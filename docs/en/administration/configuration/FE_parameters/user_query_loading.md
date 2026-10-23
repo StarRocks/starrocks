@@ -302,6 +302,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
 
+### `default_mv_refresh_mode`
+
+- Default: pct
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Deprecated and has no effect. A materialized view created without the `refresh_mode` property uses `PCT` and reports `PCT`, whatever this value is. To create an incremental materialized view, specify `refresh_mode` in its properties. Valid values are still `pct` and `incremental` (case-insensitive), so an existing setting is still accepted.
+- Introduced in: v4.1
+
 ### `dynamic_partition_check_interval_seconds`
 
 - Default: 600
