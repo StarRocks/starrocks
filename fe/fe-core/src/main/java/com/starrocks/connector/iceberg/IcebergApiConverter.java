@@ -317,6 +317,15 @@ public class IcebergApiConverter {
             }
             Column column = new Column(field.name(), srType, true);
             column.setComment(field.doc());
+<<<<<<< HEAD
+=======
+            // The column default is what INSERT writes for an omitted column: only the write-default. Without
+            // one, the spec writes NULL; the initial-default only fills older data files on read.
+            String writeDefault = toWriteDefaultValueString(field);
+            if (writeDefault != null) {
+                column.setDefaultValue(writeDefault);
+            }
+>>>>>>> e38944f ([BugFix] Write NULL for an Iceberg column without a write-default, and keep sort directions on their own columns (#81362))
             fullSchema.add(column);
         }
         return fullSchema;
