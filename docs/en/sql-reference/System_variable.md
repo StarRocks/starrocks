@@ -197,6 +197,50 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1
 
+<<<<<<< HEAD
+=======
+### blacklist_backup_routing
+
+* **Scope**: Session
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). `TABLET_HASH` takes the eligible node with the highest hash of the tablet and the node (rendezvous hashing): the tablets of an unavailable node spread evenly over the other nodes, while each tablet keeps going to the same backup across queries, so its data is cached on only one backup node. For a colocated scan, the hash uses the colocation group and the bucket instead of the tablet, so every table in the group sends the same bucket to the same backup. FEs choose the same backup for a tablet as long as they see the same set of eligible nodes. The variable also applies when a load (for example, `INSERT`) writes to a tablet whose compute node is unavailable. Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Default**: `CIRCULAR`
+* **Data type**: String
+* **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
+* **Introduced in**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
+
+### broadcast_row_limit
+
+* **Scope**: Session
+* **Description**: Limits the right-side table's output row count for a broadcast join. The optimizer (see `EnforceAndCostTask`) treats a candidate as ineligible for broadcast when the right table's row count exceeds this limit or when combined size/scale checks indicate the right table is not sufficiently smaller than the left. A non‑positive value disables this limit. `PushDownAggregateCollector` also uses this variable to identify "small broadcast" joins for aggregate push‑down: it requires the rightRows less than or equal to this limit and less than or equal to `cbo_push_down_aggregate_on_broadcast_join_row_count_limit` before allowing push‑down. It interacts with `broadcast_right_table_scale_factor` and the number of BE nodes when comparing left/right sizes. For example, when `leftOutputSize` is less than `rightOutputSize * beNum * broadcast_right_table_scale_factor` and `rightRowCount` is greater than `broadcast_row_limit`, broadcast is rejected.
+* **Default**: `15000000`
+* **Data Type**: long
+* **Introduced in**: v3.2.0
+
+>>>>>>> 58ae1fc ([Enhancement] Spread shared-data backup nodes by tablet hash (#81436))
 ### catalog
 
 * **Description**: Used to specify the catalog to which the session belongs.

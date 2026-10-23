@@ -17,6 +17,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -55,8 +56,19 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
+>>>>>>> 58ae1fc ([Enhancement] Spread shared-data backup nodes by tablet hash (#81436))
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
@@ -91,9 +103,11 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -1137,6 +1151,294 @@ public class OlapTableSinkTest {
         Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * In shared-data mode the backup of an unavailable tablet owner follows the session's blacklist_backup_routing and
+     * is keyed on the tablet, as the scan is: under TABLET_HASH the owner's tablets spread over the other nodes, each
+     * on the backup a scan of it picks. A load without a session keeps the default CIRCULAR policy.
+     */
+    @Test
+    public void testCreateLocationWithSharedDataModeRoutesBackupBySessionPolicy(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // node 10001 owns every tablet but is not alive; nodes 10002 to 10005 are
+        ComputeNode owner = new ComputeNode(10001L, "127.0.0.1", 9071);
+        Assertions.assertFalse(owner.isAlive());
+        ImmutableMap.Builder<Long, ComputeNode> allNodesBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<Long, ComputeNode> aliveNodesBuilder = ImmutableMap.builder();
+        allNodesBuilder.put(owner.getId(), owner);
+        sysInfoService.addComputeNode(owner);
+        for (long id = 10002L; id <= 10005L; id++) {
+            ComputeNode node = new ComputeNode(id, "127.0.0.1", 9071 + (int) (id - 10001L));
+            node.updateOnce(1, 2, 3);
+            allNodesBuilder.put(id, node);
+            aliveNodesBuilder.put(id, node);
+            sysInfoService.addComputeNode(node);
+        }
+        ImmutableMap<Long, ComputeNode> allNodes = allNodesBuilder.build();
+        ImmutableMap<Long, ComputeNode> aliveNodes = aliveNodesBuilder.build();
+        warehouseManager.setAllComputeNodeIds(Lists.newArrayList(allNodes.keySet()));
+        warehouseManager.setAliveComputeNodes(Lists.newArrayList(aliveNodes.values()));
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(owner));
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long physicalPartitionId = 6L;
+        int numTablets = 64;
+
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        columns.add(k1);
+        DistributionInfo distributionInfo = new HashDistributionInfo(numTablets, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
+        for (long tabletId = 1000L; tabletId < 1000L + numTablets; tabletId++) {
+            index.addTablet(new LakeTablet(tabletId), tabletMeta);
+        }
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+
+        ConnectContext context = new ConnectContext();
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setBlacklistBackupRouting("tablet_hash");
+        context.setSessionVariable(sessionVariable);
+        context.setThreadLocalInfo();
+        Map<Long, List<Long>> tabletHashNodes = new HashMap<>();
+        try {
+            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                    .forEach(location -> tabletHashNodes.put(location.getTablet_id(), location.getNode_ids()));
+        } finally {
+            ConnectContext.remove();
+        }
+
+        DefaultSharedDataWorkerProvider scanProvider = new DefaultSharedDataWorkerProvider(allNodes, aliveNodes,
+                WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(numTablets, tabletHashNodes.size());
+        tabletHashNodes.forEach((tabletId, nodeIds) -> Assertions.assertEquals(
+                Lists.newArrayList(scanProvider.selectBackupWorker(owner.getId(), tabletId)), nodeIds));
+        Set<Long> tabletHashBackups = new HashSet<>();
+        tabletHashNodes.values().forEach(tabletHashBackups::addAll);
+        Assertions.assertEquals(aliveNodes.keySet(), tabletHashBackups);
+
+        Set<Long> defaultBackups = new HashSet<>();
+        OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                .forEach(location -> defaultBackups.addAll(location.getNode_ids()));
+        Assertions.assertEquals(Set.of(10002L), defaultBackups);
+    }
+
+    /**
+     * skip_black_list keeps a blocklisted but alive tablet owner usable for the sink, as it does for the scan:
+     * without it the owner's tablets go to a backup, with it they stay on the owner.
+     */
+    @Test
+    public void testCreateLocationWithSharedDataModeHonorsSkipBlackList(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // node 10001 owns every tablet, is alive and blocklisted; nodes 10002 to 10004 are alive
+        List<ComputeNode> nodes = new ArrayList<>();
+        for (long id = 10001L; id <= 10004L; id++) {
+            ComputeNode node = new ComputeNode(id, "127.0.0.1", 9070 + (int) (id - 10000L));
+            node.updateOnce(1, 2, 3);
+            nodes.add(node);
+            sysInfoService.addComputeNode(node);
+        }
+        ComputeNode owner = nodes.get(0);
+        warehouseManager.setAllComputeNodeIds(nodes.stream().map(ComputeNode::getId).collect(Collectors.toList()));
+        warehouseManager.setAliveComputeNodes(nodes);
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(owner));
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long physicalPartitionId = 6L;
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true, null, "", ""));
+        DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(columns.get(0)));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
+        for (long tabletId = 1000L; tabletId < 1008L; tabletId++) {
+            index.addTablet(new LakeTablet(tabletId), tabletMeta);
+        }
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+
+        SimpleScheduler.getHostBlacklist().disableAutoUpdate();
+        SimpleScheduler.getHostBlacklist().add(owner.getId());
+        try {
+            for (boolean skipBlackList : new boolean[] {false, true}) {
+                ConnectContext context = new ConnectContext();
+                SessionVariable sessionVariable = new SessionVariable();
+                Deencapsulation.setField(sessionVariable, "skipBlackList", skipBlackList);
+                context.setSessionVariable(sessionVariable);
+                context.setThreadLocalInfo();
+                Set<Long> nodeIds = new HashSet<>();
+                try {
+                    OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                            .forEach(location -> nodeIds.addAll(location.getNode_ids()));
+                } finally {
+                    ConnectContext.remove();
+                }
+                // CIRCULAR backup of 10001 is 10002
+                Assertions.assertEquals(Set.of(skipBlackList ? owner.getId() : 10002L), nodeIds,
+                        "skip_black_list=" + skipBlackList);
+            }
+        } finally {
+            SimpleScheduler.getHostBlacklist().remove(owner.getId());
+        }
+    }
+
+    // A reshard can install a newer index generation after the first sink is planned. Every later
+    // partition and location build in that transaction must remain on the original tablet layout.
+    @Test
+    public void testCreatePartitionAndLocationReuseLoadedIndexGeneration(
+            @Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        ComputeNode node = new ComputeNode(7010L, "127.0.0.1", 9071);
+        node.updateOnce(1, 2, 3);
+        sysInfoService.addComputeNode(node);
+        warehouseManager.setAllComputeNodeIds(List.of(node.getId()));
+        warehouseManager.setAliveComputeNodes(List.of(node));
+        warehouseManager.setComputeNodeIdsAssignToTablet(Sets.newHashSet(node.getId()));
+
+        long dbId = 7001L;
+        long tableId = 7002L;
+        long partitionId = 7003L;
+        long physicalPartitionId = 7004L;
+        long metaId = 7005L;
+        long oldIndexId = 7006L;
+        long newIndexId = 7007L;
+        long oldTabletId = 7008L;
+        long newTabletId = 7009L;
+
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        HashDistributionInfo distribution = new HashDistributionInfo(1, List.of(k1));
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex oldIndex = new MaterializedIndex(
+                oldIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        oldIndex.addTablet(new LakeTablet(oldTabletId), null, false);
+        Partition partition = new Partition(
+                partitionId, physicalPartitionId, "p1", oldIndex, distribution);
+        LakeTable table = new LakeTable(
+                tableId, "pin_layout", List.of(k1), KeysType.PRIMARY_KEYS, partitionInfo, distribution);
+        Deencapsulation.setField(table, "baseIndexMetaId", metaId);
+        table.addPartition(partition);
+        table.setIndexMeta(metaId, "pin_layout", List.of(k1), 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
+
+        TransactionState txn = new TransactionState();
+        TOlapTablePartitionParam first = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                first.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        MaterializedIndex newIndex = new MaterializedIndex(
+                newIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        newIndex.addTablet(new LakeTablet(newTabletId), null, false);
+        partition.getDefaultPhysicalPartition().addMaterializedIndex(newIndex, true);
+
+        TOlapTablePartitionParam second = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                second.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTablePartitionParam fresh = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), new TransactionState(), null);
+        Assertions.assertEquals(newTabletId,
+                fresh.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTableLocationParam location = OlapTableSink.createLocation(table, second, false, txn);
+        Assertions.assertEquals(1, location.getTablets().size());
+        Assertions.assertEquals(oldTabletId, location.getTablets().get(0).getTablet_id());
+    }
+
+>>>>>>> 58ae1fc ([Enhancement] Spread shared-data backup nodes by tablet hash (#81436))
     // Verifies that `Config.lake_enable_per_partition_coordinator_txn_log` is
     // propagated verbatim onto `TOlapTableSink.enable_lake_per_partition_coordinator_txn_log`
     // on every built sink plan. This is the FE-side half of the per-partition
