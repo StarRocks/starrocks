@@ -29,8 +29,8 @@ public:
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
-            CurrentThread::current().mem_consume(_physical_bytes);
-            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+            CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                       _physical_bytes);
         }
     }
 
@@ -40,8 +40,7 @@ public:
         auto clone = chunk->clone_unique();
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
-        CurrentThread::current().mem_release(physical_bytes);
-        RuntimeEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
+        CurrentThread::current().mem_transfer_to(RuntimeEnv::GetInstance()->passthrough_mem_tracker(), physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
@@ -53,22 +52,21 @@ public:
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
-        RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
-        // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
+        CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                   _physical_bytes);
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
     // Drop everything buffered without handing it to a consumer. Used when the receiver is
     // cancelled/closed: nobody will ever pull these chunks, so free them now instead of
     // holding the memory until query teardown. The accounting mirrors the destructor:
-    // pre-charge the physical bytes to the current MemTracker so the immediate _buffer.clear()
-    // frees net-zero on it, and release them from the global passthrough tracker.
+    // transfer ownership without changing common ancestors. The immediate _buffer.clear() then
+    // frees net-zero on the current tracker.
     void clear() {
         std::unique_lock lock(_mutex);
         if (_physical_bytes > 0) {
-            CurrentThread::current().mem_consume(_physical_bytes);
-            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+            CurrentThread::current().mem_transfer_from(RuntimeEnv::GetInstance()->passthrough_mem_tracker(),
+                                                       _physical_bytes);
             _total_bytes -= _physical_bytes;
             _physical_bytes = 0;
         }
