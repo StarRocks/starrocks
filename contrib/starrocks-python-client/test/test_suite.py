@@ -55,7 +55,7 @@ from sqlalchemy.testing.util import mock
 
 from starrocks.datatype import INTEGER
 from starrocks.requirements import IS_SQLALCHEMY_2
-from test import test_utils
+from test.util import normalize_sql
 
 
 if IS_SQLALCHEMY_2:
@@ -86,8 +86,8 @@ class SRAssertsCompiledSQLMixin:
         compiled = clause.compile(dialect=dialect, **kw.get('compile_kwargs', {}))
         actual_sql = str(compiled)
 
-        normalized_actual = test_utils.normalize_sql(actual_sql)
-        normalized_expected = test_utils.normalize_sql(expected)
+        normalized_actual = normalize_sql(actual_sql)
+        normalized_expected = normalize_sql(expected)
 
         assert normalized_actual == normalized_expected, (
             f"\nActual (normalized):   {normalized_actual}\n"
