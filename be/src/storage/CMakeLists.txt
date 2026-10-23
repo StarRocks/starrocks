@@ -203,6 +203,7 @@ set(STORAGE_FILES
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
+    lake/tablet_merge_admission.cpp
     lake/tablet_merger.cpp
     lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
