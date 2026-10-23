@@ -229,28 +229,7 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
-<<<<<<< HEAD
-=======
-| RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
-| RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
-| RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
 | ScanRangesPrunedByPartitionValue | Number of scan ranges skipped before they are read because a predicate or an arrived join runtime filter rejects their identity partition values. |
-| PaimonFSAppIOCount | Number of valid read attempts received by the Paimon file-system adapter. It is the sum of sequential, positional, and asynchronous reads. |
-| PaimonFSAppIOBytes | Bytes returned successfully by reads at the Paimon file-system adapter boundary. |
-| PaimonFSAppIOTime | End-to-end time of reads at the Paimon file-system adapter boundary. |
-| PaimonFSIOCount | Number of backing file-system reads below Data Cache and Shared Buffered Input Stream. This is a StarRocks file-system call count, not necessarily the number of remote object-store RPCs. |
-| PaimonFSIOBytes | Bytes returned successfully by backing file-system reads for a Paimon native scan. |
-| PaimonFSIOTime | Time spent in backing file-system reads for a Paimon native scan. |
-| PaimonFSSequentialReadCount | Number of sequential Paimon file-system adapter read attempts. |
-| PaimonFSSequentialReadBytes | Bytes returned successfully by sequential Paimon file-system adapter reads. |
-| PaimonFSSequentialReadTime | Time spent in sequential Paimon file-system adapter reads. |
-| PaimonFSPositionalReadCount | Number of positional Paimon file-system adapter read attempts. |
-| PaimonFSPositionalReadBytes | Bytes returned successfully by positional Paimon file-system adapter reads. |
-| PaimonFSPositionalReadTime | Time spent in positional Paimon file-system adapter reads. |
-| PaimonFSAsyncReadCount | Number of asynchronous Paimon file-system adapter read attempts. |
-| PaimonFSAsyncReadBytes | Bytes returned successfully by asynchronous Paimon file-system adapter reads. |
-| PaimonFSAsyncReadTime | Time spent in asynchronous Paimon file-system adapter reads. |
->>>>>>> c0ebf9a ([Enhancement] Skip Iceberg equality delete files of partitions that runtime filters reject (#81437))
 
 ### Exchange Operator
 

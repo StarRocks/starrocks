@@ -77,11 +77,7 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
-<<<<<<< HEAD
-=======
     private Set<String> runtimeFilterPruningColumns = Set.of();
-    private boolean enableGlobalLateMaterialization = false;
->>>>>>> c0ebf9a ([Enhancement] Skip Iceberg equality delete files of partitions that runtime filters reject (#81437))
     private boolean enableIncrementalScanRanges = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
