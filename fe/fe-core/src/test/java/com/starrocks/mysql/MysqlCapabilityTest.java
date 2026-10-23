@@ -39,4 +39,19 @@ public class MysqlCapabilityTest {
                         + " | CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS | CLIENT_SESSION_TRACK | CLIENT_DEPRECATE_EOF",
                 capability.toString());
     }
+
+    @Test
+    public void testDefaultAdvertisesMultiResults() {
+        // The server must advertise CLIENT_MULTI_RESULTS so compliant drivers (e.g. MySQL
+        // Connector/J) enable multi-result handling, which the optional query_id trailing
+        // result set (enable_return_query_id) relies on.
+        Assertions.assertTrue(MysqlCapability.DEFAULT_CAPABILITY.isMultiResults());
+    }
+
+    @Test
+    public void testIsMultiResults() {
+        Assertions.assertFalse(new MysqlCapability(0).isMultiResults());
+        Assertions.assertTrue(
+                new MysqlCapability(MysqlCapability.Flag.CLIENT_MULTI_RESULTS.getFlagBit()).isMultiResults());
+    }
 }

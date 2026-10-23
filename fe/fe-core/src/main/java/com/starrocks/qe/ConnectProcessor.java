@@ -60,11 +60,13 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
@@ -106,6 +108,7 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.transaction.ExplicitTxnStatementValidator;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -1263,6 +1266,86 @@ public class ConnectProcessor {
         }
     }
 
+    // Sends the main command response, then — when enable_return_query_id is set — appends a trailing
+    // result set carrying this query's query_id so the client can read it in the same round trip
+    // (JDBC Statement.getMoreResults() / pymysql cursor.nextset()) instead of a pool-unsafe follow-up
+    // SELECT last_query_id(). The query_id must be captured before finalizeCommand(), which clears it.
+    private void finalizeCommandAndMaybeReturnQueryId() throws IOException {
+        boolean appendQueryId = shouldAppendQueryIdResultSet();
+        String queryIdToReturn = appendQueryId ? ctx.getQueryId().toString() : null;
+        if (appendQueryId) {
+            // Tell the client another result set follows the main terminator.
+            ctx.getState().serverStatus |= MysqlServerStatusFlag.SERVER_MORE_RESULTS_EXISTS;
+        }
+        finalizeCommand();
+        if (appendQueryId) {
+            sendQueryIdResultSet(queryIdToReturn);
+        }
+    }
+
+    private boolean shouldAppendQueryIdResultSet() {
+        // Opt-in only; off by default so existing clients are unaffected.
+        if (!ctx.getSessionVariable().isEnableReturnQueryId()) {
+            return false;
+        }
+        // Only the native MySQL protocol can carry a trailing MySQL result set. The HTTP SQL
+        // endpoint and Arrow Flight SQL reuse processOnce() with their own transports, so skip them.
+        if (ctx instanceof HttpConnectContext || ctx.isArrowFlightSql()) {
+            return false;
+        }
+        // v1: text-protocol queries only. COM_STMT_EXECUTE (binary protocol) is a follow-up.
+        if (ctx.getCommand() != MysqlCommand.COM_QUERY) {
+            return false;
+        }
+        // An ERR packet is terminal and must not carry SERVER_MORE_RESULTS_EXISTS.
+        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            return false;
+        }
+        // Forwarded-to-leader results use the leader's terminator packet, so the local
+        // SERVER_MORE_RESULTS_EXISTS flag would not take effect; skip to avoid a protocol
+        // desync (v1 limitation, tracked as a follow-up).
+        if (executor != null && executor.isForwardToLeader()) {
+            return false;
+        }
+        return ctx.getQueryId() != null;
+    }
+
+    // Emits a complete one-column ("query_id"), one-row result set terminated by its own EOF
+    // (no MORE_RESULTS), ending the multi-result sequence started by the main terminator.
+    private void sendQueryIdResultSet(String queryId) throws IOException {
+        MysqlSerializer serializer = ctx.getSerializer();
+        MysqlChannel channel = ctx.getMysqlChannel();
+        // serverStatus = 0: this trailing set is the last one in the sequence.
+        QueryState eofState = new QueryState();
+
+        // Column count.
+        serializer.reset();
+        serializer.writeVInt(1);
+        channel.sendOnePacket(serializer.toByteBuffer());
+
+        // Column definition: query_id VARCHAR.
+        serializer.reset();
+        serializer.writeField("query_id", VarcharType.VARCHAR);
+        channel.sendOnePacket(serializer.toByteBuffer());
+
+        // EOF after the column definitions.
+        serializer.reset();
+        new MysqlEofPacket(eofState).writeTo(serializer);
+        channel.sendOnePacket(serializer.toByteBuffer());
+
+        // Single row holding the query_id.
+        serializer.reset();
+        serializer.writeLenEncodedString(queryId);
+        channel.sendOnePacket(serializer.toByteBuffer());
+
+        // Final EOF terminating the trailing result set.
+        serializer.reset();
+        new MysqlEofPacket(eofState).writeTo(serializer);
+        channel.sendOnePacket(serializer.toByteBuffer());
+
+        channel.flush();
+    }
+
     public TMasterOpResult proxyExecute(TMasterOpRequest request, Frontend requestFE) {
         ctx.setCurrentCatalog(request.catalog);
         if (ctx.getCurrentCatalog() == null) {
@@ -1559,7 +1642,7 @@ public class ConnectProcessor {
 
         dispatch();
 
-        finalizeCommand();
+        finalizeCommandAndMaybeReturnQueryId();
 
         ctx.setCommand(MysqlCommand.COM_SLEEP);
         ctx.setEndTime();
@@ -1591,7 +1674,7 @@ public class ConnectProcessor {
         // dispatch
         dispatch();
         // finalize
-        finalizeCommand();
+        finalizeCommandAndMaybeReturnQueryId();
 
         ctx.setCommand(MysqlCommand.COM_SLEEP);
         ctx.setEndTime();
