@@ -22,8 +22,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -32,11 +36,14 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -46,6 +53,9 @@ import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -108,6 +118,11 @@ public class InsertOverwriteJobRunnerTest {
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_live_number(k1 date, k2 int) " +
+                        "DUPLICATE KEY(k1) PARTITION BY RANGE(k1) "
+                        + "(PARTITION p20250101 VALUES [('2025-01-01'), ('2025-01-02')))"
+                        + " DISTRIBUTED BY HASH(`k2`) BUCKETS 1"
+                        + " PROPERTIES('replication_num'='1', 'partition_live_number'='3');")
                 .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
@@ -593,6 +608,47 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+    public void testDoCommitWhenSourcePartitionMissing() {
+        // A source partition recorded before the load can be dropped (e.g. by partition TTL) before the swap;
+        // doCommit() must report it with a hint instead of a NullPointerException.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable noTtlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t3");
+        OlapTable ttlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t_live_number");
+        String ttlHint = "also check whether the partition is still within the retention range";
+
+        // source partition resolved by name, table without partition TTL
+        InsertOverwriteJob byNameJob = new InsertOverwriteJob(305L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(noTtlTable.getPartition("p1").getId()), false);
+        byNameJob.setSourcePartitionNames(Lists.newArrayList("p_dropped"));
+        byNameJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        DmlException ex = Assertions.assertThrows(DmlException.class,
+                new InsertOverwriteJobRunner(byNameJob)::testDoCommit);
+        Assertions.assertEquals("replace partitions failed: partition 'p_dropped' of table 't3' no longer exists. " +
+                "Check whether it was dropped or renamed while the INSERT OVERWRITE was running", ex.getMessage());
+
+        // source partition resolved by name, table with partition TTL
+        InsertOverwriteJob ttlJob = new InsertOverwriteJob(306L, database.getId(), ttlTable.getId(),
+                Lists.newArrayList(ttlTable.getPartition("p20250101").getId()), false);
+        ttlJob.setSourcePartitionNames(Lists.newArrayList("p20241231"));
+        ttlJob.setTmpPartitionIds(Lists.newArrayList(ttlTable.getPartition("p20250101").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(ttlJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition 'p20241231' of table 't_live_number' no longer exists"),
+                ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains(ttlHint), ex.getMessage());
+
+        // source partition names not recorded, resolved by id
+        InsertOverwriteJob byIdJob = new InsertOverwriteJob(307L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(-1L), false);
+        byIdJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(byIdJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition id -1 of table 't3' no longer exists"),
+                ex.getMessage());
+        Assertions.assertFalse(ex.getMessage().contains(ttlHint), ex.getMessage());
+    }
+
+    @Test
     public void testInsertOverwriteWithDuplicatePartitions() throws SQLException {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
@@ -782,5 +838,31 @@ public class InsertOverwriteJobRunnerTest {
                 "union all " +
                 "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
         cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testOverwriteOfAutoPartitionDroppedAfterCreationFails() throws Exception {
+        starRocksAssert.withTable("create table insert_overwrite_test.t_auto_list(k1 int, k2 varchar(10)) " +
+                "DUPLICATE KEY(k1) PARTITION BY (k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES('replication_num'='1');");
+        // A DROP PARTITION lands right after INSERT OVERWRITE created the partition and released the lock.
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void addPartitions(Invocation invocation, ConnectContext ctx, Database db, String tableName,
+                                      AddPartitionClause addPartitionClause) throws DdlException {
+                invocation.proceed();
+                OlapTable table = (OlapTable) db.getTable(tableName);
+                List<String> names = ((ListPartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                        Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    for (String name : names) {
+                        table.dropPartition(db.getId(), name, true);
+                    }
+                }
+            }
+        };
+        SQLException e = Assertions.assertThrows(SQLException.class, () -> cluster.runSql("insert_overwrite_test",
+                "insert overwrite t_auto_list partition(k2='a') values(1, 'a')"));
+        Assertions.assertTrue(e.getMessage().contains("was dropped concurrently"), e.getMessage());
     }
 }

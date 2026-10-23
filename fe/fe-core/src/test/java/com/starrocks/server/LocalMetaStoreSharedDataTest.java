@@ -21,6 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -29,6 +30,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class LocalMetaStoreSharedDataTest {
     private static ConnectContext connectContext;
@@ -144,5 +147,19 @@ public class LocalMetaStoreSharedDataTest {
         });
         String dbSvId2 = svMgr.getStorageVolumeIdOfDb(db.getId());
         Assertions.assertEquals(hdfsSv.getId(), dbSvId2);
+    }
+
+    @Test
+    public void testInvalidStatisticAutoCollectLeavesNoStorageVolumeBinding() throws Exception {
+        StorageVolumeMgr svMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        int boundTables = svMgr.storageVolumeToTables.values().stream().mapToInt(Set::size).sum();
+
+        CreateTableStmt stmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE TABLE test.t_invalid_auto_collect(k1 int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                        "PROPERTIES ('enable_statistic_auto_collect' = 'off')", connectContext);
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt));
+        Assertions.assertTrue(exception.getMessage().contains("enable_statistic_auto_collect"), exception.getMessage());
+        Assertions.assertEquals(boundTables, svMgr.storageVolumeToTables.values().stream().mapToInt(Set::size).sum());
     }
 }

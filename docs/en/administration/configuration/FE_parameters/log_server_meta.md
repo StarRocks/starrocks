@@ -815,6 +815,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000
@@ -975,6 +984,15 @@ This topic introduces the following types of FE configurations:
   `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
 
   Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+
+### `enable_rest_bearer_authentication`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
 
 ### `http_web_page_display_hardware`
 

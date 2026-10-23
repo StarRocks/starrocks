@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -59,6 +60,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private Set<Long> dirtyPartitionSet;
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
+    private Map<ColumnId, Long> dictContentIdentities;
     private final CompactionMgr compactionMgr;
 
     public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
@@ -88,6 +90,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         dirtyPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
+        dictContentIdentities = Maps.newHashMap();
 
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
@@ -111,6 +114,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
+            finishedTablets.get(i).mergeDictContentIdentities(
+                    dictContentIdentities, invalidDictCacheColumns);
 
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
@@ -128,12 +133,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     this.validDictCacheColumns.put(validDictCacheColumns.get(j), version);
                 }
             }
-            if (i == tabletMetaList.size() - 1) {
-                validDictCacheColumns.entrySet().removeIf(entry -> invalidDictCacheColumns.contains(entry.getKey()));
-            }
 
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
+
+        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
 
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
@@ -159,6 +163,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         checkShadowIndexesLoaded(txnState);
+        checkSynchronousMaterializedViewIndexesLoaded(txnState);
     }
 
     /**
@@ -193,7 +198,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
      * <p>The check runs only while the index is still SHADOW. The alter jobs wait only for transactions below W,
      * so a writer that resolved its tablets early and is still open when the alter makes the index NORMAL is not
      * caught here. After a schema change its tablets no longer resolve and it commits nothing; after a rollup it
-     * publishes the base index only. That case needs a separate fix.
+     * publishes the base index only. NORMAL range sync MVs are checked separately below.
      */
     private void checkShadowIndexesLoaded(TransactionState txnState) throws TransactionCommitFailedException {
         if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
@@ -219,6 +224,58 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                         + " must write while the table is being altered. The writer resolved the table's"
                         + " tablets before the alter added the index; refresh the table metadata and retry"
                         + " the load";
+                LOG.warn(msg);
+                throw new TransactionCommitFailedException(msg);
+            }
+        }
+    }
+
+    /**
+     * A range sync MV keeps its required-since watermark in logical metadata after activation. Writers
+     * may carry retained predecessor layouts during split/merge, so coverage is checked by logical meta
+     * id, after the tablet completeness check has validated the recorded physical layouts.
+     */
+    private void checkSynchronousMaterializedViewIndexesLoaded(TransactionState txnState)
+            throws TransactionCommitFailedException {
+        // Compaction is index-local. A later additive job's internal rewrite writes only its own SHADOW.
+        // Exemptions follow the existing persisted transaction-source classification contract, not the index list.
+        // Persistence does not authenticate the source's origin; transaction ingress owns source validation.
+        if (!table.isRangeDistribution()
+                || txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION
+                || txnState.isShadowRewrite()) {
+            return;
+        }
+        long txnId = txnState.getTransactionId();
+        for (Long partitionId : dirtyPartitionSet) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            List<Long> loadedIndexIds = txnState.getPartitionLoadedIndexIdsWithoutLock(table.getId(), partitionId);
+            if (partition == null || loadedIndexIds == null) {
+                // No snapshot: the existing latest-index tablet completeness check already enforces coverage.
+                continue;
+            }
+            Set<Long> loadedMetaIds = Sets.newHashSet();
+            for (long physicalIndexId : loadedIndexIds) {
+                MaterializedIndex loadedIndex = partition.getIndex(physicalIndexId);
+                if (loadedIndex != null) {
+                    loadedMetaIds.add(loadedIndex.getMetaId());
+                }
+            }
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                MaterializedIndexMeta meta = table.getIndexMetaByMetaId(index.getMetaId());
+                if (index.getState() != MaterializedIndex.IndexState.NORMAL || meta == null
+                        || meta.getSyncMvDefinition() == null) {
+                    continue;
+                }
+                long requiredSinceTxnId = meta.getSyncMvRequiredTxnId();
+                if (requiredSinceTxnId <= 0 || txnId < requiredSinceTxnId || loadedMetaIds.contains(index.getMetaId())) {
+                    continue;
+                }
+                String msg = "transaction " + txnId + " (" + txnState.getSourceType() + ") wrote partition "
+                        + partitionId + " of table '" + table.getName() + "' (id " + table.getId()
+                        + ") without synchronous materialized view '" + table.getIndexNameByMetaId(index.getMetaId())
+                        + "' (logical index " + index.getMetaId() + "), which every transaction since "
+                        + requiredSinceTxnId + " must write after activation. The writer resolved the table's"
+                        + " tablets before the materialized view was added; refresh the table metadata and retry the load";
                 LOG.warn(msg);
                 throw new TransactionCommitFailedException(msg);
             }
@@ -258,16 +315,21 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (isFirstPartition) {
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
+                List<Long> validDictContentIdentities = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
+                    if (!dictContentIdentities.isEmpty()) {
+                        validDictContentIdentities.add(dictContentIdentities.get(name));
+                    }
                 });
 
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0,
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
+                partitionCommitInfo.setDictContentIdentities(validDictContentIdentities);
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }

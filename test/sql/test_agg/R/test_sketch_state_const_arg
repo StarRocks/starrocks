@@ -1,4 +1,4 @@
--- name: test_agg_state_const_arg
+-- name: test_sketch_state_const_arg
 CREATE TABLE t0 (
     k INT NULL,
     s SMALLINT NULL

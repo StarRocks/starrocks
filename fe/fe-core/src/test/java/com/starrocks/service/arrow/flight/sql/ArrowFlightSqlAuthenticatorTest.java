@@ -21,6 +21,8 @@ import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallHeaders;
+import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
@@ -29,12 +31,15 @@ import org.mockito.MockedStatic;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +61,48 @@ class ArrowFlightSqlAuthenticatorTest {
         CallHeaders outgoing = mock(CallHeaders.class);
         result.appendToOutgoingHeaders(outgoing);
         verify(outgoing).insert(Auth2Constants.AUTHORIZATION_HEADER, Auth2Constants.BEARER_PREFIX + "token-123");
+    }
+
+    @Test
+    void testASessionTokenFromATwoDotHostIsNotMistakenForAJwt() {
+        // With the proxy on the session token is "host|uuid". A host name with two dots has as
+        // many dots as a JWT, and used to be sent down the JWT path, where every user - Basic
+        // included - then failed on the request after the handshake.
+        String sessionToken = "fe1.example.com|9d2c4e6a-1b3f-4a5d-8e7c-0f1a2b3c4d5e";
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt(sessionToken));
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt("9d2c4e6a-1b3f-4a5d-8e7c-0f1a2b3c4d5e"));
+        assertTrue(ArrowFlightSqlAuthenticator.isJwt("eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJoYXJib3IifQ.c2ln-bmF0_dXJl"));
+        assertFalse(ArrowFlightSqlAuthenticator.isJwt("a.b.c|9d2c4e6a"), "a \"|\" always means a session token");
+
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+        CallHeaders headers = mock(CallHeaders.class);
+        when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + sessionToken);
+
+        assertEquals(sessionToken, authenticator.authenticate(headers).getPeerIdentity());
+        verify(sessionManager).validateToken(sessionToken);
+        verify(sessionManager, never()).initializeSessionWithJwt(any(), any());
+    }
+
+    @Test
+    void testAuthenticate_withJwtBearer() {
+        // A JWT-format Bearer (header.payload.signature, two dots) is an IdP token: it is verified
+        // and exchanged for an internal session token via initializeSessionWithJwt; that minted
+        // token becomes the peer identity (so subsequent RPCs reuse the session, like the Basic
+        // path). A UUID token has no dots and takes the existing validateToken fast path instead.
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        String jwt = "header.payload.signature";
+        when(sessionManager.initializeSessionWithJwt(jwt, "0.0.0.0")).thenReturn("session-uuid-1");
+
+        CallHeaders headers = mock(CallHeaders.class);
+        when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + jwt);
+
+        CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
+
+        assertEquals("session-uuid-1", result.getPeerIdentity());
+        verify(sessionManager).initializeSessionWithJwt(jwt, "0.0.0.0");
     }
 
     @Test
@@ -151,6 +198,45 @@ class ArrowFlightSqlAuthenticatorTest {
 
             // Token rejected because FE host is not valid
             assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownLocalTokenRejectedWhenProxyEnabled() {
+        // first call after JWT expiry, then a retry once the session is gone
+        String[] messages = {"bearer token [10.0.6.7|some-uuid] is no longer valid: the credential it was opened " +
+                "with has expired, please authenticate again", "invalid bearer token [10.0.6.7|some-uuid]"};
+        for (String message : messages) {
+            assertLocalTokenRejected(message);
+        }
+    }
+
+    private void assertLocalTokenRejected(String message) {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        String localToken = "10.0.6.7|some-uuid";
+        doThrow(new IllegalArgumentException(message)).when(sessionManager).validateToken(localToken);
+        when(sessionManager.isLocalToken(localToken)).thenReturn(true);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+
+            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            Frontend mockFe = mock(Frontend.class);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
+            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
+            when(mockFe.getHost()).thenReturn("10.0.6.7");
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + localToken);
+
+            FlightRuntimeException e = assertThrows(FlightRuntimeException.class, () -> authenticator.authenticate(headers));
+            assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
+            assertEquals(message, e.status().description());
         }
     }
 }

@@ -572,7 +572,7 @@ class StatementPlannerTest extends PlanTestBase {
             assertEquals("Test exception during ExecPlanBuild", thrownException.getMessage());
 
             // Verify that OptimisticVersion.validateTableUpdate was called in the catch block
-            Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
+            Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
             if (!olapTables.isEmpty()) {
                 mockedOptimisticVersion.verify(() -> OptimisticVersion.validateTableUpdate(
                         any(OlapTable.class), eq(planStartTime)), times(olapTables.size()));
@@ -591,7 +591,7 @@ class StatementPlannerTest extends PlanTestBase {
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
 
         // Collect olap tables before mocking
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt, plannerMetaLocker);
         int tableCount = olapTables.size();
         try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
                 MockedStatic<com.starrocks.sql.OptimisticVersion> mockedOptimisticVersion =

@@ -204,6 +204,38 @@ ADMIN SET FRONTEND CONFIG (
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 ```
 
+## HTTP と Arrow Flight から接続する
+
+`authentication_chain` に登録したセキュリティインテグレーションのユーザーは、MySQL プロトコルだけでなく StarRocks のすべてのエントリポイントからログインできます: HTTP SQL API、Stream Load（FE 経由または BE に直接）、FE Web UI、Arrow Flight SQL。クライアントが送る認証情報はインテグレーションのタイプによって決まります。
+
+| インテグレーションのタイプ | HTTP | Arrow Flight SQL |
+| --- | --- | --- |
+| LDAP（`authentication_ldap_simple`） | HTTP Basic: `-u <username>:<password>` | ユーザー名とパスワード |
+| JWT（`authentication_jwt`）、<br />OAuth 2.0（`authentication_oauth2`） | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` ヘッダー。<br />例: ADBC の `adbc.flight.sql.authorization_header` オプション |
+
+Bearer トークンにはユーザー名は不要です。StarRocks は `principal_field` で指定したクレームからユーザー名を読み取り、`jwks_url` で署名を検証し、チェーン上の JWT および OAuth 2.0 インテグレーションのうち `required_issuer` と `required_audience`（設定時）がトークンに一致するものすべてにトークンを渡します。複数のインテグレーションが同じ issuer を共有する場合は、それぞれに異なる `required_audience` を設定してください。トークンの `aud` クレームがどのインテグレーション、つまりどの Group Provider とロールを使うかを決めます。すべてのインテグレーションに `required_issuer` を設定することを強く推奨します。
+
+例:
+
+```Bash
+# LDAP インテグレーションのユーザーで SQL API を呼ぶ
+curl -u alice:alice_password -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+
+# JWT で BE に直接 Stream Load する（BE 側で enable_http_auth = true が必要）
+curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:," \
+    -T data.csv -XPUT http://<be_host>:<be_http_port>/api/<db>/<table>/_stream_load
+```
+
+次の点に注意してください:
+
+- セキュリティインテグレーションのユーザーの権限は [Group Provider](../group_provider.md) と `GRANT ... TO EXTERNAL GROUP` からのみ付与されます。ユーザーが解決されたグループはすべてのエントリポイントで有効です。
+- Arrow Flight SQL では、JWT はユーザー名とパスワードとまったく同じ方法で認証されます。サーバーは自身が発行するセッショントークンを返し、クライアントは接続の残りの間それを使います。セッションは JWT より長く生きられません。トークンの `exp` を過ぎると接続は拒否され、クライアントは新しい JWT で再認証する必要があります。
+- FE の設定項目 `enable_rest_bearer_authentication`（デフォルト `true`）は、HTTP と Arrow Flight エントリポイントの Bearer 認証を無効にします。MySQL プロトコルには影響せず、MySQL プロトコルのトークンログインは引き続き `authentication_openid_connect_client` と `authentication_oauth2_client` プラグインを使います。
+- MySQL プロトコルはクライアントに一度に 1 種類のトークンプラグインしか提示できず、`authentication_chain` で最初に現れる JWT または OAuth 2.0 インテグレーションがそれを決めます。HTTP と Arrow Flight にはこの制限はありません。トークン自体が issuer と audience でルーティングされるためです。
+- HTTP 認証の失敗はすべて `401` を返し、`WWW-Authenticate` に `Basic` と `Bearer` の両方のチャレンジを含み、どのインテグレーションがなぜ拒否したかは示しません。原因の調査には FE のメトリクス `authentication_failure_total` と `authentication_failure_reason_total` を使ってください。
+
 ## セキュリティインテグレーションを管理する
 
 ### セキュリティインテグレーションを変更する

@@ -893,6 +893,11 @@ public class QueryAnalyzer {
                 // External connector table has been pre-resolved in the unlocked phase.
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                } else {
+                    // resolveTable qualifies the relation's name in place, and the policy lookup below goes by that
+                    // name: a pre-resolved table skips it, so qualify it here, or an unqualified name in the
+                    // current external catalog reaches the lookup without its catalog and database.
+                    tableName.normalization(session);
                 }
                 // Taken before time travel binds, which reads the native table too.
                 if (table != null) {
@@ -2822,6 +2827,17 @@ public class QueryAnalyzer {
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
+                        // The selected index can give same-named columns different key or aggregate properties.
+                        // Update only the query copy; catalog schema rebuilding also invalidates shared statistics.
+                        List<Column> querySchema = new ArrayList<>(materializedIndex.second.getSchema());
+                        Set<String> addedColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                        querySchema.forEach(column -> addedColumnNames.add(column.getName()));
+                        for (Column column : mvOlapTable.getFullSchema()) {
+                            if (addedColumnNames.add(column.getName())) {
+                                querySchema.add(column);
+                            }
+                        }
+                        mvOlapTable.setNewFullSchema(querySchema);
                         table = mvOlapTable;
                     }
                 }

@@ -80,16 +80,19 @@ public class StarOSAgentTest {
 
     private StarOSAgent starosAgent;
     private StarClient client;
+    private int savedGetShardInfoBatchSize;
 
     @BeforeEach
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         client = starosAgent.initForTest();
         Config.cloud_native_storage_type = "S3";
+        savedGetShardInfoBatchSize = Config.star_client_get_shard_info_batch_size;
     }
 
     @AfterEach
     public void tearDown() {
+        Config.star_client_get_shard_info_batch_size = savedGetShardInfoBatchSize;
         if (client != null) {
             client.stop();
         }
@@ -963,6 +966,117 @@ public class StarOSAgentTest {
             Assertions.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
                     starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         });
+    }
+
+    /**
+     * Stubs client.getShardInfo to answer every shard with one replica on worker 1 (node 10001), except that the
+     * calls whose 0-based index is in {@code failingCalls} fail. Records the shard ids of every call.
+     */
+    private List<List<Long>> installGetShardInfoBatches(Integer... failingCalls) {
+        List<List<Long>> calls = new ArrayList<>();
+        List<Integer> failing = Arrays.asList(failingCalls);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(String serviceId, List<Long> shardIds, long workerGroupId)
+                    throws StarClientException {
+                calls.add(new ArrayList<>(shardIds));
+                if (failing.contains(calls.size() - 1)) {
+                    throw new StarClientException(StatusCode.INTERNAL, "mocked error");
+                }
+                ReplicaInfo replica = ReplicaInfo.newBuilder()
+                        .setReplicaRole(ReplicaRole.PRIMARY)
+                        .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
+                        .build();
+                List<ShardInfo> shardInfos = new ArrayList<>();
+                for (long shardId : shardIds) {
+                    shardInfos.add(ShardInfo.newBuilder().setShardId(shardId).addReplicaInfo(replica).build());
+                }
+                return shardInfos;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        workerToNode.put(1L, 10001L);
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
+        return calls;
+    }
+
+    private static List<Long> shardIdRange(long from, long to) {
+        List<Long> shardIds = new ArrayList<>();
+        for (long shardId = from; shardId <= to; shardId++) {
+            shardIds.add(shardId);
+        }
+        return shardIds;
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsInBatches() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches();
+
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(Lists.newArrayList(shardIdRange(1, 3), shardIdRange(4, 6), shardIdRange(7, 8)),
+                calls);
+        Assertions.assertEquals(shardIdRange(1, 8), result.keySet().stream().sorted().toList());
+        result.values().forEach(nodeIds -> Assertions.assertEquals(List.of(10001L), nodeIds));
+
+        // exactly one batch
+        calls.clear();
+        Assertions.assertEquals(3,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 3), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 3)), calls);
+
+        // one more than a batch
+        calls.clear();
+        Assertions.assertEquals(4,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 4), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 3), List.of(4L)), calls);
+
+        // less than a batch goes out as it is
+        calls.clear();
+        Assertions.assertEquals(2,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 2), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 2)), calls);
+
+        // no shard, no call
+        calls.clear();
+        Assertions.assertTrue(
+                starosAgent.getAllNodeIdsByShards(new ArrayList<>(), StarOSAgent.DEFAULT_WORKER_GROUP_ID).isEmpty());
+        Assertions.assertTrue(calls.isEmpty());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsNonPositiveBatchSize() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 0;
+        List<List<Long>> calls = installGetShardInfoBatches();
+
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 3), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(List.of(List.of(1L), List.of(2L), List.of(3L)), calls);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsLaterBatchFails() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches(1);
+
+        // the shards of the first batch come back, and the batch after the failed one is not tried
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(List.of(shardIdRange(1, 3), shardIdRange(4, 6)), calls);
+        Assertions.assertEquals(shardIdRange(1, 3), result.keySet().stream().sorted().toList());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsFirstBatchFails() {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches(0);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "mocked error",
+                () -> starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assertions.assertEquals(List.of(shardIdRange(1, 3)), calls);
     }
 
     @Test

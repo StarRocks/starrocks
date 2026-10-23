@@ -204,6 +204,38 @@ You can check the value of `authentication_chain` using the following statement:
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 ```
 
+## Connect over HTTP and Arrow Flight
+
+A user of a security integration on `authentication_chain` can log in over every StarRocks entry point, not only the MySQL protocol: the HTTP SQL API, Stream Load (through an FE or directly against a BE), the FE Web UI, and Arrow Flight SQL. The credential the client sends depends on the type of the integration.
+
+| Integration type | HTTP | Arrow Flight SQL |
+| --- | --- | --- |
+| LDAP (`authentication_ldap_simple`) | HTTP Basic: `-u <username>:<password>` | username and password |
+| JWT (`authentication_jwt`), <br />OAuth 2.0 (`authentication_oauth2`) | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` header, <br />for example the ADBC `adbc.flight.sql.authorization_header` option |
+
+A Bearer token needs no user name. StarRocks reads the user name from the claim named by `principal_field`, verifies the signature against `jwks_url`, and offers the token to every JWT and OAuth 2.0 integration on the chain whose `required_issuer` and `required_audience` (if set) match the token. When several integrations share one issuer, set a distinct `required_audience` on each: the token's `aud` claim then decides which integration, and therefore which group provider and roles, the connection gets. Setting `required_issuer` on every integration is strongly recommended.
+
+Examples:
+
+```Bash
+# SQL API with an LDAP integration user
+curl -u alice:alice_password -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+
+# Stream Load with a JWT, directly against a BE (the BE must run with enable_http_auth = true)
+curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:," \
+    -T data.csv -XPUT http://<be_host>:<be_http_port>/api/<db>/<table>/_stream_load
+```
+
+Note the following points:
+
+- Privileges for security-integration users come from [Group Provider](../group_provider.md) and `GRANT ... TO EXTERNAL GROUP` only; the groups a user is resolved into apply on every entry point.
+- On Arrow Flight SQL, a JWT is authenticated exactly like a user name and password: the server answers with its own session token, which the client uses for the rest of the connection. The session cannot outlive the JWT; once the token's `exp` passes, the connection is refused and the client must authenticate again with a new JWT.
+- The FE configuration item `enable_rest_bearer_authentication` (default `true`) turns Bearer authentication on the HTTP and Arrow Flight entry points off. It never affects the MySQL protocol, where token logins keep using the `authentication_openid_connect_client` and `authentication_oauth2_client` plugins.
+- The MySQL protocol can offer a client only one token plugin at a time: the first JWT or OAuth 2.0 integration on `authentication_chain` decides which one. HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
+- Every failed HTTP authentication answers `401` with both a `Basic` and a `Bearer` challenge in `WWW-Authenticate`, and does not say which integration refused or why. Use the `authentication_failure_total` and `authentication_failure_reason_total` metrics on the FE to diagnose failures.
+
 ## Manage security integrations
 
 ### Alter security integration

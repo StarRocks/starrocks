@@ -727,6 +727,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
 - Introduced in: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- Default: 10000
+- Type: Int
+- Unit: Rowsets
+- Is mutable: Yes
+- Description: Maximum number of level -1 rowsets selected per size-tiered Primary Key compaction. Values below 2 are treated as 2. Level -1 includes rowsets with zero rows or zero estimated live bytes. This limit applies to level -1 inputs, not to the total number of inputs when other levels are also selected.
+- Introduced in: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - Default: 2
@@ -1139,6 +1148,15 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The data size of the minimum level in the Size-tiered Compaction policy. Rowsets smaller than this value immediately trigger the data compaction.
+- Introduced in: -
+
+### skip_pindex_l1_l2_check_in_insert
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to skip duplicate-key checks in immutable L1/L2 files when inserting into the local persistent primary key index in shared-nothing clusters. The default `true` checks only the L0 memtable, avoiding disk reads for these checks and aligning with the cloud-native primary key index in shared-data clusters. Set this to `false` to restore immutable-index checks. This controls an internal index consistency check, not the update semantics of SQL INSERT statements on Primary Key tables.
 - Introduced in: -
 
 ### small_dictionary_page_size

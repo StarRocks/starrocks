@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.PrepareStmtContext;
@@ -220,6 +221,43 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 () -> Assertions.assertTrue(prepared.context().isCached()),
                 () -> Assertions.assertSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
                 () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+    }
+
+    /**
+     * A hit re-prunes partitions and tablets on the table the cached scan is bound to, without the meta lock. That
+     * is fine for the private copy planning off snapshots binds it to, but cbo_use_lock_db plans on the live table
+     * under the lock, and a cached plan would go on pruning that live table unlocked, racing a concurrent INSERT
+     * OVERWRITE or partition change. Such a plan is not cached.
+     */
+    @Test
+    public void testPointQueryPlannedOnTheLiveTableIsNotCached() throws Exception {
+        boolean cboUseDBLock = connectContext.getSessionVariable().isCboUseDBLock();
+        connectContext.getSessionVariable().setCboUseDBLock(true);
+        try {
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan first = execute(prepared, bigint(1));
+            ExecPlan second = execute(prepared, bigint(2));
+            Assertions.assertAll(
+                    () -> Assertions.assertFalse(prepared.context().isCached(),
+                            "a plan bound to the live table was cached"),
+                    () -> Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
+                    () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+        } finally {
+            connectContext.getSessionVariable().setCboUseDBLock(cboUseDBLock);
+        }
+    }
+
+    @Test
+    public void testCachedPointQueryScansACopyOfTheTable() throws Exception {
+        PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+        execute(prepared, bigint(1));
+        ExecPlan hit = execute(prepared, bigint(2));
+        Table live = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tprimary");
+        PhysicalOlapScanOperator scan = findPhysicalOperator(hit.getPhysicalPlan(), PhysicalOlapScanOperator.class);
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(prepared.context().isCached()),
+                () -> Assertions.assertEquals(live.getId(), scan.getTable().getId()),
+                () -> Assertions.assertNotSame(live, scan.getTable(), "the cached plan scans the live table"));
     }
 
     @Test

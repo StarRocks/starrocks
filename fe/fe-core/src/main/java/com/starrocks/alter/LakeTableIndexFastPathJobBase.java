@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Base class for the lake-only ADD INDEX / DROP INDEX fast-path jobs.
@@ -130,6 +131,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     /** AgentBatchTask holding all in-flight AlterReplicaTasks. */
     protected transient AgentBatchTask batchTask;
 
+    // Versions this job pinned against vacuum (PhysicalPartition#setMinRetainVersion) for its dispatched tasks, by
+    // physical partition id. Leader-session state, never persisted: released at FINISHED_REWRITING, on cancel and on
+    // leader demotion. Holds the partition object so a pin can be released after its table left the catalog.
+    private final transient Map<Long, RetainPin> retainPins = new ConcurrentHashMap<>();
+
+    private record RetainPin(PhysicalPartition partition, long version) {
+    }
+
     /**
      * The index metas whose schema id {@link #applyCatalogMutation} replaces. Empty by default; a
      * subclass that re-stamps schema ids overrides it with the metas it is about to bump.
@@ -167,6 +176,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // re-dispatches. No AgentTaskQueue cleanup needed: the demotion drain
         // (abandonInFlightAgentTasks) already emptied the queue before this hook runs.
         batchTask = null;
+        // The next leader dispatches again and pins the version it dispatches at; keep no stale pin here.
+        releaseRetainPins();
     }
 
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
@@ -327,6 +338,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 long commitVersion = pp.getNextVersion();
                 commitVersionMap.put(ppId, commitVersion);
             }
+            // The tasks are done; the publish reads only the visible version, which vacuum always keeps.
+            releaseRetainPins();
             this.finishedTimeMs = System.currentTimeMillis();
             persistStateChange(this, JobState.FINISHED_REWRITING, () -> updateNextVersion(table));
         } finally {
@@ -535,6 +548,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             try {
                 OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getTable(db.getId(), tableId);
+                // Release before the table goes back to NORMAL: from then on compaction may pin these partitions.
+                releaseRetainPins();
                 persistStateChange(this, JobState.CANCELLED, () -> {
                     if (table != null) {
                         if (advanceVersionForForce) {
@@ -549,6 +564,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
             }
         } else {
+            releaseRetainPins();
             persistStateChange(this, JobState.CANCELLED);
         }
         LOG.info("index fast-path job {} cancelled (force={}): {}", jobId, force, errMsg);
@@ -861,6 +877,9 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     throw new AlterCancelException("partition disappeared: " + ppId);
                 }
                 long visibleVersion = pp.getVisibleVersion();
+                // The tasks read the tablet metadata at visibleVersion and can wait long in the CN's alter queue.
+                // Keep vacuum from deleting that version until they are done, as LakeTableSchemaChangeJob does.
+                pinRetainVersion(ppId, pp, visibleVersion);
                 for (Long tabletId : e.getValue()) {
                     ComputeNode cn = wm.getComputeNodeAssignedToTablet(computeResource, tabletId);
                     if (cn == null) {
@@ -895,6 +914,22 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         for (AgentTask task : registeredTasks) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
         }
+    }
+
+    private void pinRetainVersion(long physicalPartitionId, PhysicalPartition partition, long version) {
+        RetainPin previous = retainPins.put(physicalPartitionId, new RetainPin(partition, version));
+        if (previous != null) {
+            previous.partition().releaseMinRetainVersion(previous.version());
+        }
+        partition.setMinRetainVersion(version);
+    }
+
+    // Releases only the pins this job set, and only while they still hold the version it pinned.
+    private void releaseRetainPins() {
+        for (RetainPin pin : retainPins.values()) {
+            pin.partition().releaseMinRetainVersion(pin.version());
+        }
+        retainPins.clear();
     }
 
     private void updateNextVersion(OlapTable table) {

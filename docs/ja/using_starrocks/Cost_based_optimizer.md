@@ -460,6 +460,12 @@ CREATE ANALYZE FULL ALL db_name PROPERTIES (
 );
 ```
 
+**StarRocks が提供する自動収集タスクを使用したまま、`db_name.tbl_name` テーブルだけを収集対象から除外します。**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
+```
+
 ### データロード中に統計情報を収集する
 
 データロード直後のクエリに対する適切な実行計画を保証するために、StarRocks は INSERT INTO/OVERWRITE DML ステートメントの終了時に非同期統計収集タスクをトリガさせ、デフォルトでは DML 終了後 30 秒間待機します。統計収集タスクが 30 秒以内に終了しない場合は、DML の実行結果が返されます。

@@ -153,6 +153,18 @@ public:
                                      void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                      CachePriority priority = CachePriority::NORMAL) = 0;
 
+    // Atomically replace an existing entry only when pred(old_value, ctx) is true
+    // (or pred is null). Returns false without changing the cache if the key is
+    // absent, the predicate rejects it, or this optional operation is unsupported.
+    // The default implementation is unsupported. Only a true return transfers
+    // ownership of value to the cache; on false the caller must destroy it.
+    // Existing handles keep the old value alive until released. All deleters run
+    // outside the shard lock. pred must be O(1) and must not re-enter the cache.
+    virtual bool replace_if(const CacheKey& key, void* value, size_t value_size,
+                            void (*deleter)(const CacheKey& key, void* value),
+                            bool (*pred)(void* old_value, const void* ctx), const void* ctx,
+                            CachePriority priority = CachePriority::NORMAL);
+
     // Change the charge of the entry for "key" in place instead of rebuilding it,
     // and refresh it to the most recently used position. Entries are evicted if the
     // cache ends up over capacity. Returns false, changing nothing, if "key" is
@@ -302,9 +314,16 @@ public:
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
                           CachePriority priority = CachePriority::NORMAL);
+    // Like insert(), but never evicts: returns nullptr, leaving `value` owned by the caller,
+    // when the entry does not fit in the remaining capacity.
+    Cache::Handle* insert_no_evict(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
     Cache::Handle* insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                     void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                     CachePriority priority = CachePriority::NORMAL);
+    bool replace_if(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                    void (*deleter)(const CacheKey& key, void* value), bool (*pred)(void* old_value, const void* ctx),
+                    const void* ctx, CachePriority priority = CachePriority::NORMAL);
     bool update_charge_if(const CacheKey& key, uint32_t hash, size_t new_value_size,
                           bool (*pred)(void* value, const void* ctx), const void* ctx);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
@@ -373,9 +392,15 @@ public:
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
+    // See LRUCache::insert_no_evict(). Capacity is checked against the key's shard.
+    Handle* insert_no_evict(const CacheKey& key, void* value, size_t value_size,
+                            void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
     Handle* insert_if_absent(const CacheKey& key, void* value, size_t value_size,
                              void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                              CachePriority priority = CachePriority::NORMAL) override;
+    bool replace_if(const CacheKey& key, void* value, size_t value_size,
+                    void (*deleter)(const CacheKey& key, void* value), bool (*pred)(void* old_value, const void* ctx),
+                    const void* ctx, CachePriority priority = CachePriority::NORMAL) override;
     bool update_charge_if(const CacheKey& key, size_t new_value_size, bool (*pred)(void* value, const void* ctx),
                           const void* ctx) override;
     Handle* lookup(const CacheKey& key) override;
