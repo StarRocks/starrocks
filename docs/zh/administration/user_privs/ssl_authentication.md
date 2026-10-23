@@ -15,16 +15,45 @@ sidebar_position: 40
 要在 StarRocks 中启用 SSL 认证，需要在 FE 配置文件 **fe.conf** 中配置以下参数：
 
 - `ssl_keystore_location`：指定存储 SSL 证书和密钥的 keystore 文件路径。
+- `ssl_keystore_type`：keystore 类型。默认值为空，表示 StarRocks 自动识别 JKS 和 PKCS12。如需使用 BCFKS 等格式，需要显式配置该参数。
+- `ssl_keystore_provider`：用于加载 keystore 的安全 provider。该参数为可选项。
 - `ssl_keystore_password`：keystore 文件的访问密码，StarRocks 读取 keystore 文件时需要提供该密码。
 - `ssl_key_password`：密钥的访问密码，StarRocks 读取 keystore 文件中的密钥时需要提供该密码。
+- `ssl_truststore_location`：指定 truststore 文件路径。该参数为可选项。
+- `ssl_truststore_type`：MySQL SSL 使用的 truststore 类型。默认值为空，表示 StarRocks 自动识别 JKS 和 PKCS12。如需使用 BCFKS 等格式，需要显式配置该参数。
+- `ssl_truststore_provider`：用于加载 MySQL SSL truststore 的安全 provider。该参数为可选项。
+- `ssl_truststore_password`：truststore 文件的访问密码。配置 `ssl_truststore_location` 时需要配置该参数。
+- `ssl_security_provider_class`：加载 keystore 或 truststore 前需要注册的安全 provider 类。该参数为可选项。
+- `ssl_security_provider_name`：期望的 provider 名称。该参数为可选项。
+- `ssl_security_provider_path`：provider JAR 路径。该参数为可选项。如果 provider JAR 已添加到 FE classpath 中，则无需配置该参数。
 - `ssl_force_secure_transport`: 是否强制启用 SSL 认证，默认为 `FALSE`。如设置为 `TRUE`，则系统会拒绝未通过 SSL 加密的连接。
 
 示例：
 
 ```Properties
 ssl_keystore_location = // keystore 文件的路径
+ssl_keystore_type =
 ssl_keystore_password = // keystore 文件的密码
 ssl_key_password = // 密钥的密码
+```
+
+如果需要使用 Bouncy Castle FIPS provider 加载 BCFKS 格式的 keystore 和 truststore，可以将 provider JAR 放入 FE classpath，例如 `$STARROCKS_HOME/lib`，或配置 `ssl_security_provider_path`，然后添加如下配置。这些参数只用于配置 keystore 和 truststore 的加载方式，本身不保证 TLS engine 使用经过 FIPS 验证的 JSSE provider。
+
+```Properties
+ssl_keystore_location = /path/to/starrocks-keystore.bcfks
+ssl_keystore_type = BCFKS
+ssl_keystore_provider = BCFIPS
+ssl_keystore_password = // keystore 文件的密码
+ssl_key_password = // 密钥的密码
+
+ssl_truststore_location = /path/to/starrocks-truststore.bcfks
+ssl_truststore_type = BCFKS
+ssl_truststore_provider = BCFIPS
+ssl_truststore_password = // truststore 文件的密码
+
+ssl_security_provider_class = org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider
+ssl_security_provider_name = BCFIPS
+ssl_security_provider_path = /path/to/bc-fips.jar
 ```
 
 ### 生成 SSL 证书
