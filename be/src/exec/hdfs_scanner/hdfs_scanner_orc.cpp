@@ -463,16 +463,10 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-<<<<<<< HEAD:be/src/exec/hdfs_scanner/hdfs_scanner_orc.cpp
+        ctx->skip_rows_ctx = _skip_rows_ctx;
         ctx->split_start = info.offset();
         ctx->split_end = info.offset() + info.length();
         _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
-=======
-        ctx->skip_rows_ctx = _skip_rows_ctx;
-        ctx->start_offset = info.offset();
-        ctx->end_offset = info.offset() + info.length();
-        _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
->>>>>>> 2903ee6 ([Enhancement] Read Iceberg v3 row lineage from ORC data files (#81440)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
@@ -529,8 +523,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     // a split task reuses the deletes of the task that split the file; the others build them before splitting,
     // unless they read no stripe
-    if (_scanner_ctx->format_scan_context.split_context != nullptr) {
-        auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->format_scan_context.split_context);
+    if (_scanner_ctx->split_context != nullptr) {
+        auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->split_context);
         _skip_rows_ctx = split_context->skip_rows_ctx;
     } else if (!stripes.empty()) {
         RETURN_IF_ERROR(build_iceberg_delete_builder());

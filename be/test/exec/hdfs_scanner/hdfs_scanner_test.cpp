@@ -16,19 +16,10 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/hdfs_scanner/hdfs_scanner_test.cpp
-=======
 #include <filesystem>
-#include <fstream>
 #include <limits>
->>>>>>> 2903ee6 ([Enhancement] Read Iceberg v3 row lineage from ORC data files (#81440)):be/test/connector/hive/scanner/hdfs_scanner_test.cpp
 #include <memory>
 
-<<<<<<< HEAD:be/test/exec/hdfs_scanner/hdfs_scanner_test.cpp
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
->>>>>>> 2903ee6 ([Enhancement] Read Iceberg v3 row lineage from ORC data files (#81440)):be/test/connector/hive/scanner/hdfs_scanner_test.cpp
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
@@ -45,6 +36,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -1827,26 +1819,26 @@ TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
     auto* tuple_desc = _create_tuple_desc(descs);
     auto* range = _create_scan_range(file, 0, 0);
     auto* ctx = _create_ctx(file, range, tuple_desc);
-    ctx->format_scan_context.options.enable_split_tasks = true;
+    ctx->options.enable_split_tasks = true;
     auto scanner = std::make_shared<HdfsOrcScanner>();
     scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
     ASSERT_OK(scanner->init(_runtime_state, ctx));
     ASSERT_OK(scanner->open(_runtime_state));
-    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    const auto& split_tasks = ctx->split.split_tasks;
     ASSERT_GT(split_tasks.size(), 2);
     scanner->close();
 
     // read the last split task alone, over its range as HiveDataSource sets it
-    const FileScanSplitContext* last = split_tasks.back().get();
-    auto* split_range = _create_scan_range(file, last->start_offset, last->end_offset - last->start_offset);
+    const HdfsSplitContext* last = split_tasks.back().get();
+    auto* split_range = _create_scan_range(file, last->split_start, last->split_end - last->split_start);
     auto* split_ctx = _create_ctx(file, split_range, tuple_desc);
-    split_ctx->format_scan_context.split_context = last;
+    split_ctx->split_context = last;
     auto split_scanner = std::make_shared<HdfsOrcScanner>();
     ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
     ASSERT_OK(split_scanner->open(_runtime_state));
     EXPECT_EQ(bitmap, split_scanner->_skip_rows_ctx->deletion_bitmap);
 
-    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     int64_t rows = 0;
     int64_t min_id = std::numeric_limits<int64_t>::max();
     int64_t max_id = -1;
