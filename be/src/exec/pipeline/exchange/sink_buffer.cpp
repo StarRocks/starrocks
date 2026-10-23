@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 
+#include <cerrno>
 #include <chrono>
 #include <mutex>
 #include <string_view>
@@ -215,6 +216,18 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+        // bthread_id_list_reset() may invoke a request's error callback. Move the ids out before
+        // resetting them so that callback cannot run while the context mutex is held.
+        for (auto& [_, sink_context] : _sink_ctxs) {
+            bthread_id_list_t call_ids;
+            bthread_id_list_init(&call_ids, 0, 0);
+            {
+                std::lock_guard call_ids_guard(sink_context->in_flight_rpc_cids_mutex);
+                bthread_id_list_swap(&call_ids, &sink_context->in_flight_rpc_cids);
+            }
+            bthread_id_list_reset(&call_ids, ECANCELED);
+            bthread_id_list_destroy(&call_ids);
+        }
     }
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
@@ -424,6 +437,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         SET_IGNORE_OVERCROWDED(closure->cntl, query);
+
+        // bRPC requires obtaining the call id before starting the RPC.
+        const auto call_id = closure->cntl.call_id();
+        {
+            std::lock_guard call_ids_guard(context.in_flight_rpc_cids_mutex);
+            // EOS must still reach the destination to finish the exchange stream.
+            if (!request.params->eos()) {
+                bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
+            }
+        }
 
         Status st;
         if (bthread_self()) {
