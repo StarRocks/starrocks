@@ -15,6 +15,23 @@
 import re
 
 from alembic import util as alembic_util
+from sqlalchemy import testing
+from sqlalchemy.engine import Connection
+
+from starrocks.common.utils import render_refresh_for_server
+
+
+STRUCT_FIELDS_BACKTICKED = testing.fails_on(
+    "starrocks>=4.1.1",
+    "StarRocks 4.1.1 and later report STRUCT fields with backticked names, which the type parser rejects; reflecting the "
+    "column warns, which the testing plugin raises as an error, and leaves it NullType with no result processor",
+)
+TOLERATE_UNPARSED_STRUCT_REFLECTION = testing.emits_warning(r"Did not recognize type 'struct<")
+"""For tests whose checks on other columns hold while STRUCT_FIELDS_BACKTICKED leaves a STRUCT column NullType.
+
+Their STRUCT columns pass without being compared; the tests marked STRUCT_FIELDS_BACKTICKED track that bug.
+"""
+
 
 def alembic_runs_dialect_comparators_first(config: object) -> bool:
     """Whether Alembic runs the comparators in its global registry ahead of its own.
@@ -43,3 +60,16 @@ def normalize_sql(sql: str) -> str:
     sql = re.sub(r'\'', '"', sql)
 
     return sql.strip()
+
+
+_REFRESH_PREFIX = re.compile(r"^\s*REFRESH\s+", re.IGNORECASE)
+
+
+def refresh_clause_for_server(connection: Connection, clause: str) -> str:
+    """Spell a literal REFRESH clause the way the connected server accepts it.
+
+    DDL written out in a test bypasses the dialect, so the untimed asynchronous mode has to be
+    spelled per release here: ON_CHANGE from 26.2 on, which rejects bare ASYNC, ASYNC before it.
+    """
+    body = _REFRESH_PREFIX.sub("", clause)
+    return "REFRESH " + render_refresh_for_server(body, connection.dialect.server_version_info or ())

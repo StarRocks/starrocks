@@ -286,7 +286,7 @@ For a full tutorial on advanced topics like data migrations, handling complex ty
 
 ### Tests
 
-Every test runs under [SQLAlchemy's testing plugin](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst), against a running StarRocks cluster. A single `pytest` run covers the StarRocks tests in `test/sql` and `test/unit`, SQLAlchemy's dialect compliance suite (`test/test_suite.py`) and Alembic's dialect suite (`test/test_suite_alembic.py`). `test/conftest.py` leaves the system tests, and the integration tests not yet ported to the plugin, out of collection until they are.
+Every test runs under [SQLAlchemy's testing plugin](https://github.com/sqlalchemy/sqlalchemy/blob/main/README.dialects.rst), against a running StarRocks cluster. A single `pytest` run covers the StarRocks tests in `test/sql`, `test/unit` and `test/integration`, SQLAlchemy's dialect compliance suite (`test/test_suite.py`) and Alembic's dialect suite (`test/test_suite_alembic.py`). `test/conftest.py` leaves the system tests out until they are ported to the plugin.
 
 #### Setting Up
 
@@ -349,6 +349,7 @@ The plugin renames each class that runs against the database (one with `__backen
 
 ```bash
 pytest test/test_suite.py -k "ComponentReflectionTest and test_get_table_names"
+pytest test/integration/test_reflection_table.py -k ReflectionTableOptionsTest
 ```
 
 `pytest --collect-only -qq` lists the node IDs. For a short run, `-n0` saves starting the four workers, and `-x` stops at the first failure.
