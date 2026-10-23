@@ -798,6 +798,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
+
 ### enable_incremental_mv
 
 * **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.

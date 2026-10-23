@@ -685,6 +685,12 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
+
 ### enable_incremental_mv
 
 * **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。

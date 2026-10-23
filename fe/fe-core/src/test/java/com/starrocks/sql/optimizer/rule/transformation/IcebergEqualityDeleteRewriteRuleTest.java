@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.PartitionSpec;
@@ -176,6 +177,7 @@ public class IcebergEqualityDeleteRewriteRuleTest {
                 table, Set.of(IcebergDeleteSchema.of(List.of(2), 0), IcebergDeleteSchema.of(byId, 1)), byId));
     }
 
+<<<<<<< HEAD
     // With deletes of more than one spec, a table that has a real $partition_key column cannot tell the specs
     // apart, so the rewrite must fail instead of applying partitioned deletes to other specs.
     @Test
@@ -250,6 +252,72 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         for (OptExpression child : expr.getInputs()) {
             collectEqDeleteScans(child, out);
         }
+=======
+    private static final Schema PRUNING_SCHEMA = new Schema(
+            Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+            Types.NestedField.optional(2, "p", Types.IntegerType.get()),
+            Types.NestedField.optional(3, "ts", Types.TimestampType.withoutZone()),
+            Types.NestedField.optional(4, "s", Types.StringType.get()),
+            Types.NestedField.optional(5, PARTITION_KEY, Types.IntegerType.get()));
+
+    private static final Map<String, Column> PRUNING_SCAN_COLUMNS = Map.of(
+            "id", new Column("id", IntegerType.INT),
+            "p", new Column("p", IntegerType.INT),
+            "ts", new Column("ts", DateType.DATETIME),
+            "s", new Column("s", StringType.STRING),
+            PARTITION_KEY, new Column(PARTITION_KEY, IntegerType.INT));
+
+    private static Set<String> pruningColumns(Set<IcebergDeleteSchema> deleteSchemas, Map<String, Column> scanColumns,
+                                              PartitionSpec... specs) {
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.schema()).thenReturn(PRUNING_SCHEMA);
+        Map<Integer, PartitionSpec> bySpecId = new HashMap<>();
+        for (PartitionSpec spec : specs) {
+            bySpecId.put(spec.specId(), spec);
+        }
+        Mockito.when(table.specs()).thenReturn(bySpecId);
+        Mockito.when(table.spec()).thenReturn(specs[specs.length - 1]);
+        return IcebergEqualityDeleteRewriteRule.runtimeFilterPruningColumns(table, PRUNING_SCHEMA, deleteSchemas, List.of(1),
+                scanColumns);
+    }
+
+    // The identity partition columns replace the $partition_key match only if they alone decide the partition: one
+    // spec for the whole table, every field an identity of a scanned column of a type that reads back exactly.
+    @Test
+    public void testRuntimeFilterPruningColumns() {
+        List<Integer> byId = List.of(1);
+        PartitionSpec byP = PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity("p").build();
+        PartitionSpec byPAndS = PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity("p").identity("s").build();
+        Assertions.assertEquals(Set.of("p"),
+                pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS, byP));
+        Assertions.assertEquals(Set.of("p", "s"),
+                pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS, byPAndS));
+        // deletes of another key do not count
+        Assertions.assertEquals(Set.of("p"), pruningColumns(
+                Set.of(IcebergDeleteSchema.of(byId, 0), IcebergDeleteSchema.of(List.of(2), 7)), PRUNING_SCAN_COLUMNS, byP));
+
+        // a table that changed its spec, even if every delete is of the current one
+        PartitionSpec unpartitioned = PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).build();
+        PartitionSpec byPNow = PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(1).identity("p").build();
+        Assertions.assertEquals(Set.of(), pruningColumns(
+                Set.of(IcebergDeleteSchema.of(byId, 1)), PRUNING_SCAN_COLUMNS, unpartitioned, byPNow));
+        Assertions.assertEquals(Set.of(),
+                pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS, unpartitioned));
+        // a field that is not an identity, or not named like its column
+        Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS,
+                PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity("p").bucket("id", 4).build()));
+        Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS,
+                PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity("p", "p_part").build()));
+        // a partition column the query does not read
+        Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)),
+                Map.of("id", new Column("id", IntegerType.INT)), byP));
+        // a timestamp partition value depends on the session time zone
+        Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS,
+                PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity("ts").build()));
+        // a real column named like an extended column would be matched as that column
+        Assertions.assertEquals(Set.of(), pruningColumns(Set.of(IcebergDeleteSchema.of(byId, 0)), PRUNING_SCAN_COLUMNS,
+                PartitionSpec.builderFor(PRUNING_SCHEMA).withSpecId(0).identity(PARTITION_KEY).build()));
+>>>>>>> 92b8554636d... [Enhancement][RB-225] Skip Iceberg equality delete files of partitions that runtime filters reject (#66715)
     }
 
     private static void assertPartitionKeyEquality(ScalarOperator op, ColumnRefOperator left, ColumnRefOperator right) {

@@ -716,6 +716,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING =
+            "enable_iceberg_eq_delete_runtime_filter_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
@@ -3530,6 +3532,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
     private boolean enableReadIcebergEqDeleteWithPartitionEvolution = true;
 
+    // Let a runtime filter on an identity partition column skip the equality delete files of the partitions it rejects.
+    @VarAttr(name = ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING)
+    private boolean enableIcebergEqDeleteRuntimeFilterPruning = true;
+
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
@@ -3702,6 +3708,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergEqDeleteWithPartitionEvolution(boolean enableReadIcebergEqDeleteWithPartitionEvolution) {
         this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
+    }
+
+    public boolean isEnableIcebergEqDeleteRuntimeFilterPruning() {
+        return enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public void setEnableIcebergEqDeleteRuntimeFilterPruning(boolean enableIcebergEqDeleteRuntimeFilterPruning) {
+        this.enableIcebergEqDeleteRuntimeFilterPruning = enableIcebergEqDeleteRuntimeFilterPruning;
     }
 
     public boolean enablePaimonColumnStatistics() {
