@@ -20,32 +20,17 @@
 #include <string>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
->>>>>>> ee4fa47 ([Enhancement] Stream large flat JSON compaction output instead of buffering the segment (#80470))
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "common/config_compaction_fwd.h"
-#include "common/config_json_flat_fwd.h"
->>>>>>> ee4fa47 ([Enhancement] Stream large flat JSON compaction output instead of buffering the segment (#80470))
 #include "common/statusor.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
-<<<<<<< HEAD
-=======
-#include "storage/flat_json_metrics.h"
-#include "storage/json_path_deriver.h"
->>>>>>> ee4fa47 ([Enhancement] Stream large flat JSON compaction output instead of buffering the segment (#80470))
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
@@ -55,8 +40,10 @@
 #include "storage/types.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 #include "util/json.h"
 #include "util/json_flattener.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -2151,14 +2138,14 @@ TEST_F(FlatJsonColumnCompactTest, testUniformFlatJsonCompactionStreams) {
             last->null_column_data()[1] = 1;
             last->update_has_null();
         }
-        const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+        const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
 
         MutableColumnPtr read_col = jsons[0]->clone_empty();
         ColumnWriterOptions writer_opts;
         writer_opts.need_flat = true;
         test_json(writer_opts, jsons, read_col);
 
-        EXPECT_EQ(streamed_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+        EXPECT_EQ(streamed_before + 1, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
         EXPECT_TRUE(_meta->json_meta().is_flat());
         EXPECT_FALSE(_meta->json_meta().has_remain());
         EXPECT_FALSE(_meta->json_meta().has_remain_filter());
@@ -2275,14 +2262,14 @@ TEST_F(FlatJsonColumnCompactTest, testRemainOnlyFlatJsonCompactionIsNotStreamed)
     ASSERT_TRUE(remain_only->is_flat_json());
     ASSERT_TRUE(remain_only->flat_column_paths().empty());
     ASSERT_TRUE(remain_only->has_remain());
-    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
 
     MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, jsons, read_col);
 
-    EXPECT_EQ(streamed_before, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_EQ(streamed_before, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
     EXPECT_FALSE(_meta->json_meta().is_flat());
     ASSERT_EQ(2, read_col->size());
     EXPECT_EQ(R"({"x": 1})", read_col->debug_item(0));

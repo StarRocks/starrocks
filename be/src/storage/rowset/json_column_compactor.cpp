@@ -23,19 +23,16 @@
 #include "column/column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-<<<<<<< HEAD
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
-=======
-#include "common/config_compaction_fwd.h"
-#include "exprs/hyper_json_transformer.h"
 #include "fmt/format.h"
->>>>>>> ee4fa47 ([Enhancement] Stream large flat JSON compaction output instead of buffering the segment (#80470))
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
 #include "util/json_flattener.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -62,9 +59,6 @@ int64_t streaming_threshold_bytes() {
 } // namespace
 
 Status FlatJsonColumnCompactor::append(const Column& column) {
-<<<<<<< HEAD
-    // compaction will reuse column, must copy in there.
-=======
     if (_streaming) {
         const JsonColumn* json_col = json_data_of(column);
         if (json_col == nullptr) {
@@ -74,7 +68,6 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     }
 
     // compaction will reuse the column, must copy in there.
->>>>>>> ee4fa47 ([Enhancement] Stream large flat JSON compaction output instead of buffering the segment (#80470))
     _json_datas.emplace_back(column.clone());
     _estimate_size += column.byte_size();
 
@@ -96,8 +89,7 @@ Status FlatJsonColumnCompactor::_start_streaming() {
     // the one layout derived from their metadata (see TabletReader's compaction access paths), so a
     // segment that is still uniform this far in will stay so: adopt its layout and stop buffering.
     const JsonColumn* first = json_data_of(*_json_datas.front());
-    FlatJsonMetrics::instance()->flat_json_compaction_total.increment(1);
-    FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.increment(1);
+    StarRocksMetrics::instance()->flat_json_compaction_streaming_total.increment(1);
     VLOG(2) << "FlatJsonColumnCompactor streams flat json after " << _json_datas.size()
             << " chunks: " << first->debug_flat_paths();
     _streaming = true;
