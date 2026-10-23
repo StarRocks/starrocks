@@ -51,6 +51,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
@@ -193,6 +194,54 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
         Assertions.assertFalse(fullSchema.stream().anyMatch(
                 column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER)));
+    }
+
+    // A runtime-filter pruning column of an equality delete scan holds the delete file's identity partition value,
+    // also without a session (incremental scan ranges), and a delete file that cannot provide it fails the query.
+    @Test
+    public void testEqualityDeleteRangeTakesPruningColumnFromPartition() throws Exception {
+        ConnectContext.remove();
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(SPEC_B)
+                .ofEqualityDeletes(1)
+                .withPath("/path/to/data-b1-eq-deletes.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("k2=2")
+                .withRecordCount(1)
+                .build();
+        mockedNativeTableC.newFastAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.newRowDelta().addDeletes(eqDelete).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableC, Maps.newHashMap());
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(3));
+        for (Column column : schema) {
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(localTupleDescriptor.getSlots().size() + 1),
+                    localTupleDescriptor);
+            slot.setType(INT);
+            slot.setColumn(column);
+            localTupleDescriptor.addSlot(slot);
+        }
+        IcebergMORParams eqDeleteParams = IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, List.of(1));
+        FileScanTask task = Lists.newArrayList(mockedNativeTableC.newScan().planFiles()).get(0);
+
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, eqDeleteParams, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        source.setRuntimeFilterPruningColumns(Set.of("k2"));
+        List<TScanRangeLocations> ranges = source.toScanRanges(task);
+        Assertions.assertEquals(1, ranges.size());
+        THdfsScanRange range = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(range.getPartition_id() >= 0);
+        Assertions.assertEquals(List.of(localTupleDescriptor.getColumnSlot("k2").getId().asInt()),
+                range.getIdentity_partition_slot_ids());
+
+        IcebergConnectorScanRangeSource notPartitioned = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, eqDeleteParams, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        notPartitioned.setRuntimeFilterPruningColumns(Set.of("k1"));
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> notPartitioned.toScanRanges(task));
     }
 
     @Test

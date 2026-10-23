@@ -220,6 +220,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_partition_values());
     RETURN_IF_ERROR(_init_extended_values());
     if (_partition_filter.filter_by_eval) {
+        COUNTER_UPDATE(_scan_ranges_pruned_by_partition_value_counter, 1);
         _no_more_chunks = true;
         return Status::OK();
     }
@@ -595,6 +596,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
             ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
+    _scan_ranges_pruned_by_partition_value_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByPartitionValue", TUnit::UNIT);
 
     _scanner_ctx.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _scanner_ctx.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
