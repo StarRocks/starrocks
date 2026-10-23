@@ -983,6 +983,18 @@ public class MetadataMgr {
         return true;
     }
 
+    /**
+     * Prefetch table metadata using the query-scoped connector metadata identified by {@code queryId}.
+     * This explicit query ID is required because callers may run on worker threads without a ConnectContext
+     * thread-local binding.
+     */
+    public void prefetchTableMetadataForAnalyze(String queryId, String catalogName, String dbName, String tableName,
+                                                ConnectContext connectContext) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
+        connectorMetadata.ifPresent(metadata ->
+                metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext));
+    }
+
     public void refreshTable(String catalogName, String srDbName, Table table,
                              List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
