@@ -127,35 +127,11 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
-<<<<<<< HEAD
 
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
-=======
-    public PartitionCommitInfo(PartitionCommitInfo partitionCommitInfo) {
-        this.physicalPartitionId = partitionCommitInfo.physicalPartitionId;
-        this.version = partitionCommitInfo.version;
-        this.versionTime = partitionCommitInfo.versionTime;
-        this.dataVersion = partitionCommitInfo.dataVersion;
-        this.versionEpoch = partitionCommitInfo.versionEpoch;
-        this.invalidDictCacheColumns = partitionCommitInfo.invalidDictCacheColumns == null
-                ? Lists.newArrayList()
-                : Lists.newArrayList(partitionCommitInfo.invalidDictCacheColumns);
-        this.validDictCacheColumns = partitionCommitInfo.validDictCacheColumns == null
-                ? Lists.newArrayList()
-                : Lists.newArrayList(partitionCommitInfo.validDictCacheColumns);
-        this.dictCollectedVersions = partitionCommitInfo.dictCollectedVersions == null
-                ? Lists.newArrayList()
-                : Lists.newArrayList(partitionCommitInfo.dictCollectedVersions);
-        setDictContentIdentities(partitionCommitInfo.dictContentIdentities);
-        this.compactionScore = partitionCommitInfo.compactionScore == null
-                ? null
-                : new Quantiles(partitionCommitInfo.compactionScore);
-        this.tabletStats.putAll(partitionCommitInfo.tabletStats);
-        this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
     }
 
     public void setVersionTime(long time) {

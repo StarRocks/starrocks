@@ -747,14 +747,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                 GlobalDictsWithVersion<GlobalDictMap> dict;
                 dict.dict = std::move(global_dict);
                 dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
-<<<<<<< HEAD:be/src/runtime/lake_tablets_channel.cpp
-                _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
-=======
                 if (slot.has_global_dict_content_identity()) {
                     dict.content_identity = slot.global_dict_content_identity();
                 }
-                _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511)):be/src/data_workflows/load/tablet_writer/lake_tablets_channel.cpp
+                _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
             }
         }
     }

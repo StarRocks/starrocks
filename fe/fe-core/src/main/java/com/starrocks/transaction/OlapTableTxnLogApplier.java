@@ -217,15 +217,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             boolean hasContentIdentities = !dictContentIdentities.isEmpty();
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 ColumnId columnName = validDictCacheColumns.get(i);
-<<<<<<< HEAD
-                long collectedVersion = dictCollectedVersions.get(i);
-                IDictManager.getInstance()
-                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
-=======
                 Long contentIdentity = hasContentIdentities ? dictContentIdentities.get(i) : null;
-                IDictManager.getInstance().updateGlobalDict(table, columnName, dictCollectedVersions.get(i),
+                IDictManager.getInstance().updateGlobalDict(tableId, columnName, dictCollectedVersions.get(i),
                         maxPartitionVersionTime, contentIdentity);
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
             }
         }
     }

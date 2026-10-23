@@ -249,18 +249,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-<<<<<<< HEAD
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
-=======
-    public boolean isColumnForbidden(long tableId, String columnName) {
-        return NO_DICT_STRING_COLUMNS.stream()
-                .anyMatch(ci -> ci.getTableId() == tableId && ci.getColumnName().getId().equals(columnName));
-    }
-
-    @Override
-    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion,
                                  long versionTime, Long contentIdentity) {
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -280,21 +270,15 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     ColumnDict columnDict = columnOptional.get();
                     long lastVersion = columnDict.getVersion();
                     long dictCollectVersion = columnDict.getCollectedVersion();
-<<<<<<< HEAD
-                    if (collectVersion != dictCollectVersion) {
-                        LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
-                        removeGlobalDict(tableId, columnName);
-=======
                     if (collectedVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectedVersion, dictCollectVersion);
-                        removeGlobalDict(table, columnName);
+                        removeGlobalDict(tableId, columnName);
                         return;
                     }
                     if (contentIdentity != null && contentIdentity != columnDict.getContentIdentity()) {
                         LOG.info("remove dict by unmatched content identity for table:{} column:{} received:{} expected:{}",
                                 tableId, columnName, contentIdentity, columnDict.getContentIdentity());
-                        removeGlobalDict(table, columnName);
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
+                        removeGlobalDict(tableId, columnName);
                         return;
                     }
                     columnDict.updateVersion(versionTime);

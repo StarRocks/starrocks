@@ -118,6 +118,17 @@ protected:
         return data_sink;
     }
 
+    std::unique_ptr<OlapTableSink> _build_prepared_sink(RuntimeState* runtime_state) {
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK_OK(DescriptorTbl::create(runtime_state, _object_pool.get(), _desc_tbl, &desc_tbl,
+                                       config::vector_chunk_size));
+        runtime_state->set_desc_tbl(desc_tbl);
+        auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state);
+        CHECK_OK(sink->init(_data_sink, runtime_state));
+        CHECK_OK(sink->prepare(runtime_state));
+        return sink;
+    }
+
     void _serialize_load_profile(int64_t node_id, std::string* result) {
         auto profile = std::make_shared<RuntimeProfile>("LoadChannel");
         profile->add_info_string("LoadId", print_id(_data_sink.olap_table_sink.load_id));
@@ -398,6 +409,87 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     Status status = sink->close(runtime_state.get(), Status::OK());
     ASSERT_FALSE(status.ok());
     ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
+}
+
+TEST_F(TabletSinkIndexChannelTest, DictionaryIdentityAggregationPreservesColumnOrder) {
+    TQueryOptions options;
+    auto state = _build_runtime_state(options);
+    auto sink = _build_prepared_sink(state.get());
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+        auto* rpc = static_cast<std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*>(arg);
+        *rpc->second = true;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto receive = [&](NodeChannel& channel, const PTabletInfo& tablet) {
+        ASSERT_OK(channel.init(state.get()));
+        ReusableClosure<PTabletWriterAddBatchResult> closure;
+        closure.request_size = 0;
+        closure.result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure.result.add_tablet_vec()->CopyFrom(tablet);
+        closure.ref();
+        closure.ref();
+        closure.Run();
+        ASSERT_OK(channel._wait_request(&closure));
+        EXPECT_TRUE(closure.unref());
+    };
+    {
+        NodeChannel channel(sink.get(), 0, false);
+        PTabletInfo legacy;
+        legacy.set_tablet_id(1);
+        legacy.set_schema_hash(0);
+        legacy.add_valid_dict_cache_columns("c");
+        legacy.add_valid_dict_collected_version(100);
+        receive(channel, legacy);
+        receive(channel, legacy);
+        EXPECT_TRUE(channel._valid_dict_cache_info.content_identities.empty());
+        ASSERT_OK(channel.close_wait(state.get()));
+        EXPECT_TRUE(channel._tablet_commit_infos[0].valid_dict_content_identities.empty());
+        EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+        EXPECT_EQ(100, channel._valid_dict_cache_info.valid_dict_cache_column_set.at("c"));
+    }
+
+    NodeChannel channel(sink.get(), 0, false);
+    PTabletInfo report;
+    report.set_tablet_id(1);
+    report.set_schema_hash(0);
+    report.add_valid_dict_cache_columns("c");
+    report.add_valid_dict_collected_version(100);
+    report.add_valid_dict_content_identities(0);
+    report.add_valid_dict_cache_columns("d");
+    report.add_valid_dict_collected_version(101);
+    report.add_valid_dict_content_identities(-7);
+    receive(channel, report);
+    PTabletInfo reordered = report;
+    reordered.set_valid_dict_cache_columns(0, "d");
+    reordered.set_valid_dict_cache_columns(1, "c");
+    reordered.set_valid_dict_collected_version(0, 101);
+    reordered.set_valid_dict_collected_version(1, 100);
+    reordered.set_valid_dict_content_identities(0, -7);
+    reordered.set_valid_dict_content_identities(1, 0);
+    receive(channel, reordered);
+    PTabletInfo secondary;
+    secondary.set_tablet_id(2);
+    secondary.set_schema_hash(0);
+    receive(channel, secondary);
+    EXPECT_EQ(0, channel._valid_dict_cache_info.content_identities.at("c"));
+    EXPECT_EQ(-7, channel._valid_dict_cache_info.content_identities.at("d"));
+    EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+    ASSERT_OK(channel.close_wait(state.get()));
+    const auto& commit = channel._tablet_commit_infos[0];
+    ASSERT_EQ(2, commit.valid_dict_cache_columns.size());
+    ASSERT_EQ(2, commit.valid_dict_collected_versions.size());
+    ASSERT_EQ(2, commit.valid_dict_content_identities.size());
+    for (size_t i = 0; i < commit.valid_dict_cache_columns.size(); ++i) {
+        const auto& column = commit.valid_dict_cache_columns[i];
+        EXPECT_EQ(channel._valid_dict_cache_info.valid_dict_cache_column_set.at(column),
+                  commit.valid_dict_collected_versions[i]);
+        EXPECT_EQ(channel._valid_dict_cache_info.content_identities.at(column),
+                  commit.valid_dict_content_identities[i]);
+    }
 }
 
 } // namespace starrocks

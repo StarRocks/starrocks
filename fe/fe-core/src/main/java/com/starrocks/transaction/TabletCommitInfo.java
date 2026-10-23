@@ -40,13 +40,10 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
-<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-=======
 import java.util.Collections;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;

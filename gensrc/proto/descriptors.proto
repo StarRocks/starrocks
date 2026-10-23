@@ -53,12 +53,7 @@ message PSlotDescriptor {
     required bool is_materialized = 10;
     repeated string global_dict_words = 11; 
     optional int64 global_dict_version = 12;
-<<<<<<< HEAD
-=======
-    optional bool is_nullable = 13; // replace null_indicator_bit & null_indicator_byte
-    optional bool is_virtual = 14;
     optional int64 global_dict_content_identity = 15;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 };
 
 message PTupleDescriptor {

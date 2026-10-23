@@ -136,7 +136,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
-<<<<<<< HEAD
+        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
+
         if (enableIngestSlowdown()) {
             long currentTimeMs = System.currentTimeMillis();
             Set<Long> partitionIds = Sets.newHashSet();
@@ -146,9 +147,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             }
             new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
         }
-=======
-        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
