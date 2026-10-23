@@ -2944,8 +2944,8 @@ TEST_F(AggregateTest, test_bool_or_merge_nullable_intermediate) {
     data_column->append(0);
     null_column->append(0);
     Columns src{NullableColumn::create(std::move(data_column), std::move(null_column))};
-    MutableColumnPtr intermediate;
-    func->convert_to_serialize_format(ctx, src, 2, intermediate);
+    ColumnPtr intermediate;
+    func->convert_to_serialize_format(ctx, src, 2, &intermediate);
     ASSERT_TRUE(intermediate->has_null());
 
     auto state0 = ManagedAggrState::create(ctx, func);
