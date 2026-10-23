@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "exec/ai_project_node.h"
-#include "exec/pipeline/ai/ai_provider_config_parser.h"
 
 #include <gtest/gtest.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -28,6 +27,7 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/exec_factory.h"
+#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec_primitive/exec_node.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -78,14 +78,15 @@ TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot,
     TFunction function;
     function.__set_name(name);
     function.__set_binary_type(TFunctionBinaryType::AI);
-    function.__set_arg_types({varchar_type().to_thrift()});
+    function.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
+                              TypeDescriptor(TYPE_JSON).to_thrift()});
     function.__set_ret_type(varchar_type().to_thrift());
     function.__set_has_var_args(false);
     function.__set_fid(kAICompletePromptFid);
 
     TExprNode call;
     call.__set_node_type(TExprNodeType::FUNCTION_CALL);
-    call.__set_num_children(1);
+    call.__set_num_children(4);
     call.__set_type(varchar_type().to_thrift());
     call.__set_is_nullable(true);
     call.__set_fn(function);
@@ -94,6 +95,23 @@ TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot,
     TExpr expression;
     expression.nodes.emplace_back(std::move(call));
     expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    for (int i = 0; i < 2; ++i) {
+        TExprNode selector;
+        selector.__set_node_type(TExprNodeType::STRING_LITERAL);
+        selector.__set_num_children(0);
+        selector.__set_type(varchar_type().to_thrift());
+        selector.__set_is_nullable(false);
+        TStringLiteral literal;
+        literal.__set_value("");
+        selector.__set_string_literal(std::move(literal));
+        expression.nodes.emplace_back(std::move(selector));
+    }
+    TExprNode options;
+    options.__set_node_type(TExprNodeType::NULL_LITERAL);
+    options.__set_num_children(0);
+    options.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    options.__set_is_nullable(true);
+    expression.nodes.emplace_back(std::move(options));
     return expression;
 }
 
@@ -244,8 +262,8 @@ TEST(AIProviderConfigParserTest, RejectsInvalidMetadataWithoutExposingProperties
         missing.params.erase(key);
         EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, missing).ok());
     }
-    for (auto protocol : {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE,
-                         static_cast<TAIProviderProtocol::type>(99)}) {
+    for (auto protocol :
+         {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, static_cast<TAIProviderProtocol::type>(99)}) {
         provider.__set_protocol(protocol);
         provider.params["protocol"] = "openai";
         EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());

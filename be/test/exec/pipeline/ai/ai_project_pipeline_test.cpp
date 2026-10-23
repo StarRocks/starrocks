@@ -88,7 +88,6 @@ namespace pipeline {
 namespace {
 
 constexpr int64_t kAICompletePromptFid = 200100;
-constexpr int64_t kAICompleteModelPromptFid = 200102;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
@@ -130,6 +129,18 @@ TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {
     return expression;
 }
 
+TExprNode make_selector(std::string value) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::STRING_LITERAL);
+    node.__set_num_children(0);
+    node.__set_type(varchar_type().to_thrift());
+    node.__set_is_nullable(false);
+    TStringLiteral literal;
+    literal.__set_value(std::move(value));
+    node.__set_string_literal(std::move(literal));
+    return node;
+}
+
 TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot) {
     TFunctionName name;
     name.__set_function_name("ai_complete");
@@ -137,14 +148,15 @@ TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot) {
     TFunction function;
     function.__set_name(name);
     function.__set_binary_type(TFunctionBinaryType::AI);
-    function.__set_arg_types({varchar_type().to_thrift()});
+    function.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
+                              TypeDescriptor(TYPE_JSON).to_thrift()});
     function.__set_ret_type(varchar_type().to_thrift());
     function.__set_has_var_args(false);
     function.__set_fid(kAICompletePromptFid);
 
     TExprNode call;
     call.__set_node_type(TExprNodeType::FUNCTION_CALL);
-    call.__set_num_children(1);
+    call.__set_num_children(4);
     call.__set_type(varchar_type().to_thrift());
     call.__set_is_nullable(true);
     call.__set_fn(function);
@@ -153,42 +165,20 @@ TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot) {
     TExpr expression;
     expression.nodes.emplace_back(std::move(call));
     expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    expression.nodes.emplace_back(make_selector(""));
+    expression.nodes.emplace_back(make_selector(""));
+    TExprNode options;
+    options.__set_node_type(TExprNodeType::NULL_LITERAL);
+    options.__set_num_children(0);
+    options.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    options.__set_is_nullable(true);
+    expression.nodes.emplace_back(std::move(options));
     return expression;
 }
 
 TExpr make_ai_complete_with_explicit_model(TTupleId tuple_id, TSlotId prompt_slot) {
-    TFunctionName name;
-    name.__set_function_name("ai_complete");
-
-    TFunction function;
-    function.__set_name(name);
-    function.__set_binary_type(TFunctionBinaryType::AI);
-    function.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift()});
-    function.__set_ret_type(varchar_type().to_thrift());
-    function.__set_has_var_args(false);
-    function.__set_fid(kAICompleteModelPromptFid);
-
-    TExprNode call;
-    call.__set_node_type(TExprNodeType::FUNCTION_CALL);
-    call.__set_num_children(2);
-    call.__set_type(varchar_type().to_thrift());
-    call.__set_is_nullable(true);
-    call.__set_fn(function);
-    call.__set_ai_provider_id(std::string(kDefaultChatConfigId));
-
-    TExprNode model;
-    model.__set_node_type(TExprNodeType::STRING_LITERAL);
-    model.__set_num_children(0);
-    model.__set_type(varchar_type().to_thrift());
-    model.__set_is_nullable(false);
-    TStringLiteral literal;
-    literal.__set_value("explicit-model");
-    model.__set_string_literal(std::move(literal));
-
-    TExpr expression;
-    expression.nodes.emplace_back(std::move(call));
-    expression.nodes.emplace_back(std::move(model));
-    expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    auto expression = make_ai_complete(tuple_id, prompt_slot);
+    expression.nodes[3] = make_selector("explicit-model");
     return expression;
 }
 
@@ -202,16 +192,18 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
         const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
         call.fn.name.__set_function_name("ai_embed");
         call.fn.__set_fid(200134);
-        call.fn.__set_arg_types({file_type});
+        call.fn.__set_arg_types({file_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                 TypeDescriptor(TYPE_JSON).to_thrift()});
         call.fn.__set_ret_type(result_type);
         call.__set_type(result_type);
         call.__set_ai_provider_id("provider:default_embedding");
         expression.nodes[1] = std::move(file);
     } else {
         call.fn.__set_fid(200104);
-        call.fn.__set_arg_types({varchar_type().to_thrift(), file_type});
-        call.__set_num_children(2);
-        expression.nodes.emplace_back(std::move(file));
+        call.fn.__set_arg_types({varchar_type().to_thrift(), file_type, varchar_type().to_thrift(),
+                                 varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+        call.__set_num_children(5);
+        expression.nodes.insert(expression.nodes.begin() + 2, std::move(file));
     }
     return expression;
 }
@@ -221,8 +213,7 @@ TPlanNode make_ai_node(TTupleId tuple_id) {
     model.__set_id(std::string(kDefaultChatConfigId));
     model.__set_type(TAIProviderType::CHAT);
     model.__set_protocol(TAIProviderProtocol::OPENAI);
-    model.__set_params({{"endpoint", std::string(kEndpointSentinel)},
-                        {"model", std::string(kModelSentinel)}});
+    model.__set_params({{"endpoint", std::string(kEndpointSentinel)}, {"model", std::string(kModelSentinel)}});
 
     TAIProjectNode project;
     project.__set_slot_map({
@@ -759,11 +750,12 @@ protected:
         const auto result_type = TypeDescriptor(TYPE_JSON).to_thrift();
         auto expression = make_ai_complete(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
-        call.__set_num_children(2);
+        call.__set_num_children(4);
         call.__set_type(result_type);
         call.fn.name.__set_function_name("ai_classify");
         call.fn.__set_fid(200112);
-        call.fn.__set_arg_types({varchar_type().to_thrift(), array_type});
+        call.fn.__set_arg_types(
+                {varchar_type().to_thrift(), array_type, varchar_type().to_thrift(), varchar_type().to_thrift()});
         call.fn.__set_ret_type(result_type);
 
         TExprNode cast;
@@ -772,6 +764,7 @@ protected:
         cast.__set_type(array_type);
         cast.__set_child_type(TPrimitiveType::VARCHAR);
         cast.__set_is_nullable(true);
+        expression.nodes.resize(2);
         expression.nodes.emplace_back(std::move(cast));
 
         TExprNode literal;
@@ -783,6 +776,8 @@ protected:
         value.__set_value(std::move(categories));
         literal.__set_string_literal(std::move(value));
         expression.nodes.emplace_back(std::move(literal));
+        expression.nodes.emplace_back(make_selector(""));
+        expression.nodes.emplace_back(make_selector(""));
 
         ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(std::move(expression)));
         AIProjectProjectionSpec spec(
@@ -866,12 +861,10 @@ protected:
                                    : make_ai_complete(_tuple_id, kCommonSlotId);
         auto& call = expression.nodes.front();
         if (provider) {
-            call.fn.__set_fid(embedding ? 200163 : 200150);
-            call.fn.arg_types.insert(call.fn.arg_types.begin(), varchar_type().to_thrift());
-            call.__set_num_children(3);
+            call.fn.__set_fid(embedding ? 200130 : 200100);
             call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
             call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
-            expression.nodes[1].string_literal.__set_value(std::move(provider_name));
+            expression.nodes[2].string_literal.__set_value(std::move(provider_name));
         } else if (embedding) {
             call.fn.__set_fid(200130);
             call.fn.name.__set_function_name("ai_embed");
@@ -881,10 +874,6 @@ protected:
             const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
-        }
-        if (provider) {
-            expression.nodes.insert(expression.nodes.begin() + 2, expression.nodes[1]);
-            expression.nodes[2].string_literal.__set_value("explicit-model");
         }
         return expression;
     }
@@ -968,10 +957,14 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
     };
     const std::vector<Case> cases = {
             {"unknown provider",
-             [](auto& project) { project.ai_provider_mapping.at("provider:chat").__set_protocol(static_cast<TAIProviderProtocol::type>(99)); }},
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:chat")
+                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
+             }},
             {"unknown default provider protocol",
              [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_chat").__set_protocol(static_cast<TAIProviderProtocol::type>(99));
+                 project.ai_provider_mapping.at("provider:default_chat")
+                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
              }},
             {"default chat protocol capability mismatch",
              [](auto& project) {
@@ -979,7 +972,8 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
              }},
             {"default embedding protocol capability mismatch",
              [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_embedding").__set_protocol(TAIProviderProtocol::ANTHROPIC);
+                 project.ai_provider_mapping.at("provider:default_embedding")
+                         .__set_protocol(TAIProviderProtocol::ANTHROPIC);
              }},
             {"named provider chat protocol remains openai compatible",
              [](auto& project) {
@@ -997,7 +991,8 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
              [](auto& project) {
                  project.ai_provider_mapping.at("provider:chat").params["api_key"] = std::string("key\0tail", 8);
              }},
-            {"missing referenced route", [](auto& project) { project.ai_provider_mapping.erase("provider:embedding"); }},
+            {"missing referenced route",
+             [](auto& project) { project.ai_provider_mapping.erase("provider:embedding"); }},
             {"capability mismatch",
              [](auto& project) {
                  auto& config = project.ai_provider_mapping.at("provider:embedding");
@@ -1217,11 +1212,10 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
             auto submitter =
                     AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
             ASSERT_TRUE(submitter.ok()) << submitter.status();
-            auto handle = submitter.value()->submit(AIProjectTaskRequest{.task_id = 1,
-                                                                         .model = "row-model",
-                                                                         .prompt = "hello",
-                                                                         .provider_id = kDefaultChatConfigId},
-                                                    [](AITaskResult, const AIExecutionStatistics&) {});
+            auto handle = submitter.value()->submit(
+                    AIProjectTaskRequest{
+                            .task_id = 1, .model = "row-model", .prompt = "hello", .provider_id = kDefaultChatConfigId},
+                    [](AITaskResult, const AIExecutionStatistics&) {});
             ASSERT_TRUE(handle.ok()) << handle.status();
             _control.run_until_idle();
             ASSERT_EQ(1, _http.pending_count());
@@ -1647,19 +1641,16 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     auto make_provider_call = [&](bool embedding) {
         auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
-        call.fn.__set_fid(embedding ? 200163 : 200150);
-        call.fn.arg_types.insert(call.fn.arg_types.begin(), varchar_type().to_thrift());
-        call.__set_num_children(3);
+        call.fn.__set_fid(embedding ? 200130 : 200100);
         call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
         call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
-        expression.nodes[1].string_literal.__set_value(embedding ? "embed" : "chat");
+        expression.nodes[2].string_literal.__set_value(embedding ? "embed" : "chat");
+        expression.nodes[3].string_literal.__set_value(embedding ? "explicit-embed-model" : "explicit-chat-model");
         if (embedding) {
             const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
         }
-        expression.nodes.insert(expression.nodes.begin() + 2, expression.nodes[1]);
-        expression.nodes[2].string_literal.__set_value("explicit-model");
         return expression;
     };
     auto default_expr = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
@@ -1707,8 +1698,8 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
                   std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
                       return header.name == "Authorization" && header.value == "Bearer " + key;
                   }));
-        EXPECT_NE(std::string::npos, request.body.find(embedding       ? "provider-embed-model"
-                                                       : explicit_chat ? "provider-chat-model"
+        EXPECT_NE(std::string::npos, request.body.find(embedding       ? "explicit-embed-model"
+                                                       : explicit_chat ? "explicit-chat-model"
                                                                        : kModelSentinel));
         EXPECT_NE(std::string::npos, request.body.find(embedding ? "\"input\"" : "\"messages\""));
     }
@@ -1973,6 +1964,7 @@ TEST_F(AIProjectPipelineTest, DispatcherSnapshotsConfigAndSeparatesLiveQueryFrom
                         .task_id = 11,
                         .model = kModelSentinel,
                         .prompt = "deadline-prompt",
+                        .provider_id = kDefaultChatConfigId,
                 },
                 [&](AITaskResult result, const AIExecutionStatistics&) { results.emplace_back(std::move(result)); });
         ASSERT_TRUE(handle_or.ok()) << handle_or.status();
@@ -2033,6 +2025,7 @@ TEST_F(AIProjectPipelineTest, QueryCancellationRemainsLifecycleCancelledAndDoesN
                     .task_id = 17,
                     .model = kModelSentinel,
                     .prompt = "cancel-prompt",
+                    .provider_id = kDefaultChatConfigId,
             },
             [&](AITaskResult result, const AIExecutionStatistics& statistics) {
                 const auto query_statistics = _query_context->query_runtime_state().ai_statistics();
