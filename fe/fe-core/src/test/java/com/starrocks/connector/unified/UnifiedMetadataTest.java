@@ -569,29 +569,6 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testAcquireTvrSnapshotRoutesByTableType(@Mocked IcebergTable icebergTable) {
-        MvId mvId = new MvId(1L, 2L);
-        TvrTableSnapshot expected = TvrTableSnapshot.of(42L);
-        new Expectations() {
-            {
-                icebergTable.getType();
-                result = ICEBERG;
-                minTimes = 1;
-            }
-            {
-                icebergMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
-                result = expected;
-                times = 1;
-            }
-        };
-
-        TvrTableSnapshot actual = unifiedMetadata.acquireTvrSnapshot("test_db", icebergTable, mvId);
-        assertEquals(expected, actual);
-    }
-
-    @Test
     public void testTruncateTableRoutesToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException {
         TruncateTableStmt stmt = new TruncateTableStmt(
                 new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")), null, NodePosition.ZERO));
@@ -753,7 +730,6 @@ public class UnifiedMetadataTest {
     }
 
     @Test
->>>>>>> 46f40ce ([Enhancement] Delegate TRUNCATE and ALTER TABLE in unified catalog (#77749))
     public void testGetVersionCommitTimeMillisRoutesByTableType(@Mocked IcebergTable icebergTable) {
         Optional<Long> expected = Optional.of(1781000000000L);
         new Expectations() {
