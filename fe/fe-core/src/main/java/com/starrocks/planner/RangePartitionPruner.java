@@ -50,6 +50,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
@@ -94,7 +95,8 @@ public class RangePartitionPruner implements PartitionPruner {
         // no filter in this column
         Column keyColumn = partitionColumns.get(columnIdx);
         PartitionColumnFilter filter = partitionColumnFilters.get(keyColumn.getName());
-        if (null == filter) {
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn, filter);
+        if (null == filter || !isUsableForKeyColumn(filter, keyColumn, isConvertToDate)) {
             minKey.pushColumn(LiteralExprFactory.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), false),
                     keyColumn.getPrimitiveType());
             maxKey.pushColumn(LiteralExprFactory.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
@@ -116,7 +118,6 @@ public class RangePartitionPruner implements PartitionPruner {
             inPredicateMaxLen = ConnectContext.get().getSessionVariable().getRangePrunerPredicateMaxLen();
         }
 
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn, filter);
         LiteralExpr lowerBound = filter.getLowerBound();
         LiteralExpr upperBound = filter.getUpperBound();
         if (null == inPredicateLiterals || ((lowerBound != null || upperBound != null) &&
@@ -251,6 +252,94 @@ public class RangePartitionPruner implements PartitionPruner {
         } catch (IllegalArgumentException e) {
             return Lists.newArrayList();
         }
+    }
+
+    /**
+     * Whether this filter's literals can be compared against this partition column's bounds.
+     *
+     * <p>A filter is keyed by column NAME, and an expression-partitioned table names its partition
+     * column after the source column the expression reads: {@code PartitionInfoBuilder} copies that
+     * column and only replaces its type. A predicate on the source column therefore arrives here
+     * looking like a predicate on the partition key, carrying source values and the source type --
+     * on a table partitioned by {@code cast(substr(code, 3, 4) as bigint)},
+     * {@code code IN ('AB1000x', 'AB3000x')} hands VARCHAR literals to a BIGINT partition column.
+     *
+     * <p>Those literals describe a source value, not a partition value, so converting them would
+     * answer the wrong question: the partition bounds live on the other side of the expression.
+     * Such a filter used to reach {@code PartitionKey.compareLiteralExpr}, which casts both sides to
+     * an assignment-compatible type; the cast does not fold, its unchecked {@code (LiteralExpr)}
+     * cast throws, and {@code OptOlapPartitionPruner} catches that and abandons pruning for the
+     * whole scan -- leaving an IllegalStateException or a ClassCastException with no message behind.
+     *
+     * <p>Decide it here instead, where the filter and the partition column are both in hand. An
+     * unusable filter is treated as absent, and one conjunct fewer selects a superset of the
+     * partitions the query needs, so the answer stays correct.
+     */
+    private boolean isUsableForKeyColumn(PartitionColumnFilter filter, Column keyColumn, boolean isConvertToDate) {
+        if (isConvertToDate) {
+            // The literal is converted to the partition column's date type where it is read below.
+            return true;
+        }
+        Type keyType = keyColumn.getType();
+        if (!boundComparableWith(filter.getLowerBound(), keyType)
+                || !boundComparableWith(filter.getUpperBound(), keyType)) {
+            logUnusableFilter(filter, keyColumn);
+            return false;
+        }
+        List<LiteralExpr> literals = filter.getInPredicateLiterals();
+        if (literals != null) {
+            for (LiteralExpr literal : literals) {
+                if (!inLiteralFitsKeyColumn(literal, keyType)) {
+                    logUnusableFilter(filter, keyColumn);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A bound only has to be comparable with the partition column, not of its exact type:
+     * PartitionKey.compareLiteralExpr brings both sides to a common type first, and within one
+     * family that conversion is value preserving -- an INT partition column compared against a
+     * BIGINT constant too wide for it still orders correctly, and pruning on it has always worked.
+     * Across families it is not: a VARCHAR source value against a BIGINT partition bound is the
+     * case this guard exists for.
+     */
+    private static boolean boundComparableWith(LiteralExpr literal, Type keyType) {
+        if (literal == null || literal instanceof NullLiteral) {
+            // An absent bound is not a mismatch, and a NullLiteral carries no value type of its own:
+            // `col is null` is answered by pruneIsNull and by the infinity pushes, both of which
+            // take their type from the partition column.
+            return true;
+        }
+        Type literalType = literal.getType();
+        if (literalType.equals(keyType)) {
+            return true;
+        }
+        PrimitiveType literalPrimitive = literalType.getPrimitiveType();
+        PrimitiveType keyPrimitive = keyType.getPrimitiveType();
+        return (literalPrimitive.isNumericType() && keyPrimitive.isNumericType())
+                || (literalPrimitive.isDateType() && keyPrimitive.isDateType())
+                || (literalPrimitive.isCharFamily() && keyPrimitive.isCharFamily());
+    }
+
+    /**
+     * An IN literal is held to the stricter rule, because the branch that reads it asserts exact
+     * equality before pushing it; letting a merely comparable one through would only move the
+     * failure a few lines down.
+     */
+    private static boolean inLiteralFitsKeyColumn(LiteralExpr literal, Type keyType) {
+        return literal == null || literal instanceof NullLiteral || literal.getType().equals(keyType);
+    }
+
+    /**
+     * Say which column and which two types, rather than the bare IllegalStateException this
+     * replaces: that one carried no message, so the reason had to be read back off a line number.
+     */
+    private void logUnusableFilter(PartitionColumnFilter filter, Column keyColumn) {
+        LOG.warn("skip range partition pruning on column {}: filter literals are {} but the partition "
+                        + "column is {}", keyColumn.getName(), filter.getFilterType(), keyColumn.getType());
     }
 
     public List<Long> prune() throws AnalysisException {
