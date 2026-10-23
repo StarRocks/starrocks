@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.type.IntegerType.BIGINT;
@@ -140,6 +141,61 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 Assertions.assertEquals(2, mappingId);
             }
         }
+    }
+
+    @Test
+    public void testBucketsOfOneIdentityPartitionShareAPartitionId() throws Exception {
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_B).identity("k2").bucket("k1", 4).build();
+        TestTables.TestTable nativeTable = create(SCHEMA_B, spec, "t_identity_bucket", 2);
+        DataFile k2Is1Bucket0 = DataFiles.builder(spec).withPath("/path/to/k2=1/k1_bucket=0/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1/k1_bucket=0").withRecordCount(1).build();
+        DataFile k2Is1Bucket1 = DataFiles.builder(spec).withPath("/path/to/k2=1/k1_bucket=1/b.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=1/k1_bucket=1").withRecordCount(1).build();
+        DataFile k2Is2Bucket0 = DataFiles.builder(spec).withPath("/path/to/k2=2/k1_bucket=0/c.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k2=2/k1_bucket=0").withRecordCount(1).build();
+        nativeTable.newFastAppend().appendFile(k2Is1Bucket0).appendFile(k2Is1Bucket1).appendFile(k2Is2Bucket0).commit();
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), desc);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        desc.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), desc);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        desc.addSlot(k2Slot);
+
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("k1", INT), new Column("k2", INT)), nativeTable,
+                Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, desc, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        Map<String, Long> idByFile = Maps.newHashMap();
+        Map<String, Long> k2ByFile = Maps.newHashMap();
+        Map<String, THdfsPartition> valueByFile = Maps.newHashMap();
+        for (FileScanTask task : nativeTable.newScan().planFiles()) {
+            long partitionId = scanRangeSource.addPartition(task);
+            // a second call hits the cache and returns the same id
+            Assertions.assertEquals(partitionId, scanRangeSource.addPartition(task));
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+            idByFile.put(task.file().location(), partitionId);
+            valueByFile.put(task.file().location(), range.getPartition_value());
+            k2ByFile.put(task.file().location(),
+                    range.getPartition_value().getPartition_key_exprs().get(0).getNodes().get(0).getInt_literal().getValue());
+        }
+
+        Assertions.assertEquals(idByFile.get(k2Is1Bucket0.location()), idByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertNotEquals(idByFile.get(k2Is1Bucket0.location()), idByFile.get(k2Is2Bucket0.location()));
+        Assertions.assertEquals(1L, k2ByFile.get(k2Is1Bucket0.location()));
+        Assertions.assertEquals(1L, k2ByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertEquals(2L, k2ByFile.get(k2Is2Bucket0.location()));
+        // files of one partition id share one thrift partition value
+        Assertions.assertSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is1Bucket1.location()));
+        Assertions.assertNotSame(valueByFile.get(k2Is1Bucket0.location()), valueByFile.get(k2Is2Bucket0.location()));
+        // the partition count still counts every (k2, bucket) combination
+        Assertions.assertEquals(3, scanRangeSource.selectedPartitionCount());
     }
 
     @Test
