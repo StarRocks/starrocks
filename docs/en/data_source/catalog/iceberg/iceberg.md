@@ -1496,19 +1496,19 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 
 - Unit: -
 - Default value: true
-- Description: Whether to enable the periodic Iceberg metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Iceberg cluster, and refreshes the cached metadata of the frequently accessed Iceberg catalogs to perceive data changes. `true` indicates to enable the Iceberg metadata cache refresh, and `false` indicates to disable it.
+- Description: Whether to enable the periodic background refresh of cached external catalog metadata. After it is enabled, StarRocks refreshes cached metadata of recently accessed Iceberg tables. It reads table metadata from the catalog service configured for the Iceberg catalog (Hive Metastore, AWS Glue, REST, Hadoop, or JDBC). When that metadata changes, StarRocks also refreshes the cached manifests and data files. `true` enables the refresh, and `false` disables it.
 
 ##### background_refresh_metadata_interval_millis
 
 - Unit: Millisecond
 - Default value: 600000
-- Description: The interval between two consecutive Iceberg metadata cache refreshes. - Unit: millisecond.
+- Description: The interval between two consecutive background refreshes of cached external catalog metadata.
 
-##### background_refresh_metadata_time_secs_since_last_access_sec
+##### background_refresh_metadata_time_secs_since_last_access_secs
 
 - Unit: Second
 - Default value: 86400
-- Description: The expiration time of an Iceberg metadata cache refresh task. For the Iceberg catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Iceberg catalog that has not been accessed, StarRocks will not refresh its cached metadata.
+- Description: How long StarRocks keeps refreshing an Iceberg table after that table was last accessed. StarRocks applies this cutoff to each table. A table that has not been accessed is not refreshed.
 
 ## Appendix A: Periodic Metadata Refresh Strategy
 
