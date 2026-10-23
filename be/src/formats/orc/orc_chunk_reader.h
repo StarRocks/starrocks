@@ -107,10 +107,6 @@ public:
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
     void set_iceberg_schema(const TIcebergSchema* schema) { _orc_mapping_options.iceberg_schema = schema; }
     void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
-    // The ORC statistics of these slots do not describe the values the scanner outputs (e.g. the Iceberg row lineage
-    // columns, whose NULLs it replaces with inherited values), so neither search arguments nor min/max filters use
-    // them.
-    void set_no_stats_slot_ids(std::unordered_set<SlotId> ids) { _no_stats_slot_ids = std::move(ids); }
 
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
@@ -222,7 +218,6 @@ private:
     // Key is slot name formatted with case sensitive
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
     std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;
-    std::unordered_set<SlotId> _no_stats_slot_ids;
     RuntimeState* _state = nullptr;
     LazyLoadContext* _lazy_load_ctx{nullptr};
 

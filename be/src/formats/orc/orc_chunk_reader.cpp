@@ -1219,7 +1219,6 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
 
     std::unordered_map<SlotId, size_t> slot_id_to_pos_in_src_slot_descriptors{};
     for (size_t i = 0; i < _src_slot_descriptors.size(); i++) {
-        if (_no_stats_slot_ids.contains(_src_slot_descriptors[i]->id())) continue;
         slot_id_to_pos_in_src_slot_descriptors.emplace(_src_slot_descriptors[i]->id(), i);
     }
 
@@ -1363,9 +1362,6 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
 }
 
 const orc::Type* OrcChunkReader::get_orc_type_by_slot_id(const SlotId& slot_id) const {
-    if (_no_stats_slot_ids.contains(slot_id)) {
-        return nullptr;
-    }
     const auto& it = _slot_id_to_pos_in_src_slot_descs.find(slot_id);
     if (it == _slot_id_to_pos_in_src_slot_descs.end()) {
         // partition column don't existed in _src_slot_descriptors

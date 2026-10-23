@@ -139,8 +139,7 @@ public:
 
     // Iceberg resolves ORC columns by the field id in the `iceberg.id` attribute, not by name. Returns the
     // current Iceberg name of each top-level ORC column ("" when its id is no longer in the schema), for use as
-    // positional hive_column_names. The stored v3 row lineage columns, whose reserved ids are never in the schema,
-    // get their reserved names. Returns nullopt when the file carries no field ids.
+    // positional hive_column_names. Returns nullopt when the file carries no field ids.
     static std::optional<std::vector<std::string>> iceberg_column_names(const orc::Type& root_orc_type,
                                                                         const TIcebergSchema& schema);
 

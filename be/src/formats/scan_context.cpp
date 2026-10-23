@@ -61,28 +61,6 @@ static StatusOr<double> parse_time_of_day(const std::string& value) {
     return fields[0] * 3600.0 + fields[1] * 60.0 + fields[2];
 }
 
-StatusOr<Datum> FormatScanContext::get_extended_bigint_value(SlotId slot_id) const {
-    auto it = extended_column_exprs.find(slot_id);
-    if (it == extended_column_exprs.end()) {
-        return Status::NotFound(fmt::format("Cannot find extended column value for slot {}", slot_id));
-    }
-
-    const auto& expr = it->second;
-    if (expr.nodes.empty()) {
-        return Status::InvalidArgument(fmt::format("Invalid extended column expression for slot {}", slot_id));
-    }
-
-    const auto& node = expr.nodes[0];
-    if (node.node_type == TExprNodeType::NULL_LITERAL) {
-        return kNullDatum;
-    }
-    if (node.node_type != TExprNodeType::INT_LITERAL || !node.__isset.int_literal) {
-        return Status::InvalidArgument(fmt::format("Unsupported extended column expression for slot {}", slot_id));
-    }
-
-    return Datum(node.int_literal.value);
-}
-
 StatusOr<MutableColumnPtr> FormatScanContext::create_initial_default_column(const TypeDescriptor& type, bool nullable,
                                                                             const std::string& value) {
     // Parse default value into Datum using TypeInfo::from_string
