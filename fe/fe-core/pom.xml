@@ -885,6 +885,14 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- JDK 15 removed the bundled JavaScript engine. Ranger discovers standalone Nashorn
+             through JSR-223 for script conditions and dynamic policy expressions. -->
+        <dependency>
+            <groupId>org.openjdk.nashorn</groupId>
+            <artifactId>nashorn-core</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
         <dependency>
             <groupId>org.apache.ranger</groupId>
