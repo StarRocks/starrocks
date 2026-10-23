@@ -18,12 +18,15 @@ import logging
 from sqlalchemy import (
     Integer,
     MetaData,
+    Numeric,
     String,
     Table,
     and_,
     cast,
     column,
+    func,
     literal,
+    literal_column,
     schema,
     select,
     table,
@@ -32,7 +35,6 @@ from sqlalchemy import (
     type_coerce,
     union,
 )
-from sqlalchemy.engine import ObjectKind, ObjectScope
 from sqlalchemy.sql.sqltypes import CHAR, Float
 from sqlalchemy.testing import config, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
@@ -40,12 +42,11 @@ from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
-    CTETest as _CTETest,
     CompositeKeyReflectionTest,
-    EnumTest,
+    CTETest as _CTETest,
     FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONTest as _JSONTest,
-    LongNameBlowoutTest,
+    LongNameBlowoutTest as _LongNameBlowoutTest,
     NumericTest as _NumericTest,
     ServerSideCursorsTest as _ServerSideCursorsTest,
     StringTest as _StringTest,
@@ -53,7 +54,19 @@ from sqlalchemy.testing.suite import (
 from sqlalchemy.testing.util import mock
 
 from starrocks.datatype import INTEGER
+from starrocks.requirements import IS_SQLALCHEMY_2
 from test import test_utils
+
+
+if IS_SQLALCHEMY_2:
+    from sqlalchemy.engine import ObjectKind, ObjectScope
+    from sqlalchemy.testing.suite import EnumTest, TrueDivTest as _TrueDivTest
+else:
+    from sqlalchemy.testing.suite import (
+        HasIndexTest,
+        LikeFunctionsTest as _LikeFunctionsTest,
+        QuotedNameArgumentTest as _QuotedNameArgumentTest,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -114,7 +127,12 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL, SRAssertsCompiledSQLMix
 
 
 class StarrocksMogrifyTest(fixtures.TablesTest, AssertsCompiledSQL):
-    # Not strictly a dialect test, but allows me to test why mogrify is not working correctly
+    """The driver's ``mogrify`` renders a compiled statement with its parameters as literals.
+
+    pymysql compiles named ``%(name)s`` placeholders and asyncmy positional ``%s`` ones, so the
+    expected placeholder and the parameters given to ``mogrify`` follow the dialect's paramstyle.
+    """
+
     def test_mogrify_query_with_parameters(self, connection):
         t = table('t1', column('c1'), column('c2'), column('test_param'))
 
@@ -127,14 +145,18 @@ class StarrocksMogrifyTest(fixtures.TablesTest, AssertsCompiledSQL):
                 ),
         )
 
+        positional = connection.dialect.positional
+        placeholder = "%s" if positional else "%(test_param_1)s"
         self.assert_compile(
             sel,
-            result="SELECT CAST(t1.c1 AS CHAR(4000)) AS c1, CAST(t1.c2 AS CHAR(4000)) AS c2 FROM t1 WHERE t1.test_param = %(test_param_1)s",
+            result=f"SELECT CAST(t1.c1 AS CHAR(4000)) AS c1, CAST(t1.c2 AS CHAR(4000)) AS c2 FROM t1 WHERE t1.test_param = {placeholder}",
             params={'test_param_1':'Y'},
             render_postcompile=True,
         )
         compiled = sel.compile(connection, compile_kwargs={"render_postcompile": True})
-        mog = connection.engine.raw_connection().cursor().mogrify(str(compiled).replace('\n', ''), compiled.params)
+        params = tuple(compiled.params[name] for name in compiled.positiontup) if positional else compiled.params
+        cursor = connection.connection.driver_connection.cursor()
+        mog = cursor.mogrify(str(compiled).replace('\n', ''), params)
         assert mog == "SELECT CAST(t1.c1 AS CHAR(4000)) AS c1, CAST(t1.c2 AS CHAR(4000)) AS c2 FROM t1 WHERE t1.test_param = 'Y'"
 
     # def test_select_nonrecursive_round_trip(self, connection):
@@ -151,110 +173,128 @@ class StarrocksMogrifyTest(fixtures.TablesTest, AssertsCompiledSQL):
     #     eq_(result.fetchall(), [("d4",)])
 
 class ComponentReflectionTest(_ComponentReflectionTest):
+    """On SQLAlchemy 1.4 ``test_get_indexes`` is gated on ``index_reflection``, as 2.0 already does."""
+
     # Updated to allow tests to run when Starrocks does not support default autoincrement on single primary key columns
     @classmethod
     def define_tables(cls, metadata):
         super().define_tables(metadata)
         for t_name, t in metadata.tables.items():
-            if t.autoincrement_column is not None:
-                t.autoincrement_column.autoincrement = True
+            autoincrement_column = t.autoincrement_column if IS_SQLALCHEMY_2 else t._autoincrement_column
+            if autoincrement_column is not None:
+                autoincrement_column.autoincrement = True
 
-    # Updated because Starrocks does not currently support column comments
-    def exp_columns(
-            self,
-            schema=None,
-            scope=ObjectScope.ANY,
-            kind=ObjectKind.ANY,
-            filter_names=None,
-    ):
-        def col(
-                name, auto=False, default=mock.ANY, comment=None, nullable=True
+    if IS_SQLALCHEMY_2:
+        # Updated because Starrocks does not currently support column comments
+        def exp_columns(
+                self,
+                schema=None,
+                scope=ObjectScope.ANY,
+                kind=ObjectKind.ANY,
+                filter_names=None,
         ):
-            res = {
-                "name": name,
-                "autoincrement": auto,
-                "type": mock.ANY,
-                "default": default,
-                "comment": comment if config.requirements.comment_reflection.enabled else '',
-                "nullable": nullable,
+            def col(
+                    name, auto=False, default=mock.ANY, comment=None, nullable=True
+            ):
+                res = {
+                    "name": name,
+                    "autoincrement": auto,
+                    "type": mock.ANY,
+                    "default": default,
+                    "comment": comment if config.requirements.comment_reflection.enabled else '',
+                    "nullable": nullable,
+                }
+                if auto == "omit":
+                    res.pop("autoincrement")
+                return res
+
+            def pk(name, **kw):
+                kw = {"auto": True, "default": mock.ANY, "nullable": False, **kw}
+                return col(name, **kw)
+
+            materialized = {
+                (schema, "dingalings_v"): [
+                    col("dingaling_id", auto="omit", nullable=mock.ANY),
+                    col("address_id"),
+                    col("id_user"),
+                    col("data"),
+                ]
             }
-            if auto == "omit":
-                res.pop("autoincrement")
+            views = {
+                (schema, "email_addresses_v"): [
+                    col("address_id", auto="omit", nullable=mock.ANY),
+                    col("remote_user_id"),
+                    col("email_address"),
+                ],
+                (schema, "users_v"): [
+                    col("user_id", auto="omit", nullable=mock.ANY),
+                    col("test1", nullable=mock.ANY),
+                    col("test2", nullable=mock.ANY),
+                    col("parent_user_id"),
+                ],
+                (schema, "user_tmp_v"): [
+                    col("id", auto="omit", nullable=mock.ANY),
+                    col("name"),
+                    col("foo"),
+                ],
+            }
+            self._resolve_views(views, materialized)
+            tables = {
+                (schema, "users"): [
+                    pk("user_id"),
+                    col("test1", nullable=False),
+                    col("test2", nullable=False),
+                    col("parent_user_id"),
+                ],
+                (schema, "dingalings"): [
+                    pk("dingaling_id"),
+                    col("address_id"),
+                    col("id_user"),
+                    col("data"),
+                ],
+                (schema, "email_addresses"): [
+                    pk("address_id"),
+                    col("remote_user_id"),
+                    col("email_address"),
+                ],
+                (schema, "comment_test"): [
+                    pk("id", comment="id comment"),
+                    col("data", comment="data % comment"),
+                    col(
+                        "d2",
+                        comment=r"""Comment types type speedily ' " \ '' Fun!""",
+                    ),
+                    col("d3", comment="Comment\nwith\rescapes"),
+                ],
+                (schema, "no_constraints"): [col("data")],
+                (schema, "local_table"): [pk("id"), col("data"), col("remote_id")],
+                (schema, "remote_table"): [pk("id"), col("local_id"), col("data")],
+                (schema, "remote_table_2"): [pk("id"), col("data")],
+                (schema, "noncol_idx_test_nopk"): [col("q")],
+                (schema, "noncol_idx_test_pk"): [pk("id"), col("q")],
+                (schema, self.temp_table_name()): [
+                    pk("id"),
+                    col("name"),
+                    col("foo"),
+                ],
+            }
+            res = self._resolve_kind(kind, tables, views, materialized)
+            res = self._resolve_names(schema, scope, filter_names, res)
             return res
+    else:
+        test_get_indexes = testing.requires.index_reflection(_ComponentReflectionTest.test_get_indexes)
 
-        def pk(name, **kw):
-            kw = {"auto": True, "default": mock.ANY, "nullable": False, **kw}
-            return col(name, **kw)
 
-        materialized = {
-            (schema, "dingalings_v"): [
-                col("dingaling_id", auto="omit", nullable=mock.ANY),
-                col("address_id"),
-                col("id_user"),
-                col("data"),
-            ]
-        }
-        views = {
-            (schema, "email_addresses_v"): [
-                col("address_id", auto="omit", nullable=mock.ANY),
-                col("remote_user_id"),
-                col("email_address"),
-            ],
-            (schema, "users_v"): [
-                col("user_id", auto="omit", nullable=mock.ANY),
-                col("test1", nullable=mock.ANY),
-                col("test2", nullable=mock.ANY),
-                col("parent_user_id"),
-            ],
-            (schema, "user_tmp_v"): [
-                col("id", auto="omit", nullable=mock.ANY),
-                col("name"),
-                col("foo"),
-            ],
-        }
-        self._resolve_views(views, materialized)
-        tables = {
-            (schema, "users"): [
-                pk("user_id"),
-                col("test1", nullable=False),
-                col("test2", nullable=False),
-                col("parent_user_id"),
-            ],
-            (schema, "dingalings"): [
-                pk("dingaling_id"),
-                col("address_id"),
-                col("id_user"),
-                col("data"),
-            ],
-            (schema, "email_addresses"): [
-                pk("address_id"),
-                col("remote_user_id"),
-                col("email_address"),
-            ],
-            (schema, "comment_test"): [
-                pk("id", comment="id comment"),
-                col("data", comment="data % comment"),
-                col(
-                    "d2",
-                    comment=r"""Comment types type speedily ' " \ '' Fun!""",
-                ),
-                col("d3", comment="Comment\nwith\rescapes"),
-            ],
-            (schema, "no_constraints"): [col("data")],
-            (schema, "local_table"): [pk("id"), col("data"), col("remote_id")],
-            (schema, "remote_table"): [pk("id"), col("local_id"), col("data")],
-            (schema, "remote_table_2"): [pk("id"), col("data")],
-            (schema, "noncol_idx_test_nopk"): [col("q")],
-            (schema, "noncol_idx_test_pk"): [pk("id"), col("q")],
-            (schema, self.temp_table_name()): [
-                pk("id"),
-                col("name"),
-                col("foo"),
-            ],
-        }
-        res = self._resolve_kind(kind, tables, views, materialized)
-        res = self._resolve_names(schema, scope, filter_names, res)
-        return res
+if not IS_SQLALCHEMY_2:
+
+    class QuotedNameArgumentTest(_QuotedNameArgumentTest):
+        """SQLAlchemy 2.0 gates the foreign key and index tests on requirements; 1.4 does not."""
+
+        test_get_foreign_keys = testing.requires.foreign_key_constraint_reflection(
+            _QuotedNameArgumentTest.test_get_foreign_keys
+        )
+        test_get_indexes = testing.requires.index_reflection(_QuotedNameArgumentTest.test_get_indexes)
+
 
 class FetchLimitOffsetTest(_FetchLimitOffsetTest):
 
@@ -333,81 +373,158 @@ class NumericTest(_NumericTest,):
 
         return run
 
-    @testing.fixture
-    def literal_round_trip(self, metadata, connection):
-        """test literal rendering"""
+    if IS_SQLALCHEMY_2:
+        @testing.fixture
+        def literal_round_trip(self, metadata, connection):
+            """test literal rendering"""
 
-        # for literal, we test the literal render in an INSERT
-        # into a typed column.  we can then SELECT it back as its
-        # official type; ideally we'd be able to use CAST here
-        # but MySQL in particular can't CAST fully
+            # for literal, we test the literal render in an INSERT
+            # into a typed column.  we can then SELECT it back as its
+            # official type; ideally we'd be able to use CAST here
+            # but MySQL in particular can't CAST fully
 
-        def run(
-                type_,
-                input_,
-                output,
-                filter_=None,
-                compare=None,
-                support_whereclause=True,
-        ):
-            if isinstance(type_, Float):
-                t = Table("t", metadata, Column("a", Integer), Column("x", type_))
-            else:
-                t = Table("t", metadata, Column("x", type_))
-            t.create(connection)
+            def run(
+                    type_,
+                    input_,
+                    output,
+                    filter_=None,
+                    compare=None,
+                    support_whereclause=True,
+            ):
+                if isinstance(type_, Float):
+                    t = Table("t", metadata, Column("a", Integer), Column("x", type_))
+                else:
+                    t = Table("t", metadata, Column("x", type_))
+                t.create(connection)
 
-            for value in input_:
+                for value in input_:
+                    ins = t.insert().values(
+                        x=literal(value, type_, literal_execute=True)
+                    )
+                    connection.execute(ins)
+
                 ins = t.insert().values(
-                    x=literal(value, type_, literal_execute=True)
+                    x=literal(None, type_, literal_execute=True)
                 )
                 connection.execute(ins)
 
-            ins = t.insert().values(
-                x=literal(None, type_, literal_execute=True)
-            )
-            connection.execute(ins)
-
-            if support_whereclause and self.supports_whereclause:
-                if compare:
-                    stmt = select(t.c.x).where(
-                        t.c.x
-                        == literal(
-                            compare,
-                            type_,
-                            literal_execute=True,
-                        ),
-                        t.c.x
-                        == literal(
-                            input_[0],
-                            type_,
-                            literal_execute=True,
-                        ),
+                if support_whereclause and self.supports_whereclause:
+                    if compare:
+                        stmt = select(t.c.x).where(
+                            t.c.x
+                            == literal(
+                                compare,
+                                type_,
+                                literal_execute=True,
+                            ),
+                            t.c.x
+                            == literal(
+                                input_[0],
+                                type_,
+                                literal_execute=True,
+                            ),
+                            )
+                    else:
+                        stmt = select(t.c.x).where(
+                            t.c.x
+                            == literal(
+                                compare if compare is not None else input_[0],
+                                type_,
+                                literal_execute=True,
+                            )
                         )
                 else:
-                    stmt = select(t.c.x).where(
-                        t.c.x
-                        == literal(
-                            compare if compare is not None else input_[0],
-                            type_,
-                            literal_execute=True,
-                        )
+                    stmt = select(t.c.x).where(t.c.x.is_not(None))
+
+                rows = connection.execute(stmt).all()
+                assert rows, "No rows returned"
+                for row in rows:
+                    value = row[0]
+                    if filter_ is not None:
+                        value = filter_(value)
+                    assert value in output
+
+                stmt = select(t.c.x).where(t.c.x.is_(None))
+                rows = connection.execute(stmt).all()
+                eq_(rows, [(None,)])
+
+            return run
+    else:
+        @testing.fixture
+        def literal_round_trip(self, metadata, connection):
+            """SQLAlchemy 1.4's literal round trip, keeping a FLOAT out of the first column"""
+
+            def run(type_, input_, output, filter_=None):
+                if isinstance(type_, Float):
+                    t = Table("t", metadata, Column("a", Integer), Column("x", type_))
+                else:
+                    t = Table("t", metadata, Column("x", type_))
+                t.create(connection)
+
+                for value in input_:
+                    ins = t.insert().values(x=literal(value, type_)).compile(
+                        dialect=testing.db.dialect, compile_kwargs=dict(literal_binds=True)
                     )
-            else:
-                stmt = select(t.c.x).where(t.c.x.is_not(None))
+                    connection.execute(ins)
 
-            rows = connection.execute(stmt).all()
-            assert rows, "No rows returned"
-            for row in rows:
-                value = row[0]
-                if filter_ is not None:
-                    value = filter_(value)
-                assert value in output
+                stmt = select(t.c.x)
+                if self.supports_whereclause:
+                    stmt = stmt.where(t.c.x == literal(value))
+                stmt = stmt.compile(dialect=testing.db.dialect, compile_kwargs=dict(literal_binds=True))
+                for row in connection.execute(stmt):
+                    value = row[0]
+                    if filter_ is not None:
+                        value = filter_(value)
+                    assert value in output
 
-            stmt = select(t.c.x).where(t.c.x.is_(None))
-            rows = connection.execute(stmt).all()
-            eq_(rows, [(None,)])
+            return run
 
-        return run
+
+FLOAT_CAST_SKIPPED = testing.fails_on(
+    "starrocks", "the dialect inherits MySQL's version check and skips CAST to FLOAT, which StarRocks supports"
+)
+DECIMAL_SCALE_ABOVE_38 = testing.skip(
+    "starrocks", "the quotient of two DECIMALs of scale 20 needs scale 40; StarRocks allows 38"
+)
+NULLIF_DECIMAL_OVERFLOW = testing.skip(
+    "starrocks", "StarRocks overflows the DECIMAL(38, 0) quotient to NULL once the divisor is wrapped in nullif()"
+)
+TINY_DIVIDEND, TINY_DIVISOR = "0.00000000000049382716", "0.00000000000012345679"
+BIG_DIVIDEND, BIG_DIVISOR = "30000000000000000000000000000000000000", "10000000000000000000000000000000000000"
+MANY_DIGITS_DIVIDEND, MANY_DIGITS_DIVISOR = "5.02797279921331664759", "0.71828182845904523537"
+
+
+if IS_SQLALCHEMY_2:
+
+    class TrueDivTest(_TrueDivTest):
+        """Upstream's pair of combinations, flattened so StarRocks' DECIMAL limits can be marked per case."""
+
+        @testing.combinations(
+            ("float-typed", "7.0", "3.5", Float(), "2", False, FLOAT_CAST_SKIPPED),
+            ("float-untyped_function", "7.0", "3.5", Float(), "2", True, FLOAT_CAST_SKIPPED),
+            ("numeric_whole_number-typed", "1", "2.00", Numeric(10, 2), "0.5", False),
+            ("numeric_whole_number-untyped_function", "1", "2.00", Numeric(10, 2), "0.5", True),
+            ("numeric_many_decimals-typed", MANY_DIGITS_DIVIDEND, MANY_DIGITS_DIVISOR, Numeric(22, 20), "7", False,
+             DECIMAL_SCALE_ABOVE_38),
+            ("numeric_many_decimals-untyped_function", MANY_DIGITS_DIVIDEND, MANY_DIGITS_DIVISOR, Numeric(22, 20), "7",
+             True, DECIMAL_SCALE_ABOVE_38),
+            ("numeric_tiny_divisor-typed", TINY_DIVIDEND, TINY_DIVISOR, Numeric(38, 20), "4", False,
+             DECIMAL_SCALE_ABOVE_38),
+            ("numeric_tiny_divisor-untyped_function", TINY_DIVIDEND, TINY_DIVISOR, Numeric(38, 20), "4", True,
+             DECIMAL_SCALE_ABOVE_38),
+            ("numeric_38_digit_divisor-typed", BIG_DIVIDEND, BIG_DIVISOR, Numeric(38, 0), "3", False),
+            ("numeric_38_digit_divisor-untyped_function", BIG_DIVIDEND, BIG_DIVISOR, Numeric(38, 0), "3", True,
+             NULLIF_DECIMAL_OVERFLOW),
+            id_="iaaaaa",
+            argnames="left, right, type_, expected, hide_divisor_type",
+        )
+        def test_truediv_divisor(self, connection, left, right, type_, expected, hide_divisor_type):
+            divisor = cast(literal_column(right), type_)
+            if hide_divisor_type:
+                divisor = func.nullif(divisor, 0)
+            result = connection.scalar(select(cast(literal_column(left), type_) / divisor))
+
+            eq_(decimal.Decimal(str(result)), decimal.Decimal(expected))
 
 
 class StringTest(_StringTest):
@@ -442,6 +559,8 @@ class CTETest(_CTETest):
         pass
 
 class JSONTest(_JSONTest):
+    """On SQLAlchemy 1.4 the typed-access tests are gated on ``legacy_unconditional_json_extract``, as 2.0 does."""
+
     # Override define_tables to specify autoincrement=True explicitly for test on Starrocks
     @classmethod
     def define_tables(cls, metadata):
@@ -485,83 +604,148 @@ class JSONTest(_JSONTest):
     def test_single_element_round_trip(self, element):
         pass
 
-class ServerSideCursorsTest(_ServerSideCursorsTest):
+    if not IS_SQLALCHEMY_2:
+        test_index_typed_access = testing.requires.legacy_unconditional_json_extract(_JSONTest.test_index_typed_access)
+        test_index_typed_comparison = testing.requires.legacy_unconditional_json_extract(
+            _JSONTest.test_index_typed_comparison
+        )
+        test_path_typed_comparison = testing.requires.legacy_unconditional_json_extract(
+            _JSONTest.test_path_typed_comparison
+        )
 
-    @testing.combinations(
-        ("global_string", True, lambda stringify: stringify("select 1"), True),
-        (
-                "global_text",
-                True,
-                lambda stringify: text(stringify("select 1")),
-                True,
-        ),
-        ("global_expr", True, select(1), True),
-        (
-                "global_off_explicit",
-                False,
-                lambda stringify: text(stringify("select 1")),
-                False,
-        ),
-        (
-                "stmt_option",
-                False,
-                select(1).execution_options(stream_results=True),
-                True,
-        ),
-        (
-                "stmt_option_disabled",
-                True,
-                select(1).execution_options(stream_results=False),
-                False,
-        ),
-        # Omit unsupported FOR UPDATE
-        # ("for_update_expr", True, select(1).with_for_update(), True),
-        # # TODO: need a real requirement for this, or dont use this test
-        # (
-        #     "for_update_string",
-        #     True,
-        #     lambda stringify: stringify("SELECT 1 FOR UPDATE"),
-        #     True,
-        #     testing.skip_if(["sqlite", "mssql"]),
-        # ),
-        (
-                "text_no_ss",
-                False,
-                lambda stringify: text(stringify("select 42")),
-                False,
-        ),
-        (
+FOR_UPDATE = testing.skip("starrocks", "StarRocks does not support SELECT ... FOR UPDATE")
+
+
+class ServerSideCursorsTest(_ServerSideCursorsTest):
+    """Upstream's cursor status test, with its FOR UPDATE combinations skipped.
+
+    The body is copied rather than delegated: the upstream combinations carry an exclusion, which adds an
+    ``_exclusions_0`` parameter to the upstream function.
+    """
+
+    if IS_SQLALCHEMY_2:
+
+        @testing.combinations(
+            ("global_string", True, lambda stringify: stringify("select 1"), True),
+            ("global_text", True, lambda stringify: text(stringify("select 1")), True),
+            ("global_expr", True, select(1), True),
+            ("global_off_explicit", False, lambda stringify: text(stringify("select 1")), False),
+            ("stmt_option", False, select(1).execution_options(stream_results=True), True),
+            ("stmt_option_disabled", True, select(1).execution_options(stream_results=False), False),
+            ("for_update_expr", True, select(1).with_for_update(), True, FOR_UPDATE),
+            ("for_update_string", True, lambda stringify: stringify("SELECT 1 FOR UPDATE"), True, FOR_UPDATE),
+            ("text_no_ss", False, lambda stringify: text(stringify("select 42")), False),
+            (
                 "text_ss_option",
                 False,
-                lambda stringify: text(stringify("select 42")).execution_options(
-                    stream_results=True
-                ),
+                lambda stringify: text(stringify("select 42")).execution_options(stream_results=True),
                 True,
-        ),
-        id_="iaaa",
-        argnames="engine_ss_arg, statement, cursor_ss_status",
-    )
-    def test_ss_cursor_status(
-            self, engine_ss_arg, statement, cursor_ss_status
-    ):
-        engine = self._fixture(engine_ss_arg)
-        with engine.begin() as conn:
-            if callable(statement):
-                statement = testing.resolve_lambda(
-                    statement, stringify=self.stringify
-                )
+            ),
+            id_="iaaa",
+            argnames="engine_ss_arg, statement, cursor_ss_status",
+        )
+        def test_ss_cursor_status(self, engine_ss_arg, statement, cursor_ss_status):
+            engine = self._fixture(engine_ss_arg)
+            with engine.begin() as conn:
+                if callable(statement):
+                    statement = testing.resolve_lambda(statement, stringify=self.stringify)
+                if isinstance(statement, str):
+                    result = conn.exec_driver_sql(statement)
+                else:
+                    result = conn.execute(statement)
+                eq_(self._is_server_side(result.cursor), cursor_ss_status)
+                result.close()
+    else:
 
-            if isinstance(statement, str):
-                result = conn.exec_driver_sql(statement)
-            else:
-                result = conn.execute(statement)
-            eq_(self._is_server_side(result.cursor), cursor_ss_status)
-            result.close()
+        @testing.combinations(
+            ("global_string", True, "select 1", True),
+            ("global_text", True, text("select 1"), True),
+            ("global_expr", True, select(1), True),
+            ("global_off_explicit", False, text("select 1"), False),
+            ("stmt_option", False, select(1).execution_options(stream_results=True), True),
+            ("stmt_option_disabled", True, select(1).execution_options(stream_results=False), False),
+            ("for_update_expr", True, select(1).with_for_update(), True, FOR_UPDATE),
+            ("for_update_string", True, "SELECT 1 FOR UPDATE", True, FOR_UPDATE),
+            ("text_no_ss", False, text("select 42"), False),
+            ("text_ss_option", False, text("select 42").execution_options(stream_results=True), True),
+            id_="iaaa",
+            argnames="engine_ss_arg, statement, cursor_ss_status",
+        )
+        def test_ss_cursor_status(self, engine_ss_arg, statement, cursor_ss_status):
+            engine = self._fixture(engine_ss_arg)
+            with engine.begin() as conn:
+                if isinstance(statement, str):
+                    result = conn.exec_driver_sql(statement)
+                else:
+                    result = conn.execute(statement)
+                eq_(self._is_server_side(result.cursor), cursor_ss_status)
+                result.close()
+
+        @testing.skip(
+            "starrocks",
+            "SQLAlchemy 1.4's fixture leaves out test_needs_autoincrement (2.0 adds it), and the dialect renders "
+            "AUTO_INCREMENT only when it is asked for, so the inserted rows get no id",
+        )
+        def test_roundtrip_fetchmany(self, metadata):
+            pass
 
     @testing.skip("starrocks", 'Auto Increment seems to increment by 100000, not 1')
     def test_roundtrip_fetchall(self, metadata):
         pass
 
-EnumTest.__requires__ = ("enums",)  # Fix Enum handling. Mysql has native ENUM type, but Starrocks has not
-LongNameBlowoutTest.__requires__ = ("index_reflection",)  # This will do to make it skip for now, no multiple column index
+SINGLE_COLUMN_INDEXES = testing.skip("starrocks", "a StarRocks index covers one column, and this one has two")
+
+
+class LongNameBlowoutTest(_LongNameBlowoutTest):
+    """Upstream's long constraint name test, with its two-column index case skipped.
+
+    The skip goes on that case rather than the class: SQLAlchemy 2.0 drops a ``__backend__`` class whose
+    requirements fail without reporting its tests as skipped. The body is copied rather than delegated, since the
+    upstream combinations carry an exclusion, which adds an ``_exclusions_0`` parameter to the upstream function.
+    """
+
+    @testing.combinations(
+        ("fk",),
+        ("pk",),
+        ("ix", SINGLE_COLUMN_INDEXES),
+        ("ck", testing.requires.check_constraint_reflection.as_skips()),
+        ("uq", testing.requires.unique_constraint_reflection.as_skips()),
+        argnames="type_",
+    )
+    def test_long_convention_name(self, type_, metadata, connection):
+        actual_name, reflected_name = getattr(self, type_)(metadata, connection)
+
+        assert len(actual_name) > 255
+
+        if reflected_name is not None:
+            overlap = actual_name[0 : len(reflected_name)]
+            if len(overlap) < len(actual_name):
+                eq_(overlap[0:-5], reflected_name[0 : len(overlap) - 5])
+            else:
+                eq_(overlap, reflected_name)
+
+
 CompositeKeyReflectionTest.__requires__ = ('primary_key_constraint_reflection',) # This will make it also skip the fixture which is not creating succesfully
+if IS_SQLALCHEMY_2:
+    EnumTest.__requires__ = ("enums",)  # Fix Enum handling. Mysql has native ENUM type, but Starrocks has not
+else:
+    HasIndexTest.__requires__ = ('index_reflection',)
+
+    class LikeFunctionsTest(_LikeFunctionsTest):
+        """SQLAlchemy 2.0 gates the escape tests on ``like_escapes``; 1.4 does not."""
+
+        test_startswith_autoescape = testing.requires.like_escapes(_LikeFunctionsTest.test_startswith_autoescape)
+        test_startswith_escape = testing.requires.like_escapes(_LikeFunctionsTest.test_startswith_escape)
+        test_startswith_autoescape_escape = testing.requires.like_escapes(
+            _LikeFunctionsTest.test_startswith_autoescape_escape
+        )
+        test_endswith_autoescape = testing.requires.like_escapes(_LikeFunctionsTest.test_endswith_autoescape)
+        test_endswith_escape = testing.requires.like_escapes(_LikeFunctionsTest.test_endswith_escape)
+        test_endswith_autoescape_escape = testing.requires.like_escapes(
+            _LikeFunctionsTest.test_endswith_autoescape_escape
+        )
+        test_contains_autoescape = testing.requires.like_escapes(_LikeFunctionsTest.test_contains_autoescape)
+        test_contains_escape = testing.requires.like_escapes(_LikeFunctionsTest.test_contains_escape)
+        test_contains_autoescape_escape = testing.requires.like_escapes(
+            _LikeFunctionsTest.test_contains_autoescape_escape
+        )

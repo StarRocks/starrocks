@@ -111,12 +111,17 @@ include = '\.pyi?$'
 
 [tool.pytest.ini_options]
 addopts = "--tb native -n4 -v -r fxX --maxfail=500 -p no:warnings"
-#python_files = "test/*test_*.py test/**/*test_*.py"
-python_files = "test/**/*test_*.py"
+python_files = "test_*.py"
 #python_functions = "test_engine_and_comment"
 
-# Integration test markers
+# The first six markers are applied by the SQLAlchemy testing plugin
 markers = [
+    "backend: tests that should run on all backends; typically dialect-sensitive",
+    "sparse_backend: tests that should run on just one backend for each kind of db",
+    "sparse_driver_backend: tests that should run on just one kind of driver for each kind of db",
+    "mypy: mypy integration / plugin tests",
+    "timing_intensive: time-oriented tests that are sensitive to race conditions",
+    "memory_intensive: memory / GC intensive tests",
     "integration: marks tests as integration tests (require real database)",
     "slow: marks tests as slow running",
 ]
