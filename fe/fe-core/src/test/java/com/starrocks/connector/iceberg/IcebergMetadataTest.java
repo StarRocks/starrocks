@@ -3557,36 +3557,6 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testRowDeltaDataFileUsesPlanSpecWhenSpecEvolvesBeforeCommit() throws Exception {
-        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_update_spec_evolves_before_commit", 2);
-        table.newFastAppend().appendFile(FILE_A).commit();
-        int planSpecId = table.spec().specId();
-        // A concurrent ALTER adds a partition field after an UPDATE was planned; the BE wrote spec 0 paths.
-        table.updateSpec().addField("id").commit();
-
-        TIcebergDataFile newDataFile = new TIcebergDataFile();
-        newDataFile.setPath(table.location() + "/data/data_bucket=0/updated.parquet");
-        newDataFile.setFormat("parquet");
-        newDataFile.setRecord_count(1);
-        newDataFile.setSplit_offsets(Lists.newArrayList(4L));
-        newDataFile.setPartition_path(table.location() + "/data/data_bucket=0/");
-        newDataFile.setFile_size_in_bytes(100);
-        newDataFile.setPartition_null_fingerprint("0");
-        newDataFile.setColumn_stats(new TIcebergColumnStats());
-        commitPositionDeleteOfFileA(table, planSpecId, "data_bucket=0/", "0", newDataFile);
-
-        FileScanTask newFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
-                task -> task.file().location().equals(newDataFile.getPath())));
-        Assertions.assertEquals(planSpecId, newFileTask.file().specId());
-        Assertions.assertEquals(FILE_A.partition(), newFileTask.file().partition());
-        FileScanTask oldFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
-                task -> task.file().location().equals(FILE_A.location())));
-        DeleteFile committedDelete = Iterables.getOnlyElement(oldFileTask.deletes());
-        Assertions.assertEquals(FILE_A.specId(), committedDelete.specId());
-        Assertions.assertEquals(FILE_A.partition(), committedDelete.partition());
-    }
-
-    @Test
     public void testPositionDeleteFailsWhenPlanSpecNoLongerExists() throws Exception {
         TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_plan_spec_removed", 2);
         table.newFastAppend().appendFile(FILE_A).commit();

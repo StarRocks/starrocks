@@ -2686,8 +2686,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergCatalog.invalidatePartitionCache(dbName, tableName);
     }
 
-<<<<<<< HEAD
-=======
     // The spec the BE partitioned this DML's output by: frozen at plan time, it differs from the current spec
     // when the spec evolved between planning and commit.
     private static PartitionSpec writeSpec(org.apache.iceberg.Table nativeTbl, Object extra) {
@@ -2830,30 +2828,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    private org.apache.iceberg.DataFile buildDataFile(
-            TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
-        Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
-        DataFiles.Builder builder = DataFiles.builder(partitionSpec)
-                .withMetrics(metrics)
-                .withPath(dataFile.path)
-                .withFormat(dataFile.format)
-                .withRecordCount(dataFile.record_count)
-                .withFileSizeInBytes(dataFile.file_size_in_bytes)
-                .withSplitOffsets(dataFile.split_offsets);
-
-        if (partitionSpec.isPartitioned()) {
-            String nullFingerprint = dataFile.isSetPartition_null_fingerprint() ?
-                    dataFile.getPartition_null_fingerprint() :
-                    "0".repeat(partitionSpec.fields().size());
-            String relativePartitionLocation = getIcebergRelativePartitionPath(
-                    IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
-            builder.withPartition(IcebergPartitionData.partitionDataFromPath(
-                    relativePartitionLocation, nullFingerprint, partitionSpec));
-        }
-        return builder.build();
-    }
-
->>>>>>> 6e0c976 ([BugFix] Keep Iceberg position deletes under their data file spec after partition evolution (#81361))
     private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                        List<TIcebergDataFile> dataFiles, String branch,
                                        String dbName, String tableName, Object extra,
@@ -2869,37 +2843,9 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
         for (TIcebergDataFile dataFile : dataFiles) {
-<<<<<<< HEAD
-            // All files should be delete files in a delete operation
-            FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(partitionSpec)
-                    .ofPositionDeletes()
-                    .withPath(dataFile.path)
-                    .withFormat(FileFormat.PARQUET)
-                    .withFileSizeInBytes(dataFile.file_size_in_bytes)
-                    .withRecordCount(dataFile.record_count)
-                    .withPartition(partitionSpec.isPartitioned() ?
-                            IcebergPartitionData.partitionDataFromPath(
-                                    getIcebergRelativePartitionPath(
-                                            IcebergUtil.tableDataLocation(nativeTbl),
-                                            dataFile.partition_path),
-                                    dataFile.isSetPartition_null_fingerprint() ?
-                                            dataFile.getPartition_null_fingerprint() :
-                                            "0".repeat(partitionSpec.fields().size()),
-                                    partitionSpec) : null)
-                    .withMetrics(dataFile.isSetColumn_stats() ?
-                            IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl) : null);
-
-            // Set referenced data file if available
-=======
->>>>>>> 6e0c976 ([BugFix] Keep Iceberg position deletes under their data file spec after partition evolution (#81361))
             if (dataFile.isSetReferenced_data_file()) {
-                String referencedFile = dataFile.getReferenced_data_file();
-                builder.withReferencedDataFile(referencedFile);
-                referencedDataFiles.add(referencedFile);
+                referencedDataFiles.add(dataFile.getReferenced_data_file());
             }
-
-            org.apache.iceberg.DeleteFile deleteFile = builder.build();
-            rowDelta.addDeletes(deleteFile);
         }
 
         // Use the base snapshot id frozen at plan time so conflict detection covers
@@ -2943,9 +2889,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
-            // Build the delete files inside commitWithCleanup so a failed lookup deletes the BE-written files.
+            // Build the files inside commitWithCleanup so a rejected entry deletes the BE-written files.
             commitWithCleanup(() -> {
-                // The BE partitioned the deletes by the plan-time spec.
+                // The BE wrote the deletes under the plan-time spec.
                 PartitionSpec partitionSpec = writeSpec(nativeTbl, extra);
                 Map<String, DataFile> otherSpecDataFiles =
                         findOtherSpecDataFiles(nativeTbl, dataFiles, partitionSpec, lookupSnapshotId);
@@ -2983,169 +2929,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
-<<<<<<< HEAD
-=======
-    private void commitRowDeltaOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
-                                          List<TIcebergDataFile> dataFiles, String branch,
-                                          String dbName, String tableName, Object extra,
-                                          ConnectContext context) {
-        long startMs = System.currentTimeMillis();
-
-        // UPDATE operations - use RowDelta with both delete and data files
-        RowDelta rowDelta = transaction.newRowDelta();
-        if (branch != null) {
-            rowDelta.toBranch(branch);
-        }
-
-        ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
-        long deleteFileCount = 0;
-        long dataFileCount = 0;
-        long deleteBytes = 0;
-        long dataBytes = 0;
-        for (TIcebergDataFile dataFile : dataFiles) {
-            if (isPositionDelete(dataFile)) {
-                if (dataFile.isSetReferenced_data_file()) {
-                    referencedDataFiles.add(dataFile.getReferenced_data_file());
-                }
-                deleteFileCount++;
-                deleteBytes += dataFile.file_size_in_bytes;
-            } else {
-                dataFileCount++;
-                dataBytes += dataFile.file_size_in_bytes;
-            }
-        }
-
-        boolean isMerge = extra instanceof IcebergSinkExtra
-                && ((IcebergSinkExtra) extra).getOperationType() == IcebergSinkExtra.OperationType.MERGE;
-
-        // Use the base snapshot id frozen at plan time so conflict detection covers every
-        // commit landed between scan and commit. The MERGE/UPDATE planners freeze it from the
-        // target scan whenever existing rows are modified; the currentSnapshot fallback below
-        // covers paths that do not (plain appends, target-less MERGE).
-        Long baseSnapshotId = extra instanceof IcebergSinkExtra
-                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
-        if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
-            }
-        }
-        if (baseSnapshotId != null) {
-            rowDelta.validateFromSnapshot(baseSnapshotId);
-        }
-        final Long lookupSnapshotId = baseSnapshotId;
-
-        // Validate that referenced data files exist and haven't been deleted
-        rowDelta.validateDataFilesExist(referencedDataFiles.build());
-        rowDelta.validateDeletedFiles();
-
-        // Set conflict detection filter if available
-        // This filter defines which data files should be checked for conflicts during validation
-        if (extra instanceof IcebergSinkExtra) {
-            Expression conflictDetectionFilterObj = ((IcebergSinkExtra) extra).getConflictDetectionFilter();
-            if (conflictDetectionFilterObj != null) {
-                rowDelta.conflictDetectionFilter(conflictDetectionFilterObj);
-            }
-        }
-
-        // MERGE and UPDATE have separate Iceberg isolation-level properties; pick by op type
-        // so a table that relaxes one but not the other validates at the right level.
-        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().getOrDefault(
-                isMerge ? MERGE_ISOLATION_LEVEL : UPDATE_ISOLATION_LEVEL,
-                isMerge ? MERGE_ISOLATION_LEVEL_DEFAULT : UPDATE_ISOLATION_LEVEL_DEFAULT));
-        if (isolationLevel == IsolationLevel.SERIALIZABLE) {
-            rowDelta.validateNoConflictingDataFiles();
-        }
-        // Per Iceberg's RowDelta contract, validateNoConflictingDeleteFiles must be
-        // called for UPDATE/MERGE "independently of the isolation level" — a concurrent
-        // writer adding position-delete files that overlap rows being updated would
-        // otherwise commit silently and resurrect rows that were concurrently deleted.
-        // Not required for pure DELETE (deleting an already-deleted record is
-        // idempotent), which is why the sibling DELETE-commit path above does not call
-        // this method.
-        // Reference: https://github.com/apache/iceberg/blob/main/api/src/main/java/org/apache/iceberg/RowDelta.java#L149-L163
-        rowDelta.validateNoConflictingDeleteFiles();
-
-        if (context != null) {
-            updateCommitInfo(rowDelta, context);
-        }
-
-        try {
-            // Build the files inside commitWithCleanup so a rejected entry deletes the BE-written files.
-            commitWithCleanup(() -> {
-                // The BE wrote both the deletes and the new rows under the plan-time spec.
-                PartitionSpec partitionSpec = writeSpec(nativeTbl, extra);
-                Map<String, DataFile> otherSpecDataFiles =
-                        findOtherSpecDataFiles(nativeTbl, dataFiles, partitionSpec, lookupSnapshotId);
-                for (TIcebergDataFile dataFile : dataFiles) {
-                    if (isPositionDelete(dataFile)) {
-                        rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl,
-                                otherSpecDataFiles));
-                    } else {
-                        rowDelta.addRows(buildDataFile(dataFile, partitionSpec, nativeTbl));
-                    }
-                }
-                rowDelta.commit();
-                transaction.commitTransaction();
-            }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
-
-            if (isMerge) {
-                ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
-
-                Snapshot newSnapshot = nativeTbl.currentSnapshot();
-                if (newSnapshot != null && newSnapshot.summary() != null) {
-                    // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
-                    // data = data rows written (UPDATE rewrites + INSERTs).
-                    long positionDeleteRows = Long.parseLong(newSnapshot.summary()
-                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                    long dataRows = Long.parseLong(newSnapshot.summary()
-                            .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(positionDeleteRows,
-                            ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(dataRows,
-                            ConnectorMetricsMgr.FILE_TYPE_DATA);
-                }
-
-                ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,
-                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-                ConnectorMetricsMgr.increaseIcebergMergeBytes(dataBytes,
-                        ConnectorMetricsMgr.FILE_TYPE_DATA);
-                ConnectorMetricsMgr.increaseIcebergMergeFiles(deleteFileCount,
-                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-                ConnectorMetricsMgr.increaseIcebergMergeFiles(dataFileCount,
-                        ConnectorMetricsMgr.FILE_TYPE_DATA);
-            } else {
-                ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
-
-                Snapshot updateSnapshot = nativeTbl.currentSnapshot();
-                if (updateSnapshot != null && updateSnapshot.summary() != null) {
-                    long affectedRows = Long.parseLong(updateSnapshot.summary()
-                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                    ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
-                }
-
-                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
-                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
-            }
-        } finally {
-            if (isMerge) {
-                ConnectorMetricsMgr.increaseIcebergMergeDurationMs(System.currentTimeMillis() - startMs);
-            } else {
-                ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        System.currentTimeMillis() - startMs);
-            }
-        }
-
-        asyncRefreshOthersFeMetadataCache(dbName, tableName);
-    }
-
->>>>>>> 6e0c976 ([BugFix] Keep Iceberg position deletes under their data file spec after partition evolution (#81361))
     private void commitDataOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                      List<TIcebergDataFile> dataFiles, String branch,
                                      boolean isOverwrite, boolean isRewrite, Object extra,
@@ -3384,12 +3167,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // so conflict detection covers the window between scan and commit, not a fresher
         // snapshot re-read at commit time.
         private Long baseSnapshotId;
-<<<<<<< HEAD
-=======
         // Spec of the table descriptor the BE partitions this DML's output by, frozen at plan time.
         private Integer writeSpecId;
-        private OperationType operationType = OperationType.UPDATE;
->>>>>>> 6e0c976 ([BugFix] Keep Iceberg position deletes under their data file spec after partition evolution (#81361))
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
