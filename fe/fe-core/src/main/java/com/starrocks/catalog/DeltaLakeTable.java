@@ -76,6 +76,11 @@ public class DeltaLakeTable extends Table {
     }
 
     @Override
+    public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
     public String getTableLocation() {
         return metastoreTable.getTableLocation();
     }
