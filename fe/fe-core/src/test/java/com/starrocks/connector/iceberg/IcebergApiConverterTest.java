@@ -781,16 +781,18 @@ public class IcebergApiConverterTest {
 
     @Test
     public void testToFullSchemasWithInitialDefaultValue() {
+        // Columns added with a DEFAULT carry the same initial-default and write-default; the column default is the
+        // write-default.
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional("c_bool").withId(1)
-                .ofType(Types.BooleanType.get()).withInitialDefault(true).build());
+                .ofType(Types.BooleanType.get()).withInitialDefault(true).withWriteDefault(true).build());
         fields.add(Types.NestedField.optional("c_int").withId(2)
-                .ofType(Types.IntegerType.get()).withInitialDefault(7).build());
+                .ofType(Types.IntegerType.get()).withInitialDefault(7).withWriteDefault(7).build());
         fields.add(Types.NestedField.optional("c_date").withId(3)
-                .ofType(Types.DateType.get()).withInitialDefault(2).build());
+                .ofType(Types.DateType.get()).withInitialDefault(2).withWriteDefault(2).build());
         long tsMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
         fields.add(Types.NestedField.optional("c_ts").withId(4)
-                .ofType(Types.TimestampType.withoutZone()).withInitialDefault(tsMicros).build());
+                .ofType(Types.TimestampType.withoutZone()).withInitialDefault(tsMicros).withWriteDefault(tsMicros).build());
         fields.add(Types.NestedField.optional("c_no_default").withId(5)
                 .ofType(Types.StringType.get()).build());
 
@@ -880,7 +882,7 @@ public class IcebergApiConverterTest {
         // Time type
         long timeMicros = 3661000000L; // 01:01:01.000000
         fields.add(Types.NestedField.optional("c_time").withId(1)
-                .ofType(Types.TimeType.get()).withInitialDefault(timeMicros).build());
+                .ofType(Types.TimeType.get()).withInitialDefault(timeMicros).withWriteDefault(timeMicros).build());
 
         Schema schema = new Schema(fields);
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
@@ -893,7 +895,7 @@ public class IcebergApiConverterTest {
         // Timestamp with timezone
         long tsMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 6, 15, 10, 30, 45));
         fields.add(Types.NestedField.optional("c_ts_tz").withId(1)
-                .ofType(Types.TimestampType.withZone()).withInitialDefault(tsMicros).build());
+                .ofType(Types.TimestampType.withZone()).withInitialDefault(tsMicros).withWriteDefault(tsMicros).build());
 
         Schema schema = new Schema(fields);
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
@@ -1093,10 +1095,10 @@ public class IcebergApiConverterTest {
         Schema schema = new Schema(fields);
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
 
-        // toFullSchemas stores write-default (for INSERT path), falling back to initial-default
+        // toFullSchemas stores only the write-default (the INSERT path); without one, INSERT writes NULL
         assertEquals("10", columns.get(0).getDefaultValue()); // write-default wins
         assertEquals("10", columns.get(1).getDefaultValue()); // write-default only
-        assertEquals("5", columns.get(2).getDefaultValue());  // initial-default as fallback
+        assertNull(columns.get(2).getDefaultValue());         // initial-default is never written
 
         // toInitialDefaultValueString returns ONLY the initial-default
         assertEquals("5", IcebergApiConverter.toInitialDefaultValueString(schema.findField("c_both")));

@@ -29,6 +29,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.IcebergTableFactory;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
@@ -254,6 +255,86 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
                 "resource", "db", "table", "", columns, icebergNativeTable, Maps.newHashMap());
         Assertions.assertEquals(Lists.newArrayList(1, 0), icebergTable.getSortKeyIndexes());
+    }
+
+    @Test
+    public void testGetSortKeyIndexesStopsAtNestedSortField(@Mocked Table icebergNativeTable) {
+        List<Column> columns = Lists.newArrayList(
+                new Column("s", INT),
+                new Column("b", INT),
+                new Column("c", INT));
+
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StructType.of(
+                        Types.NestedField.optional(4, "x", Types.IntegerType.get()))),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get()));
+        // callers pair index i with sortOrder.fields().get(i): skipping s.x would put b's DESC on c
+        SortOrder nestedFirst = SortOrder.builderFor(schema)
+                .asc("s.x")
+                .desc("b")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        SortOrder nestedMiddle = SortOrder.builderFor(schema)
+                .desc("b")
+                .asc("s.x")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+
+        new mockit.Expectations() {
+            {
+                icebergNativeTable.schema();
+                result = schema;
+                minTimes = 0;
+
+                icebergNativeTable.sortOrder();
+                returns(nestedFirst, nestedMiddle);
+            }
+        };
+
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", columns, icebergNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(Lists.newArrayList(), icebergTable.getSortKeyIndexes());
+        Assertions.assertEquals(Lists.newArrayList(1), icebergTable.getSortKeyIndexes());
+    }
+
+    @Test
+    public void testShowCreateTableKeepsSortDirectionsOnTheirColumns() {
+        List<Column> columns = Lists.newArrayList(
+                new Column("s", INT),
+                new Column("b", INT),
+                new Column("c", INT));
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StructType.of(
+                        Types.NestedField.optional(4, "x", Types.IntegerType.get()))),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get()));
+
+        // a nested first field leaves no top-level prefix: no ORDER BY, not "b ASC, c DESC"
+        SortOrder nestedFirst = SortOrder.builderFor(schema)
+                .asc("s.x")
+                .desc("b")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        TestTables.TestTable nestedFirstTable = TestTables.create(tableDir, "sort_nested_first", schema,
+                PartitionSpec.unpartitioned(), nestedFirst, 2);
+        String ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(1, "sort_nested_first",
+                "iceberg_catalog", "resource", "db", "sort_nested_first", "", columns, nestedFirstTable,
+                Maps.newHashMap()));
+        Assertions.assertFalse(ddl.contains("ORDER BY"), ddl);
+
+        // a nested middle field keeps only the prefix before it
+        SortOrder nestedMiddle = SortOrder.builderFor(schema)
+                .desc("b")
+                .asc("s.x")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        TestTables.TestTable nestedMiddleTable = TestTables.create(tableDir, "sort_nested_middle", schema,
+                PartitionSpec.unpartitioned(), nestedMiddle, 2);
+        ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(2, "sort_nested_middle",
+                "iceberg_catalog", "resource", "db", "sort_nested_middle", "", columns, nestedMiddleTable,
+                Maps.newHashMap()));
+        Assertions.assertTrue(ddl.contains("\nORDER BY (b DESC NULLS LAST)\n"), ddl);
     }
 
     @Test
