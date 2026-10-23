@@ -2739,7 +2739,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return aiTopnPushdownMaxGlobalLimit;
     }
 
-    public void setAITopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
+    public void setAiTopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
         // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
         if (aiTopnPushdownMaxGlobalLimit < 0) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,

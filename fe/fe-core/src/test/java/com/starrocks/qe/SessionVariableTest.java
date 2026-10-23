@@ -26,6 +26,12 @@ import java.util.Map;
 public class SessionVariableTest {
 
     @Test
+    public void testAITopNThresholdRegistersValidatedSetter() throws Exception {
+        Assertions.assertEquals(SessionVariable.class.getMethod("setAiTopnPushdownMaxGlobalLimit", long.class),
+                SessionVariable.SETTER_MAP.get("aiTopnPushdownMaxGlobalLimit"));
+    }
+
+    @Test
     public void testAITopNThresholdValidationAndState() throws Exception {
         SessionVariable variables = new SessionVariable();
         Assertions.assertTrue(variables.isEnableAITopnPushdown());
@@ -34,7 +40,7 @@ public class SessionVariableTest {
         Assertions.assertTrue(variables.isEnableAITopnPushdown());
         Assertions.assertEquals(1000, variables.getAITopnPushdownMaxGlobalLimit());
 
-        variables.setAITopnPushdownMaxGlobalLimit(0);
+        variables.setAiTopnPushdownMaxGlobalLimit(0);
         variables.setEnableAITopnPushdown(false);
         Assertions.assertEquals(false,
                 variables.getNonDefaultVariables().get(SessionVariable.ENABLE_AI_TOPN_PUSHDOWN).actualValue);
@@ -48,13 +54,13 @@ public class SessionVariableTest {
         Assertions.assertEquals(0, clone.getAITopnPushdownMaxGlobalLimit());
         Assertions.assertEquals(0, restored.getAITopnPushdownMaxGlobalLimit());
 
-        clone.setAITopnPushdownMaxGlobalLimit(Long.MAX_VALUE);
+        clone.setAiTopnPushdownMaxGlobalLimit(Long.MAX_VALUE);
         clone.setEnableAITopnPushdown(true);
         Assertions.assertTrue(clone.isEnableAITopnPushdown());
         Assertions.assertFalse(variables.isEnableAITopnPushdown());
         Assertions.assertEquals(Long.MAX_VALUE, clone.getAITopnPushdownMaxGlobalLimit());
         Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
-        Assertions.assertThrows(SemanticException.class, () -> variables.setAITopnPushdownMaxGlobalLimit(-1));
+        Assertions.assertThrows(SemanticException.class, () -> variables.setAiTopnPushdownMaxGlobalLimit(-1));
         Assertions.assertEquals(0, variables.getAITopnPushdownMaxGlobalLimit());
     }
 

@@ -175,7 +175,31 @@ public class AIFunctionArgumentsTest {
                     + "(" + String.join(",", nullDefaults) + ")");
             assertEquals(ids[i], withNullDefaults.getFn().getFunctionId());
             assertTrue(AIModelConfigs.shouldUseDefaultProvider(withNullDefaults));
+            assertEquals("", stringArgument(withNullDefaults, providerIndex));
             assertEquals("", stringArgument(withNullDefaults, modelIndex));
+        }
+    }
+
+    @Test
+    public void testExtractLabelsNamedArgumentsAndDefaults() {
+        for (String sql : List.of("ai_extract(input => 'Alice', labels => ['name'])",
+                "ai_extract(labels => ['name'], input => 'Alice')", "ai_extract('Alice', ['name'])")) {
+            FunctionCallExpr call = analyze(sql);
+            assertEquals(200114, call.getFn().getFunctionId());
+            assertEquals("labels", call.getFn().getArgNames()[1]);
+            assertTrue(AIModelConfigs.shouldUseDefaultProvider(call));
+            assertEquals("chat_provider", AIModelConfigs.resolveProvider(providers, call).getName());
+        }
+        FunctionCallExpr explicit = analyze("ai_extract(model => 'explicit-model', labels => ['name'], provider => "
+                + "'chat_provider', input => 'Alice')");
+        assertFalse(AIModelConfigs.shouldUseDefaultProvider(explicit));
+        assertEquals("chat_provider", stringArgument(explicit, 2));
+        assertEquals("explicit-model", stringArgument(explicit, 3));
+        reject("ai_extract(input => 'Alice', `keys` => ['name'])", "does not support parameter 'keys'");
+        reject("ai_extract(labels => ['name'])", "No matching function");
+        reject("ai_extract(input => 'Alice', labels => ['name'], labels => ['age'])", "No matching function");
+        for (String array : List.of("[]", "['name', NULL]", "[' ']")) {
+            reject("ai_extract(input => 'Alice', labels => " + array + ")", "nonempty ARRAY");
         }
     }
 

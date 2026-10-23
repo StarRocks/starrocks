@@ -132,8 +132,7 @@ public class AIFunctionAnalyzerTest {
 
     private static FunctionCallExpr analyzeTypedFunction(String name, Expr... arguments) {
         FunctionCallExpr call = new FunctionCallExpr(name, Arrays.asList(arguments));
-        new ExpressionAnalyzer.Visitor(new AnalyzeState(), AnalyzeTestUtil.getConnectContext())
-                .visitFunctionCall(call, new Scope(RelationId.anonymous(), new RelationFields()));
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(call, AnalyzeTestUtil.getConnectContext());
         return call;
     }
 
@@ -147,20 +146,18 @@ public class AIFunctionAnalyzerTest {
     @ParameterizedTest
     @ValueSource(strings = {"ai_complete", "ai_embed"})
     public void testAIProviderSelectorRequiresConstant(String function) throws Exception {
-        analyzeFail("select " + function + "(ta, 'model', 'prompt') from tall", "constant AI provider name");
-        analyzeFail("select " + function + "(NULL, 'model', 'prompt')", "provider name");
-        for (String provider : new String[] {"''", "'  '", "concat(' ', ' ')"}) {
-            analyzeFail("select " + function + "(" + provider + ", 'model', 'prompt')", "nonblank constant AI provider name");
+        analyzeFail("select " + function + "('prompt', ta, 'model') from tall", "constant provider");
+        for (String provider : new String[] {"'  '", "concat(' ', ' ')"}) {
+            analyzeFail("select " + function + "('prompt', " + provider + ", 'model')", "whitespace");
         }
-        analyzeFail("select " + function + "('missing_provider', 'model', 'prompt')", "does not exist");
-        // Analysis resolves the provider for authorization; execution configuration is still bound later.
+        analyzeFail("select " + function + "('prompt', 'missing_provider', 'model')", "does not exist");
         String name = "provider_for_analysis";
         AIProviderType type = function.equals("ai_embed") ? AIProviderType.EMBEDDING : AIProviderType.CHAT;
         GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider(name, type,
                 Map.of("endpoint", "https://models.example.test/v1/inference", "model", "provider-model"), "");
         try {
             for (String provider : new String[] {"'provider_for_analysis'", "concat('provider_', 'for_analysis')"}) {
-                analyzeSuccess("select " + function + "(" + provider + ", 'model', 'prompt')");
+                analyzeSuccess("select " + function + "('prompt', " + provider + ", 'model')");
                 analyzeSuccess("select " + function + "('prompt', " + provider + ", 'model', json_object())");
             }
         } finally {
@@ -175,7 +172,7 @@ public class AIFunctionAnalyzerTest {
         for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
             Assertions.assertAll(
                     () -> analyzeFail("select " + function + "('p', " + array + ")", "nonempty ARRAY"),
-                    () -> analyzeFail("select " + function + "('model', 'p', " + array + ")", "nonempty ARRAY"));
+                    () -> analyzeFail("select " + function + "('p', " + array + ", '', 'model')", "nonempty ARRAY"));
         }
     }
 
@@ -190,7 +187,7 @@ public class AIFunctionAnalyzerTest {
             String array = "['" + Character.toString(codePoint) + "']";
             Assertions.assertAll(String.format("%s U+%04X", function, codePoint),
                     () -> analyzeFail("select " + function + "('p', " + array + ")", "nonblank elements"),
-                    () -> analyzeFail("select " + function + "('model', 'p', " + array + ")", "nonblank elements"));
+                    () -> analyzeFail("select " + function + "('p', " + array + ", '', 'model')", "nonblank elements"));
         }
     }
 
@@ -202,7 +199,7 @@ public class AIFunctionAnalyzerTest {
             String array = "['" + value + "']";
             Assertions.assertAll(
                     () -> analyzeSuccess("select " + function + "('p', " + array + ")"),
-                    () -> analyzeSuccess("select " + function + "('model', 'p', " + array + ")"));
+                    () -> analyzeSuccess("select " + function + "('p', " + array + ", '', 'model')"));
         }
     }
 
@@ -211,15 +208,15 @@ public class AIFunctionAnalyzerTest {
     public void testHelperArrayStringCastsDeferBlankValidationToBackend(String whitespace) {
         String value = "[\"" + whitespace + "\"]";
         for (String function : new String[] {"ai_classify", "ai_extract", "ai_redact"}) {
-            for (String arguments : new String[] {"'p', ", "'model', 'p', "}) {
+            for (String suffix : new String[] {"", ", '', 'model'"}) {
                 QueryStatement statement = (QueryStatement) analyzeSuccess(
-                        "select " + function + "(" + arguments + "cast('" + value + "' as array<varchar>))");
+                        "select " + function + "('p', cast('" + value + "' as array<varchar>)" + suffix + ")");
                 FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                         .getOutputExpression().get(0);
-                CastExpr cast = Assertions.assertInstanceOf(CastExpr.class, call.getChild(call.getChildren().size() - 1));
+                CastExpr cast = Assertions.assertInstanceOf(CastExpr.class, call.getChild(1));
                 Assertions.assertEquals(new ArrayType(VarcharType.VARCHAR), cast.getType());
                 Assertions.assertEquals(value, Assertions.assertInstanceOf(StringLiteral.class, cast.getChild(0)).getValue());
-                analyzeSuccess("select " + function + "(" + arguments + "parse_json('" + value + "'))");
+                analyzeSuccess("select " + function + "('p', parse_json('" + value + "')" + suffix + ")");
             }
         }
     }
@@ -244,7 +241,7 @@ public class AIFunctionAnalyzerTest {
             String function, String column, String table) {
         Assertions.assertAll(
                 () -> analyzeFail("select " + function + "('p', " + column + ") from " + table, "constant ARRAY"),
-                () -> analyzeFail("select " + function + "('model', 'p', " + column + ") from " + table,
+                () -> analyzeFail("select " + function + "('p', " + column + ", '', 'model') from " + table,
                         "constant ARRAY"));
     }
 
@@ -255,7 +252,7 @@ public class AIFunctionAnalyzerTest {
                     "'[\"a\"]'", "parse_json('[\"a\"]')",
                     "array_concat(['a'], ['b'])"}) {
                 analyzeSuccess("select " + function + "('p', " + argument + ")");
-                analyzeSuccess("select " + function + "('model', 'p', " + argument + ")");
+                analyzeSuccess("select " + function + "('p', " + argument + ", '', 'model')");
             }
         }
     }
@@ -268,10 +265,10 @@ public class AIFunctionAnalyzerTest {
                 "'p', 'en', 'zh'", "'p', 'q'", "'p'", "'p', 'condition'"};
         for (int i = 0; i < names.length; i++) {
             assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200110 + i * 2);
-            assertFunctionId("select " + names[i] + "(ta, " + args[i] + ") from tall", 200111 + i * 2);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200110 + i * 2);
         }
         for (int i = 0; i < names.length; i++) {
-            assertFunctionId("select " + names[i] + "('test_default_chat', ta, " + args[i] + ") from tall", 200154 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200110 + i * 2);
         }
 
     }
@@ -323,12 +320,12 @@ public class AIFunctionAnalyzerTest {
     }
 
     @Test
-    public void testEmptyExplicitModelIsRejectedButEmptyPromptIsValid() {
-        Assertions.assertAll(
-                () -> analyzeFail("select ai_complete('', 'prompt')", "model must not be empty"),
-                () -> analyzeFail("select ai_complete('   ', 'prompt')", "model must not be empty"));
-        analyzeSuccess("select ai_complete(cast(null as varchar), 'p')");
-        analyzeSuccess("select ai_complete('model', '')");
+    public void testEmptyModelUsesDefaultAndBlankModelIsRejected() {
+        analyzeFail("select ai_complete(prompt => 'p', model => '   ')", "whitespace");
+        analyzeSuccess("select ai_complete(prompt => 'p', model => '')");
+        analyzeSuccess("select ai_complete(prompt => 'p', model => NULL)");
+        analyzeSuccess("select ai_complete(prompt => cast(null as varchar), model => 'model')");
+        analyzeSuccess("select ai_complete(prompt => '', model => 'model')");
     }
 
     @Test
@@ -607,13 +604,13 @@ public class AIFunctionAnalyzerTest {
         String[] suffixes = {"", ", ['a']", ", ['a']", "", ", ['a']", ", 'en', 'zh'", ", 'q'", "", ", 'q'"};
         for (int i = 0; i < names.length; i++) {
             analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ")");
-            analyzeSuccess("select " + names[i] + "('model', " + value + suffixes[i] + ")");
-            analyzeSuccess("select " + names[i] + "('test_default_chat', 'model', " + value + suffixes[i] + ")");
+            analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ", '', 'model')");
+            analyzeSuccess("select " + names[i] + "(" + value + suffixes[i] + ", 'test_default_chat', 'model')");
         }
         analyzeSuccess("select ai_translate('hello', " + value + ", 'zh')");
         analyzeSuccess("select ai_translate('hello', 'en', " + value + ")");
         analyzeFail("select ai_classify('text', cast(NULL as array<varchar>))", "nonempty ARRAY");
-        analyzeFail("select ai_complete(cast(NULL as varchar), 'model', 'text')", "provider name");
+        analyzeSuccess("select ai_complete(cast(NULL as varchar), '', 'model')");
     }
 
     @Test
@@ -635,7 +632,7 @@ public class AIFunctionAnalyzerTest {
         session.setDisableFunctionFoldConstants(true);
         try {
             analyzeSuccess("select ai_complete(nullif('x', 'x'))");
-            analyzeFail("select ai_complete('a', 'b', NULL)", "is ambiguous");
+            analyzeFail("select ai_complete('a', NULL)", "is ambiguous");
             Assertions.assertTrue(session.isDisableFunctionFoldConstants());
         } finally {
             session.setDisableFunctionFoldConstants(previous);

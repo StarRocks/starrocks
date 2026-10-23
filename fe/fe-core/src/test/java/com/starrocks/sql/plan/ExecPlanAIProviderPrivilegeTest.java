@@ -129,6 +129,7 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
         Mockito.when(state.getAIProviderMgr()).thenReturn(manager);
         Mockito.when(state.getAuthorizationMgr()).thenReturn(originalState.getAuthorizationMgr());
         Mockito.when(state.getAuthorizer()).thenReturn(new Authorizer(access));
+        connectContext.setGlobalStateMgr(state);
         ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         try (MockedStatic<GlobalStateMgr> mocked = Mockito.mockStatic(GlobalStateMgr.class, Mockito.CALLS_REAL_METHODS)) {
             mocked.when(GlobalStateMgr::getCurrentState).thenReturn(state);
@@ -143,6 +144,8 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
             Assertions.assertEquals(Set.of(provider.getId()), recovered.keySet());
             Assertions.assertEquals("test-model", recovered.values().iterator().next().getModel());
             Mockito.verify(manager, Mockito.times(2)).getProvider("private_provider");
+        } finally {
+            connectContext.setGlobalStateMgr(originalState);
         }
     }
 }

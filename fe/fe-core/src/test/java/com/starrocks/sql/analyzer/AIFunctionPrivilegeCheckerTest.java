@@ -90,8 +90,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider("ai_rbac_provider", AIProviderType.CHAT,
                 Map.of("endpoint", "https://models.example.test/v1/chat/completions", "model", "provider-model",
                         "api_key", "private-rbac-test-key"), "");
-        starRocksAssert.withView("CREATE VIEW ai_provider_view SECURITY NONE AS "
-                + "SELECT ai_complete('ai_rbac_provider', 'explicit-model', prompt) AS answer FROM prompts");
+        starRocksAssert.withView("CREATE VIEW ai_provider_view SECURITY NONE AS SELECT ai_complete(provider => "
+                + "'ai_rbac_provider', model => 'explicit-model', prompt => prompt) AS answer FROM prompts");
     }
 
     @AfterAll
@@ -130,11 +130,11 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     public void testSameNameSqlUdfDoesNotRequireAIUsage() throws Exception {
         boolean previousEnableUdf = Config.enable_udf;
         Config.enable_udf = true;
-        String signature = "ai_rbac.ai_complete(STRING, STRING, STRING, STRING)";
-        String sql = "SELECT ai_rbac.ai_complete(prompt, 'a', 'b', 'c') FROM prompts";
+        String signature = "ai_rbac.ai_complete(STRING, STRING, STRING, STRING, STRING, STRING)";
+        String sql = "SELECT ai_rbac.ai_complete(prompt, 'a', 'b', 'c', 'd', 'e') FROM prompts";
         try {
-            executeAsRoot("CREATE FUNCTION ai_complete(x STRING, y STRING, z STRING, suffix STRING) "
-                    + "RETURNS concat(x, y, z, suffix)");
+            executeAsRoot("CREATE FUNCTION ai_complete(x STRING, y STRING, z STRING, suffix STRING, extra STRING, "
+                    + "tail STRING) RETURNS concat(x, y, z, suffix, extra, tail)");
             assertDenied(sql, "FUNCTION");
             executeAsRoot("GRANT USAGE ON FUNCTION " + signature + " TO '" + user + "'");
             QueryStatement statement = (QueryStatement) analyze(sql);
@@ -201,7 +201,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @Test
     public void testFunctionAndProviderUsageAreBothRequired() throws Exception {
-        String query = "SELECT ai_complete('ai_rbac_provider', 'explicit-model', prompt) FROM prompts";
+        String query = "SELECT ai_complete(provider => 'ai_rbac_provider', model => 'explicit-model', prompt => "
+                + "prompt) FROM prompts";
         executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
         assertDenied(query);
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
@@ -227,8 +228,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             executeAsRoot("GRANT " + role + " TO '" + user + "'");
             Long roleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull(role);
             caller.setCurrentRoleIds(Set.of(roleId));
-            SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE task_output AS "
-                    + "SELECT ai_complete('ai_rbac_provider', 'explicit-model', 'prompt') AS answer");
+            SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE task_output AS SELECT "
+                    + "ai_complete(provider => 'ai_rbac_provider', model => 'explicit-model', prompt => 'prompt') AS answer");
             Task task = GsonUtils.GSON.fromJson(
                     GsonUtils.GSON.toJson(TaskBuilder.buildTask(submit, caller)), Task.class);
             caller = restoreTaskContext(task);
@@ -327,8 +328,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         try {
             executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
             executeAsRoot("GRANT USAGE ON AI PROVIDER " + provider + " TO '" + user + "'");
-            PrepareStmt prepared = prepare("SELECT ai_complete('" + provider + "', 'explicit-model', prompt) "
-                    + "FROM prompts WHERE id = ?");
+            PrepareStmt prepared = prepare("SELECT ai_complete(provider => '" + provider + "', model => "
+                    + "'explicit-model', prompt => prompt) FROM prompts WHERE id = ?");
             try {
                 ExecPlan first = executePrepared(prepared, 1);
                 Assertions.assertEquals(Set.of("original-model"), providerModels(first));
