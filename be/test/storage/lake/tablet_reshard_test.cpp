@@ -151,40 +151,8 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_compaction_partial_merge_reject
         SCOPED_TRACE(reverse_sources);
         std::vector<TabletMetadataPtr> pair{children[0], children[1]};
         if (reverse_sources) std::reverse(pair.begin(), pair.end());
-<<<<<<< HEAD
-        const int64_t partial_id = next_id();
-        std::unordered_map<int64_t, TabletMetadataPtr> published;
-        ASSERT_OK(publish_resharding_merge(pair, partial_id, children[0]->version(), children[0]->version() + 1,
-                                           next_id(), published));
-        auto partial = published.at(partial_id);
-        // Advance the untouched third child with an empty transaction: no rowset or recovery-coordinate rewrite.
-        ASSERT_OK(put_tablet_metadata(children[2]));
-        TxnLogPB empty_log;
-        empty_log.set_tablet_id(children[2]->id());
-        empty_log.set_txn_id(next_id());
-        ASSERT_OK(_tablet_manager->put_txn_log(empty_log));
-        TxnInfoPB empty_txn;
-        empty_txn.set_txn_id(empty_log.txn_id());
-        empty_txn.set_txn_type(TXN_NORMAL);
-        empty_txn.set_commit_time(1);
-        ASSIGN_OR_ABORT(auto untouched,
-                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(children[2]->id()),
-                                              children[2]->version(), partial->version(),
-                                              std::span<const TxnInfoPB>(&empty_txn, 1), false));
-        ASSERT_NE(partial->rowsets(0).max_compact_input_rowset_id(),
-                  untouched->rowsets(0).max_compact_input_rowset_id());
-        std::vector<TabletMetadataPtr> rejoin{partial, untouched};
-        if (reverse_sources) std::reverse(rejoin.begin(), rejoin.end());
-        const int64_t target = next_id();
-        published.clear();
-        ASSERT_OK(publish_resharding_merge(rejoin, target, partial->version(), partial->version() + 1, next_id(),
-                                           published));
-        ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(published.at(target)));
-        EXPECT_EQ(baseline, signature);
-=======
         auto status = expect_merge_rejected_without_writes(pair, next_id(), children[0]->version() + 1);
         EXPECT_TRUE(status.message().contains("still holds shared data files")) << status;
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
     }
 }
 
@@ -232,11 +200,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke
     ASSIGN_OR_ABORT(auto expected_rows, read_two_column_rows(source));
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
-<<<<<<< HEAD
-    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(current, current->version()));
-=======
-    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(source, source->version()));
     ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
     ASSERT_OK(put_tablet_metadata(flushed));
     _primary_key_manager->unload_and_remove_primary_index(flushed->id());
@@ -2168,55 +2132,6 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_zero_active_weights_omit_
     segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
     segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
 
-<<<<<<< HEAD
-    auto split_once = [&](const TabletMetadataPtr& input) {
-        SplittingTabletInfoPB splitting;
-        splitting.set_old_tablet_id(input->id());
-        const std::array<std::pair<int, int>, 3> bounds = {{{0, 50}, {50, 95}, {95, 200}}};
-        std::vector<int64_t> child_ids;
-        for (const auto& [lower, upper] : bounds) {
-            const int64_t child_id = next_id();
-            child_ids.push_back(child_id);
-            prepare_tablet_dirs(child_id);
-            splitting.add_new_tablet_ids(child_id);
-            set_range(splitting.add_new_tablet_ranges(), lower, upper);
-        }
-        TxnInfoPB txn;
-        txn.set_txn_id(next_id());
-        txn.set_commit_time(1);
-        txn.set_gtid(1);
-        ASSIGN_OR_ABORT(auto mutable_children,
-                        lake::split_tablet(_tablet_manager.get(), input, splitting, input->version() + 1, txn));
-        std::vector<TabletMetadataPtr> children;
-        for (const int64_t child_id : child_ids) children.push_back(mutable_children.at(child_id));
-        return children;
-    };
-
-    auto expect_conserved_split = [&](const std::vector<TabletMetadataPtr>& children) {
-        ASSERT_EQ(3, children.size());
-        EXPECT_EQ(0, children[0]->rowsets_size());
-        ASSERT_EQ(1, children[1]->rowsets_size());
-        ASSERT_EQ(1, children[2]->rowsets_size());
-        const auto& middle = children[1]->rowsets(0);
-        const auto& right = children[2]->rowsets(0);
-        EXPECT_EQ(0, middle.num_rows() + right.num_rows());
-        EXPECT_EQ(1000, middle.data_size() + right.data_size());
-        EXPECT_EQ(1, middle.num_dels() + right.num_dels());
-        EXPECT_EQ(1, middle.num_dels());
-        EXPECT_EQ(0, right.num_dels());
-        EXPECT_EQ(rowset->uid().SerializeAsString(), middle.uid().SerializeAsString());
-        EXPECT_EQ(rowset->uid().SerializeAsString(), right.uid().SerializeAsString());
-    };
-
-    auto first = split_once(source);
-    expect_conserved_split(first);
-    const RowsetMetadataPB first_middle(first[1]->rowsets(0));
-    const RowsetMetadataPB first_right(first[2]->rowsets(0));
-    auto stable_rowset = [](RowsetMetadataPB rowset) {
-        rowset.clear_id();
-        return rowset.SerializeAsString();
-    };
-=======
     SplittingTabletInfoPB splitting;
     splitting.set_old_tablet_id(source->id());
     const std::array<std::pair<int, int>, 3> bounds = {{{0, 50}, {50, 95}, {95, 200}}};
@@ -2232,11 +2147,10 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_zero_active_weights_omit_
     txn.set_txn_id(next_id());
     txn.set_commit_time(1);
     txn.set_gtid(1);
-    ASSIGN_OR_ABORT(auto mutable_children, lake::split_tablet(_tablet_manager.get(), source, splitting,
-                                                              source->version() + 1, txn, std::nullopt));
+    ASSIGN_OR_ABORT(auto mutable_children,
+                    lake::split_tablet(_tablet_manager.get(), source, splitting, source->version() + 1, txn));
     std::vector<TabletMetadataPtr> children;
     for (const int64_t child_id : child_ids) children.push_back(mutable_children.at(child_id));
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
 
     ASSERT_EQ(3, children.size());
     EXPECT_EQ(0, children[0]->rowsets_size());

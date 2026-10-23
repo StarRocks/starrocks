@@ -137,7 +137,6 @@ Status check_configuration(const std::vector<TabletMetadataPtr>& sources) {
         if (first.compaction_strategy() != other.compaction_strategy()) return disagree("compaction_strategy");
         if (first_flat_json_config != other.flat_json_config().SerializeAsString()) return disagree("flat_json_config");
         if (first_source_schema != other.source_schema().SerializeAsString()) return disagree("source_schema");
-        if (first.cdc_metadata().enable_cdc() != other.cdc_metadata().enable_cdc()) return disagree("enable_cdc");
     }
     return Status::OK();
 }

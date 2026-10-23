@@ -1014,100 +1014,6 @@ Status project_idgs(MergePlan* plan, const std::vector<std::map<uint32_t, uint32
     return Status::OK();
 }
 
-<<<<<<< HEAD
-void record_merge_sstable_meta_result(const MergeSstableMetaResult& result) {
-    switch (result.mode) {
-    case MergeSstableMetaMode::kPrivate:
-        g_tablet_merge_sstable_meta_private_total << 1;
-        return;
-    case MergeSstableMetaMode::kIdentical:
-        g_tablet_merge_sstable_meta_identical_total << 1;
-        return;
-    case MergeSstableMetaMode::kLazyRebuild:
-        g_tablet_merge_sstable_meta_lazy_rebuild_total << 1;
-        break;
-    }
-    switch (result.reason) {
-    case MergeSstableFallbackReason::kNone:
-        return;
-    case MergeSstableFallbackReason::kSharedOrMixed:
-        g_tablet_merge_sstable_fallback_shared_or_mixed_total << 1;
-        return;
-    case MergeSstableFallbackReason::kNonuniformMapping:
-        g_tablet_merge_sstable_fallback_nonuniform_mapping_total << 1;
-        return;
-    case MergeSstableFallbackReason::kCohortMismatch:
-        g_tablet_merge_sstable_fallback_cohort_mismatch_total << 1;
-        return;
-    case MergeSstableFallbackReason::kRowsetLayoutMismatch:
-        g_tablet_merge_sstable_fallback_rowset_layout_mismatch_total << 1;
-        return;
-    case MergeSstableFallbackReason::kDuplicatePhysicalFile:
-        g_tablet_merge_sstable_fallback_duplicate_physical_file_total << 1;
-        return;
-    case MergeSstableFallbackReason::kUnsupportedSstForm:
-        g_tablet_merge_sstable_fallback_unsupported_sst_form_total << 1;
-        return;
-    case MergeSstableFallbackReason::kProjectedDomain:
-        g_tablet_merge_sstable_fallback_projected_domain_total << 1;
-        return;
-    case MergeSstableFallbackReason::kEmbeddedDelvec:
-        g_tablet_merge_sstable_fallback_embedded_delvec_total << 1;
-        return;
-    }
-}
-
-Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
-                      const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata) {
-    auto* primary_key_manager = tablet_manager->primary_key_mgr();
-    for (auto& context : merge_contexts) {
-        bool skip_source_flush = false;
-        FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
-        if (skip_source_flush) continue;
-        TEST_SYNC_POINT_CALLBACK("merge_sstables:source_pk_flush", nullptr);
-        ASSIGN_OR_RETURN(auto flushed,
-                         primary_key_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
-        context.set_metadata(std::move(flushed));
-    }
-
-    const bool has_source_sstable = std::any_of(merge_contexts.begin(), merge_contexts.end(), [](const auto& context) {
-        return !context.metadata()->sstable_meta().sstables().empty();
-    });
-    if (!has_source_sstable) {
-        new_metadata->clear_sstable_meta();
-        return Status::OK();
-    }
-    const auto live_rssids = build_sstable_live_rssid_index(merge_contexts, allocation_plan, *new_metadata);
-
-    TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_entry", nullptr);
-    DeferOp classifier_exit([] { TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_exit", nullptr); });
-    ASSIGN_OR_RETURN(const auto source_range_proof,
-                     validate_metadata_reuse_source_ranges(merge_contexts, *new_metadata));
-
-    ASSIGN_OR_RETURN(auto private_result,
-                     try_project_complete_private_sstables(merge_contexts, allocation_plan, *new_metadata,
-                                                           source_range_proof, live_rssids));
-    if (private_result.mode == MergeSstableMetaMode::kPrivate) {
-        new_metadata->mutable_sstable_meta()->Swap(&private_result.metadata);
-        record_merge_sstable_meta_result(private_result);
-        return Status::OK();
-    }
-
-    ASSIGN_OR_RETURN(auto identical_result,
-                     try_reuse_complete_identical_sstables(merge_contexts, allocation_plan, *new_metadata,
-                                                           source_range_proof, live_rssids));
-    if (identical_result.mode == MergeSstableMetaMode::kIdentical) {
-        new_metadata->mutable_sstable_meta()->Swap(&identical_result.metadata);
-        record_merge_sstable_meta_result(identical_result);
-        return Status::OK();
-    }
-
-    MergeSstableMetaResult fallback_result;
-    fallback_result.reason = private_result.reason;
-    if (fallback_result.reason == MergeSstableFallbackReason::kNone ||
-        fallback_result.reason == MergeSstableFallbackReason::kSharedOrMixed) {
-        fallback_result.reason = identical_result.reason;
-=======
 // Every live delete-vector page has exactly one target RSSID, so the merged file is the pages copied in target
 // RSSID order. Pages of segments a source no longer has are left out. Once every declaration is known to be
 // consistent, the checks the page writer makes before it creates its file are made too, so a refusal comes before
@@ -1155,7 +1061,6 @@ Status plan_delvec_pages(MergePlan* plan, const std::vector<std::map<uint32_t, u
             }
             plan->delvec_pages[segment->second] = DelvecPageInfo{source.id(), declaration, page};
         }
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
     }
     constexpr uint64_t kInt64Max = std::numeric_limits<int64_t>::max();
     std::map<std::tuple<int64_t, std::string, uint64_t>, uint64_t> sizes;
@@ -1341,7 +1246,6 @@ StatusOr<MergePlan> plan_merge(const std::vector<TabletMetadataPtr>& requested, 
     target->clear_orphan_files();
     target->clear_prev_garbage_version();
     target->set_cumulative_point(0);
-    tablet_reshard_helper::reset_cdc_carryover_for_new_tablet(target);
     merge_vector_index_built_version(&plan);
 
     TabletRangePB range = plan.sources.front()->range();
@@ -1431,8 +1335,7 @@ Status write_delvecs(TabletManager* tablet_manager, MergePlan* plan, int64_t txn
 
 // Flushes each source's primary-key memtable so its sstables cover all its rows (the merged tablet's cold load
 // skips rowsets below the last sstable's watermark), then carries the sstables over, or falls back to a rebuild.
-Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan,
-                      std::optional<PublishPropertyPBRef> publish_property) {
+Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
     auto* target = plan->target.get();
     if (!uses_cloud_native_pk_index(*target)) return Status::OK();
     if (plan->rebuild_index) {
@@ -1444,8 +1347,7 @@ Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan,
         bool skip_source_flush = false;
         FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
         if (skip_source_flush) continue;
-        ASSIGN_OR_RETURN(source, tablet_manager->primary_key_mgr()->flush_pk_memtable(source, target->version(),
-                                                                                      publish_property));
+        ASSIGN_OR_RETURN(source, tablet_manager->primary_key_mgr()->flush_pk_memtable(source, target->version()));
     }
     for (size_t s = 0; s < flushed.size(); ++s) {
         std::set<std::string> existing;
@@ -1484,133 +1386,17 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
-<<<<<<< HEAD
-
-    std::vector<TabletMergeContext> merge_contexts;
-    merge_contexts.reserve(old_tablet_metadatas.size());
-    for (const auto& old_tablet_metadata : old_tablet_metadatas) {
-        if (old_tablet_metadata == nullptr) {
-            return Status::InvalidArgument("old tablet metadata is null");
-        }
-        // Source RSSIDs occupy the full uint32 domain. Only the packed target
-        // cursor is restricted to INT32_MAX; source SST reuse is proved later
-        // by the modern/legacy classifiers against the packed projection.
-        RETURN_IF_ERROR(validate_source_rssid_domain(*old_tablet_metadata));
-        if (is_primary_key(*old_tablet_metadata)) {
-            for (const auto& rowset : old_tablet_metadata->rowsets()) {
-                const uint64_t source_rowset_id = static_cast<uint64_t>(rowset.id());
-                if (source_rowset_id == 0) {
-                    return Status::InvalidArgument(
-                            fmt::format("Writable primary-key tablet merge source tablet {} has invalid rowset {}",
-                                        old_tablet_metadata->id(), source_rowset_id));
-                }
-            }
-        }
-        merge_contexts.emplace_back(old_tablet_metadata);
-    }
-
-    auto new_tablet_metadata = std::make_shared<TabletMetadataPB>(*merge_contexts.front().metadata());
-    new_tablet_metadata->set_id(merging_tablet.new_tablet_id());
-    new_tablet_metadata->set_version(new_version);
-    new_tablet_metadata->set_commit_time(txn_info.commit_time());
-    new_tablet_metadata->set_gtid(txn_info.gtid());
-    new_tablet_metadata->clear_rowsets();
-    new_tablet_metadata->clear_delvec_meta();
-    new_tablet_metadata->clear_sstable_meta();
-    new_tablet_metadata->clear_dcg_meta();
-    new_tablet_metadata->clear_idg_meta();
-    new_tablet_metadata->clear_rowset_to_schema();
-    new_tablet_metadata->clear_compaction_inputs();
-    new_tablet_metadata->clear_orphan_files();
-    new_tablet_metadata->clear_prev_garbage_version();
-    new_tablet_metadata->set_cumulative_point(0);
-
-    // Reconcile the async vector-index build watermark to the MIN over all merge sources so the
-    // build task never skips another source's unbuilt rowsets (see the helper for the invariant).
-    reconcile_vector_index_built_version(merge_contexts, new_tablet_metadata.get());
-
-    // Merge tablet-level range via union_range
-    TabletRangePB merged_range = merge_contexts.front().metadata()->range();
-    for (size_t i = 1; i < merge_contexts.size(); ++i) {
-        ASSIGN_OR_RETURN(merged_range,
-                         tablet_reshard_helper::union_range(merged_range, merge_contexts[i].metadata()->range()));
-    }
-    new_tablet_metadata->mutable_range()->CopyFrom(merged_range);
-
-    RETURN_IF_ERROR(validate_merge_inputs(merge_contexts, merged_range));
-    ASSIGN_OR_RETURN(auto allocation_plan, build_tablet_merge_allocation_plan(merge_contexts));
-
-    RETURN_IF_ERROR(preflight_merge_sources(merge_contexts, allocation_plan, *new_tablet_metadata));
-
-    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_rssid_reassign);
-
-    // Phase 2: Materialize the globally ordered canonical rowsets.
-    // canonical_contribs collects each canonical rowset's contributing
-    // old tablets' old-tablet-local ranges; consumed by the PK fail-fast coverage
-    // check below and by gap-delvec synthesis.
-    CanonicalContribMap canonical_contribs;
-    RETURN_IF_ERROR(materialize_planned_rowsets(allocation_plan, new_tablet_metadata.get(), &canonical_contribs));
-
-    // Phase 2.5: Merge schemas (must run before gap synthesis + merge_dcg_meta,
-    // which need historical_schemas to locate rebuild schemas for shared-segment
-    // rebuild).
-    merge_schemas(merge_contexts, new_tablet_metadata.get());
-
-    new_tablet_metadata->set_next_rowset_id(allocation_plan.target_next_rowset_id);
-
-    // Synthesize the per-target gap bitmaps once (PK only). The same specs drive
-    // both DCG coverage-acceptance (merge_dcg_meta) and delvec masking
-    // (merge_delvecs), so the two paths cannot diverge. For non-PK tables the
-    // specs stay empty, which keeps DCG coverage strict.
-    std::vector<CanonicalGapSpec> gap_specs;
-    if (is_primary_key(*new_tablet_metadata)) {
-        ASSIGN_OR_RETURN(gap_specs,
-                         compute_synthesized_gap_specs(tablet_manager, *new_tablet_metadata, canonical_contribs));
-        if (!gap_specs.empty()) {
-            g_tablet_merge_gap_delvec_total << 1;
-        }
-=======
     for (const auto& metadata : old_tablet_metadatas) {
         if (metadata == nullptr) return Status::InvalidArgument("old tablet metadata is null");
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
     }
     auto plan_or = plan_merge(old_tablet_metadatas, merging_tablet, new_version, txn_info);
     if (!plan_or.ok()) {
         return merge_rejection(plan_or.status(), old_tablet_metadatas, merging_tablet.new_tablet_id());
     }
-<<<<<<< HEAD
-
-    if (uses_cloud_native_pk_index(*new_tablet_metadata)) {
-        RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, allocation_plan, new_tablet_metadata.get()));
-    } else {
-        // SST classification and source flushing are cloud-native PK contracts. Other key/index modes retain
-        // their merged rowset and sidecar metadata without manufacturing a primary-index attachment.
-        new_tablet_metadata->clear_sstable_meta();
-    }
-
-    // Phase 4: Finalize
-    ASSIGN_OR_RETURN(auto required_next_rowset_id, compute_supported_next_rowset_id(*new_tablet_metadata));
-    if (required_next_rowset_id > allocation_plan.target_next_rowset_id) {
-        return Status::Corruption("tablet merge output exceeds its authoritative RSSID cursor");
-    }
-    new_tablet_metadata->set_next_rowset_id(allocation_plan.target_next_rowset_id);
-
-    // No re-share here: the merged tablet OWNS its segments via the same ownership-transfer
-    // model that the identical-tablet and split paths already use. The source old tablets
-    // are marked all-shared (set_all_data_files_shared in tablet_reshard.cpp), so their
-    // drop/vacuum skips these files; the merged tablet then inherits the split-side
-    // per-segment flags unchanged. A split-pruned segment keeps shared=false (owned by the
-    // merged tablet, freed by its own GC); a spanning segment keeps shared=true (still
-    // referenced by any non-merged split sibling). Leaving the flags untouched keeps
-    // genuinely-private compaction/rewrite outputs on the local-output GC path rather than
-    // leaking them onto the shared-file path.
-    return new_tablet_metadata;
-=======
     auto plan = std::move(plan_or).value();
     RETURN_IF_ERROR(write_delvecs(tablet_manager, &plan, txn_info.txn_id()));
-    RETURN_IF_ERROR(merge_sstables(tablet_manager, &plan, publish_property));
+    RETURN_IF_ERROR(merge_sstables(tablet_manager, &plan));
     return plan.target;
->>>>>>> 798bc622d1c... [Enhancement][RB-96] Rewrite the range tablet merge around per-source translation and an input contract (#66260)
 }
 
 } // namespace starrocks::lake
