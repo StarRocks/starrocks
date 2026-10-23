@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -584,5 +585,115 @@ public class JsonPathRewriteTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
             connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
         }
+    }
+
+    /**
+     * Issue #79714: the predicate reads the path as VARCHAR(65533) (CAST AS STRING) and the projection as
+     * VARCHAR (implicit cast for regexp_split). Both must share one extended column instead of throwing and
+     * leaving a half-rewritten scan behind ("Invalid plan ... Input dependency cols check failed").
+     */
+    @Test
+    public void testSamePathStringTypesFromIssue79714() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("create table shared_events (id bigint, `time` datetime, data json) "
+                + "properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "SELECT split_part(regexp_split(json_query(data, '$.value.href'), 'configSet=')[2], \"&\", 1) "
+                            + "FROM shared_events "
+                            + "WHERE CAST(json_query(data, '$.value.href') AS STRING) LIKE '%configSet=%'");
+            assertContains(plan, "data.value.href");
+            String accessPaths = getExtendedColumnAccessPaths(plan);
+            assertContains(accessPaths, "/data(");
+            Assertions.assertEquals(1, StringUtils.countMatches(accessPaths, "/href("), accessPaths);
+        } finally {
+            starRocksAssert.dropTable("shared_events");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+    /**
+     * The same path cast to strings of different lengths in the projection and the predicate must reuse one
+     * extended column: the length is metadata only for an extended JSON column.
+     */
+    @Test
+    public void testSamePathDifferentStringLengths() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("create table json_str_len (k int, c2 json) properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "select cast(json_query(c2, '$.a') as varchar(10)) from json_str_len "
+                            + "where cast(json_query(c2, '$.a') as string) like '%x%'");
+            String accessPaths = getExtendedColumnAccessPaths(plan);
+            Assertions.assertEquals(1, StringUtils.countMatches(accessPaths, "/a("), accessPaths);
+            assertNotContains(plan, "get_json_string");
+        } finally {
+            starRocksAssert.dropTable("json_str_len");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+    /**
+     * A real type conflict on the same path (BIGINT vs VARCHAR) is still not rewritten. The rewrite must fall
+     * back to the untouched original scan, not to a predicate that already references a dropped extended column.
+     */
+    @Test
+    public void testSamePathRealTypeConflictFallsBack() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("create table json_type_conflict (k int, j json) properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "select get_json_int(j, '$.x') + 1 from json_type_conflict "
+                            + "where get_json_string(j, '$.x') like '%a%'");
+            assertNotContains(plan, "ExtendedColumnAccessPath");
+            assertContains(plan, "get_json_string");
+        } finally {
+            starRocksAssert.dropTable("json_type_conflict");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+    /**
+     * One scan rewrites fine and a later scan hits a real type conflict. The whole rule falls back, so the
+     * first scan must not keep a projection that was rewritten in place while the fallback plan is used.
+     */
+    @Test
+    public void testTypeConflictInOneOfTwoScansFallsBack() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("create table json_two_scans (k int, j json) properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain(
+                    "select get_json_string(j, '$.x') from json_two_scans where k > 0 "
+                            + "union all "
+                            + "select cast(get_json_int(j, '$.x') + 1 as string) from json_two_scans "
+                            + "where get_json_string(j, '$.x') like '%a%'");
+            assertNotContains(plan, "Invalid plan");
+            assertContains(plan, "get_json_int");
+        } finally {
+            starRocksAssert.dropTable("json_two_scans");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+    private static String getExtendedColumnAccessPaths(String plan) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : plan.split("\n")) {
+            if (line.contains("ExtendedColumnAccessPath")) {
+                sb.append(line).append('\n');
+            }
+        }
+        return sb.toString();
     }
 }
