@@ -684,6 +684,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                         _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
                         RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
                 if (!st.ok()) {
+                    // Publish failed: TxnManager still owns the writing-size estimate and will
+                    // retry persistence. Do not also count or apply this unpersisted pending rowset.
+                    _pending_commits.erase(version);
                     LOG(WARNING) << "add rowset to pending commits failed tablet:" << _tablet.tablet_id()
                                  << " version:" << version << " txn_id: " << rowset->txn_id() << " " << st << " "
                                  << _debug_string(false, true);

@@ -18,6 +18,7 @@
 #include <thread>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
@@ -184,6 +185,78 @@ TEST_P(TxnManagerWritingSizeTest, PendingPublishPreservesCapacityUntilVersionGap
     ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 2, 2, earlier_rowset));
     expect_empty();
     EXPECT_GE(_tablet->data_size(), initial_data_size + later_bytes + earlier_bytes);
+}
+
+TEST_P(TxnManagerWritingSizeTest, PendingMetadataFailureKeepsSingleEstimateForRetry) {
+    if (GetParam() != TKeysType::PRIMARY_KEYS) {
+        GTEST_SKIP() << "Only PK tablets have pending commits";
+    }
+    const auto initial_data_size = _tablet->data_size();
+    prepare(1);
+    auto later_rowset = commit(1, true);
+    const auto later_bytes = later_rowset->data_disk_size();
+    ASSERT_GT(later_bytes, 0);
+    {
+        DeferOp restore_error([] {
+            TEST_DISABLE_ERROR_POINT("TabletMetaManager::pending_rowset_commit");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        TEST_ENABLE_ERROR_POINT("TabletMetaManager::pending_rowset_commit", Status::IOError("injected pending write"));
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            auto st = _txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset);
+            ASSERT_TRUE(st.is_io_error()) << st;
+            EXPECT_EQ(0, _tablet->updates()->num_pending());
+            EXPECT_EQ(0, _tablet->updates()->pending_data_size());
+            EXPECT_EQ(initial_data_size, _tablet->data_size());
+            EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
+            EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+        }
+    }
+    // Retry must persist the pending rowset, not mistake the failed insertion for success.
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset));
+    EXPECT_EQ(1, _tablet->updates()->num_pending());
+    EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+    EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset));
+    EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+
+    prepare(2);
+    auto earlier_rowset = commit(2, true);
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 2, 2, earlier_rowset));
+    EXPECT_EQ(0, _tablet->updates()->num_pending());
+    expect_empty();
+    EXPECT_GE(_tablet->data_size(), initial_data_size + later_bytes + earlier_rowset->data_disk_size());
+}
+
+TEST_P(TxnManagerWritingSizeTest, FailedPendingPublishIsNotAppliedWhenGapIsFilled) {
+    if (GetParam() != TKeysType::PRIMARY_KEYS) {
+        GTEST_SKIP() << "Only PK tablets have pending commits";
+    }
+    prepare(1);
+    auto later_rowset = commit(1, true);
+    const auto later_bytes = later_rowset->data_disk_size();
+    ASSERT_GT(later_bytes, 0);
+    {
+        DeferOp restore_error([] {
+            TEST_DISABLE_ERROR_POINT("TabletMetaManager::pending_rowset_commit");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        TEST_ENABLE_ERROR_POINT("TabletMetaManager::pending_rowset_commit", Status::IOError("injected pending write"));
+        auto st = _txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset);
+        ASSERT_TRUE(st.is_io_error()) << st;
+    }
+    prepare(2);
+    auto earlier_rowset = commit(2, true);
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 2, 2, earlier_rowset));
+    EXPECT_EQ(0, _tablet->updates()->num_pending());
+    EXPECT_EQ(2, _tablet->updates()->max_version());
+    EXPECT_EQ(1, _tablet->_in_writing_txn_size.size());
+    EXPECT_EQ(later_bytes, _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->publish_txn(_tablet->partition_id(), _tablet, 1, 3, later_rowset));
+    EXPECT_EQ(3, _tablet->updates()->max_version());
+    expect_empty();
 }
 
 TEST_P(TxnManagerWritingSizeTest, PublishFailureKeepsEntryForRetry) {
