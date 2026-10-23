@@ -60,6 +60,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.service.TableSchemaService;
+import com.starrocks.sql.OptimisticVersion;
+>>>>>>> b6eb7fef82d... [BugFix][RB-642] Bump lastSchemaUpdateTime before shared-data schema change swaps indexes so concurrent queries re-plan (#66589)
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -1867,6 +1872,60 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(List.of("c0", "c1"),
                 followerTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList()));
         Assertions.assertEquals(0, shadowIndexCount(followerTable));
+    }
+
+    /**
+     * A query planned off a snapshot taken before the swap shares the swapped physical partitions, so the swap must
+     * invalidate that snapshot before it drops the first origin index, or the planner rethrows instead of retrying.
+     */
+    @Test
+    public void testSwapInvalidatesEarlierPlansBeforeDroppingOriginIndex() throws Exception {
+        completeTasksAndPublishOnSend();
+        LakeTableSchemaChangeJob job = alterTableAddColumn();
+        long planStartTime = OptimisticVersion.generate();
+        List<Boolean> planValidAtDrop = recordPlanValidityOnIndexDrop(table, planStartTime);
+
+        runToFinished(job);
+
+        Assertions.assertEquals(List.of(false), planValidAtDrop);
+        Assertions.assertFalse(OptimisticVersion.validateTableUpdate(table, planStartTime));
+    }
+
+    @Test
+    public void testFollowerReplayInvalidatesEarlierPlansBeforeDroppingOriginIndex() throws Exception {
+        completeTasksAndPublishOnSend();
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        LakeTableSchemaChangeJob job = alterTableAddColumn();
+        runToFinished(job);
+        List<LakeTableSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        long planStartTime = OptimisticVersion.generate();
+        List<Boolean> planValidAtDrop = recordPlanValidityOnIndexDrop(followerTable, planStartTime);
+        for (LakeTableSchemaChangeJob entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        Assertions.assertEquals(List.of(false), planValidAtDrop);
+        Assertions.assertFalse(OptimisticVersion.validateTableUpdate(followerTable, planStartTime));
+    }
+
+    /**
+     * Records, at each origin index drop, whether a plan started at {@code planStartTime} would still pass the
+     * planner's schema check on {@code olapTable}.
+     */
+    private static List<Boolean> recordPlanValidityOnIndexDrop(OlapTable olapTable, long planStartTime) {
+        List<Boolean> planValidAtDrop = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public List<MaterializedIndex> deleteMaterializedIndexByMetaId(Invocation inv, long indexMetaId) {
+                planValidAtDrop.add(OptimisticVersion.validateTableUpdate(olapTable, planStartTime));
+                return inv.proceed(indexMetaId);
+            }
+        };
+        return planValidAtDrop;
     }
 
     @Test
