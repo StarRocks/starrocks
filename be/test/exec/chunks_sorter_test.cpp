@@ -641,7 +641,6 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 //     ChunkPtr big_chunk = std::make_shared<Chunk>(columns, slots);
 //     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
 
-<<<<<<< HEAD
 //     // Update until overflow
 //     size_t total_bytes = 0;
 //     while (total_bytes < Column::MAX_CAPACITY_LIMIT) {
@@ -658,122 +657,15 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 //     }
 //     ASSERT_EQ(total_bytes, output_bytes);
 // }
-=======
-static const BinaryColumn* binary_data_column(const Column* column) {
-    const Column* data = ColumnHelper::get_data_column(column);
-    EXPECT_TRUE(data->is_binary());
-    return down_cast<const BinaryColumn*>(data);
-}
 
-// The full sorter used to convert a BinaryColumn whose payload crossed 4GB to LargeBinaryColumn before sorting. Now
-// it sorts and materializes the BinaryColumn as is, with 64-bit offsets, so check the sort and permute primitives on
-// such a column, both as the source and as the destination of the permutation.
-TEST_F(ChunksSorterTest, sort_binary_column_with_large_offsets) {
-    const std::vector<std::string> values{"delta", "alpha", "echo", "", "charlie", "bravo"};
-    for (bool nullable : {false, true}) {
-        for (bool use_german_string : {false, true}) {
-            SCOPED_TRACE(fmt::format("nullable={}, use_german_string={}", nullable, use_german_string));
-            Chunk::SlotHashMap slot_map{{0, 0}};
-            ChunkPtr chunk = std::make_shared<Chunk>(
-                    Columns{build_large_offsets_varchar_column(values, nullable, nullable ? 1 : 0)}, slot_map);
-            ASSERT_TRUE(binary_data_column(chunk->get_column_raw_ptr_by_index(0))->get_offset().is_large());
-
-            std::atomic<bool> cancel{false};
-            SortDescs sort_desc(std::vector<bool>{true}, std::vector<bool>{true});
-            sort_desc.use_german_string = use_german_string;
-            SmallPermutation perm = create_small_permutation(chunk->num_rows());
-            ASSERT_OK(sort_and_tie_columns(cancel, chunk->columns(), sort_desc, perm));
-
-            auto sorted = chunk->clone_empty_with_slot(chunk->num_rows());
-            auto* sorted_data =
-                    down_cast<BinaryColumn*>(ColumnHelper::get_data_column(sorted->get_column_raw_ptr_by_index(0)));
-            ColumnTestHelper::force_large_offsets(sorted_data);
-            materialize_by_permutation_single(sorted.get(), chunk, perm);
-            ASSERT_TRUE(sorted_data->get_offset().is_large());
-
-            std::vector<std::string> expected{"", "alpha", "bravo", "charlie", "delta", "echo"};
-            if (nullable) {
-                expected.insert(expected.begin(), "NULL");
-            }
-            EXPECT_EQ(expected, varchar_column_values(*sorted->get_column_by_index(0)));
-        }
+// Build a nullable VARCHAR column from |values| with |num_nulls| NULLs appended after the values.
+static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::string>& values, size_t num_nulls = 0) {
+    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    for (const auto& value : values) {
+        column->append_datum(Datum(Slice(value)));
     }
-}
-
-// Run ChunksSorterFullSort end to end over input whose BinaryColumn has 64-bit offsets. concat_chunks appends them
-// into a fresh BinaryColumn with 32-bit offsets, and get_next hands its output on without downgrade(), so the output
-// must stay a sorted BinaryColumn.
-TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
-    std::vector<bool> is_asc{true};
-    std::vector<bool> is_null_first{true};
-    std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
-    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
-
-    auto pool = std::make_unique<ObjectPool>();
-    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216, {});
-    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
-                         pool->add(new MemTracker(1L << 62, "", nullptr)));
-
-    Chunk::SlotHashMap slot_map{{0, 0}};
-    const std::vector<std::pair<std::vector<std::string>, size_t>> inputs{
-            {{"delta", "alpha"}, 0}, {{"echo", ""}, 1}, {{"charlie", "bravo"}, 0}};
-    for (const auto& [values, num_nulls] : inputs) {
-        auto column = build_large_offsets_varchar_column(values, true, num_nulls);
-        ASSERT_OK(sorter.update(_runtime_state.get(), std::make_shared<Chunk>(Columns{std::move(column)}, slot_map)));
-    }
-    ASSERT_OK(sorter.done(_runtime_state.get()));
-
-    std::vector<std::string> result;
-    for (const auto& output : consume_pages_from_sorter(sorter)) {
-        binary_data_column(output->get_column_raw_ptr_by_index(0));
-        auto values = varchar_column_values(*output->get_column_by_index(0));
-        result.insert(result.end(), values.begin(), values.end());
-    }
-    std::vector<std::string> expected{"NULL", "", "alpha", "bravo", "charlie", "delta", "echo"};
-    EXPECT_EQ(expected, result);
-}
-
-// Run ChunksSorterTopn over input whose BinaryColumn has 64-bit offsets. With max_buffered_rows = 1 every update()
-// sorts at once: the first one materializes the initial run in _hybrid_sort_first_time, and the later ones merge the
-// new rows into it in _merge_sort_common. get_next hands the output on without downgrade(), so it must stay a sorted
-// BinaryColumn.
-TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
-    std::vector<bool> is_asc{true};
-    std::vector<bool> is_null_first{true};
-    std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
-    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
-
-    auto pool = std::make_unique<ObjectPool>();
-    constexpr size_t kLimit = 4;
-    constexpr size_t kMaxBufferedRows = 1;
-    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, kLimit,
-                            TTopNType::ROW_NUMBER, kMaxBufferedRows);
-    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
-                         pool->add(new MemTracker(1L << 62, "", nullptr)));
-
-    Chunk::SlotHashMap slot_map{{0, 0}};
-    const std::vector<std::pair<std::vector<std::string>, size_t>> inputs{
-            {{"delta", "bravo", "foxtrot"}, 0}, {{"echo", "charlie"}, 0}, {{"golf", "alpha"}, 1}};
-    for (const auto& [values, num_nulls] : inputs) {
-        auto column = build_large_offsets_varchar_column(values, true, num_nulls);
-        ASSERT_OK(sorter.update(_runtime_state.get(), std::make_shared<Chunk>(Columns{std::move(column)}, slot_map)));
-    }
-    ASSERT_OK(sorter.done(_runtime_state.get()));
-
-    std::vector<std::string> result;
-    for (const auto& output : consume_pages_from_sorter(sorter)) {
-        binary_data_column(output->get_column_raw_ptr_by_index(0));
-        auto values = varchar_column_values(*output->get_column_by_index(0));
-        result.insert(result.end(), values.begin(), values.end());
-    }
-    std::vector<std::string> expected{"NULL", "alpha", "bravo", "charlie"};
-    EXPECT_EQ(expected, result);
+    EXPECT_TRUE(column->append_nulls(num_nulls));
+    return column;
 }
 
 // A VARCHAR topn filter built from values, then overrun by NULLs sorted first: the updater has to drop the slice bounds
@@ -785,9 +677,9 @@ TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
         std::vector<bool> is_asc{true};
         std::vector<bool> is_null_first{true};
         std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
-        DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-        ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
-        ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+        DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+        ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
         auto pool = std::make_unique<ObjectPool>();
         constexpr size_t kLimit = 2;
@@ -800,8 +692,8 @@ TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
         Chunk::SlotHashMap slot_map{{0, 0}};
         ASSERT_OK(sorter.update(
                 _runtime_state.get(),
-                std::make_shared<Chunk>(
-                        Columns{build_large_offsets_varchar_column({"bravo", "charlie", "delta"}, true)}, slot_map)));
+                std::make_shared<Chunk>(Columns{build_nullable_varchar_column({"bravo", "charlie", "delta"})},
+                                        slot_map)));
         auto* filters = sorter.runtime_filters(pool.get());
         ASSERT_TRUE(filters != nullptr);
         ASSERT_EQ(1, filters->size());
@@ -809,9 +701,9 @@ TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
         ASSERT_FALSE(rf->is_empty_range());
         ASSERT_TRUE(rf->has_null());
 
-        ASSERT_OK(sorter.update(
-                _runtime_state.get(),
-                std::make_shared<Chunk>(Columns{build_large_offsets_varchar_column({"echo"}, true, 2)}, slot_map)));
+        ASSERT_OK(
+                sorter.update(_runtime_state.get(),
+                              std::make_shared<Chunk>(Columns{build_nullable_varchar_column({"echo"}, 2)}, slot_map)));
         filters = sorter.runtime_filters(pool.get());
         ASSERT_TRUE(filters != nullptr);
         ASSERT_EQ(rf, filters->back());
@@ -819,33 +711,6 @@ TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
         ASSERT_EQ(topn_type == TTopNType::RANK, rf->has_null());
     }
 }
-
-// _partial_sort checks the concatenated and the sorted chunk with capacity_limit_reached(), which replaced
-// upgrade_if_overflow(). It must accept a BinaryColumn whose payload exceeds 4GB: only the row count is limited. The
-// column borrows a 1-byte buffer and is never read, so nothing close to 4GB is allocated.
-TEST_F(ChunksSorterTest, binary_column_over_4g_within_capacity_limit) {
-    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
-    config::enable_zero_copy_from_page_cache = true;
-    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
-
-    // Copy the limit: ASSERT_GT binds its arguments by reference, which would odr-use the in-class static member.
-    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
-    const uint64_t element_size = (capacity_limit / 2) + 1;
-    auto owner = std::make_shared<std::string>("x");
-    ContainerResource resource(owner, owner->data(), 2 * element_size);
-    BinaryColumn::Offsets offsets;
-    offsets.emplace_back(0);
-    offsets.emplace_back(element_size);
-    offsets.emplace_back(2 * element_size);
-    auto column = BinaryColumn::create(std::move(resource), std::move(offsets));
-    ASSERT_TRUE(column->get_offset().is_large());
-    ASSERT_GT(column->get_immutable_bytes().size(), capacity_limit);
-
-    Chunk::SlotHashMap slot_map{{0, 0}};
-    Chunk chunk(Columns{std::move(column)}, slot_map);
-    ASSERT_OK(chunk.capacity_limit_reached());
-}
->>>>>>> 46bdd65 ([BugFix] Hold the slice lock on every path that reads a min/max filter's bounds (#81138))
 
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {
