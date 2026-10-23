@@ -486,7 +486,7 @@ private:
 };
 
 std::shared_ptr<AIProjectProcessor> make_processor(const std::shared_ptr<AIChunkBuffer>& input_buffer,
-                                                   const std::shared_ptr<RecordingProjection>& projection,
+                                                   const std::shared_ptr<AIProjectProjection>& projection,
                                                    const std::shared_ptr<ManualTaskSubmitter>& submitter,
                                                    std::string on_error = "ignore", int32_t dop = 1) {
     auto processor =

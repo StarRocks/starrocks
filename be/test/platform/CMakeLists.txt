@@ -53,6 +53,13 @@ else()
     # the platform HTTP teardown issue is fixed.
 endif()
 
+# Transitive platform modules are appended after third-party archives by CMake.
+# Rescan the full link line to resolve static dependencies in that order.
+if (NOT APPLE)
+    string(REPLACE "<LINK_LIBRARIES>" "${WL_START_GROUP} <LINK_LIBRARIES> ${WL_END_GROUP}"
+        CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE}")
+endif()
+
 set(PLATFORM_TEST_LINK_LIBS
     Platform
     ${STARROCKS_DEPENDENCIES}
