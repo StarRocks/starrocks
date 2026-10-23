@@ -247,4 +247,42 @@ public class StatisticsCalcUtilsTest {
         // When all partitions are dropped, selectedPartitions is empty, row count should be 1 (minimum)
         Assertions.assertEquals(1, rowCount);
     }
+
+    /**
+     * A scan reads exactly one index, so the row count must come from the selected index only and not from the
+     * sum of the base index and its rollups / sync MVs.
+     */
+    @Test
+    public void testGetTableRowCountUsesSelectedIndex() throws Exception {
+        // the rollup job only waits for the replicas to be created when not running as a unit test
+        FeConstants.runningUnitTest = true;
+        try {
+            starRocksAssert.withRollup("ALTER TABLE test_partition_table ADD ROLLUP r1 (k1, v1)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getLocalMetastore().getDb("statistics_calc_utils_test")
+                .getTable("test_partition_table");
+        long baseMetaId = table.getBaseIndexMetaId();
+        long rollupMetaId = table.getIndexMetaIdByName("r1");
+        for (Partition partition : table.getPartitions()) {
+            partition.getDefaultPhysicalPartition().getLatestIndex(baseMetaId).setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestIndex(rollupMetaId).setRowCount(10);
+        }
+
+        Assertions.assertEquals(3000, StatisticsCalcUtils.getTableRowCount(
+                table, scan(table, baseMetaId), optimizerContext));
+        Assertions.assertEquals(30, StatisticsCalcUtils.getTableRowCount(
+                table, scan(table, rollupMetaId), optimizerContext));
+    }
+
+    private static LogicalOlapScanOperator scan(OlapTable table, long indexMetaId) {
+        Column column = table.getColumns().get(0);
+        ColumnRefOperator ref = new ColumnRefOperator(0, column.getType(), column.getName(), true);
+        List<Long> partitionIds = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+        return new LogicalOlapScanOperator(table, Map.of(ref, column), Map.of(column, ref), null, -1, null,
+                indexMetaId, partitionIds, null, false, Lists.newArrayList(), Lists.newArrayList(),
+                Lists.newArrayList(), false);
+    }
 }
