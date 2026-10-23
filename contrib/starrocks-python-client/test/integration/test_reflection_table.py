@@ -12,76 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
-from sqlalchemy import Column, Integer, MetaData, String, Table, inspect, text
-from sqlalchemy.engine import Engine
+from sqlalchemy import Column, Integer, String, Table, inspect
+from sqlalchemy.testing import fixtures
 
 from starrocks.common.params import TableInfoKeyWithPrefix
 from starrocks.common.types import SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
+from test.util import normalize_sql
 
 
-logger = logging.getLogger(__name__)
+class ReflectionTableOptionsTest(fixtures.TestBase):
+    """``get_table_options`` reflects every StarRocks table option from information_schema."""
 
+    __backend__ = True
+    __only_on__ = "starrocks"
 
-class TestReflectionTablesIntegration:
-    """Integration tests for StarRocks table reflection from information_schema."""
-
-    def test_reflect_table_options(self, sr_root_engine: Engine):
-        """Test that `get_table_options` correctly reflects all StarRocks table options."""
-        table_name = "test_reflect_table_options"
-        metadata = MetaData()
-        sr_engine = sr_root_engine
-
-        # Define a table with various StarRocks-specific options
-        table = Table(
-            table_name,
+    def test_reflect_table_options(self, connection, metadata):
+        Table(
+            "test_reflect_table_options",
             metadata,
             Column("id", Integer, primary_key=True),
             Column("name", String(32)),
             comment="Test table with all StarRocks options",
-            starrocks_engine='OLAP',
-            starrocks_primary_key='id',
+            starrocks_engine="OLAP",
+            starrocks_primary_key="id",
             starrocks_partition_by="""RANGE(id) (
                 PARTITION p1 VALUES LESS THAN ("10"),
                 PARTITION p2 VALUES LESS THAN ("20"),
                 PARTITION p3 VALUES LESS THAN (MAXVALUE)
             )""",
-            starrocks_distributed_by='HASH(id) BUCKETS 8',
-            starrocks_order_by='id, name',
+            starrocks_distributed_by="HASH(id) BUCKETS 8",
+            starrocks_order_by="id, name",
             starrocks_properties={"replication_num": "1", "storage_medium": "SSD"},
         )
+        metadata.create_all(connection)
 
-        with sr_engine.connect() as connection:
-            # Ensure the table is dropped before creation for a clean test environment
-            connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
-            # Create the table in the test database
-            table.create(connection)
+        table_options = inspect(connection).get_table_options("test_reflect_table_options")
 
-            try:
-                # Inspect the database to get table options
-                inspector = inspect(sr_engine)
-                table_options = inspector.get_table_options(table_name)
-                logger.info("table_options: %s", table_options)
-
-                from test.test_utils import normalize_sql
-                # Assertions for all expected StarRocks table options
-                assert table_options[TableInfoKeyWithPrefix.ENGINE] == 'OLAP'
-                assert normalize_sql(table_options[TableInfoKeyWithPrefix.PRIMARY_KEY]) == 'id'
-                partition_info = table_options[TableInfoKeyWithPrefix.PARTITION_BY]
-                assert partition_info is not None and isinstance(partition_info, ReflectedPartitionInfo)
-                assert normalize_sql(partition_info.partition_method) == normalize_sql('RANGE(id)')
-                assert "(PARTITION p1 VALUES" in normalize_sql(partition_info.pre_created_partitions)
-                assert normalize_sql(table_options[TableInfoKeyWithPrefix.DISTRIBUTED_BY]) == normalize_sql('HASH(id) BUCKETS 8')
-                assert normalize_sql(table_options[TableInfoKeyWithPrefix.ORDER_BY]) == normalize_sql("id, name")
-                assert table_options[TableInfoKeyWithPrefix.PROPERTIES]['replication_num'] == '1'
-                if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
-                    assert "storage_medium" not in table_options or table_options[TableInfoKeyWithPrefix.PROPERTIES]['storage_medium'] == 'HDD'
-                else:
-                    assert table_options[TableInfoKeyWithPrefix.PROPERTIES]['storage_medium'] == 'SSD'
-                assert table_options[TableInfoKeyWithPrefix.COMMENT] == normalize_sql('Test table with all StarRocks options')
-
-            finally:
-                # Clean up: Drop the table after the test
-                connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+        assert table_options[TableInfoKeyWithPrefix.ENGINE] == "OLAP"
+        assert normalize_sql(table_options[TableInfoKeyWithPrefix.PRIMARY_KEY]) == "id"
+        partition_info = table_options[TableInfoKeyWithPrefix.PARTITION_BY]
+        assert isinstance(partition_info, ReflectedPartitionInfo)
+        assert normalize_sql(partition_info.partition_method) == normalize_sql("RANGE(id)")
+        assert "(PARTITION p1 VALUES" in normalize_sql(partition_info.pre_created_partitions)
+        assert normalize_sql(table_options[TableInfoKeyWithPrefix.DISTRIBUTED_BY]) == normalize_sql(
+            "HASH(id) BUCKETS 8"
+        )
+        assert normalize_sql(table_options[TableInfoKeyWithPrefix.ORDER_BY]) == normalize_sql("id, name")
+        properties = table_options[TableInfoKeyWithPrefix.PROPERTIES]
+        assert properties["replication_num"] == "1"
+        if connection.dialect.run_mode == SystemRunMode.SHARED_DATA:
+            assert properties.get("storage_medium", "HDD") == "HDD"
+        else:
+            assert properties["storage_medium"] == "SSD"
+        assert table_options[TableInfoKeyWithPrefix.COMMENT] == "Test table with all StarRocks options"
