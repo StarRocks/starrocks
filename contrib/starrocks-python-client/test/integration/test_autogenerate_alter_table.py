@@ -28,10 +28,7 @@ TEST SCOPE:
 - Verify reflection + comparison accuracy
 - NOT testing actual ALTER execution (some operations aren't supported)
 
-These tests require a real StarRocks database connection.
-Set STARROCKS_URL environment variable to run these tests.
-
-Example: STARROCKS_URL=starrocks://user:pass@localhost:9030/test_db
+These tests run against the plugin's StarRocks database.
 """
 
 import logging
