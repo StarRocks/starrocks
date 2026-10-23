@@ -14,10 +14,17 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     @Test
@@ -42,6 +49,33 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(partitionCommitInfo.getVersionTime(),
                 table.getPartition(partitionId).getDefaultPhysicalPartition()
                         .getVisibleVersionTime());
+    }
+
+    @Test
+    public void testDictionaryIdentityFallbackForWholeList() {
+        for (List<Long> identities : Arrays.<List<Long>>asList(null, List.of(), List.of(0L, -7L))) {
+            LakeTable table = buildLakeTable();
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            ColumnId a = ColumnId.create("a");
+            ColumnId b = ColumnId.create("b");
+            PartitionCommitInfo partition = new PartitionCommitInfo(physicalPartitionId, 2, 200,
+                    List.of(), List.of(a, b), List.of(100L, 101L));
+            if (identities != null) {
+                partition.setDictContentIdentities(identities);
+            }
+            TableCommitInfo commit = new TableCommitInfo(tableId);
+            commit.addPartitionCommitInfo(partition);
+            IDictManager manager = Mockito.mock(IDictManager.class);
+            try (MockedStatic<IDictManager> mocked = Mockito.mockStatic(IDictManager.class)) {
+                mocked.when(IDictManager::getInstance).thenReturn(manager);
+                new LakeTableTxnLogApplier(table).applyVisibleLog(state, commit, null);
+                boolean hasIdentity = identities != null && !identities.isEmpty();
+                Mockito.verify(manager).updateGlobalDict(tableId, a, 100L, 200L, hasIdentity ? 0L : null);
+                Mockito.verify(manager).updateGlobalDict(tableId, b, 101L, 200L, hasIdentity ? -7L : null);
+                Mockito.verifyNoMoreInteractions(manager);
+            }
+        }
     }
 
     @Test

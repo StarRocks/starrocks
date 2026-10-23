@@ -265,4 +265,31 @@ TEST_F(DictMappingTest, test_expression_returns_null_for_some_values) {
     EXPECT_EQ(nullable_result->get(3).get_slice(), "ok");
 }
 
+TEST(RuntimeStateGlobalDictTest, LoadIdentityIsOptionalAndDoesNotReplaceVersion) {
+    auto make_global_dict = [](int32_t column_id, int64_t version, std::vector<int32_t> ids,
+                               std::vector<std::string> strings) {
+        TGlobalDict dict;
+        dict.__set_columnId(column_id);
+        dict.__set_version(version);
+        dict.__set_ids(std::move(ids));
+        dict.__set_strings(std::move(strings));
+        return dict;
+    };
+    RuntimeState state;
+    state._obj_pool = std::make_shared<ObjectPool>();
+    state._instance_mem_pool = std::make_unique<MemPool>();
+    auto legacy = make_global_dict(1, 100, {1}, {"A"});
+    auto zero = make_global_dict(2, 200, {1}, {"B"});
+    auto negative = make_global_dict(3, 300, {1}, {"C"});
+    zero.__set_content_identity(0);
+    negative.__set_content_identity(-7);
+    ASSERT_OK(state.init_load_global_dict({legacy, zero, negative}));
+    EXPECT_EQ(0, state.load_dict_content_identities().count(1));
+    EXPECT_EQ(0, state.load_dict_content_identities().at(2));
+    EXPECT_EQ(-7, state.load_dict_content_identities().at(3));
+    EXPECT_EQ(100, state.load_dict_versions().at(1));
+    EXPECT_EQ(200, state.load_dict_versions().at(2));
+    EXPECT_EQ(300, state.load_dict_versions().at(3));
+}
+
 } // namespace starrocks
