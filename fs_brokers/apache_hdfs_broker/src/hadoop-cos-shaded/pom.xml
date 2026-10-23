@@ -31,7 +31,7 @@ under the License.
     </parent>
 
     <artifactId>hadoop-cos-shaded</artifactId>
-    <version>3.3.0-8.3.7</version>
+    <version>3.4.1-8.3.31</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -40,23 +40,22 @@ under the License.
 
     <dependencies>
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+        <!-- Transitively supplies cos_api-bundle, chdfs_hadoop_plugin_network,
+             cos-sts-java and ofs-sdk-definition at the versions it was released
+             with; do not redeclare them. cosn-ranger-interface is provided-scope
+             upstream, so it stays declared explicitly below. The org.json
+             exclusion targets the stale 20180130 pulled in via cos-sts-java;
+             a patched version is re-declared below. -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
             <artifactId>hadoop-cos</artifactId>
-            <version>3.3.3-8.3.10</version>
+            <version>3.4.1-8.3.31</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.json</groupId>
                     <artifactId>json</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->
-        <dependency>
-            <groupId>com.qcloud</groupId>
-            <artifactId>cos_api-bundle</artifactId>
-            <version>5.6.137.2</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cosn-ranger-interface -->
@@ -71,13 +70,6 @@ under the License.
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>20231013</version>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
-        <dependency>
-            <groupId>com.qcloud</groupId>
-            <artifactId>chdfs_hadoop_plugin_network</artifactId>
-            <version>3.5</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/hadoop-ranger-client-for-hadoop -->
