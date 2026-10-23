@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
@@ -55,17 +54,7 @@ from starrocks.datatype import (
     VARBINARY,
     VARCHAR,
 )
-
-
-def _normalize_py_call(s: str) -> str:
-    # strip whitespace and collapse multiple spaces, ignore line breaks
-    s = re.sub(r"\s+", " ", s).strip()
-    s = re.sub(r" , ", ", ", s)
-    s = re.sub(r"\( ", "(", s)
-    s = re.sub(r" \)", ")", s)
-    s = re.sub(r"\[ ", "[", s)
-    s = re.sub(r" \]", "]", s)
-    return s
+from test.util import normalize_py_call
 
 
 class TableRenderingTest(fixtures.TestBase):
@@ -74,38 +63,38 @@ class TableRenderingTest(fixtures.TestBase):
         op = AlterTableDistributionOp("t1", "HASH(k1, k2)", buckets=10, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'HASH(k1, k2)', buckets=10, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No schema
         op = AlterTableDistributionOp("t1", "HASH(k1, k2)", buckets=10, schema=None)
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'HASH(k1, k2)', buckets=10)"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No buckets
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=None, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM', schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # Buckets is 0
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=0, schema="s1")
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM', buckets=0, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # No buckets and no schema
         op = AlterTableDistributionOp("t1", "RANDOM", buckets=None, schema=None)
         rendered = _render_alter_table_distribution(ctx, op)
         expected = "op.alter_table_distribution('t1', 'RANDOM')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_alter_table_order(self):
         ctx = Mock()
         op = AlterTableOrderOp("t1", "k1, k2", schema="s1")
         rendered = _render_alter_table_order(ctx, op)
         expected = "op.alter_table_order('t1', 'k1, k2', schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         op = AlterTableOrderOp("t1", "k1", schema=None)
         rendered = _render_alter_table_order(ctx, op)
@@ -115,9 +104,9 @@ class TableRenderingTest(fixtures.TestBase):
         ctx = Mock()
         op = AlterTablePropertiesOp("t1", {"replication_num": "1", "storage_medium": "SSD"}, schema="s1")
         rendered = _render_alter_table_properties(ctx, op)
-        rendered = _normalize_py_call(rendered)
+        rendered = normalize_py_call(rendered)
         # repr() on dict is order-sensitive in older pythons, so check keys/values
-        assert _normalize_py_call("op.alter_table_properties('t1', ") in rendered
+        assert normalize_py_call("op.alter_table_properties('t1', ") in rendered
         assert "'replication_num': '1'" in rendered
         assert "'storage_medium': 'SSD'" in rendered
         assert "schema='s1'" in rendered
@@ -131,7 +120,7 @@ class TableRenderingTest(fixtures.TestBase):
         op = AlterTablePropertiesOp("t1", {}, schema="s1")
         rendered = _render_alter_table_properties(ctx, op)
         expected = "op.alter_table_properties('t1', {}, schema='s1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # With no properties and no schema
         op = AlterTablePropertiesOp("t1", {}, schema=None)

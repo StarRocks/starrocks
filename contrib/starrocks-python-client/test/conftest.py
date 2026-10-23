@@ -17,8 +17,6 @@
 The database URL comes from, in order of precedence: ``--dburi``/``--db``, the ``STARROCKS_URL`` environment
 variable, a git-ignored ``test.cfg`` ``[db]`` section, then ``setup.cfg``'s ``[db] default``. Run pytest from
 this client directory: Alembic stages its migration scripts under ``scratch`` in the working directory.
-
-The system tests are left out of collection until they are moved onto Alembic's testing environment.
 """
 
 import inspect
@@ -43,9 +41,6 @@ import starrocks.alembic  # noqa: E402,F401
 
 
 CLIENT_DIRECTORY = Path(__file__).resolve().parent.parent
-collect_ignore = [
-    "system",
-]
 
 
 def pytest_configure(config: pytest.Config) -> None:
