@@ -771,7 +771,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
         } catch (StarRocksConnectorException | NotFoundException e) {
-            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+            // DROP VIEW must not remove a table's entry; it is also authorized against views, not tables.
+            if (stmt.isView() || !isMetadataFileMissing(e)
+                    || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
                 throw e;
             }
             // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
