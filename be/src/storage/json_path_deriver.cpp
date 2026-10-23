@@ -552,9 +552,24 @@ void dfs_downgrade_uint(JsonFlatPath* node) {
     }
 }
 
+static void dfs_mark_remain(JsonFlatPath* node) {
+    node->remain = true;
+    for (auto& [_, child] : node->children) {
+        dfs_mark_remain(child.get());
+    }
+}
+
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
+    // A key repeated within one row has more than one value there, and a sub-column holds one value per row, so
+    // neither the key nor anything below it can be flattened: keep the subtree in the remain, which stores the
+    // document as it is. The leaf check below has always refused such a key; an object was still flattened, and
+    // the copies of a repeated object then shared one set of sub-columns.
+    if (!absolute_path.empty() && node->multi_times > 0) {
+        dfs_mark_remain(node);
+        return 0;
+    }
     // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
     if (!absolute_path.empty() && !node->children.empty()) {
         if (node->base_type_count > 0) {
