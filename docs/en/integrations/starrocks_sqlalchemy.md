@@ -47,7 +47,7 @@ Schema changes can be applied to development, staging, and production with the s
 ### Prerequisites**
 
 - StarRocks Python client: 1.3.2 or later
-- `SQLAlchemy`: 1.4 or later (SQLAlchemy 2.0 is recommended and is required to use `sqlacodegen`)
+- `SQLAlchemy`: 1.4 or later. Views, materialized views, Alembic autogenerate and `sqlacodegen` need SQLAlchemy 2.0.
 - `Alembic`: 1.16 or later
 
 ### Installing StarRocks Python client

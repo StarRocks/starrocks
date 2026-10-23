@@ -2,6 +2,8 @@
 
 This document describes how to define, create, and manage database views in StarRocks using the `starrocks-sqlalchemy` dialect and Alembic.
 
+Views need SQLAlchemy 2.0.
+
 ## Defining a View
 
 To define a view, you use the `starrocks.schema.View` object. This object captures the name, schema, and definition of the view.

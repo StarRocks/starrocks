@@ -22,6 +22,7 @@ These integration tests ensure that the dialect can accurately inspect a live St
 - **`test_reflection_data_types.py`**: Verifies reflection of various data types.
 - **`test_reflection_view.py`**: Verifies reflection of views.
 - **`test_reflection_mv.py`**: Verifies reflection of materialized views.
+Other integration tests (`test/integration/`) cover reading ARRAY, MAP and STRUCT values (`test_result_processor.py`), the run mode (`test_run_mode.py`), the wait for schema changes (`test_schema_change_wait.py`), column-change coalescing (`test_combine_column_alters*.py`), and the testing plugin's hooks that create and drop each worker's databases (`test_provision.py`).
 
 ## 3. Alembic `autogenerate` Comparison (`test/integration/test_autogenerate_*.py`)
 
