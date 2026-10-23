@@ -53,14 +53,11 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.SimpleScheduler;
->>>>>>> 58ae1fc ([Enhancement] Spread shared-data backup nodes by tablet hash (#81436))
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;

@@ -471,7 +471,7 @@ public class ColocatedBackendSelectorTest {
                 genBucketSeq2Locations(bucketSeqToBackends, 1);
         bucketSeqToLocations.forEach((bucketSeq, locations) ->
                 locations.getScan_range().getInternal_scan_range().setTablet_id(tableId * 1000 + bucketSeq));
-        scanNode.getBucketSeqToLocations().putAll(bucketSeqToLocations);
+        scanNode.bucketSeq2locations.putAll(bucketSeqToLocations);
 
         WorkerProvider workerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
                 WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
