@@ -63,7 +63,8 @@ public class MvRefreshArbiter {
      * Once materialized view's base tables have updated, we need to check correspond materialized views' partitions
      * to be refreshed.
      * @param mv The materialized view to check
-     * @param queryRewriteParams Mark whether this caller is query rewrite or not, when it's true we can use staleness to shortcut
+     * @param queryRewriteParams Mark whether this caller is query rewrite or not, when it tolerates a stale mv we can use
+     *                           staleness to shortcut
      * @return mv timeliness update info which contains all need refreshed partitions of materialized view and partition name
      * to partition values.
      */
@@ -78,6 +79,10 @@ public class MvRefreshArbiter {
         TableProperty tableProperty = mv.getTableProperty();
         TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
         if (queryRewriteParams.isQueryRewrite()) {
+            if (!queryRewriteParams.toleratesStaleMv()
+                    && mvConsistencyRewriteMode != TableProperty.QueryRewriteConsistencyMode.DISABLE) {
+                mvConsistencyRewriteMode = TableProperty.QueryRewriteConsistencyMode.CHECKED;
+            }
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
                     return MvUpdateInfo.fullRefresh(mv);
@@ -145,7 +150,7 @@ public class MvRefreshArbiter {
             try {
                 baseUpdatedPartitionNames = MvUtils.readBaseTableUnderLock(mv, olapBaseTable,
                         queryRewriteParams.readsBaseTablesUnlocked(),
-                        () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.isQueryRewrite()));
+                        () -> mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, queryRewriteParams.toleratesStaleMv()));
             } catch (LockTimeoutException e) {
                 // Fail this refresh, as a lock timeout on a ref base table does: an empty result would read as
                 // "changed" and refresh every partition of the mv.
@@ -168,7 +173,11 @@ public class MvRefreshArbiter {
             return Optional.of(false);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+<<<<<<< HEAD
                     queryRewriteParams.isQueryRewrite());
+=======
+                    queryRewriteParams.toleratesStaleMv(), pinnedVersionRange);
+>>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
             if (baseUpdatedPartitionNames == null) {
                 return Optional.empty();
             }
@@ -195,7 +204,7 @@ public class MvRefreshArbiter {
             OlapTable olapBaseTable = (OlapTable) baseTable;
             MvUtils.BaseTableRead<PCellSortedSet, RuntimeException> readUpdatedPartitions = () -> {
                 Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
-                        queryRewriteParams.isQueryRewrite());
+                        queryRewriteParams.toleratesStaleMv());
                 return baseUpdatedPartitionNames == null ? null
                         : PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
             };
@@ -225,7 +234,11 @@ public class MvRefreshArbiter {
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+<<<<<<< HEAD
                     queryRewriteParams.isQueryRewrite());
+=======
+                    queryRewriteParams.toleratesStaleMv(), pinnedVersionRange);
+>>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }

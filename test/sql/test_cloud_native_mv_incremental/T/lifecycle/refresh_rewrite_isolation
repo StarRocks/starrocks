@@ -1,0 +1,93 @@
+-- name: test_ivm_bootstrap_does_not_read_a_stale_sibling @cloud
+-- The sibling view is tolerated as stale for queries, but the incremental view's first refresh must read the base
+-- table at its pinned snapshot: a row the sibling lacks would never reach the view after the baseline moved past it.
+CREATE TABLE rri_stale_base_${uuid0} (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO rri_stale_base_${uuid0} VALUES (1, 1), (2, 2);
+CREATE MATERIALIZED VIEW rri_stale_pct_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='pct', 'mv_rewrite_staleness_second'='3600')
+AS SELECT k, v FROM rri_stale_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_stale_pct_${uuid0} WITH SYNC MODE;
+INSERT INTO rri_stale_base_${uuid0} VALUES (3, 3);
+CREATE MATERIALIZED VIEW rri_stale_inc_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='incremental', 'session.enable_materialized_view_rewrite'='true', 'session.enable_materialized_view_for_insert'='true')
+AS SELECT k, v FROM rri_stale_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_stale_inc_${uuid0} WITH SYNC MODE;
+INSERT INTO rri_stale_base_${uuid0} VALUES (4, 4);
+REFRESH MATERIALIZED VIEW rri_stale_inc_${uuid0} WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+SELECT k, v FROM rri_stale_inc_${uuid0} ORDER BY k, v;
+SELECT k, v FROM rri_stale_base_${uuid0} ORDER BY k, v;
+SET enable_materialized_view_rewrite = true;
+DROP MATERIALIZED VIEW rri_stale_inc_${uuid0};
+DROP MATERIALIZED VIEW rri_stale_pct_${uuid0};
+DROP TABLE rri_stale_base_${uuid0};
+
+-- name: test_ivm_bootstrap_does_not_read_a_sibling_that_filtered_rows @cloud
+-- The sibling refreshes with a raised insert_max_filter_ratio and drops the NULL row, yet counts as fresh.
+CREATE TABLE rri_filter_base_${uuid0} (k INT NOT NULL, v INT NOT NULL) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO rri_filter_base_${uuid0} VALUES (1, 10), (2, 20);
+CREATE MATERIALIZED VIEW rri_filter_pct_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='pct', 'session.insert_max_filter_ratio'='1')
+AS SELECT k, v FROM rri_filter_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_filter_pct_${uuid0} WITH SYNC MODE;
+ALTER TABLE rri_filter_base_${uuid0} MODIFY COLUMN v INT NULL;
+ALTER MATERIALIZED VIEW rri_filter_pct_${uuid0} ACTIVE;
+INSERT INTO rri_filter_base_${uuid0} VALUES (3, NULL);
+REFRESH MATERIALIZED VIEW rri_filter_pct_${uuid0} WITH SYNC MODE;
+SELECT k, v FROM rri_filter_pct_${uuid0} ORDER BY k;
+CREATE MATERIALIZED VIEW rri_filter_inc_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='incremental', 'session.enable_materialized_view_rewrite'='true', 'session.enable_materialized_view_for_insert'='true')
+AS SELECT k, v FROM rri_filter_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_filter_inc_${uuid0} WITH SYNC MODE;
+INSERT INTO rri_filter_base_${uuid0} VALUES (4, NULL);
+REFRESH MATERIALIZED VIEW rri_filter_inc_${uuid0} WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+SELECT k, v FROM rri_filter_inc_${uuid0} ORDER BY k;
+SELECT k, v FROM rri_filter_base_${uuid0} ORDER BY k;
+SET enable_materialized_view_rewrite = true;
+DROP MATERIALIZED VIEW rri_filter_inc_${uuid0};
+DROP MATERIALIZED VIEW rri_filter_pct_${uuid0};
+DROP TABLE rri_filter_base_${uuid0};
+
+-- name: test_pct_refresh_does_not_read_a_stale_sibling @cloud
+-- A view without any staleness tolerance must not become fresh with the data of a sibling that only queries may
+-- read stale: it records the base versions it consumed, so the next refresh would skip.
+CREATE TABLE rri_pct_base_${uuid0} (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO rri_pct_base_${uuid0} VALUES (1, 1), (2, 2);
+CREATE MATERIALIZED VIEW rri_pct_src_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='pct', 'mv_rewrite_staleness_second'='3600')
+AS SELECT k, v FROM rri_pct_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_pct_src_${uuid0} WITH SYNC MODE;
+INSERT INTO rri_pct_base_${uuid0} VALUES (3, 3);
+CREATE MATERIALIZED VIEW rri_pct_dst_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='pct', 'session.enable_materialized_view_rewrite'='true', 'session.enable_materialized_view_for_insert'='true')
+AS SELECT k, sum(v) AS s FROM rri_pct_base_${uuid0} GROUP BY k;
+REFRESH MATERIALIZED VIEW rri_pct_dst_${uuid0} WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+SELECT k, s FROM rri_pct_dst_${uuid0} ORDER BY k;
+SELECT k, sum(v) FROM rri_pct_base_${uuid0} GROUP BY k ORDER BY k;
+SET enable_materialized_view_rewrite = true;
+DROP MATERIALIZED VIEW rri_pct_dst_${uuid0};
+DROP MATERIALIZED VIEW rri_pct_src_${uuid0};
+DROP TABLE rri_pct_base_${uuid0};
+
+-- name: test_bookmark_read_is_not_rewritten @cloud
+-- A read at a bookmark must return the bookmarked data, not a view refreshed after it. The bookmark is the one the
+-- incremental view holds as its baseline.
+CREATE TABLE rri_bm_base_${uuid0} (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO rri_bm_base_${uuid0} VALUES (1, 1), (2, 2);
+CREATE MATERIALIZED VIEW rri_bm_inc_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='incremental')
+AS SELECT k, v FROM rri_bm_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_bm_inc_${uuid0} WITH SYNC MODE;
+[UC]BASE_ID=SELECT TABLE_ID FROM information_schema.tables_config WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'rri_bm_base_${uuid0}';
+[UC]BOOKMARK_ID=SELECT MAX(BOOKMARK_ID) FROM information_schema.table_bookmark_summary WHERE TABLE_ID = ${BASE_ID};
+INSERT INTO rri_bm_base_${uuid0} VALUES (3, 3);
+CREATE MATERIALIZED VIEW rri_bm_pct_${uuid0} DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES('refresh_mode'='pct')
+AS SELECT k, v FROM rri_bm_base_${uuid0};
+REFRESH MATERIALIZED VIEW rri_bm_pct_${uuid0} WITH SYNC MODE;
+SELECT k, v FROM rri_bm_base_${uuid0} [_BOOKMARK_${BOOKMARK_ID}_] ORDER BY k;
+DROP MATERIALIZED VIEW rri_bm_pct_${uuid0};
+DROP MATERIALIZED VIEW rri_bm_inc_${uuid0};
+DROP TABLE rri_bm_base_${uuid0};
