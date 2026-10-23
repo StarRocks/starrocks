@@ -310,6 +310,58 @@ public class MVMirrorBasePartitionTest extends MVTestBase {
     }
 
     /**
+     * Reverse migration with an unbounded full refresh: the coarse month is replaced by day partitions.
+     * The dropped month must leave the published topology; otherwise potential-partition expansion adds
+     * it back to the insert targets and the refresh fails with "Unknown partition".
+     */
+    @Test
+    public void testFullRefreshAfterDisablingMirrorDropsCoarseFromTopology() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = true;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_c3", MAY_RANGE));
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_full_reverse\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_c3 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        refreshMV(DB_NAME, mv);
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+
+                        Config.enable_mv_mirror_base_partition = false;
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.getProperties().put(TaskRun.FORCE, "true");
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "full refresh after disabling mirror did not succeed");
+
+                        Set<String> after = mv.getRangePartitionMap().getPartitionNames();
+                        Assertions.assertEquals(31, after.size(), "after: " + after);
+                        Assertions.assertFalse(after.contains("p20210501_20210601"), "after: " + after);
+
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Assertions.assertFalse(
+                                extraMessage.getMvPartitionsToRefresh().contains("p20210501_20210601"),
+                                "refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertFalse(
+                                processor.getMvContext().getPartitionTopology().getMvToCellMap()
+                                        .containsName("p20210501_20210601"),
+                                "topology still contains the dropped coarse partition");
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
      * Reverse migration: an MV refreshed while the flag was on holds a coarse month partition.
      * After disabling the flag, a bounded refresh inside that month must not drop the month while
      * only creating the in-range day; the coarse partition and its history must survive.
