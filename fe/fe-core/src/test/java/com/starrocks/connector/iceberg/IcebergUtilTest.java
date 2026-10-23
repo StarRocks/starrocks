@@ -235,6 +235,7 @@ public class IcebergUtilTest {
         FileScanTask avroFileScanTask = createMockFileScanTask(FileFormat.AVRO);
 
         IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true);
+<<<<<<< HEAD
 
         StarRocksConnectorException orcException = assertThrows(StarRocksConnectorException.class,
                 () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true));
@@ -249,6 +250,16 @@ public class IcebergUtilTest {
         IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
         IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
         IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
+=======
+        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true);
+
+        StarRocksConnectorException avroException = assertThrows(StarRocksConnectorException.class,
+                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet and ORC format files. " +
+                "Found AVRO format file: /test/avro/file.avro", avroException.getMessage());
+
+        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
     }
 
     @Test

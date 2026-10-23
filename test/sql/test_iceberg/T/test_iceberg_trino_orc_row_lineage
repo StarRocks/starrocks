@@ -1,0 +1,102 @@
+-- name: test_iceberg_trino_orc_row_lineage
+-- Trino writes an ORC v3 table: inserted rows inherit _row_id from the file's first_row_id, while UPDATE, MERGE and
+-- optimize store _row_id (and optimize also _last_updated_sequence_number) in the data files. StarRocks copies the
+-- lineage it reads into a table that Trino joins with its own, since the _row_id Trino assigns to inserted rows
+-- depends on the order it writes files in. Filters on the lineage columns must match the unfiltered values.
+trino: CREATE SCHEMA iceberg.trino_orc_lineage_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_lineage_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_orc_lineage_${uuid0}.t (id integer, v varchar, p integer) WITH (format = 'ORC', format_version = 3, partitioning = ARRAY['p']);
+trino: INSERT INTO iceberg.trino_orc_lineage_${uuid0}.t VALUES (1, 'a', 1), (2, 'b', 2), (3, 'c', 1), (4, 'd', 2);
+trino: INSERT INTO iceberg.trino_orc_lineage_${uuid0}.t VALUES (5, 'e', 1), (6, 'f', 2);
+trino: UPDATE iceberg.trino_orc_lineage_${uuid0}.t SET v = 'b2' WHERE id = 2;
+trino: MERGE INTO iceberg.trino_orc_lineage_${uuid0}.t t USING (VALUES (5, 'e2'), (7, 'g')) AS s(id, v) ON t.id = s.id WHEN MATCHED THEN UPDATE SET v = s.v WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.v, 1);
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+select id, v, p, _last_updated_sequence_number from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t order by id;
+select count(*), count(distinct _row_id) from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t;
+create table ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.sr_lineage (id int, row_id bigint, seq bigint);
+insert into ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.sr_lineage select id, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t;
+trino: SELECT count(*), count_if(t."$row_id" = s.row_id AND t."$last_updated_sequence_number" = s.seq) FROM iceberg.trino_orc_lineage_${uuid0}.t t JOIN iceberg.trino_orc_lineage_${uuid0}.sr_lineage s ON t.id = s.id;
+select (select count(*) from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _row_id >= 4) = (select count_if(_row_id >= 4) from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t);
+select id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _row_id = (select _row_id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where id = 2);
+select id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _row_id = (select _row_id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where id = 4);
+select id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _last_updated_sequence_number > 2 order by id;
+[UC]trino: ALTER TABLE iceberg.trino_orc_lineage_${uuid0}.t EXECUTE optimize;
+refresh external table ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t;
+select id, v, p, _last_updated_sequence_number from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t order by id;
+select count(*) from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t t join ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.sr_lineage s on t.id = s.id and t._row_id = s.row_id and t._last_updated_sequence_number = s.seq;
+select id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _row_id = (select _row_id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where id = 6);
+select id from ice_cat_${uuid0}.trino_orc_lineage_${uuid0}.t where _last_updated_sequence_number = 2 order by id;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_orc_lineage_${uuid0}.sr_lineage;
+trino: DROP TABLE iceberg.trino_orc_lineage_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_orc_lineage_${uuid0};
+
+-- name: test_iceberg_trino_orc_row_lineage_multi_stripe
+-- Row lineage on ORC data files with many stripes: the inherited _row_id follows the file-level row position across
+-- stripes, and a filter on _row_id is not pruned by the statistics of a stored _row_id that has NULLs.
+trino: SET SESSION iceberg.orc_writer_max_stripe_rows = 1000;
+trino: SET SESSION iceberg.orc_writer_min_stripe_size = '1kB';
+trino: SET SESSION iceberg.orc_writer_max_stripe_size = '4kB';
+trino: CREATE SCHEMA iceberg.trino_orc_lineage_ms_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_lineage_ms_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_orc_lineage_ms_${uuid0}.t (id bigint, v varchar) WITH (format = 'ORC', format_version = 3);
+trino: INSERT INTO iceberg.trino_orc_lineage_ms_${uuid0}.t SELECT x, 'v' || CAST(x AS varchar) FROM UNNEST(sequence(1, 10000)) AS u(x);
+trino: SELECT count(*), min(cardinality(split_offsets)) > 1 FROM iceberg.trino_orc_lineage_ms_${uuid0}."t$files";
+trino: UPDATE iceberg.trino_orc_lineage_ms_${uuid0}.t SET v = 'u' WHERE id % 1000 = 0;
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+select count(*), count(distinct _row_id), sum(_row_id), min(_row_id), max(_row_id), sum(_last_updated_sequence_number) from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t;
+select _last_updated_sequence_number, count(*) from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where v = 'u' group by 1;
+create table ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.sr_lineage (id bigint, row_id bigint, seq bigint);
+insert into ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.sr_lineage select id, _row_id, _last_updated_sequence_number from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t;
+trino: SELECT count(*), count_if(t."$row_id" = s.row_id AND t."$last_updated_sequence_number" = s.seq) FROM iceberg.trino_orc_lineage_ms_${uuid0}.t t JOIN iceberg.trino_orc_lineage_ms_${uuid0}.sr_lineage s ON t.id = s.id;
+select count(*) from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where _row_id between 3990 and 5010;
+select (select sum(id) from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where _row_id between 3990 and 5010) = (select sum(if(_row_id between 3990 and 5010, id, 0)) from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t);
+select id from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where _row_id = (select _row_id from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where id = 9000);
+select id from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where _row_id = (select _row_id from ice_cat_${uuid0}.trino_orc_lineage_ms_${uuid0}.t where id = 9001);
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_orc_lineage_ms_${uuid0}.sr_lineage;
+trino: DROP TABLE iceberg.trino_orc_lineage_ms_${uuid0}.t;
+trino: DROP SCHEMA iceberg.trino_orc_lineage_ms_${uuid0};
+
+-- name: test_iceberg_trino_orc_split_tasks_share_deletes
+-- An ORC data file with many stripes is scanned by split tasks; the deletes of the file (a v3 deletion vector, v2
+-- position deletes) are built once by the task that splits it and shared by the split tasks, which skip the rows by
+-- their file-level positions.
+trino: SET SESSION iceberg.orc_writer_max_stripe_rows = 1000;
+trino: SET SESSION iceberg.orc_writer_min_stripe_size = '1kB';
+trino: SET SESSION iceberg.orc_writer_max_stripe_size = '4kB';
+trino: CREATE SCHEMA iceberg.trino_orc_split_${uuid0} WITH (location = 'oss://${oss_bucket}/trino_orc_split_${uuid0}.db');
+trino: CREATE TABLE iceberg.trino_orc_split_${uuid0}.dv (id bigint, v varchar) WITH (format = 'ORC', format_version = 3);
+trino: CREATE TABLE iceberg.trino_orc_split_${uuid0}.pd (id bigint, v varchar) WITH (format = 'ORC', format_version = 2);
+trino: INSERT INTO iceberg.trino_orc_split_${uuid0}.dv SELECT x, 'v' || CAST(x AS varchar) FROM UNNEST(sequence(1, 10000)) AS u(x);
+trino: INSERT INTO iceberg.trino_orc_split_${uuid0}.pd SELECT x, 'v' || CAST(x AS varchar) FROM UNNEST(sequence(1, 10000)) AS u(x);
+trino: DELETE FROM iceberg.trino_orc_split_${uuid0}.dv WHERE id % 7 = 0 OR id BETWEEN 4000 AND 4500;
+trino: DELETE FROM iceberg.trino_orc_split_${uuid0}.pd WHERE id % 7 = 0 OR id BETWEEN 4000 AND 4500;
+trino: SELECT count(*), sum(id) FROM iceberg.trino_orc_split_${uuid0}.dv;
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+set enable_connector_split_io_tasks = true;
+set connector_max_split_size = 1;
+set enable_profile = true;
+set enable_async_profile = false;
+select count(*), sum(id), min(v), max(v) from ice_cat_${uuid0}.trino_orc_split_${uuid0}.dv;
+select regexp_extract(get_query_profile(last_query_id()), 'IcebergDVBuildCount: [0-9]+', 0);
+select count(*), sum(id), min(v), max(v) from ice_cat_${uuid0}.trino_orc_split_${uuid0}.pd;
+select regexp_extract(get_query_profile(last_query_id()), 'DeleteFilesPerScan: [0-9]+', 0);
+select count(*), sum(id) from ice_cat_${uuid0}.trino_orc_split_${uuid0}.pd where id between 3990 and 4510;
+drop catalog ice_cat_${uuid0};
+trino: DROP TABLE iceberg.trino_orc_split_${uuid0}.dv;
+trino: DROP TABLE iceberg.trino_orc_split_${uuid0}.pd;
+trino: DROP SCHEMA iceberg.trino_orc_split_${uuid0};

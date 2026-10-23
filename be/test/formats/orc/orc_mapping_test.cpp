@@ -86,6 +86,21 @@ TEST(OrcMappingTest, IcebergFieldIdMapping) {
     EXPECT_FALSE(OrcMappingFactory::iceberg_column_names(*no_ids, schema).has_value());
 }
 
+// The stored v3 row lineage columns carry reserved field ids that are never in the table schema; they resolve to
+// their reserved names.
+TEST(OrcMappingTest, IcebergRowLineageFieldIds) {
+    std::unique_ptr<orc::Type> root = orc::Type::buildTypeFromString("struct<c1:int,a:bigint,b:bigint>");
+    const_cast<orc::Type*>(root->getSubtype(0))->setAttribute("iceberg.id", "1");
+    const_cast<orc::Type*>(root->getSubtype(1))->setAttribute("iceberg.id", "2147483540");
+    const_cast<orc::Type*>(root->getSubtype(2))->setAttribute("iceberg.id", "2147483539");
+    TIcebergSchema schema;
+    schema.__set_fields({make_iceberg_field(1, "c1")});
+
+    auto names = OrcMappingFactory::iceberg_column_names(*root, schema);
+    ASSERT_TRUE(names.has_value());
+    EXPECT_EQ((std::vector<std::string>{"c1", "_row_id", "_last_updated_sequence_number"}), *names);
+}
+
 // A struct subfield added to an Iceberg table after the file was written is missing from the file: it maps to no
 // ORC type and carries its initial-default, instead of failing the scan.
 TEST(OrcMappingTest, IcebergMissingStructSubfield) {

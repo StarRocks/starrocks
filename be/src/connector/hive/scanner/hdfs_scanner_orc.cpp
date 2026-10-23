@@ -18,6 +18,8 @@
 
 #include "base/simd/simd.h"
 #include "base/time/timezone_utils.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -36,10 +38,13 @@ namespace starrocks {
 
 struct SplitContext : public FileScanSplitContext {
     std::shared_ptr<std::string> footer;
+    // the file's deletes, built once by the task that splits the file: they are keyed by file-level row numbers
+    SkipRowsContextPtr skip_rows_ctx;
 
     FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };
@@ -430,6 +435,39 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    _row_position_slot = nullptr;
+    _row_lineage_slots.clear();
+    for (const auto* slot : _scanner_ctx->format_scan_context.reserved_field_slots) {
+        if (slot->col_name() == formats::kIcebergRowPositionColumnName) {
+            _row_position_slot = slot;
+        } else if (slot->col_name() == formats::kIcebergRowIdColumnName) {
+            RowLineageSlot lineage{.slot = slot, .is_row_id = true};
+            lineage.inherited = _scanner_ctx->format_scan_context.first_row_id;
+            _row_lineage_slots.emplace_back(lineage);
+        } else if (slot->col_name() == formats::kIcebergLastUpdatedSequenceNumberColumnName) {
+            RowLineageSlot lineage{.slot = slot, .is_row_id = false};
+            auto sequence_number = _scanner_ctx->format_scan_context.get_extended_bigint_value(slot->id());
+            if (sequence_number.ok()) {
+                if (!sequence_number.value().is_null()) {
+                    lineage.inherited = sequence_number.value().get_int64();
+                }
+            } else if (!sequence_number.status().is_not_found()) {
+                return sequence_number.status();
+            }
+            _row_lineage_slots.emplace_back(lineage);
+        } else {
+            continue;
+        }
+        // the scanner fills these slots itself, so it also evaluates the single-slot conjuncts on them
+        auto it = _scanner_ctx->format_scan_context.conjuncts.by_slot.find(slot->id());
+        if (it != _scanner_ctx->format_scan_context.conjuncts.by_slot.end()) {
+            _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
+        }
+    }
+
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         auto col_name = Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
@@ -459,6 +497,20 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         _src_slot_descriptors.emplace_back(column.slot_desc);
         src_slot_index++;
     }
+
+    // a row lineage column the file stores is read like any other column, before the conjuncts are evaluated
+    for (auto& lineage : _row_lineage_slots) {
+        auto col_name =
+                Utils::format_name(lineage.slot->col_name(), _scanner_ctx->format_scan_context.options.case_sensitive);
+        if (known_column_names.find(col_name) == known_column_names.end()) continue;
+        lineage.stored = true;
+        auto* slot = const_cast<SlotDescriptor*>(lineage.slot);
+        _lazy_load_ctx.active_load_slots.emplace_back(slot);
+        _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
+        _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
+        _src_slot_descriptors.emplace_back(slot);
+        src_slot_index++;
+    }
     return Status::OK();
 }
 
@@ -473,6 +525,7 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
+        ctx->skip_rows_ctx = _skip_rows_ctx;
         ctx->start_offset = info.offset();
         ctx->end_offset = info.offset() + info.length();
         _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
@@ -525,6 +578,20 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
+    // resolved before the deletes are loaded: a conjunct on a column the file lacks may skip the whole file
+    RETURN_IF_ERROR(resolve_columns(reader.get()));
+    if (_should_skip_file) {
+        return Status::OK();
+    }
+    // a split task reuses the deletes of the task that split the file; the others build them before splitting,
+    // unless they read no stripe
+    if (_scanner_ctx->format_scan_context.split_context != nullptr) {
+        auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->format_scan_context.split_context);
+        _skip_rows_ctx = split_context->skip_rows_ctx;
+    } else if (!stripes.empty()) {
+        RETURN_IF_ERROR(build_iceberg_delete_builder());
+        RETURN_IF_ERROR(build_paimon_delete_file_builder());
+    }
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
     if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
         _scanner_ctx->format_scan_context.split.has_split_tasks = true;
@@ -533,10 +600,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
-    RETURN_IF_ERROR(resolve_columns(reader.get()));
-    if (_should_skip_file) {
-        return Status::OK();
-    }
 
     // create orc chunk reader .
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
@@ -553,6 +616,11 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     if (!_iceberg_column_names.empty()) {
         _orc_reader->set_iceberg_schema(_scanner_ctx->format_scan_context.lake_schema);
     }
+    std::unordered_set<SlotId> no_stats_slot_ids;
+    for (const auto& lineage : _row_lineage_slots) {
+        no_stats_slot_ids.insert(lineage.slot->id());
+    }
+    _orc_reader->set_no_stats_slot_ids(std::move(no_stats_slot_ids));
     // for hive table, we set this flag
     _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -576,10 +644,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx->runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
-
-    // create iceberg delete builder at last
-    RETURN_IF_ERROR(build_iceberg_delete_builder());
-    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 
@@ -645,6 +709,37 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
     return 1;
 }
 
+void HdfsOrcScanner::_fill_row_lineage_columns(Chunk* chunk, const Column* row_positions) const {
+    if (_row_lineage_slots.empty()) {
+        return;
+    }
+    // the chunk has no column yet when the scan reads no column from the file
+    const auto& positions = down_cast<const Int64Column*>(row_positions)->get_data();
+    const size_t num_rows = positions.size();
+    for (const auto& lineage : _row_lineage_slots) {
+        const SlotDescriptor* slot = lineage.slot;
+        const Column* stored = lineage.stored ? chunk->get_column_raw_ptr_by_slot_id(slot->id()) : nullptr;
+        auto dst = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        dst->reserve(num_rows);
+        for (size_t i = 0; i < num_rows; i++) {
+            if (stored != nullptr && !stored->is_null(i)) {
+                dst->append_datum(stored->get(i));
+            } else if (!lineage.inherited.has_value()) {
+                dst->append_nulls(1);
+            } else if (lineage.is_row_id) {
+                dst->append_datum(Datum(lineage.inherited.value() + positions[i]));
+            } else {
+                dst->append_datum(Datum(lineage.inherited.value()));
+            }
+        }
+        if (stored != nullptr) {
+            chunk->update_column(std::move(dst), slot->id());
+        } else {
+            chunk->append_column(std::move(dst), slot->id());
+        }
+    }
+}
+
 StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
     ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
@@ -663,6 +758,16 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
+<<<<<<< HEAD
+=======
+            if (_row_position_slot != nullptr || !_row_lineage_slots.empty()) {
+                row_positions = Int64Column::create();
+                int64_t first_row = _orc_reader->current_row_number();
+                for (size_t i = 0; i < read_num_values; i++) {
+                    row_positions->append_datum(Datum(static_cast<int64_t>(first_row + i)));
+                }
+            }
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
                                                                       &_dict_filter));
             if (_orc_reader->get_cvb_size() != read_num_values) {
@@ -687,6 +792,17 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 RETURN_IF_ERROR(ret);
                 *chunk = std::move(ret.value());
             }
+<<<<<<< HEAD
+=======
+            _fill_row_lineage_columns(ck.get(), row_positions.get());
+            if (_row_position_slot != nullptr) {
+                ColumnPtr positions = std::move(row_positions);
+                if (_row_position_slot->is_nullable()) {
+                    positions = NullableColumn::wrap_if_necessary(positions);
+                }
+                ck->append_column(std::move(positions), _row_position_slot->id());
+            }
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
 
             // we need to append none existed column before do eval, just for count(*) optimization
             RETURN_IF_ERROR(
@@ -773,17 +889,16 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerCon
 }
 
 void HdfsOrcScanner::do_update_counter(HdfsScannerProfile* profile) {
+    const std::string orcProfileSectionPrefix = "ORC";
+    RuntimeProfile* root_profile = profile->runtime_profile;
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
+    // the deletes are built only by the task that splits the file, not by its split tasks
+    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
         return;
     }
-    const std::string orcProfileSectionPrefix = "ORC";
-
-    RuntimeProfile* root_profile = profile->runtime_profile;
-    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
-
-    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
     RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),

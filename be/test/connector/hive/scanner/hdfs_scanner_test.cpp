@@ -1789,6 +1789,247 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
     scanner->close();
 }
 
+// An Iceberg ORC file with id (field id 1) = i, plus, when `with_row_id`, a stored _row_id = 100 + i that is NULL on
+// odd rows, as a writer that keeps the lineage of only some rows leaves it.
+static void write_iceberg_lineage_orc_file(const std::string& path, bool with_row_id, size_t num_rows) {
+    std::filesystem::remove(path);
+    ORC_UNIQUE_PTR<orc::Type> schema(
+            orc::Type::buildTypeFromString(with_row_id ? "struct<id:bigint,_row_id:bigint>" : "struct<id:bigint>"));
+    const_cast<orc::Type*>(schema->getSubtype(0))->setAttribute("iceberg.id", "1");
+    if (with_row_id) {
+        const_cast<orc::Type*>(schema->getSubtype(1))->setAttribute("iceberg.id", "2147483540");
+    }
+    ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(path);
+    ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), orc::WriterOptions{});
+    ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(num_rows);
+    auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+    auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+    for (size_t i = 0; i < num_rows; i++) {
+        id->data[i] = i;
+    }
+    id->numElements = num_rows;
+    if (with_row_id) {
+        auto* row_id = dynamic_cast<orc::LongVectorBatch*>(root->fields[1]);
+        row_id->hasNulls = true;
+        for (size_t i = 0; i < num_rows; i++) {
+            row_id->data[i] = 100 + i;
+            row_id->notNull[i] = (i % 2 == 0);
+        }
+        row_id->numElements = num_rows;
+    }
+    root->numElements = num_rows;
+    writer->add(*batch);
+    writer->close();
+}
+
+static TExpr create_bigint_literal_texpr(int64_t value) {
+    TExpr expr;
+    expr.__set_nodes({create_int_literal_node(TPrimitiveType::BIGINT, value)});
+    return expr;
+}
+
+static SlotDesc iceberg_lineage_orc_descs[] = {
+        {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"_last_updated_sequence_number", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"_pos", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {""}};
+
+// A stored _row_id keeps its non-NULL values and inherits first_row_id + _pos for the NULL ones; the sequence number,
+// not stored, inherits the file's. `_row_id > 500` matches only inherited values, which the stored column's
+// statistics (max 102) do not cover, so the search argument must not prune the file.
+TEST_F(HdfsScannerTest, TestOrcIcebergStoredRowLineage) {
+    const std::string file = "orc_iceberg_stored_row_lineage.orc";
+    write_iceberg_lineage_orc_file(file, true, 4);
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    auto* range = _create_scan_range(file, 0, 0);
+    range->__set_first_row_id(1000);
+    range->__set_extended_columns({{2, create_bigint_literal_texpr(7)}});
+    auto* tuple_desc = _create_tuple_desc(iceberg_lineage_orc_descs);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    TIcebergSchema schema;
+    TIcebergSchemaField id_field;
+    id_field.__set_field_id(1);
+    id_field.__set_name("id");
+    schema.__set_fields({id_field});
+    ctx->format_scan_context.lake_schema = &schema;
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::BIGINT, 500);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GT, tuple_desc->slots()[1], TPrimitiveType::BIGINT, lit_node);
+        ctx->format_scan_context.conjuncts.by_slot[1].push_back(create_expr_context(&_pool, nodes));
+    }
+    for (auto& it : ctx->format_scan_context.conjuncts.by_slot) {
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
+    }
+
+    Status status = scanner->init(_runtime_state, ctx);
+    ASSERT_OK(status);
+    status = scanner->open(_runtime_state);
+    ASSERT_OK(status);
+    _debug_rows_per_call = 10;
+    READ_SCANNER_ROWS(scanner, 2);
+    // The conjunct reads only _row_id, so id is lazily loaded and appended to the chunk last:
+    // [_row_id, _last_updated_sequence_number, id, _pos].
+    EXPECT_EQ("[1001, 7, 1, 1]\n[1003, 7, 3, 3]\n", _debug_row_output);
+    scanner->close();
+}
+
+// The task that splits an ORC file builds its deletes once; its split tasks share them, and since the deletes are
+// keyed by file-level row numbers, a split task starting at a later stripe skips the right rows.
+TEST_F(HdfsScannerTest, TestOrcSplitTasksShareDeletes) {
+    const std::string file = "orc_split_tasks_share_deletes.orc";
+    std::filesystem::remove(file);
+    const size_t num_rows = 20000;
+    {
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<id:bigint>"));
+        orc::WriterOptions options;
+        // force a stripe per batch
+        options.setStripeSize(0);
+        ORC_UNIQUE_PTR<orc::OutputStream> out = orc::writeLocalFile(file);
+        ORC_UNIQUE_PTR<orc::Writer> writer = orc::createWriter(*schema, out.get(), options);
+        const size_t batch_size = 1000;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* id = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        for (size_t start = 0; start < num_rows; start += batch_size) {
+            for (size_t i = 0; i < batch_size; i++) {
+                id->data[i] = start + i;
+            }
+            id->numElements = batch_size;
+            root->numElements = batch_size;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+    ASSERT_GT(orc::createReader(orc::readLocalFile(file), orc::ReaderOptions{})->getNumberOfStripes(), 2);
+
+    // every 7th row of the file is deleted
+    auto bitmap = std::make_shared<DeletionBitmap>(roaring64_bitmap_create());
+    for (size_t i = 0; i < num_rows; i += 7) {
+        bitmap->add_value(i);
+    }
+
+    SlotDesc descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    auto* range = _create_scan_range(file, 0, 0);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+    ctx->format_scan_context.options.enable_split_tasks = true;
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    scanner->_skip_rows_ctx->deletion_bitmap = bitmap;
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+    const auto& split_tasks = ctx->format_scan_context.split.split_tasks;
+    ASSERT_GT(split_tasks.size(), 2);
+    scanner->close();
+
+    // read the last split task alone, over its range as HiveDataSource sets it
+    const FileScanSplitContext* last = split_tasks.back().get();
+    auto* split_range = _create_scan_range(file, last->start_offset, last->end_offset - last->start_offset);
+    auto* split_ctx = _create_ctx(file, split_range, tuple_desc);
+    split_ctx->format_scan_context.split_context = last;
+    auto split_scanner = std::make_shared<HdfsOrcScanner>();
+    ASSERT_OK(split_scanner->init(_runtime_state, split_ctx));
+    ASSERT_OK(split_scanner->open(_runtime_state));
+    EXPECT_EQ(bitmap, split_scanner->_skip_rows_ctx->deletion_bitmap);
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    int64_t rows = 0;
+    int64_t min_id = std::numeric_limits<int64_t>::max();
+    int64_t max_id = -1;
+    Status status;
+    for (;;) {
+        chunk->reset();
+        status = split_scanner->get_next(_runtime_state, &chunk);
+        if (!status.ok() && !status.is_end_of_file()) break;
+        const Column* col = chunk->get_column_raw_ptr_by_slot_id(0);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            int64_t v = col->get(i).get_int64();
+            EXPECT_NE(0, v % 7) << v;
+            min_id = std::min(min_id, v);
+            max_id = std::max(max_id, v);
+        }
+        rows += chunk->num_rows();
+        if (status.is_end_of_file()) break;
+    }
+    ASSERT_TRUE(status.is_end_of_file()) << status;
+    ASSERT_GT(rows, 0);
+    // the last stripe holds ids [19000, 20000); 19999 is a multiple of 7, so deleted
+    EXPECT_EQ(19000, min_id);
+    EXPECT_EQ(19998, max_id);
+    int64_t live = 0;
+    for (int64_t v = min_id; v < static_cast<int64_t>(num_rows); v++) {
+        live += (v % 7 != 0);
+    }
+    EXPECT_EQ(live, rows);
+    split_scanner->close();
+}
+
+// A scan that reads only _row_id reads no column from the file.
+TEST_F(HdfsScannerTest, TestOrcIcebergRowIdOnly) {
+    const std::string file = "orc_iceberg_row_id_only.orc";
+    write_iceberg_lineage_orc_file(file, false, 3);
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+
+    SlotDesc row_id_descs[] = {{"_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)}, {""}};
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    auto* range = _create_scan_range(file, 0, 0);
+    range->__set_first_row_id(50);
+    auto* tuple_desc = _create_tuple_desc(row_id_descs);
+    auto* ctx = _create_ctx(file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, ctx);
+    ASSERT_OK(status);
+    status = scanner->open(_runtime_state);
+    ASSERT_OK(status);
+    _debug_rows_per_call = 10;
+    READ_SCANNER_ROWS(scanner, 3);
+    EXPECT_EQ("[50]\n[51]\n[52]\n", _debug_row_output);
+    scanner->close();
+}
+
+// Without a stored column, _row_id is first_row_id + _pos and the sequence number is the file's; without either
+// value from FE, both are NULL.
+TEST_F(HdfsScannerTest, TestOrcIcebergInheritedRowLineage) {
+    const std::string file = "orc_iceberg_inherited_row_lineage.orc";
+    write_iceberg_lineage_orc_file(file, false, 3);
+    DeferOp remove_file([&]() { std::filesystem::remove(file); });
+
+    for (bool has_values : {true, false}) {
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        auto* range = _create_scan_range(file, 0, 0);
+        if (has_values) {
+            range->__set_first_row_id(50);
+            range->__set_extended_columns({{2, create_bigint_literal_texpr(3)}});
+        }
+        auto* tuple_desc = _create_tuple_desc(iceberg_lineage_orc_descs);
+        auto* ctx = _create_ctx(file, range, tuple_desc);
+        TIcebergSchema schema;
+        TIcebergSchemaField id_field;
+        id_field.__set_field_id(1);
+        id_field.__set_name("id");
+        schema.__set_fields({id_field});
+        ctx->format_scan_context.lake_schema = &schema;
+
+        Status status = scanner->init(_runtime_state, ctx);
+        ASSERT_OK(status);
+        status = scanner->open(_runtime_state);
+        ASSERT_OK(status);
+        _debug_rows_per_call = 10;
+        READ_SCANNER_ROWS(scanner, 3);
+        if (has_values) {
+            EXPECT_EQ("[0, 50, 3, 0]\n[1, 51, 3, 1]\n[2, 52, 3, 2]\n", _debug_row_output);
+        } else {
+            EXPECT_EQ("[0, NULL, NULL, 0]\n[1, NULL, NULL, 1]\n[2, NULL, NULL, 2]\n", _debug_row_output);
+        }
+        scanner->close();
+    }
+}
+
 // =============================================================================
 
 /*

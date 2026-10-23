@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <orc/OrcFile.hh>
 
 #include "connector/hive/scanner/hdfs_scanner.h"
@@ -40,6 +41,7 @@ public:
 private:
     StatusOr<size_t> _do_get_next(ChunkPtr* chunk);
     StatusOr<size_t> _do_get_next_count(ChunkPtr* chunk);
+    void _fill_row_lineage_columns(Chunk* chunk, const Column* row_positions) const;
 
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,
@@ -48,7 +50,12 @@ private:
     bool _should_skip_file;
 
     // hdfs_scanner_orc will only eval conjunctions in _eval_conjunct_ctxs_by_materialized_slot
+<<<<<<< HEAD
     // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
+=======
+    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file, or be _pos or a row lineage slot,
+    // which the scanner fills
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
     Status build_iceberg_delete_builder();
@@ -77,6 +84,21 @@ private:
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
     // Current Iceberg name of each top-level ORC column, set when the file carries Iceberg field ids.
     std::vector<std::string> _iceberg_column_names;
+<<<<<<< HEAD
+=======
+    // Iceberg `_pos` slot (the row's position in the data file), filled by the scanner; null when not read.
+    const SlotDescriptor* _row_position_slot = nullptr;
+    // An Iceberg v3 row lineage slot. The scanner reads the stored column when the file has one, and fills its NULLs
+    // (or every row, when it is not stored) with the inherited value: first_row_id + _pos for _row_id, the file's
+    // data sequence number for _last_updated_sequence_number. Without an inherited value they stay NULL.
+    struct RowLineageSlot {
+        const SlotDescriptor* slot = nullptr;
+        bool is_row_id = false;
+        bool stored = false;
+        std::optional<int64_t> inherited;
+    };
+    std::vector<RowLineageSlot> _row_lineage_slots;
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
 };
 
 } // namespace starrocks

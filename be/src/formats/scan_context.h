@@ -317,6 +317,9 @@ struct FormatScanContext {
     // the file readers do. NotSupported for a type the value cannot be parsed into.
     static StatusOr<MutableColumnPtr> create_initial_default_column(const TypeDescriptor& type, bool nullable,
                                                                     const std::string& value);
+    // The BIGINT value (or NULL) FE sends in extended_column_exprs for a slot, e.g. the data sequence number an
+    // Iceberg _last_updated_sequence_number inherits. NotFound when FE sent none.
+    StatusOr<Datum> get_extended_bigint_value(SlotId slot_id) const;
     bool can_use_count_optimization() const;
     bool has_count_column() const { return _count_slot.has_value(); }
     bool can_use_min_max_optimization() const;

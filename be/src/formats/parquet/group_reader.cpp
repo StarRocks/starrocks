@@ -546,26 +546,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(co
 }
 
 StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
-    const auto& extended_columns = _param.scan_ctx->extended_column_exprs;
-    auto it = extended_columns.find(slot_id);
-    if (it == extended_columns.end()) {
-        return Status::NotFound(fmt::format("Cannot find extended column value for slot {}", slot_id));
-    }
-
-    const auto& expr = it->second;
-    if (expr.nodes.empty()) {
-        return Status::InvalidArgument(fmt::format("Invalid extended column expression for slot {}", slot_id));
-    }
-
-    const auto& node = expr.nodes[0];
-    if (node.node_type == TExprNodeType::NULL_LITERAL) {
-        return kNullDatum;
-    }
-    if (node.node_type != TExprNodeType::INT_LITERAL || !node.__isset.int_literal) {
-        return Status::InvalidArgument(fmt::format("Unsupported extended column expression for slot {}", slot_id));
-    }
-
-    return Datum(node.int_literal.value);
+    return _param.scan_ctx->get_extended_bigint_value(slot_id);
 }
 
 Status GroupReader::_create_column_readers() {

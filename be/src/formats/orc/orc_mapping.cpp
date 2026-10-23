@@ -15,6 +15,7 @@
 #include "formats/orc/orc_mapping.h"
 
 #include "common/statusor.h"
+#include "formats/reserved_columns.h"
 #include "gutil/strings/numbers.h"
 
 namespace starrocks {
@@ -161,6 +162,10 @@ std::optional<std::vector<std::string>> OrcMappingFactory::iceberg_column_names(
         has_ids = true;
         if (auto it = id_2_name.find(*id); it != id_2_name.end()) {
             names[i] = *it->second;
+        } else if (*id == formats::kIcebergRowIdColumnId) {
+            names[i] = formats::kIcebergRowIdColumnName;
+        } else if (*id == formats::kIcebergLastUpdatedSequenceNumberColumnId) {
+            names[i] = formats::kIcebergLastUpdatedSequenceNumberColumnName;
         }
     }
     if (!has_ids) {

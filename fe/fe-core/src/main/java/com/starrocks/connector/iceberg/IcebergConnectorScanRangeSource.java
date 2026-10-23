@@ -215,6 +215,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
                 checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
+<<<<<<< HEAD
+=======
+                // A plain read of a data file whose deletion vector deletes every row returns nothing; DELETE,
+                // UPDATE and MERGE (usedForDelete), rewrites (recordScanFiles) and the equality-delete scan, which
+                // reads the task's delete files rather than its data file, keep it.
+                if (!usedForDelete && !recordScanFiles &&
+                        morParams.getScanTaskType() != IcebergMORParams.ScanTaskType.EQ_DELETE &&
+                        isFullyDeletedByDeletionVector(fileScanTask)) {
+                    Tracers.count(EXTERNAL, "ICEBERG.skippedFullyDeletedDataFiles", 1);
+                    continue;
+                }
+>>>>>>> d751274f024... [Enhancement][RB-225] Read Iceberg v3 row lineage from ORC data files (#66820)
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -402,7 +414,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
             // _row_id is handled as a reserved field in BE (not an extended column).
-            // It is computed as firstRowId + row_position, or read from the physical Parquet column
+            // It is computed as firstRowId + row_position, or read from the physical Parquet/ORC column
             // if present (after compaction).
             if (name.equalsIgnoreCase(ROW_ID)) {
                 continue;
