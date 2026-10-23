@@ -16,71 +16,6 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: 此BE中tablet的最高累积合并分数。
 
-## `tablet_merge_sstable_fallback_cohort_mismatch_total`
-
-- 单位: 计数
-- 描述: 因各源 tablet 的 SST 队列在数量、顺序或语义元数据上不一致而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
-
-- 单位: 计数
-- 描述: 因候选 SST 队列中存在重复物理 SST 文件名而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_embedded_delvec_total`
-
-- 单位: 计数
-- 描述: 因 SST 投影后无法解析所需内嵌删除向量而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
-
-- 单位: 计数
-- 描述: 因源到目标的 RSSID 映射或所有权不满足元数据安全复用的一致性要求而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_projected_domain_total`
-
-- 单位: 计数
-- 描述: 因投影后的 SST 所有者、RSSID 偏移或水位超出可复用的存活域或支持域而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
-
-- 单位: 计数
-- 描述: 因各源 rowset 的物理布局不一致而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_shared_or_mixed_total`
-
-- 单位: 计数
-- 描述: 因源 SST 为共享所有权或混合所有权而无法安全复用元数据并选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
-
-- 单位: 计数
-- 描述: 因源范围或 SST 元数据不符合支持的复用形式而选择延迟重建主键索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_meta_identical_total`
-
-- 单位: 计数
-- 描述: 在合并后 tablet 元数据中复用一组完整且完全相同的继承 SST 队列的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_meta_lazy_rebuild_total`
-
-- 单位: 计数
-- 描述: 省略源 SST 元数据，使下一次加载主键索引的操作或使用方重建该索引的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_meta_private_total`
-
-- 单位: 计数
-- 描述: 投影并复用一组完整私有源 SST 元数据的 tablet 合并累计次数。
-
-## `tablet_merge_sstable_omitted_bytes_total`
-
-- 单位: Bytes
-- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计大小。
-
-## `tablet_merge_sstable_omitted_file_total`
-
-- 单位: 计数
-- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计数量。
-
 ## `tablet_metadata_mem_bytes`
 
 - 单位: 字节
@@ -103,6 +38,11 @@ description: "Alphabetical t - z"
 
 - 单位: 计数
 - 描述: 该指标统计的是合并规划过程中 Tablet 被排除事件的累计次数，而不是当前仍被阻塞的 Tablet 数量：只要某次规划把一个原本符合条件的 Tablet 判定为排除，计数就会加一，且不会随后回退，只有 FE 重启才会清零。因此应关注该值的增长速率，而非其绝对大小。一个 Tablet 被排除，原因要么是它仍持有 Tablet 分裂遗留下来、会阻塞合并的共享数据文件，要么是尚未被证实不含这类文件——后一种情况通常意味着 compaction 还没追上，但也可能是该 Tablet 所在 BE 版本过旧、不支持这项检查，或者该 Tablet 还未被观测到。清掉分裂遗留的共享文件需要一次重写它们的 compaction：非主键表可以用 `ALTER TABLE ... COMPACT` 按需触发；主键表执行同样的语句时，只有当该 Tablet 存在未清理的删除时才会触发 base compaction，而刚分裂出来的 Tablet 通常没有删除，因此对它无效，只能等常规 compaction 自行重写到那些 rowset。仅 Leader FE 会递增该计数器。
+
+## `tablet_reshard_merge_rejected_total`
+
+- 单位: 计数
+- 描述: 本 BE 在写入任何文件之前拒绝执行的 tablet 合并累计次数。拒绝的原因是待合并的 tablet 不满足合并的前提条件，常见情形有：某个 tablet 仍持有 split 后与其他 tablet 共享的数据文件、两个 tablet 声明了同一个文件，或者各 tablet 的表级配置不一致。被拒绝的 publish 返回的错误信息以 `MERGE_REJECTED` 开头，BE 同时输出一条 WARNING 日志，列出源 tablet 与目标 tablet。
 
 ## `tablet_schema_mem_bytes`
 

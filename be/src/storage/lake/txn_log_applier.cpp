@@ -1241,7 +1241,7 @@ public:
         merged_rowset->set_num_rows(total_num_rows);
         merged_rowset->set_data_size(total_data_size);
         merged_rowset->set_overlapped(all_segment_metas.size() > 1);
-        // MERGE dedup identity: adopt the first log's uid. All logs of one txn share a producer
+        // Logical rowset identity: adopt the first log's uid. All logs of one txn share a producer
         // version and uids are CopyFrom-preserved across cross-publish, so this is stable across
         // cross-published split children.
         tablet_reshard_helper::inherit_or_set_uid(merged_rowset, txn_logs.front()->op_write().rowset());
