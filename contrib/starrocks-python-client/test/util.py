@@ -14,6 +14,16 @@
 
 import re
 
+from alembic import util as alembic_util
+
+def alembic_runs_dialect_comparators_first(config: object) -> bool:
+    """Whether Alembic runs the comparators in its global registry ahead of its own.
+
+    Alembic's PriorityDispatcher (1.18 and later) copies the global registry, which holds the dialect's
+    comparators, before adding its own, so the dialect's ``schema`` and ``table`` comparators run first.
+    """
+    return hasattr(alembic_util, "PriorityDispatcher")
+
 
 def normalize_sql(sql: str) -> str:
     """Normalizes a SQL string for comparison."""
