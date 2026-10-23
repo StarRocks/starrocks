@@ -1839,11 +1839,11 @@ vectorized_functions = [
      'AIFunctions::ai_extract', {
          'named_args': [
              {'name': 'input'},
-             {'name': 'keys'},
+             {'name': 'labels'},
              {'name': 'provider', 'default': ''},
              {'name': 'model', 'default': ''},
          ],
-         'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'keys'))
+         'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'labels'))
      }],
     [200116, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
      'AIFunctions::ai_fix_grammar', {
