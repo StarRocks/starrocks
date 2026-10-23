@@ -155,6 +155,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### lake_pk_compaction_base_enable_delete_trigger
 
 - 默认值：false
