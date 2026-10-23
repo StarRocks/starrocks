@@ -568,6 +568,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
         buildLocation();
+        buildDataCachePartitionDuration();
         return this;
     }
 
