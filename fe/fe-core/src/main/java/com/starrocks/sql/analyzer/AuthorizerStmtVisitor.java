@@ -194,6 +194,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -979,6 +980,30 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
         String catalogName = statement.getCatalogName();
         // No authorization check for using default_catalog
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        try {
+            Authorizer.checkAnyActionOnCatalog(context, catalogName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), catalogName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowDatabasesStatement(ShowDbStmt statement, ConnectContext context) {
+        String catalogName = statement.getCatalogName();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        // Any user has an implicit usage permission on the internal catalog, so SHOW DATABASES on it
+        // relies on the per-database filtering in ShowExecutor. For an external catalog, require the same
+        // catalog-level privilege as SET CATALOG before ShowExecutor lists databases from its metastore,
+        // otherwise a user without any privilege on the catalog can probe its existence and metastore.
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
