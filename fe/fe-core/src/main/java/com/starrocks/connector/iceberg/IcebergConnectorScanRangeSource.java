@@ -34,7 +34,6 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -57,7 +56,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
-import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -76,8 +74,6 @@ import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -113,9 +109,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Optional<List<BucketProperty>> bucketProperties;
     private final RemoteFileInfoSource remoteFileInfoSource;
 
-    private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
     // specId, StructLikeWrapper -> partitionId
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
+    // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
+    private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
+    // partitionId -> partition value sent with the scan ranges, shared by every file of the partition
+    private final Map<Long, THdfsPartition> partitionValues = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -379,7 +378,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
-        DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         String filePath = file.path().toString();
         String tableLocation = table.getTableLocation();
@@ -415,12 +413,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setModification_time(0);
         hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
-        THdfsPartition tPartition = new THdfsPartition();
-        tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(ExprToThrift::treeToThrift)
-                .collect(Collectors.toList()));
-
-        hdfsScanRange.setPartition_value(tPartition);
+        hdfsScanRange.setPartition_value(partitionValues.get(partitionId));
         hdfsScanRange.setTable_id(table.getId());
 
         // fill extended column value
@@ -577,6 +570,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
 
+        // Look up before building the PartitionKey: this runs once per data file, and with a non-identity
+        // transform such as bucket(N) the cache below sees N keys per identity partition.
+        StructLikeWrapper wrappedPartition = partitionWrapperCache
+                .computeIfAbsent(spec.specId(), ignore -> StructLikeWrapper.forType(spec.partitionType()))
+                .copyFor(task.file().partition());
+        Pair<Integer, StructLikeWrapper> cacheKey = Pair.create(spec.specId(), wrappedPartition);
+
+        Long cachedId = partitionKeyToId.get(cacheKey);
+        if (cachedId != null) {
+            return cachedId;
+        }
+
         if (!partitionSlotIdsCache.containsKey(spec.specId())) {
             partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
         }
@@ -589,25 +594,19 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         StructLike origPartition = task.partition();
         PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
-
-        StructLikeWrapper wrappedPartition = StructLikeWrapper.forType(spec.partitionType())
-                .copyFor(task.file().partition());
-        Pair<Integer, StructLikeWrapper> cacheKey = Pair.create(spec.specId(), wrappedPartition);
-
-        Long cachedId = partitionKeyToId.get(cacheKey);
-        if (cachedId != null) {
-            return cachedId;
-        }
-
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
-
-        Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
-        DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
-                new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
-                        filePath.getParent().toString());
-
         partitionKeyToId.put(cacheKey, partitionId);
-        referencedPartitions.put(partitionId, referencedPartitionInfo);
+
+        // The PartitionKey holds identity fields only, so several cache keys (one per bucket, say) share one
+        // partition id and one thrift value. The scheduler sends it once per fragment instance and drops it from
+        // later ranges (FragmentInstance.removeDuplicatedPartitionValues).
+        partitionValues.computeIfAbsent(partitionId, ignore -> {
+            THdfsPartition value = new THdfsPartition();
+            value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                    .map(ExprToThrift::treeToThrift)
+                    .collect(Collectors.toList()));
+            return value;
+        });
         checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }
