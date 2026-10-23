@@ -1342,7 +1342,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### paimon_reader_mode
 
-* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。
+
+  * `AUTO`: StarRocks が適切な Reader を自動的に選択します。
+  * `JNI`: JNI 経由で Paimon Java Reader を使用します。
+  * `NATIVE`: 対応可能な場合は StarRocks ファイル Reader を使用し、それ以外は対応可能な paimon-cpp Reader を必要とします。JNI にフォールバックせず、対応できない場合はエラーになります。
+  * `paimon_force_jni_reader=true` は `JNI` の選択と同等で、この変数の設定より優先されます。
 * **デフォルト**: AUTO
 * **データ型**: String
 * **導入バージョン**: v4.2

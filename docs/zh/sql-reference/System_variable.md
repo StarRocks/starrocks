@@ -1386,7 +1386,12 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
+
+  * `AUTO`：由 StarRocks 自动选择合适的读取模式。
+  * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
+  * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2
