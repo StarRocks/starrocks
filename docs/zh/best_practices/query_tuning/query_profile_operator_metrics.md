@@ -221,6 +221,7 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | SubmitTaskTime | 任务提交所花费的时间。 |
 | PeakIOTasks | I/O 任务的峰值数量。 |
 | PeakScanTaskQueueSize | I/O 任务队列的峰值大小。 |
+| ScanRangesPrunedByPartitionValue | 因 identity 分区值被谓词或已到达的 Join Runtime Filter 过滤，而在读取前被跳过的 Scan Range 数量。 |
 
 ### Exchange Operator
 

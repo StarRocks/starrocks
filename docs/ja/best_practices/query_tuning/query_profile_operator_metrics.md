@@ -221,6 +221,7 @@ OLAP_SCAN オペレーターに似ていますが、Iceberg/Hive/Hudi/Detal な�
 | SubmitTaskTime | タスク提出にかかった時間。 |
 | PeakIOTasks | IO タスクのピーク数。 |
 | PeakScanTaskQueueSize | IO タスクキューのピークサイズ。 |
+| ScanRangesPrunedByPartitionValue | identity パーティション値が述語または到着済みの Join Runtime Filter で除外されたため、読み取り前にスキップされた Scan Range の数。 |
 
 ### Exchange Operator
 

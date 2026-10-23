@@ -229,6 +229,7 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
+| ScanRangesPrunedByPartitionValue | Number of scan ranges skipped before they are read because a predicate or an arrived join runtime filter rejects their identity partition values. |
 
 ### Exchange Operator
 

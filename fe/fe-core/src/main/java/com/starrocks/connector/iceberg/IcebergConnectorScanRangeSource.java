@@ -40,6 +40,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -135,6 +136,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
+    private Set<String> runtimeFilterPruningColumns = Set.of();
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -343,12 +345,36 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
 
             if (!seenEqDeleteFiles.contains(file.path().toString())) {
+                checkRuntimeFilterPruningColumns(task, file);
                 THdfsScanRange hdfsScanRange = buildScanRange(task, file, partitionId);
                 res.add(buildTScanRangeLocations(hdfsScanRange));
                 seenEqDeleteFiles.add(file.path().toString());
             }
         }
         return res;
+    }
+
+    public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {
+        this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
+    }
+
+    // A runtime-filter pruning column of the delete scan takes the delete file's identity partition value, which
+    // only a partition-scoped delete of the data file's own spec has. Any other delete file would get a wrong value
+    // and silently stop deleting rows, so fail the query instead.
+    private void checkRuntimeFilterPruningColumns(FileScanTask task, DeleteFile file) {
+        if (runtimeFilterPruningColumns.isEmpty()) {
+            return;
+        }
+        List<Integer> identitySlotIds = partitionSlotIdsCache.get(file.specId());
+        boolean valid = file.specId() == task.spec().specId() && !task.spec().isUnpartitioned() &&
+                identitySlotIds != null && runtimeFilterPruningColumns.stream()
+                        .map(desc::getColumnSlot)
+                        .allMatch(slot -> slot != null && identitySlotIds.contains(slot.getId().asInt()));
+        if (!valid) {
+            throw new StarRocksConnectorException("Equality delete file %s cannot be pruned by runtime filters on %s. " +
+                    "You can execute `set %s = false` then rerun it", file.location(), runtimeFilterPruningColumns,
+                    SessionVariable.ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING);
+        }
     }
 
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
@@ -371,8 +397,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         ConnectContext context = ConnectContext.get();
-        if (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
-                partitionSlotIdsCache.containsKey(file.specId())) {
+        // the runtime-filter pruning columns of a delete scan exist only as identity partition values, whatever the
+        // session (incremental scan ranges are built without one)
+        boolean identityColumnOptimize = !runtimeFilterPruningColumns.isEmpty() ||
+                (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize());
+        if (identityColumnOptimize && partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(partitionId);
             hdfsScanRange.setIdentity_partition_slot_ids(partitionSlotIdsCache.get(file.specId()));
         } else {

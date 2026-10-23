@@ -43,7 +43,11 @@ select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id order by p, i
 select count(*) from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id;
 select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where p = 'b' order by id;
 select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id where id = 1 order by p;
+-- with runtime filter pruning the identity column p does the partition match in place of $partition_key
+set enable_iceberg_eq_delete_runtime_filter_pruning = false;
 function: assert_explain_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
+set enable_iceberg_eq_delete_runtime_filter_pruning = true;
+function: assert_explain_not_contains('select * from iceberg_eq_scope_${uuid0}.eq_scope_db_${uuid0}.by_id', '$partition_key')
 
 -- the equality key contains the identity partition column (as in a Flink upsert table): a key match already
 -- implies the same partition, so the plan needs no partition check
