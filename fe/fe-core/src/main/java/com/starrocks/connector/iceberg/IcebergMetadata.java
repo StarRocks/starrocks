@@ -119,6 +119,8 @@ import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.IsolationLevel;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.MetricsConfig;
 import org.apache.iceberg.MetricsModes;
@@ -2751,8 +2753,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Map.of();
         }
         Set<String> referenced = dataFiles.stream()
-                .filter(f -> isPositionDelete(f) && f.isSetReferenced_data_file()
-                        && !IcebergDeletionVectorSupport.PUFFIN_FORMAT.equalsIgnoreCase(f.getFormat()))
+                .filter(f -> isPositionDelete(f) && f.isSetReferenced_data_file())
                 .map(TIcebergDataFile::getReferenced_data_file)
                 .collect(Collectors.toSet());
         if (referenced.isEmpty()) {
@@ -2831,18 +2832,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private org.apache.iceberg.DeleteFile buildPositionDeleteFile(
-<<<<<<< HEAD
-            TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
-        FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(partitionSpec)
-=======
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
-            Map<String, DataFile> scannedByLocation, Map<String, DataFile> otherSpecDataFiles) {
-        // Iceberg V3 deletion vector: a Puffin blob rather than a Parquet position-delete file.
-        // Its spec/partition come from the referenced data file itself (partition evolution).
-        if (IcebergDeletionVectorSupport.PUFFIN_FORMAT.equalsIgnoreCase(dataFile.getFormat())) {
-            return IcebergDeletionVectorSupport.buildDeletionVectorFile(dataFile, nativeTbl, scannedByLocation);
-        }
-
+            Map<String, DataFile> otherSpecDataFiles) {
         // A delete of a data file written under another spec must carry that file's spec and partition, not the
         // tuple the BE derived from the write spec, or a ReplacePartitions of that tuple drops it.
         DataFile referenced = dataFile.isSetReferenced_data_file()
@@ -2862,7 +2853,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(deleteSpec)
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
                 .ofPositionDeletes()
                 .withPath(dataFile.path)
                 .withFormat(FileFormat.PARQUET)
@@ -2901,7 +2891,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-<<<<<<< HEAD
     private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                        List<TIcebergDataFile> dataFiles, String branch,
                                        String dbName, String tableName, Object extra,
@@ -2915,28 +2904,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             rowDelta.toBranch(branch);
         }
 
-        PartitionSpec partitionSpec = nativeTbl.spec();
         ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
         for (TIcebergDataFile dataFile : dataFiles) {
-            org.apache.iceberg.DeleteFile deleteFile = buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl);
-            rowDelta.addDeletes(deleteFile);
-=======
-    // Builds the RowDelta's DeleteFiles and configures its commit-time conflict validation. Called
-    // inside commitWithCleanup so a rejected deletion-vector entry cleans up the BE-written Puffin files.
-    private void prepareDeleteRowDelta(RowDelta rowDelta, List<TIcebergDataFile> dataFiles,
-                                       PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
-                                       Object extra, Long baseSnapshotId, ConnectContext context,
-                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles) {
-        Map<String, DataFile> otherSpecDataFiles =
-                findOtherSpecDataFiles(nativeTbl, dataFiles, partitionSpec, baseSnapshotId);
-        // A deletion vector's entry carries the referenced data file's OWN spec and partition
-        // (partition evolution); the scanned data files are the source.
-        Map<String, DataFile> scannedByLocation = IcebergDeletionVectorSupport.scannedDataFilesByLocation(extra);
-        ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
-        for (TIcebergDataFile dataFile : dataFiles) {
-            rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl, scannedByLocation,
-                    otherSpecDataFiles));
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
             if (dataFile.isSetReferenced_data_file()) {
                 referencedDataFiles.add(dataFile.getReferenced_data_file());
             }
@@ -2956,6 +2925,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (baseSnapshotId != null) {
             rowDelta.validateFromSnapshot(baseSnapshotId);
         }
+        final Long lookupSnapshotId = baseSnapshotId;
 
         // Validate that referenced data files exist and haven't been deleted
         rowDelta.validateDataFilesExist(referencedDataFiles.build());
@@ -2980,47 +2950,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (context != null) {
             updateCommitInfo(rowDelta, context);
         }
-<<<<<<< HEAD
-=======
-    }
-
-    private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
-                                       List<TIcebergDataFile> dataFiles,
-                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles, String branch,
-                                       String dbName, String tableName, Object extra,
-                                       ConnectContext context) {
-        long startMs = System.currentTimeMillis();
-        // Splits the delete metrics (total/duration/rows/bytes) by V2 position deletes vs V3
-        // deletion vectors, which have distinct cost and failure profiles.
-        String deleteType = IcebergDeletionVectorSupport.isDeletionVectorDelete(dataFiles)
-                ? ConnectorMetricsMgr.DELETE_TYPE_DELETION_VECTOR
-                : ConnectorMetricsMgr.DELETE_TYPE_POSITION;
-
-        // DELETE operations - use RowDelta
-        RowDelta rowDelta = transaction.newRowDelta();
-        if (branch != null) {
-            rowDelta.toBranch(branch);
-        }
-
-        // Base snapshot id frozen at plan time so conflict detection covers every commit landed between
-        // scan and commit; falling back to currentSnapshot would defeat SERIALIZABLE isolation.
-        Long planBaseSnapshotId = extra instanceof IcebergSinkExtra
-                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
-        if (planBaseSnapshotId == null && nativeTbl.currentSnapshot() != null) {
-            planBaseSnapshotId = nativeTbl.currentSnapshot().snapshotId();
-        }
-        final Long baseSnapshotId = planBaseSnapshotId;
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
 
         try {
+            // Build the delete files inside commitWithCleanup so a failed lookup deletes the BE-written files.
             commitWithCleanup(() -> {
-<<<<<<< HEAD
-=======
-                prepareDeleteRowDelta(rowDelta, dataFiles, writeSpec(nativeTbl, extra), nativeTbl, extra,
-                        baseSnapshotId, context,
-                        rewrittenDeleteFiles);
-                IcebergDeletionVectorSupport.validateSingleDeletionVectorPerFile(dataFiles);
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
+                // The BE partitioned the deletes by the plan-time spec.
+                PartitionSpec partitionSpec = writeSpec(nativeTbl, extra);
+                Map<String, DataFile> otherSpecDataFiles =
+                        findOtherSpecDataFiles(nativeTbl, dataFiles, partitionSpec, lookupSnapshotId);
+                for (TIcebergDataFile dataFile : dataFiles) {
+                    rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl,
+                            otherSpecDataFiles));
+                }
                 rowDelta.commit();
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
@@ -3069,13 +3010,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         long deleteBytes = 0;
         long dataBytes = 0;
         for (TIcebergDataFile dataFile : dataFiles) {
-<<<<<<< HEAD
-            if (dataFile.isSetFile_content() &&
-                    dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES) {
-                rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl));
-=======
             if (isPositionDelete(dataFile)) {
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
                 if (dataFile.isSetReferenced_data_file()) {
                     referencedDataFiles.add(dataFile.getReferenced_data_file());
                 }
@@ -3151,9 +3086,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         findOtherSpecDataFiles(nativeTbl, dataFiles, partitionSpec, lookupSnapshotId);
                 for (TIcebergDataFile dataFile : dataFiles) {
                     if (isPositionDelete(dataFile)) {
-                        // UPDATE/MERGE emit V2 position deletes only (V3 is rejected at analysis).
                         rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl,
-                                Map.of(), otherSpecDataFiles));
+                                otherSpecDataFiles));
                     } else {
                         rowDelta.addRows(buildDataFile(dataFile, partitionSpec, nativeTbl));
                     }
@@ -3491,8 +3425,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         public Long getBaseSnapshotId() {
             return baseSnapshotId;
         }
-<<<<<<< HEAD
-=======
 
         public void setWriteSpecId(Integer writeSpecId) {
             this.writeSpecId = writeSpecId;
@@ -3501,19 +3433,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         public Integer getWriteSpecId() {
             return writeSpecId;
         }
-
-        public void putPreviousDeleteFile(String key, DeleteFile file) {
-            previousDeleteByKey.put(key, file);
-        }
-
-        public DeleteFile getPreviousDeleteFile(String key) {
-            return previousDeleteByKey.get(key);
-        }
-
-        // uniqueDeleteFileKey -> the original DeleteFile collected at plan time; commit
-        // resolves the BE-reported rewritten entries through this map for removeDeletes.
-        private final Map<String, DeleteFile> previousDeleteByKey = new HashMap<>();
->>>>>>> 16c8ef04291... [BugFix][RB-465] Keep Iceberg position deletes under their data file spec after partition evolution (#65543)
     }
 
     public static class DynamicOverwrite implements BatchWrite {
