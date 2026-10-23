@@ -29,6 +29,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -142,6 +143,118 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static DeleteFile dvOn(DataFile dataFile, String partitionPath, long deletedRows) {
+        return FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath(dataFile.location() + ".dv.puffin").withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100).withRecordCount(deletedRows)
+                .withReferencedDataFile(dataFile.location())
+                .withContentOffset(4).withContentSizeInBytes(40)
+                .withPartitionPath(partitionPath).build();
+    }
+
+    private List<String> scannedPaths(IcebergTable icebergTable, List<FileScanTask> tasks, boolean recordScanFiles,
+                                      boolean usedForDelete) {
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        tasks.forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), recordScanFiles, false, usedForDelete);
+        List<String> paths = new ArrayList<>();
+        for (TScanRangeLocations locations : source.getSourceOutputs(100)) {
+            paths.add(locations.getScan_range().getHdfs_scan_range().getFull_path());
+        }
+        paths.sort(String::compareTo);
+        return paths;
+    }
+
+    @Test
+    public void testSkipDataFileFullyDeletedByDeletionVector() {
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_fully_deleted", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_2).commit();
+        // FILE_A (2 rows) loses both rows, FILE_A_2 (2 rows) only one.
+        v3Table.newRowDelta()
+                .addDeletes(dvOn(FILE_A, "data_bucket=0", 2))
+                .addDeletes(dvOn(FILE_A_2, "data_bucket=1", 1))
+                .commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v3Table,
+                Maps.newHashMap());
+        List<FileScanTask> tasks = Lists.newArrayList(v3Table.newScan().planFiles());
+        Assertions.assertEquals(2, tasks.size());
+
+        // A plain read skips the fully deleted file.
+        Assertions.assertEquals(List.of(FILE_A_2.location()), scannedPaths(icebergTable, tasks, false, false));
+        // DELETE / UPDATE / MERGE and rewrites keep it.
+        List<String> both = List.of(FILE_A.location(), FILE_A_2.location());
+        Assertions.assertEquals(both, scannedPaths(icebergTable, tasks, false, true));
+        Assertions.assertEquals(both, scannedPaths(icebergTable, tasks, true, false));
+    }
+
+    // A deletion vector on an ORC data file is sent to the BE like one on a parquet data file.
+    @Test
+    public void testDeletionVectorOnOrcDataFile() {
+        DataFile orcFile = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-orc.orc")
+                .withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .build();
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_orc_dv", 3);
+        v3Table.newFastAppend().appendFile(orcFile).commit();
+        v3Table.newRowDelta().addDeletes(dvOn(orcFile, "data_bucket=0", 1)).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v3Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v3Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        List<TScanRangeLocations> ranges = source.getSourceOutputs(100);
+        Assertions.assertEquals(1, ranges.size());
+        THdfsScanRange range = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(1, range.getDelete_files().size());
+        TIcebergDeleteFile deleteFile = range.getDelete_files().get(0);
+        Assertions.assertTrue(deleteFile.isSetDeletion_vector());
+        Assertions.assertEquals(4, deleteFile.getDeletion_vector().getContent_offset());
+        Assertions.assertEquals(40, deleteFile.getDeletion_vector().getContent_size_in_bytes());
+    }
+
+    // A position delete file is sent with its own format, which may differ from its data file's.
+    @Test
+    public void testPositionDeleteFileFormat() {
+        DataFile orcFile = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-orc.orc")
+                .withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .build();
+        DeleteFile parquetDeletes = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath("/path/to/data-a-orc-deletes.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(1).withPartitionPath("data_bucket=0").build();
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_orc_pos_delete", 2);
+        v2Table.newFastAppend().appendFile(orcFile).commit();
+        v2Table.newRowDelta().addDeletes(parquetDeletes).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        THdfsScanRange range = source.getSourceOutputs(100).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(THdfsFileFormat.ORC, range.getFile_format());
+        Assertions.assertEquals(THdfsFileFormat.PARQUET, range.getDelete_files().get(0).getFile_format());
+    }
+
+>>>>>>> a3943b75642... [BugFix][RB-225] Support DELETE on Iceberg ORC data files (#66719)
     @Test
     public void testSamePartitionIdForSamePartitionKeysAcrossDifferentSources() throws Exception {
         List<Column> schema = new ArrayList<>();
