@@ -58,9 +58,6 @@ final class AzureDeltaFileIO implements FileIO {
         try {
             // Kernel paths follow Hadoop Path's literal object-key semantics (including percent signs).
             // Use its URI parser only; native I/O never calls Hadoop FileSystem.
-            if (path.indexOf('?') >= 0 || path.indexOf('#') >= 0) {
-                throw new IllegalArgumentException("Query and fragment are not supported");
-            }
             uri = new org.apache.hadoop.fs.Path(path).toUri();
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid native ADLS URI");

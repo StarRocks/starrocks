@@ -152,7 +152,7 @@ public class AzureDeltaFileIOTest {
     public void testScopeReadOnlyAndUriValidation() {
         assertThrows(IllegalArgumentException.class,
                 () -> fileIO.newInputFile(ROOT.replace("account.", "other.") + "file", 0));
-        assertThrows(IllegalArgumentException.class, () -> fileIO.resolvePath(ROOT + "file?sig=secret"));
+        assertEquals(ROOT + "file?literal=value", fileIO.resolvePath(ROOT + "file?literal=value"));
         assertThrows(IllegalArgumentException.class,
                 () -> AzureDeltaFileIO.parseUri("abfss://container@custom.invalid/file"));
         assertThrows(UnsupportedOperationException.class, () -> fileIO.delete(ROOT + "file"));
@@ -164,6 +164,24 @@ public class AzureDeltaFileIOTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testKernelSnapshotThroughNativeIO(boolean cached) throws IOException {
+        assertKernelSnapshot("", cached);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"table#2026/", "table?2026/", "table%23%3F/", "table space/"})
+    public void testLiteralTablePaths(String folder) throws IOException {
+        String path = ROOT + folder + "file#part?value%23";
+        assertEquals(path, fileIO.getFileStatus(path).getPath());
+        assertEquals("/container/" + folder + "file#part?value%23", requestedPath);
+        try (SeekableInputStream stream = fileIO.newInputFile(path, data.length).newStream()) {
+            assertEquals(data[0] & 0xff, stream.read());
+            assertEquals("/container/" + folder + "file#part?value%23", requestedPath);
+        }
+        assertKernelSnapshot(folder, false);
+        assertKernelSnapshot(folder, true);
+    }
+
+    private void assertKernelSnapshot(String folder, boolean cached) throws IOException {
         String schema = "{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\","
                 + "\"nullable\":true,\"metadata\":{}}]}";
         String log = "{\"protocol\":{\"minReaderVersion\":1,\"minWriterVersion\":2}}\n"
@@ -172,12 +190,17 @@ public class AzureDeltaFileIOTest {
                 + "\",\"partitionColumns\":[],\"configuration\":{}}}\n"
                 + "{\"add\":{\"path\":\"part.parquet\",\"partitionValues\":{},\"size\":123,"
                 + "\"modificationTime\":0,\"dataChange\":true}}\n";
-        metadata = Map.of("_delta_log/00000000000000000000.json", log.getBytes(StandardCharsets.UTF_8));
+        metadata = Map.of(folder + "_delta_log/00000000000000000000.json", log.getBytes(StandardCharsets.UTF_8));
         DeltaLakeEngine engine = DeltaLakeEngine.create(fileIO, new DeltaLakeCatalogProperties(Map.of(
                         DeltaLakeCatalogProperties.ENABLE_DELTA_LAKE_JSON_META_CACHE, String.valueOf(cached))),
                 CacheBuilder.newBuilder().build(), CacheBuilder.newBuilder().build());
-        var snapshot = Table.forPath(engine, ROOT).getLatestSnapshot(engine);
+        var snapshot = Table.forPath(engine, ROOT + folder).getLatestSnapshot(engine);
         assertEquals(0, snapshot.getVersion());
+        assertTrue(lists.get() > 0);
+        try (CloseableIterator<FileStatus> files = fileIO.listFrom(ROOT + folder + "_delta_log/000")) {
+            assertEquals(ROOT + folder + "_delta_log/00000000000000000000.json", files.next().getPath());
+            assertFalse(files.hasNext());
+        }
         try (CloseableIterator<FilteredColumnarBatch> batches = snapshot.getScanBuilder().build().getScanFiles(engine)) {
             assertTrue(batches.hasNext());
             try (var rows = batches.next().getRows()) {
