@@ -57,3 +57,14 @@ def normalize_sql(sql: str) -> str:
     sql = re.sub(r'\'', '"', sql)
 
     return sql.strip()
+
+
+def normalize_py_call(s: str) -> str:
+    """Collapse the whitespace in rendered Python calls, so line breaks and indentation are ignored."""
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r" , ", ", ", s)
+    s = re.sub(r"\( ", "(", s)
+    s = re.sub(r" \)", ")", s)
+    s = re.sub(r"\[ ", "[", s)
+    s = re.sub(r" \]", "]", s)
+    return s
