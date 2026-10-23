@@ -599,6 +599,27 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
     }
 
+    // Returns the cached data files of this manifest whose locations are in `locations`, or null unless the
+    // manifest is cached completely (its live file count is known and matches the cached entry).
+    public Map<String, DataFile> findCachedDataFiles(ManifestFile manifest, Set<String> locations) {
+        Set<DataFile> files = dataFileCache.getIfPresent(manifest.path());
+        Integer added = manifest.addedFilesCount();
+        Integer existing = manifest.existingFilesCount();
+        if (files == null || added == null || existing == null || files.size() != added + existing) {
+            return null;
+        }
+        Map<String, DataFile> found = new HashMap<>();
+        for (DataFile file : files) {
+            if (locations.contains(file.location())) {
+                if (file.specId() != manifest.partitionSpecId()) {
+                    return null;
+                }
+                found.put(file.location(), file);
+            }
+        }
+        return found;
+    }
+
     // We still allow reads from caches, but skip populating or refreshing them when this flag is set.
     private boolean shouldOnlyReadCache(ConnectContext context) {
         return context != null && context.isOnlyReadIcebergCache();
