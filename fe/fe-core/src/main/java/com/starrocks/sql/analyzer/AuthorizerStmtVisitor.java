@@ -2055,21 +2055,25 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         PrivilegeType.DROP.name(), ObjectType.VIEW.name(), tableName.getTbl());
             }
         } else {
-            Table table = null;
             try {
-                table = MetaUtils.getSessionAwareTable(context, null, tableName);
+                MetaUtils.getSessionAwareTable(context, null, tableName);
+            } catch (Exception e) {
+                if (!statement.isSetIfExists()) {
+                    throw e;
+                }
+                // External privileges are keyed by name, so still check them: a connector may drop
+                // the entry of a table whose metadata cannot be loaded.
+                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                    return null;
+                }
+            }
+            try {
                 Authorizer.checkTableAction(context, tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.TABLE.name(), tableName.getTbl());
-            } catch (Exception e) {
-                if (table == null && statement.isSetIfExists()) {
-                    // an exception will be thrown if table is not found, ignore it if `if exists` is set.
-                    return null;
-                }
-                throw e;
             }
         }
         return null;
