@@ -42,6 +42,8 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
+    private static final String NESTED_GEO_ERROR =
+            "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT";
     private static final ScalarType CRS84_GEOGRAPHY = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
             new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
                     GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
@@ -132,17 +134,66 @@ public class AnalyzeFunctionTest {
     public void testNativeGeoStructAdmission() {
         for (String geo : List.of("ST_GeogFromText('POINT (1 2)')",
                 "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
-            analyzeFail("select row(" + geo + ")", "does not support native GEO arguments");
-            analyzeFail("select ST_AsText(row(" + geo + ").col1)", "does not support native GEO arguments");
-            analyzeFail("select named_struct('g', " + geo + ")", "does not support native GEO arguments");
-            analyzeFail("select row(named_struct('g', " + geo + "))", "does not support native GEO arguments");
-            analyzeFail("select named_struct('g', row(" + geo + "))", "does not support native GEO arguments");
+            analyzeFail("select row(" + geo + ")", NESTED_GEO_ERROR);
+            analyzeFail("select ST_AsText(row(" + geo + ").col1)", NESTED_GEO_ERROR);
+            analyzeFail("select named_struct('g', " + geo + ")", NESTED_GEO_ERROR);
+            analyzeFail("select row(named_struct('g', " + geo + "))", NESTED_GEO_ERROR);
+            analyzeFail("select named_struct('g', row(" + geo + "))", NESTED_GEO_ERROR);
             analyzeSuccess("select row(ST_AsText(" + geo + "))");
         }
         analyzeSuccess("select row(1, NULL, 'a')");
         analyzeSuccess("select named_struct('i', 1, 'n', NULL)");
         // Legacy geometry is VARCHAR and is not affected by native-GEO admission.
         analyzeSuccess("select row(ST_GeomFromText('POINT (1 2)'))");
+    }
+
+    @Test
+    public void testNestedGeoAdmission() throws Exception {
+        for (String constructor : List.of("ST_GeogFromText(%s)", "ST_GeomFromText(%s, 'EPSG:3857')")) {
+            analyzeFail("select [" + String.format(constructor, "'POINT (1 2)'") + "]", NESTED_GEO_ERROR);
+            analyzeFail("select [" + String.format(constructor, "NULL") + "]", NESTED_GEO_ERROR);
+            String source = " from (select " + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')")
+                    + " g, v1 id from t0) t";
+            for (String expr : List.of("[[g]]", "map{'a': g}", "map{g: 'a'}", "row([g])", "named_struct('a', [g])",
+                    "array_agg(g)", "array_agg(distinct g)", "max_by([g], id)", "map_agg(id, g)",
+                    "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
+                    "ST_AsText([g][1])", "cardinality([g])")) {
+                analyzeFail("select " + expr + source, NESTED_GEO_ERROR);
+            }
+            for (String query : List.of("select [g]" + source + " union all select [g]" + source,
+                    "with c as (select [g] a" + source + ") select cardinality(a) from c",
+                    "select cardinality(a) from (select [g] a" + source + ") s",
+                    "select ST_AsText(x)" + source + ", unnest([g]) u(x)",
+                    "select id" + source + " where cardinality([g]) = 1",
+                    "select row(array_filter(x -> false, [g]))" + source + " order by id",
+                    "insert into t0 select cardinality([g]), id, id" + source,
+                    "create table nested_geo_ctas as select cardinality([g]) n" + source,
+                    "create view nested_geo_rejected as select [g] a" + source)) {
+                analyzeFail(query, NESTED_GEO_ERROR);
+            }
+            analyzeSuccess("select ST_AsText(g), ST_AsBinary(g), g IS NULL" + source);
+            StarRocksAssert sr = AnalyzeTestUtil.getStarRocksAssert();
+            sr.withView("create view nested_geo_view as select " + String.format(constructor, "'POINT (1 2)'") + " g");
+            try {
+                analyzeFail("select cardinality([g]) from nested_geo_view", NESTED_GEO_ERROR);
+                analyzeSuccess("select ST_AsText(g) from nested_geo_view");
+            } finally {
+                sr.dropView("nested_geo_view");
+            }
+        }
+        analyzeSuccess("select array_length([ST_AsText(ST_GeogFromText('POINT (1 2)'))])");
+    }
+
+    @Test
+    public void testNestedGeoLambdaAdmission() {
+        for (String geo : List.of("ST_GeogFromText('POINT (1 2)')", "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
+            for (String expr : List.of("array_sortby(x -> g, [1])", "array_map(x -> g, [1])",
+                    "array_filter(x -> g, [1])", "any_match(x -> g, [1])", "all_match(x -> g, [1])",
+                    "map_apply((k,v) -> (k,g), map{1:2})", "transform_keys((k,v) -> g, map{1:2})",
+                    "transform_values((k,v) -> g, map{1:2})")) {
+                analyzeFail("select cardinality(" + expr + ") from (select " + geo + " g) t", NESTED_GEO_ERROR);
+            }
+        }
     }
 
     @Test

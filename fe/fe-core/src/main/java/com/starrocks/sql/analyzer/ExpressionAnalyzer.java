@@ -46,6 +46,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -448,6 +449,16 @@ public class ExpressionAnalyzer {
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
+        }
+
+        @Override
+        public Void visit(ParseNode node, Scope scope) {
+            node.accept(this, scope);
+            if (node instanceof Expr expression && expression.getType().hasNestedGeoType()) {
+                throw new SemanticException("Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT: "
+                        + expression.getType().toSql() + " in " + ExprToSql.toSql(expression), expression.getPos());
+            }
+            return null;
         }
 
         @Override
@@ -1260,10 +1271,6 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
-            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
-                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
-                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
-            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:
