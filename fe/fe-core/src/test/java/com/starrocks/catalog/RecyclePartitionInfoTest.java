@@ -51,7 +51,7 @@ public class RecyclePartitionInfoTest {
         }
 
         @Override
-        DataCacheInfo getDataCacheInfo() {
+        public DataCacheInfo getDataCacheInfo() {
             return dataCacheInfo;
         }
 
