@@ -37,7 +37,7 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class DeltaLakeInternalMgr {
-    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue", "dlf");
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue", "dlf", "unity");
     protected final String catalogName;
     protected final DeltaLakeCatalogProperties deltaLakeCatalogProperties;
     protected final HdfsEnvironment hdfsEnvironment;
@@ -62,6 +62,9 @@ public class DeltaLakeInternalMgr {
             Util.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
+        if (metastoreType == MetastoreType.UNITY) {
+            new UnityCatalogProperties(properties);
+        }
     }
 
     protected boolean isSupportedMetastoreType(String metastoreType) {
@@ -69,6 +72,10 @@ public class DeltaLakeInternalMgr {
     }
 
     public IDeltaLakeMetastore createDeltaLakeMetastore() {
+        // Unity metastore instances belong to statements and must never enter a catalog-level cache.
+        if (metastoreType == MetastoreType.UNITY) {
+            return null;
+        }
         return createHMSBackedDeltaLakeMetastore();
     }
 
