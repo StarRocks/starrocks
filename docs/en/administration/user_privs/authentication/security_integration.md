@@ -82,7 +82,16 @@ PROPERTIES (
 ##### authentication_ldap_simple_user_search_attr
 
 - Required: No
-- Description: The user's attribute used to log in to the LDAP service, for example, `uid`. Required when using search-and-bind mode.
+- Description: The attribute of a user entry that carries the login name. It is interpolated into the search filter of search-and-bind mode, so it must be the attribute whose value the user actually types when logging in. Default: `uid`, the convention on OpenLDAP, where it is usually also the entry's RDN (`uid=alice,ou=People,dc=example,dc=com`). Not used in direct bind mode.
+
+:::note On Active Directory, set this to `sAMAccountName`
+
+An AD entry's RDN is the display name (`CN=Dana Scully,OU=People,DC=company,DC=com`), while the name a user types to log in is its `sAMAccountName` (`dscully`). AD's schema does contain `uid`, but it holds no value unless an administrator populated it, so the default finds nobody and every login fails. Two settings follow from this choice:
+
+- **Use search-and-bind, not direct bind.** `sAMAccountName` is not part of an AD entry's DN, so no `authentication_ldap_simple_bind_dn_pattern` can produce one. Leave that property unset and set `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd` instead.
+- **A Group Provider cannot match members by `sAMAccountName` either.** An AD group lists its members by DN (`member: CN=Dana Scully,OU=People,...`), and that DN carries no `sAMAccountName`, so a group provider configured with `"ldap_user_search_attr" = "sAMAccountName"` matches nobody. Either leave the group provider's own `ldap_user_search_attr` unset, so that it matches by DN, or read the groups from the user's own entry with `authentication_ldap_simple_group_source = memberof`.
+
+:::
 
 :::note
 
@@ -111,6 +120,34 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 
 - Required: No
 - Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by semicolons, and the system will try each pattern in order until one succeeds. When this parameter is set, the system skips the search step and directly binds with the constructed DN, so `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_bind_root_dn`, and `authentication_ldap_simple_bind_root_pwd` are not required.
+
+##### authentication_ldap_simple_group_source
+
+- Required: No
+- Description: Where the groups of an LDAP-authenticated user come from. Valid values:
+  - `group_provider` (default): only the group providers configured in `group_provider` are used. This is the behavior of earlier versions.
+  - `memberof`: only the group membership attribute of the user's own LDAP entry is used. Group providers configured in `group_provider` are ignored, but the configuration is kept, so switching back only takes one `ALTER SECURITY INTEGRATION`.
+  - `both`: the union of the two sources.
+
+  With `memberof` or `both`, a group newly created in the directory takes effect on the next login without any configuration change here. The resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. The cluster-wide default is the FE configuration item of the same name. Supported from v4.2 onwards.
+
+##### authentication_ldap_simple_memberof_attr
+
+- Required: No
+- Description: The name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. Matched ignoring case, like every LDAP attribute name. Default: `memberOf`, which fits Active Directory and OpenLDAP with the `memberof` overlay installed. Oracle Directory Server and 389 Directory Server use `isMemberOf`. The cluster-wide default is the FE configuration item of the same name. Supported from v4.2 onwards.
+
+:::note Reading group membership from the user entry
+
+- Only direct membership is resolved. Nested groups, the Active Directory primary group (`Domain Users` by default), and groups from another domain or forest are not included, because they do not appear in the attribute.
+- The group name is the value of the first RDN of each group DN. For example, `CN=SR Analysts,OU=Groups,DC=company,DC=com` becomes `SR Analysts`. The original case is kept.
+- The attribute is read on the connection that authentication already opened, so no additional LDAP connection is made. In search-and-bind mode the number of requests does not change at all; in direct bind mode (`authentication_ldap_simple_bind_dn_pattern`) one read request is added, because a bind response cannot carry attributes.
+- In direct bind mode the user reads its own attribute. If the directory does not allow that and `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd` are set, the FE retries once with that account, so there is no need to change the authentication mode. If neither reader can see the attribute, the group set is empty and the login still succeeds.
+- If the group set is empty and `permitted_groups` is set, the user is rejected, because the intersection is necessarily empty.
+- The group set is computed at login and stored in the session. A membership change in the directory takes effect on the next login, not in a running session.
+- The legacy per-user form `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'` does not support this feature. Use a security integration instead.
+- `EXECUTE AS` resolves the groups of the **target** identity from that identity's own configuration: a native-password user has no LDAP identity and only gets its group providers, while `EXECUTE AS EXTERNAL USER` uses the first `authentication_ldap_simple` integration of `authentication_chain`. Impersonation never presents the target's password, so the attribute is read with `authentication_ldap_simple_bind_root_dn` and `authentication_ldap_simple_bind_root_pwd`; with no service account configured, only the group providers contribute.
+
+:::
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 
@@ -166,6 +203,38 @@ You can check the value of `authentication_chain` using the following statement:
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 ```
+
+## Connect over HTTP and Arrow Flight
+
+A user of a security integration on `authentication_chain` can log in over every StarRocks entry point, not only the MySQL protocol: the HTTP SQL API, Stream Load (through an FE or directly against a BE), the FE Web UI, and Arrow Flight SQL. The credential the client sends depends on the type of the integration.
+
+| Integration type | HTTP | Arrow Flight SQL |
+| --- | --- | --- |
+| LDAP (`authentication_ldap_simple`) | HTTP Basic: `-u <username>:<password>` | username and password |
+| JWT (`authentication_jwt`), <br />OAuth 2.0 (`authentication_oauth2`) | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` header, <br />for example the ADBC `adbc.flight.sql.authorization_header` option |
+
+A Bearer token needs no user name. StarRocks reads the user name from the claim named by `principal_field`, verifies the signature against `jwks_url`, and offers the token to every JWT and OAuth 2.0 integration on the chain whose `required_issuer` and `required_audience` (if set) match the token. When several integrations share one issuer, set a distinct `required_audience` on each: the token's `aud` claim then decides which integration, and therefore which group provider and roles, the connection gets. Setting `required_issuer` on every integration is strongly recommended.
+
+Examples:
+
+```Bash
+# SQL API with an LDAP integration user
+curl -u alice:alice_password -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+
+# Stream Load with a JWT, directly against a BE (the BE must run with enable_http_auth = true)
+curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:," \
+    -T data.csv -XPUT http://<be_host>:<be_http_port>/api/<db>/<table>/_stream_load
+```
+
+Note the following points:
+
+- Privileges for security-integration users come from [Group Provider](../group_provider.md) and `GRANT ... TO EXTERNAL GROUP` only; the groups a user is resolved into apply on every entry point.
+- On Arrow Flight SQL, a JWT is authenticated exactly like a user name and password: the server answers with its own session token, which the client uses for the rest of the connection. The session cannot outlive the JWT; once the token's `exp` passes, the connection is refused and the client must authenticate again with a new JWT.
+- The FE configuration item `enable_rest_bearer_authentication` (default `true`) turns Bearer authentication on the HTTP and Arrow Flight entry points off. It never affects the MySQL protocol, where token logins keep using the `authentication_openid_connect_client` and `authentication_oauth2_client` plugins.
+- The MySQL protocol can offer a client only one token plugin at a time: the first JWT or OAuth 2.0 integration on `authentication_chain` decides which one. HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
+- Every failed HTTP authentication answers `401` with both a `Basic` and a `Bearer` challenge in `WWW-Authenticate`, and does not say which integration refused or why. Use the `authentication_failure_total` and `authentication_failure_reason_total` metrics on the FE to diagnose failures.
 
 ## Manage security integrations
 

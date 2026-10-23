@@ -22,6 +22,9 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.system.ComputeNode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -473,11 +477,16 @@ public class SlotSelectionStrategyV2Test {
                 concurrency = slotTracker.getCurrentCurrency();
                 runningSmallSlots.addAll(peakSlots);
             }
-            Assertions.assertThat(numPeakedSmallSlots == 10);
-            // since concurrency is 10, all small slots are blocked.
+            // The concurrency limit is 10 and slot1 already holds one, so a single batch can admit at most 9
+            // of the 10 small slots. Before the batch counter was added this loop admitted all 10 and drove
+            // the running count to 11, i.e. past the limit it was supposed to enforce.
+            Assertions.assertThat(numPeakedSmallSlots).isEqualTo(9);
+            Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(10);
+            // since concurrency is at the limit, all small slots are blocked.
             Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
-            // release all running slots
-            runningSmallSlots.forEach(slot -> Assertions.assertThat(slotTracker.releaseSlot(slot.getSlotId())).isSameAs(slot));
+            // release every small slot, including the one that stayed pending because the batch stopped at
+            // the limit; otherwise it would still be queued when slot2 is examined below.
+            smallSlots.forEach(slot -> slotTracker.releaseSlot(slot.getSlotId()));
         }
         Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
 
@@ -530,6 +539,73 @@ public class SlotSelectionStrategyV2Test {
         GlobalVariable.setQueryQueueConcurrencyLimit(-1);
     }
 
+    /**
+     * The concurrency limit is an upper bound on a single batch, not only across batches. The tracker's
+     * own counter cannot move while {@code peakSlotsToAllocate} is running, so a batch that does not count
+     * what it has already picked compares every candidate against the same constant and runs past the
+     * limit.
+     */
+    @Test
+    public void testConcurrencyLimitCapsOneBatch() {
+        useWideFbeCapacityForSchedulingTests();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+        final int concurrencyLimit = 3;
+        final int numPendingQueries = 20;
+        final int slotsPerQuery = 2;
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+
+        // The slot pool must have room for every pending query, otherwise the batch could be capped by the
+        // pool and the assertion below would hold even without the concurrency limit bounding anything.
+        assertThat(numPendingQueries * slotsPerQuery).isLessThan(opts.v2().getTotalSlots());
+
+        List<LogicalSlot> pendingSlots = IntStream.range(0, numPendingQueries)
+                .mapToObj(i -> generateSlot(slotsPerQuery))
+                .collect(Collectors.toList());
+        pendingSlots.forEach(slotTracker::requireSlot);
+
+        assertThat(slotTracker.getCurrentCurrency()).isZero();
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).hasSize(concurrencyLimit);
+    }
+
+    /**
+     * The queries already running count towards the same limit, so a batch may only top the concurrency
+     * up to the limit.
+     */
+    @Test
+    public void testConcurrencyLimitCountsAlreadyAllocatedQueries() {
+        useWideFbeCapacityForSchedulingTests();
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+        final int concurrencyLimit = 3;
+        final int numPendingQueries = 10;
+        final int slotsPerQuery = 2;
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+        assertThat((numPendingQueries + 1) * slotsPerQuery).isLessThan(opts.v2().getTotalSlots());
+
+        LogicalSlot running = generateSlot(slotsPerQuery);
+        slotTracker.requireSlot(running);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(running);
+        slotTracker.allocateSlot(running);
+        assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+
+        List<LogicalSlot> pendingSlots = IntStream.range(0, numPendingQueries)
+                .mapToObj(i -> generateSlot(slotsPerQuery))
+                .collect(Collectors.toList());
+        pendingSlots.forEach(slotTracker::requireSlot);
+
+        List<LogicalSlot> peaked = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peaked).hasSize(concurrencyLimit - 1);
+        peaked.forEach(slotTracker::allocateSlot);
+
+        assertThat(slotTracker.getCurrentCurrency()).isEqualTo(concurrencyLimit);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+    }
+
     @Test
     public void testConcurrencyLimitWithSmallSlots() {
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
@@ -555,5 +631,239 @@ public class SlotSelectionStrategyV2Test {
         assertThat(peakSlots).containsExactly(smallSlot2);
         slotTracker.releaseSlot(smallSlot2.getSlotId());
         GlobalVariable.setQueryQueueConcurrencyLimit(-1);
+    }
+
+    private static final long GB = 1024L * 1024 * 1024;
+
+    /**
+     * Point the memory gate at one node of 20 GB whose memory usage the test controls, and set the memory usage
+     * limit, a fraction of the memory limit of a node.
+     */
+    private static ComputeNode useMemoryGate(double limit, long memUsedBytes) {
+        GlobalVariable.setQueryQueueMemUsedPctLimit(limit);
+        ComputeNode node = new ComputeNode(1, "127.0.0.1", 9050);
+        node.setAlive(true);
+        node.setMemLimitBytes(20 * GB);
+        node.updateResourceUsage(0, memUsedBytes, 0);
+        new MockUp<MemoryAdmissionGate>() {
+            @Mock
+            List<ComputeNode> getWarehouseNodes(long warehouseId) {
+                return List.of(node);
+            }
+        };
+        return node;
+    }
+
+    /**
+     * A new resource usage report of the node, which also keeps the report fresh.
+     */
+    private static void report(ComputeNode node, long memUsedBytes) {
+        node.updateResourceUsage(0, memUsedBytes, 0);
+    }
+
+    @Test
+    public void testMemoryGateHoldsNewQueriesUntilUsageDrops() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            ComputeNode node = useMemoryGate(0.5, 4 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            LogicalSlot running = generateSlot(2);
+            slotTracker.requireSlot(running);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(running);
+            slotTracker.allocateSlot(running);
+
+            // The node goes over the limit: new queries queue, the running one is untouched.
+            report(node, 12 * GB);
+            List<LogicalSlot> pending = IntStream.range(0, 3).mapToObj(i -> generateSlot(2)).collect(Collectors.toList());
+            pending.forEach(slotTracker::requireSlot);
+            for (int i = 0; i < 3; i++) {
+                assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            }
+            assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+
+            // Usage drops back under the limit: the queued queries run.
+            report(node, 5 * GB);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactlyInAnyOrderElementsOf(pending);
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testMemoryGateAdmitsOneQueryWhenNothingRuns() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            // Over the limit with nothing running in the warehouse: loads, caches and queries that bypass the queue
+            // hold memory that queueing cannot release, so the gate still lets one query through.
+            useMemoryGate(0.5, 15 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            List<LogicalSlot> pending = IntStream.range(0, 3).mapToObj(i -> generateSlot(2)).collect(Collectors.toList());
+            pending.forEach(slotTracker::requireSlot);
+
+            List<LogicalSlot> peaked = strategy.peakSlotsToAllocate(slotTracker);
+            assertThat(peaked).hasSize(1);
+            peaked.forEach(slotTracker::allocateSlot);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testMemoryGateDecisionHoldsForTheWholeBatch() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            // Under the limit when the batch is selected, so every candidate that fits the slot pool is admitted in
+            // the same batch; the next report is what the following batch will see.
+            useMemoryGate(0.5, 9 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            List<LogicalSlot> pending = IntStream.range(0, 5).mapToObj(i -> generateSlot(2)).collect(Collectors.toList());
+            pending.forEach(slotTracker::requireSlot);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactlyInAnyOrderElementsOf(pending);
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testMemoryGateIsEvaluatedAtMostOncePerBatch() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(0.5);
+            ComputeNode node = new ComputeNode(1, "127.0.0.1", 9050);
+            node.setAlive(true);
+            node.setMemLimitBytes(20 * GB);
+            report(node, 4 * GB);
+            AtomicInteger numEvaluations = new AtomicInteger();
+            new MockUp<MemoryAdmissionGate>() {
+                @Mock
+                List<ComputeNode> getWarehouseNodes(long warehouseId) {
+                    numEvaluations.incrementAndGet();
+                    return List.of(node);
+                }
+            };
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            // Nothing is pending, so there is no candidate to decide on.
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            assertThat(numEvaluations.get()).isZero();
+
+            List<LogicalSlot> pending = IntStream.range(0, 5).mapToObj(i -> generateSlot(2)).collect(Collectors.toList());
+            pending.forEach(slotTracker::requireSlot);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactlyInAnyOrderElementsOf(pending);
+            assertThat(numEvaluations.get()).isOne();
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testMemoryGateIgnoresUsageWhenNotConfigured() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            useMemoryGate(0, 19 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            LogicalSlot running = generateSlot(2);
+            slotTracker.requireSlot(running);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(running);
+            slotTracker.allocateSlot(running);
+
+            List<LogicalSlot> pending = IntStream.range(0, 3).mapToObj(i -> generateSlot(2)).collect(Collectors.toList());
+            pending.forEach(slotTracker::requireSlot);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactlyInAnyOrderElementsOf(pending);
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testReportWakesAdmissionOnceTheMemoryGateReleases() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            ComputeNode node = useMemoryGate(0.5, 4 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            LogicalSlot running = generateSlot(2);
+            slotTracker.requireSlot(running);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(running);
+            slotTracker.allocateSlot(running);
+
+            report(node, 12 * GB);
+            slotTracker.requireSlot(generateSlot(2));
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+            // A report that keeps the node over the limit does not wake admission up.
+            int numRequests = slotManager.requests.size();
+            slotManager.getResourceUsageMonitor().notifyResourceUsageUpdate();
+            assertThat(slotManager.requests).hasSize(numRequests);
+
+            // The first report under the limit wakes it up once; later reports have nothing left to release.
+            report(node, 5 * GB);
+            slotManager.getResourceUsageMonitor().notifyResourceUsageUpdate();
+            assertThat(slotManager.requests).hasSize(numRequests + 1);
+            slotManager.getResourceUsageMonitor().notifyResourceUsageUpdate();
+            assertThat(slotManager.requests).hasSize(numRequests + 1);
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
+    }
+
+    @Test
+    public void testDrainedQueueIsNoLongerHeldByTheMemoryGate() {
+        useWideFbeCapacityForSchedulingTests();
+        double prevLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
+        try {
+            ComputeNode node = useMemoryGate(0.5, 4 * GB);
+            SlotSelectionStrategyV2 strategy = createSlotSelectionStrategy();
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
+
+            LogicalSlot running = generateSlot(2);
+            slotTracker.requireSlot(running);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(running);
+            slotTracker.allocateSlot(running);
+
+            // The gate holds a query, which is then canceled or times out while the node stays over the limit.
+            report(node, 12 * GB);
+            LogicalSlot held = generateSlot(2);
+            slotTracker.requireSlot(held);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            slotTracker.releaseSlot(held.getSlotId());
+
+            // Nothing waits any more, so the report under the limit has no admission to wake up.
+            int numRequests = slotManager.requests.size();
+            report(node, 5 * GB);
+            slotManager.getResourceUsageMonitor().notifyResourceUsageUpdate();
+            assertThat(slotManager.requests).hasSize(numRequests);
+
+            // The same when the held query is admitted instead, as the one query of an idle warehouse.
+            report(node, 12 * GB);
+            held = generateSlot(2);
+            slotTracker.requireSlot(held);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            slotTracker.releaseSlot(running.getSlotId());
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(held);
+            slotTracker.allocateSlot(held);
+            report(node, 5 * GB);
+            slotManager.getResourceUsageMonitor().notifyResourceUsageUpdate();
+            assertThat(slotManager.requests).hasSize(numRequests);
+        } finally {
+            GlobalVariable.setQueryQueueMemUsedPctLimit(prevLimit);
+        }
     }
 }

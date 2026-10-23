@@ -17,6 +17,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -49,8 +50,14 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -100,9 +107,11 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -757,6 +766,148 @@ public class OlapTableSinkTest {
 
         Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
                 "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * TOlapTableSink.enable_multi_node_write has to be true of every location this load will ever
+     * receive, and the one the planner builds is not all of them: automatic partitioning creates
+     * partitions DURING the load and FrontendServiceImpl.buildCreatePartitionResponse hands those
+     * back long afterwards. createLocation records the width it resolved on the transaction exactly
+     * when that can happen, and the flag is derived from that width rather than only from the
+     * location built here -- which in this test carries no multi-node tablet at all, so the flag can
+     * come from nowhere else.
+     *
+     * <p>The order is the point. A spread node list reaching BE without this flag is read as a
+     * REPLICA set, and every row is written to every node in it.
+     */
+    @Test
+    public void testMultiNodeWriteFlagFollowsTheRecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState spreadingTxn = new TransactionState();
+        // dstTable is the @Injectable OlapTable whose getId() the Expectations below pin to 1.
+        spreadingTxn.setMultiNodeWriteWidth(1L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = spreadingTxn;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertFalse(OlapTableSink.hasMultiNodeTablet(tSink.getLocation()),
+                "this location is built one node per tablet; the flag must not be coming from it");
+        Assertions.assertTrue(tSink.isEnable_multi_node_write(),
+                "a load that will spread a runtime-created partition must tell BE so before the "
+                        + "create-partition path can hand one back");
+    }
+
+    /**
+     * The width is per TABLE, not per transaction. A multi-table Broker Load plans one sink per
+     * table on a single txn id -- {@code BrokerLoadJob.buildLoadingTasksUnderReadLock} calls
+     * {@code task.prepare()} inside the per-table loop -- and only some of those tables may be
+     * eligible. An eligible table's width must not turn on this table's flag: every input to the
+     * decision (file bundling, colocate MV, and the estimated size the width is derived from) is
+     * that other table's, and nothing here established this one's eligibility.
+     */
+    @Test
+    public void testMultiNodeWriteFlagIgnoresAnotherTablesWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState otherTableSpread = new TransactionState();
+        // dstTable's id is pinned to 1 below; some other table in this transaction resolved 3.
+        otherTableSpread.setMultiNodeWriteWidth(2L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = otherTableSpread;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write(),
+                "another table's width must not enable the shard-set reading for this one");
+    }
+
+    /**
+     * The other half of the same rule: a load the planner did not record a width for spreads
+     * nothing, now or later, so the flag stays off and BE keeps the behaviour that existed before
+     * multi-node write.
+     */
+    @Test
+    public void testMultiNodeWriteFlagStaysOffWithoutARecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                    @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write());
     }
 
     /**
@@ -1421,6 +1572,206 @@ public class OlapTableSinkTest {
         List<Long> nodes = location.getNode_ids();
         Assertions.assertEquals(1, nodes.size());
         Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
+    }
+
+    /**
+     * In shared-data mode the backup of an unavailable tablet owner follows the session's blacklist_backup_routing and
+     * is keyed on the tablet, as the scan is: under TABLET_HASH the owner's tablets spread over the other nodes, each
+     * on the backup a scan of it picks. A load without a session keeps the default CIRCULAR policy.
+     */
+    @Test
+    public void testCreateLocationWithSharedDataModeRoutesBackupBySessionPolicy(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // node 10001 owns every tablet but is not alive; nodes 10002 to 10005 are
+        ComputeNode owner = new ComputeNode(10001L, "127.0.0.1", 9071);
+        Assertions.assertFalse(owner.isAlive());
+        ImmutableMap.Builder<Long, ComputeNode> allNodesBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<Long, ComputeNode> aliveNodesBuilder = ImmutableMap.builder();
+        allNodesBuilder.put(owner.getId(), owner);
+        sysInfoService.addComputeNode(owner);
+        for (long id = 10002L; id <= 10005L; id++) {
+            ComputeNode node = new ComputeNode(id, "127.0.0.1", 9071 + (int) (id - 10001L));
+            node.updateOnce(1, 2, 3);
+            allNodesBuilder.put(id, node);
+            aliveNodesBuilder.put(id, node);
+            sysInfoService.addComputeNode(node);
+        }
+        ImmutableMap<Long, ComputeNode> allNodes = allNodesBuilder.build();
+        ImmutableMap<Long, ComputeNode> aliveNodes = aliveNodesBuilder.build();
+        warehouseManager.setAllComputeNodeIds(Lists.newArrayList(allNodes.keySet()));
+        warehouseManager.setAliveComputeNodes(Lists.newArrayList(aliveNodes.values()));
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(owner));
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long physicalPartitionId = 6L;
+        int numTablets = 64;
+
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        columns.add(k1);
+        DistributionInfo distributionInfo = new HashDistributionInfo(numTablets, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
+        for (long tabletId = 1000L; tabletId < 1000L + numTablets; tabletId++) {
+            index.addTablet(new LakeTablet(tabletId), tabletMeta);
+        }
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+
+        ConnectContext context = new ConnectContext();
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setBlacklistBackupRouting("tablet_hash");
+        context.setSessionVariable(sessionVariable);
+        context.setThreadLocalInfo();
+        Map<Long, List<Long>> tabletHashNodes = new HashMap<>();
+        try {
+            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                    .forEach(location -> tabletHashNodes.put(location.getTablet_id(), location.getNode_ids()));
+        } finally {
+            ConnectContext.remove();
+        }
+
+        DefaultSharedDataWorkerProvider scanProvider = new DefaultSharedDataWorkerProvider(allNodes, aliveNodes,
+                WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(numTablets, tabletHashNodes.size());
+        tabletHashNodes.forEach((tabletId, nodeIds) -> Assertions.assertEquals(
+                Lists.newArrayList(scanProvider.selectBackupWorker(owner.getId(), tabletId)), nodeIds));
+        Set<Long> tabletHashBackups = new HashSet<>();
+        tabletHashNodes.values().forEach(tabletHashBackups::addAll);
+        Assertions.assertEquals(aliveNodes.keySet(), tabletHashBackups);
+
+        Set<Long> defaultBackups = new HashSet<>();
+        OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                .forEach(location -> defaultBackups.addAll(location.getNode_ids()));
+        Assertions.assertEquals(Set.of(10002L), defaultBackups);
+    }
+
+    /**
+     * skip_black_list keeps a blocklisted but alive tablet owner usable for the sink, as it does for the scan:
+     * without it the owner's tablets go to a backup, with it they stay on the owner.
+     */
+    @Test
+    public void testCreateLocationWithSharedDataModeHonorsSkipBlackList(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        // node 10001 owns every tablet, is alive and blocklisted; nodes 10002 to 10004 are alive
+        List<ComputeNode> nodes = new ArrayList<>();
+        for (long id = 10001L; id <= 10004L; id++) {
+            ComputeNode node = new ComputeNode(id, "127.0.0.1", 9070 + (int) (id - 10000L));
+            node.updateOnce(1, 2, 3);
+            nodes.add(node);
+            sysInfoService.addComputeNode(node);
+        }
+        ComputeNode owner = nodes.get(0);
+        warehouseManager.setAllComputeNodeIds(nodes.stream().map(ComputeNode::getId).collect(Collectors.toList()));
+        warehouseManager.setAliveComputeNodes(nodes);
+        warehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(owner));
+
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long physicalPartitionId = 6L;
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true, null, "", ""));
+        DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(columns.get(0)));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.SSD);
+        for (long tabletId = 1000L; tabletId < 1008L; tabletId++) {
+            index.addTablet(new LakeTablet(tabletId), tabletMeta);
+        }
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+        OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(physicalPartitionId);
+        partitionParam.addToPartitions(tPartition);
+
+        SimpleScheduler.getHostBlacklist().disableAutoUpdate();
+        SimpleScheduler.getHostBlacklist().add(owner.getId());
+        try {
+            for (boolean skipBlackList : new boolean[] {false, true}) {
+                ConnectContext context = new ConnectContext();
+                SessionVariable sessionVariable = new SessionVariable();
+                Deencapsulation.setField(sessionVariable, "skipBlackList", skipBlackList);
+                context.setSessionVariable(sessionVariable);
+                context.setThreadLocalInfo();
+                Set<Long> nodeIds = new HashSet<>();
+                try {
+                    OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                            .forEach(location -> nodeIds.addAll(location.getNode_ids()));
+                } finally {
+                    ConnectContext.remove();
+                }
+                // CIRCULAR backup of 10001 is 10002
+                Assertions.assertEquals(Set.of(skipBlackList ? owner.getId() : 10002L), nodeIds,
+                        "skip_black_list=" + skipBlackList);
+            }
+        } finally {
+            SimpleScheduler.getHostBlacklist().remove(owner.getId());
+        }
     }
 
     // A reshard can install a newer index generation after the first sink is planned. Every later
@@ -2088,4 +2439,50 @@ public class OlapTableSinkTest {
         Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
                 "second distributed_expr slot must resolve to shadow_k1 (new key order)");
     }
+
+    /**
+     * Streaming ingest must never spread a tablet's write, because it cannot be sized: neither
+     * StreamLoadPlanner nor LoadPlanner's streaming path sets an estimate, so nodesForEstimatedSize
+     * answers Integer.MAX_VALUE and the width would collapse to lake_multi_node_write_max_nodes.
+     * That would give the smallest and most frequent writes the widest spread -- every micro-batch
+     * cut into that many segments, each with its own partial txn log -- and stream load has no
+     * session to SET, so nothing could turn it off.
+     *
+     * The control arm is the point: the same sink, same table, same settings, differing only in the
+     * streaming flag, does spread. Without it this test would pass on any unrelated precondition.
+     */
+    @Test
+    public void testStreamingLoadNeverSpreadsAcrossNodes(@Injectable OlapTable table) {
+        new Expectations() {
+            {
+                table.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                table.isFileBundling();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        TransactionState txnState = new TransactionState();
+        txnState.setUseCombinedTxnLog(true);
+
+        OlapTableSink sink = new OlapTableSink(table, getTuple(), Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        // Pinned explicitly so the resolution never reaches ConnectContext: the knobs are not what
+        // this test is about, and a unit test has no bound session. A zero share means "no size
+        // estimate", which is exactly the state both streaming planners leave the sink in.
+        sink.setMultiNodeWriteSettings(new OlapTableSink.MultiNodeWriteSettings(
+                SessionVariable.MultiNodeTabletWriteMode.FORCE, 6, 0));
+
+        int spreadWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(6, spreadWidth,
+                "control: a non-streaming load with every precondition met spreads to the node bound");
+
+        sink.setIsStreamingLoad(true);
+        int streamingWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(OlapTableSink.NO_MULTI_NODE_WRITE, streamingWidth,
+                "a stream or routine load must stay on one node whatever the mode says");
+    }
+
 }

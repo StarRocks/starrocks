@@ -51,6 +51,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -128,6 +129,17 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     protected TableName tableName;
     protected Database db;
     protected Table table;
+
+    /**
+     * Work a clause visitor defers until the metadata lock is released.
+     *
+     * <p>The rewrite caches of a materialized view are refreshed by re-analyzing its define query,
+     * which resolves every base table -- a connector round trip for an external one. Done inside the
+     * critical section, the MV's write lock is held for the length of that round trip and every
+     * reader of the MV waits on the metastore. It does not belong there on its own terms either: the
+     * editlog is already written by then, so a cache refresh is not part of the metadata change.
+     */
+    protected final List<Runnable> postUnlockActions = new ArrayList<>();
     private boolean isSynchronous;
 
     public AlterJobExecutor() {
@@ -294,6 +306,35 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         return null;
     }
 
+    /**
+     * Resolve, before the lock is taken, whatever the clause visitors would otherwise resolve while
+     * holding it: a critical section may mutate state already in hand, it may not go and find state.
+     * For an MV over external base tables "finding" means a connector call with the MV's write lock
+     * held. visitAlterTableStatement already has this shape -- it runs updateTableConstraint before
+     * locking -- and this hook gives ALTER MATERIALIZED VIEW the same one.
+     *
+     * <p>Overrides read the clause and stash what they resolved; the clause visitor then consumes it
+     * instead of resolving again, so each resolve still happens exactly once.
+     */
+    protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+    }
+
+    /**
+     * Run what the clause visitors deferred. A failure here is logged, not thrown: the metadata
+     * change is already committed to the editlog, so failing the statement now would report an error
+     * for a change that happened. The caches involved rebuild themselves on the next miss.
+     */
+    protected void runPostUnlockActions() {
+        for (Runnable action : postUnlockActions) {
+            try {
+                action.run();
+            } catch (Exception e) {
+                LOG.warn("post-unlock action failed for {}", tableName, e);
+            }
+        }
+        postUnlockActions.clear();
+    }
+
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
@@ -331,6 +372,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         AlterClause alterClause = stmt.getAlterTableClause();
         boolean dbLevelClause = alterClause instanceof TableRenameClause || alterClause instanceof SwapTableClause;
 
+        // Everything that has to be resolved for this clause is resolved here, outside the lock.
+        resolveBeforeLock(alterClause, context);
+
         Locker locker = new Locker();
         if (dbLevelClause) {
             locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -341,6 +385,12 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             // re-check db existence under the lock (uniform for both lock types)
             if (!db.isExist()) {
                 throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
+            }
+            // The MV was looked up before the lock, and resolveBeforeLock ran unlocked too: a DROP MATERIALIZED
+            // VIEW in between leaves `table` detached from the db, and altering it would write an editlog
+            // entry for a table that no longer exists.
+            if (db.getTable(table.getId()) != table) {
+                throw new AlterJobException("Materialized view " + mvName + " was dropped concurrently");
             }
             MaterializedView materializedView = (MaterializedView) table;
             if (materializedView.getRefreshScheme().getType()
@@ -353,8 +403,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         + "Do not allow to do ALTER ops");
             }
 
-            visit(alterClause);
-            return null;
+            visit(alterClause, context);
         } finally {
             if (dbLevelClause) {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -362,6 +411,11 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             }
         }
+
+        // Only on the success path: if visit threw, the exception propagates through the finally
+        // above and there is no committed change whose caches need refreshing.
+        runPostUnlockActions();
+        return null;
     }
 
     //Alter table clause
@@ -607,8 +661,13 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
                 try {
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            table.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    String forbiddenTimeRanges =
+                            properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                    CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                table.getId(), forbiddenTimeRanges);
+                    }
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } catch (Exception e) {
@@ -708,6 +767,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else {
@@ -763,7 +824,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             modifiedColumns.add(clause.getColName());
             ErrorReport.wrapWithRuntimeException(() ->
-                    AlterMVJobExecutor.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
+                    AlterMVJobExecutor.checkRenamedColumnWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
 
             // If modified columns are already done, inactive related mv

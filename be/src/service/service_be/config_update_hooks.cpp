@@ -22,6 +22,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/container/lru_cache.h"
 #include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"
@@ -67,8 +68,8 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
@@ -124,6 +125,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
     registry->register_callback("ai_function_max_response_bytes", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_response_bytes(config::ai_function_max_response_bytes);
+    });
+    registry->register_callback("ai_function_max_input_file_bytes", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_input_file_bytes(config::ai_function_max_input_file_bytes);
     });
     registry->register_callback("ai_function_worker_thread_num", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
@@ -327,18 +332,49 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
     });
     registry->register_callback("update_memory_limit_percent", [=]() -> Status {
-        Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        st = StorageEnv::GetInstance()->lake_update_manager()->update_primary_index_memory_limit(
-                config::update_memory_limit_percent);
-#endif
-        return st;
+        runtime_env_ptr->refresh_update_mem_limit();
+        StorageEngine::instance()->update_manager()->refresh_mem_limits();
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_mem_limits();
+        }
+        LOG(INFO) << "Set update_memory_limit_percent: " << config::update_memory_limit_percent
+                  << ", update mem limit: " << runtime_env_ptr->update_mem_tracker()->limit();
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_preload_memory_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_preload_mem_limit();
+            LOG(INFO) << "Set lake_pk_preload_memory_limit_percent: " << config::lake_pk_preload_memory_limit_percent
+                      << ", preload mem limit: " << primary_key_mgr->update_state_mem_tracker()->limit();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_pk_index_block_cache_limit_percent", [=]() -> Status {
+        auto* primary_key_mgr = StorageEnv::GetInstance()->lake_primary_key_manager();
+        if (primary_key_mgr != nullptr) {
+            primary_key_mgr->refresh_block_cache_mem_limit();
+            LOG(INFO) << "Set lake_pk_index_block_cache_limit_percent: "
+                      << config::lake_pk_index_block_cache_limit_percent
+                      << ", block cache capacity: " << primary_key_mgr->block_cache()->cache()->get_capacity();
+        }
+        return Status::OK();
     });
     registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
         auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(config::dictionary_cache_refresh_threadpool_size);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("load_sink_close_thread_pool_num_max", [=]() -> Status {
+        if (config::load_sink_close_thread_pool_num_max <= 0) {
+            return Status::InvalidArgument("load_sink_close_thread_pool_num_max must be greater than 0");
+        }
+        auto* thread_pool = runtime_env_ptr->load_sink_close_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::load_sink_close_thread_pool_num_max);
         }
         return Status::OK();
     });
@@ -419,7 +455,11 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
         auto thread_pool = runtime_env_ptr->pk_index_execution_thread_pool();
         if (thread_pool != nullptr) {
-            return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            int max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+            if (max_thread_count <= 0) {
+                max_thread_count = CpuInfo::num_cores();
+            }
+            return thread_pool->update_max_threads(std::max(1, max_thread_count));
         }
         return Status::OK();
     });
@@ -553,7 +593,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("compact_threads", [=]() -> Status {
         auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
-            tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
         }
         return Status::OK();
     });
@@ -617,7 +657,21 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
+    UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
 #undef UPDATE_STARLET_CONFIG
+
+    // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
+    // The value reaching here already passed the config's enum check, so the update can only fail if
+    // starlet does not know the flag.
+    registry->register_callback("starlet_starmgr_client_compression_type", []() {
+        auto val = config::starlet_starmgr_client_compression_type.value();
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type", val).empty()) {
+            LOG(WARNING) << "Failed to update starmgr_client_compression_type";
+            return Status::InvalidArgument("Failed to update starlet_starmgr_client_compression_type.");
+        }
+        LOG(INFO) << "set starlet_starmgr_client_compression_type: " << val;
+        return Status::OK();
+    });
 
 #ifndef BUILD_FORMAT_LIB
     registry->register_callback("starlet_filesystem_instance_cache_capacity", [=]() -> Status {

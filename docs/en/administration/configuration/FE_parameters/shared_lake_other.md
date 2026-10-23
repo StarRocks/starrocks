@@ -176,6 +176,14 @@ This topic introduces the following types of FE configurations:
 - Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the federated token file used for Workload Identity authentication when creating the built-in ADLS2 storage volume. Set it together with `azure_adls2_oauth2_tenant_id` and `azure_adls2_oauth2_client_id`, and keep `azure_adls2_oauth2_use_managed_identity` as `false`. Mount the file at the same readable path on every FE and CN. An empty string disables token-file authentication. Restart the FE after changing this configuration.
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - Default: false
@@ -374,6 +382,33 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
+### `group_provider`
+
+- Default: Empty
+- Type: String[]
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
+- Introduced in: v3.5
+
+### `group_provider_http_connect_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Connect timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. If the server does not accept the connection within this time, the CREATE or ALTER GROUP PROVIDER statement fails and the group provider keeps its previous configuration. Without a bound, a server that never answers would block not only the statement but also journal replay on every FE.
+- Introduced in: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Read timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see `group_provider_http_connect_timeout_ms` for the failure behavior.
+- Introduced in: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - Default: 300
@@ -477,7 +512,7 @@ This topic introduces the following types of FE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Compaction operations in a shared-data cluster. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- Description: The Compaction Score threshold for automatic Compaction in a shared-data cluster. Automatic Compaction requires a partition score greater than `0` and greater than or equal to this threshold. Partitions with a score of `0` are skipped even when this parameter is set to `0`. Manual Compaction and other priority requests bypass these score checks.
 - Introduced in: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -614,6 +649,15 @@ This topic introduces the following types of FE configurations:
 - Description:
 - Introduced in: -
 
+### `star_client_get_shard_info_batch_size`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the FE looks up in one StarMgr request when it resolves the Compute Nodes of many tablets at once in a shared-data cluster, for example when it plans a query or a load on a large table, or when AutoVacuum cleans up a partition or the FE deletes tablets. A larger lookup is split into consecutive requests of at most this many tablets. StarMgr holds a lock on its tablet metadata while it answers one request, which blocks StarMgr metadata changes and, on Follower FEs, the replay of StarMgr metadata. A request for all tablets of a large table can therefore stall them for seconds. A smaller value shortens each stall at the cost of more requests. Values less than `1` are treated as `1`.
+- Introduced in: v4.2.0
+
 ### `lake_scheduler_enable_colocate_group_sample`
 
 - Default: true
@@ -649,6 +693,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
 - Introduced in: v4.1.5
+
+### `lake_enable_incremental_shard_replica_journal`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether StarMgr journals a replica-only tablet change as a replica delta instead of a full tablet snapshot. Adding, removing, or transitioning a single replica otherwise re-serializes the entire tablet metadata entry, including its file path, storage credentials, properties, and every replica, of which roughly 95% describes state that no replica operation can change. On a cluster that schedules tablets heavily, those snapshots dominate the metadata journal. Every FE that offers this item understands the delta entry on replay, and only the writer is gated by it, so a cluster becomes able to replay the entry by first deploying a version that offers this item with the item left as `false`, and only then setting it to `true`. Do not enable it while any FE in the cluster still runs an earlier version: such an FE skips every replica update rather than one, and writes the resulting divergence into its own checkpoint without reporting a failure. To roll back, set this item to `false`, force a metadata checkpoint so that the image absorbs the entries already written, and only then downgrade, because setting it to `false` does not retract what is already in the journal. Only the Leader FE's value has any effect, and changing it at runtime is safe, because a journal that carries both entry kinds replays correctly.
+- Introduced in: v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether StarMgr maintains a Compute Node to tablets reverse index. Rescheduling the tablets of a restarted Compute Node and validating the replicas that a Compute Node reports on each heartbeat otherwise both scan the whole tablet map and test each tablet for a replica on that Compute Node, which costs time proportional to the number of tablets in the cluster for each Compute Node. With the index, they cost only the Compute Node's own tablet count. The index is derived state: it is rebuilt from the tablet map when the metadata image loads and is maintained under the same lock from then on, and when this item is `false` it is neither built nor held, so leaving it disabled costs nothing. StarMgr reads this item once while the metadata image loads, so a change takes effect only after the FE restarts.
+- Introduced in: v4.2.0
 
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
@@ -707,6 +769,15 @@ This topic introduces the following types of FE configurations:
 - Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values `>1` require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval before PublishVersionDaemon retries a partition whose last publish attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch publish path. Only a partition that actually failed waits: a partition that publishes on its first attempt is never delayed, and a partition that is merely waiting for an earlier version to become visible is not treated as a failure. Raising this value reduces the load a persistently failing publish puts on the leader and on object storage, at the cost of a slower recovery once the underlying problem clears. Setting it to `0` retries on every daemon tick, which is the behavior from before the backoff existed. A negative value is treated as `0`.
+- Introduced in: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - Default: true
@@ -731,7 +802,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, the table property `file_bundling` alone decides how a cloud-native table or materialized view writes the initial tablet metadata of a new partition: with `file_bundling` enabled, all tablets under a physical partition share a single tablet metadata (except in a table that uses range distribution, whose tablets each carry their own key range); otherwise, each tablet gets its own. Rollup and schema-change jobs always write the metadata per tablet. If the table property `light_weight_tablet_creation` is enabled, no initial tablet metadata is written at creation time in either case. Previously, enabling this parameter also gave the shared tablet metadata to tables without `file_bundling`, where a rollup or schema-change job could overwrite the tablet metadata of the existing index in the same partition. Partitions created while this parameter was enabled remain readable.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -865,6 +936,42 @@ This topic introduces the following types of FE configurations:
 - Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 - Introduced in: -
 
+### `authentication_failure_cache_capacity`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many rejected credentials `authentication_failure_cache_ttl_second` remembers at most. It bounds the memory a client - or an attacker cycling usernames - can occupy; the oldest entries are evicted first.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_group_case_insensitive`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a group name from a login matches a `GRANT ... TO EXTERNAL GROUP` entry or a `permitted_groups` entry that differs from it only in case. On by default because an LDAP `cn` is case-insensitive in the directory, so a GRANT written in another case than the directory returns must not silently have no effect. Set it to `false` when the identity system behind the groups distinguishes them by case, for example groups read from a JWT claim, so that `Admins` and `admins` stay two groups. Only the comparison is affected: the names are stored and shown exactly as they arrived, and handed to Apache Ranger unchanged.
+- Introduced in: v4.2
+
+### `authentication_ldap_case_insensitive`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case. When this item is set to `true`, a login whose name differs only in case from a user created with `AUTHENTICATION_LDAP_SIMPLE` still resolves to that user, so its per-user DN and the roles granted to it apply; and a login authenticated by an LDAP security integration takes its session identity from the name held by the directory rather than the one typed by the client. Because this both widens which stored user a login may resolve to and changes the value reported by `current_user()` and `SHOW PROCESSLIST`, it is disabled by default. Users authenticated by native password, JWT, or OAuth2 are never affected. If two users created with `AUTHENTICATION_LDAP_SIMPLE` have names that differ only in case, a login matching both of them is refused rather than resolved to either. Group names are matched without regard to case independently of this item.
+- Introduced in: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string
@@ -900,6 +1007,42 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Socket read timeout for the LDAP bind performed by `authentication_ldap_simple`. See `authentication_ldap_simple_conn_timeout_ms`.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: TCP connect timeout for the LDAP bind performed by `authentication_ldap_simple`. Without it the bind falls back to the operating system's TCP timeout, which can hold the thread serving the request - an HTTP worker or a Thrift handler, now that a security integration also authenticates those channels - for minutes when the directory is unreachable. Lower it if authentication has to fail fast.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- Default: group_provider
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for where the groups of an LDAP-authenticated user come from. Valid values: `group_provider` (only the configured group providers, the behavior of earlier versions), `memberof` (only the group membership attribute of the user's own LDAP entry), `both` (the union of the two). A security integration property of the same name overrides this value. An illegal value is treated as `group_provider` and logged at ERROR level, so that a typo cannot lock every LDAP user out.
+- Introduced in: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- Default: memberOf
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
+- Introduced in: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string
@@ -924,7 +1067,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The name of the attribute that identifies users in LDAP objects.
+- Description: The name of the attribute that carries the login name on a user entry, used to build the search filter of search-and-bind mode. `uid` suits OpenLDAP; on Active Directory set it to `sAMAccountName`, because an AD entry's RDN is the display name and its `uid` is empty unless an administrator populated it. That choice also rules out `authentication_ldap_simple_bind_dn_pattern` - see the property of the same name in [Security Integration](../../user_privs/authentication/security_integration.md).
 - Introduced in: -
 
 ### `backup_clean_check_interval_seconds`
@@ -1232,6 +1375,42 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
+
+### `jwks_cache_ttl_seconds`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lifetime of the cached JWKS (JSON Web Key Set) per JWKS URL. Because HTTP Bearer performs a full authentication on every request, the JWK set is cached instead of being fetched from the IdP each time.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How many seconds before the cached JWKS expires that StarRocks refreshes it in the background, to reduce cache misses. Must be smaller than `jwks_cache_ttl_seconds`.
+- Introduced in: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: When the IdP is unreachable, the maximum time StarRocks keeps serving the stale (expired) JWKS so that already-issued tokens can still be verified.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lower bound on how often an unknown key ID (`kid`) may trigger a forced JWKS refresh, to guard against key-ID flooding.
+- Introduced in: v4.2
 
 ### `jwt_jwks_url`
 

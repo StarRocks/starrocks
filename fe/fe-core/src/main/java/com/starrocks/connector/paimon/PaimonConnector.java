@@ -17,6 +17,7 @@ package com.starrocks.connector.paimon;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -184,6 +185,9 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
+            // Inside the null check for the same reason as iceberg: a hit returns a field, only
+            // the build contacts the metastore or the warehouse path's file system.
+            BlockingCallValidator.validateNotUnderLock("paimon", catalogName);
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             CatalogContext context = CatalogContext.create(getPaimonOptions(), configuration);
@@ -191,12 +195,16 @@ public class PaimonConnector implements Connector {
             // snapshot/schema revisions; privilege wrapper stays outside, as in createCatalog.
             Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context,
                     CatalogFactory.class.getClassLoader());
+            // Directly around the unwrapped catalog, so the per-call door only sees requests that
+            // are really going to the metastore. Anything mounted above the cache would report its
+            // hits instead; see GuardedPaimonCatalog.
+            Catalog guarded = new GuardedPaimonCatalog(catalogName, unwrapped);
             if (!getPaimonOptions().get(CatalogOptions.CACHE_ENABLED)) {
                 // no cache layer, hence nothing for the background refresh to track
-                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
+                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(guarded, getPaimonOptions());
                 return paimonNativeCatalog;
             }
-            CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions(),
+            CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, guarded, getPaimonOptions(),
                     refreshExecutor, tableCacheRefreshIntervalSec);
             this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
             GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()

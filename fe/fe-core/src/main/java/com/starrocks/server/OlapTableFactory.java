@@ -53,6 +53,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
@@ -524,20 +525,34 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+                try {
+                    table.setEnableStatisticAutoCollect(PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                            PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, true));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
-                table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
+                String forbiddenTimeRanges = PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
+                CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);
+                table.setBaseCompactionForbiddenTimeRanges(forbiddenTimeRanges);
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
                     if (table instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) table;
                         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                                || olapTable.isCloudNativeTableOrMaterializedView()) {
+                                && !olapTable.isCloudNativeTableOrMaterializedView()) {
                             throw new SemanticException("Property " +
                                     PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                         }
                     }
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            table.getId(), table.getBaseCompactionForbiddenTimeRanges());
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                table.getId(), forbiddenTimeRanges);
+                    }
                 }
                 if (properties != null) {
                     properties.remove(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);

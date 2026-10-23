@@ -17,6 +17,8 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
+#include "formats/scan_context.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -80,10 +82,15 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers;
         for (size_t i = 0; i < type.children.size(); i++) {
             const TypeDescriptor& child_type = type.children[i];
-            ASSIGN_OR_RETURN(
-                    std::unique_ptr<ORCColumnReader> child_reader,
-                    ORCColumnReader::create(child_type, orc_mapping->get_orc_type_child_mapping(i).orc_type, true,
-                                            orc_mapping->get_orc_type_child_mapping(i).orc_mapping, reader));
+            const OrcMappingOrcType& child = orc_mapping->get_orc_type_child_mapping(i);
+            std::unique_ptr<ORCColumnReader> child_reader;
+            if (child.orc_type == nullptr) {
+                ASSIGN_OR_RETURN(child_reader,
+                                 create_default_column_reader(child_type, true, reader, child.initial_default));
+            } else {
+                ASSIGN_OR_RETURN(child_reader,
+                                 ORCColumnReader::create(child_type, child.orc_type, true, child.orc_mapping, reader));
+            }
             child_readers.emplace_back(std::move(child_reader));
         }
         return std::make_unique<StructColumnReader>(type, orc_type, nullable, reader, std::move(child_readers));
@@ -128,14 +135,28 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(const TypeDescriptor& type,
-                                                                                         bool nullable,
-                                                                                         OrcChunkReader* reader) {
-    return std::make_unique<DefaultColumnReader>(type, nullable, reader);
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(
+        const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+        const std::optional<std::string>& initial_default) {
+    ColumnPtr default_column = nullptr;
+    if (initial_default.has_value()) {
+        auto column = FormatScanContext::create_initial_default_column(type, nullable, *initial_default);
+        // A type the default parser does not support keeps reading NULL; any other failure fails the scan.
+        if (column.ok()) {
+            default_column = std::move(column).value();
+        } else if (!column.status().is_not_supported()) {
+            return column.status();
+        }
+    }
+    return std::make_unique<DefaultColumnReader>(type, nullable, reader, std::move(default_column));
 }
 
 Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) {
-    col->append_default(size);
+    if (_default_column != nullptr) {
+        col->append_value_multiple_times(*_default_column, 0, size);
+    } else {
+        col->append_default(size);
+    }
     return Status::OK();
 }
 
@@ -519,7 +540,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vb = values->get_bytes();
     // Need to resize after insert, because of padding char existed
-    vb.reserve(vb.size() + len);
+    TRY_CATCH_BAD_ALLOC(vb.reserve(vb.size() + len));
 
     auto& vo = values->get_offset();
     // We can resize directly
@@ -671,7 +692,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
     size_t write_pos = vb.size();
 
     // vb is using RawVectorPad16, resize will not initialize vector
-    vb.resize(vb.size() + len);
+    TRY_CATCH_BAD_ALLOC(vb.resize(vb.size() + len));
     vo.resize_uninitialized(vo.size() + size, vb.size());
 
     if (cvb->hasNulls) {
@@ -971,8 +992,10 @@ Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, Colu
 
     auto field_columns = col_struct->fields();
     for (size_t i = 0; i < _type.children.size(); i++) {
-        size_t column_id = _child_readers[i]->get_orc_type()->getColumnId();
-        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
+        const orc::Type* field_orc_type = _child_readers[i]->get_orc_type();
+        // nullptr for a subfield missing from the file (DefaultColumnReader)
+        orc::ColumnVectorBatch* field_cvb =
+                field_orc_type == nullptr ? nullptr : orc_struct->fieldsColumnIdMap[field_orc_type->getColumnId()];
         auto* field_column = field_columns[i]->as_mutable_raw_ptr();
         RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_column, from, size));
     }

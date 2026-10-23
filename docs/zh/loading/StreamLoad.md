@@ -28,6 +28,11 @@ Stream Load 和 Broker Load 都支持在数据导入时进行数据转换，并�
 
 ## 开始之前
 
+:::tip
+如果配置了 JWT 或 OAuth 2.0 [安全集成](../administration/user_privs/authentication/security_integration.md)，Stream Load 除用户名密码外也接受 Bearer token：把 `-u <username>:<password>` 换成 `-H "Authorization: Bearer <token>"`。导入 commit 时 token 必须仍然有效，因此长时间导入请使用有效期足够长的 token。参见[各认证方式在哪些入口可用](../administration/user_privs/authentication/authentication.mdx#各认证方式在哪些入口可用)。
+:::
+
+
 ### 检查权限
 
 <InsertPrivNote />

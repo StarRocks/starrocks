@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
@@ -579,6 +580,10 @@ public class ColumnTypeConverter {
             return VariantType.VARIANT;
         }
 
+        public Type visit(org.apache.paimon.types.BlobType blobType) {
+            return FileType.FILE;
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -935,6 +940,10 @@ public class ColumnTypeConverter {
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
                 return VariantType.VARIANT;
+            case UNKNOWN:
+                // Iceberg v3 `unknown`: always null and never stored in data files, so it reads as NULL.
+                // A concrete type keeps an enclosing struct/list/map readable.
+                return NullType.NULL;
             case GEOGRAPHY:
                 Types.GeographyType geography = (Types.GeographyType) icebergType;
                 if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))

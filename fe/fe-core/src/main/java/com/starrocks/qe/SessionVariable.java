@@ -128,6 +128,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         SETTER_MAP = builder.build();
     }
 
+    /**
+     * How a load may spread one tablet's write across compute nodes.
+     *
+     * <p>AUTO covers the one shape that has no other way to fill the cluster: a table on a
+     * range-bucket distribution whose partition still has fewer tablets than the load is worth
+     * writers -- i.e. pre-split did not run or did not manage to split. Every key type qualifies:
+     * rows sharing a key are routed by a hash of the key columns and so meet in one writer, which
+     * leaves nothing about the result depending on which node wrote which row, and therefore nothing
+     * to put to the user before turning it on.
+     *
+     * <p>A hash-bucket table is left to FORCE -- not because spreading it would be wrong, but
+     * because it can simply be given more buckets to fill the cluster.
+     */
+    public enum MultiNodeTabletWriteMode {
+        OFF,
+        AUTO,
+        FORCE
+    }
+
     public enum PaimonReaderMode {
         AUTO,
         JNI,
@@ -251,6 +270,52 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
+
+    /**
+     * Shared-data only. When on, a load writes each row into a delta writer on the compute node its
+     * sink instance already runs on, instead of sending it to the single node the tablet is assigned
+     * to. That both spreads a single tablet's write across the cluster and removes the network hop.
+     * <p>
+     * Only takes effect while a partition has fewer tablets than the width this load is actually
+     * spread over -- the smallest of the size-derived node count, lake_multi_node_write_max_nodes,
+     * and the alive compute nodes (createLocation's spreadsIndex). NOT the warehouse size: a load
+     * worth three writers landing on a five-tablet partition is already spread wider than it asked
+     * for, and above that width bucket-level parallelism already fills the cluster, so writing
+     * locally would give up read-side cache locality (a tablet has one owner and scans are
+     * scheduled to it) for nothing.
+     * <p>
+     * Rows sharing a key are not spread across nodes: an aggregate, unique or primary key table
+     * routes by a hash of the key columns, so all of a key's rows reach one node and resolve against
+     * each other in arrival order exactly as they do on the single-node path. A DUPLICATE KEY table
+     * keeps every row where it was produced, its rowset being the union of its segments.
+     */
+    public static final String LAKE_MULTI_NODE_TABLET_WRITE_MODE = "lake_multi_node_tablet_write_mode";
+
+    /**
+     * Upper bound on how many compute nodes may write ONE tablet. Every node in a tablet's location
+     * opens its own delta writer and produces its own segments, so a very wide warehouse would split
+     * one load into many small segments. Nodes left out still run their sink instance -- their rows
+     * travel, which is the behaviour that existed before this feature -- so the bound costs locality
+     * but never correctness. <= 0 means no bound (every alive compute node).
+     */
+    public static final String LAKE_MULTI_NODE_WRITE_MAX_NODES = "lake_multi_node_write_max_nodes";
+
+    /**
+     * How many bytes of a load one node should be given before another node is added to a tablet's
+     * write set. The node count is the estimated load size divided by this, then capped by
+     * lake_multi_node_write_max_nodes and by the number of alive compute nodes.
+     * <p>
+     * Spreading is not free: every node in a tablet's node list writes its own segments and emits its
+     * own partial txn log, and open/close reach every node in that list whether or not it ends up with
+     * any rows. So a small load spread wide pays one extra segment and one extra log per node and gets
+     * little back -- the measured speedup is ~1.35x at 5 GB against ~3x at 20-50 GB.
+     * <p>
+     * Which is why streaming ingest is refused outright rather than sized (OlapTableSink.
+     * writerNodeCount): stream and routine load set no estimate, so sizing them would fall back to
+     * lake_multi_node_write_max_nodes and hand the widest spread to the smallest, most frequent
+     * writes -- precisely the cost this knob exists to bound.
+     */
+    public static final String LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE = "lake_multi_node_write_bytes_per_node";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -405,6 +470,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
     public static final String ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION = "enable_gather_fragment_locality_optimization";
+    public static final String ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY = "enable_gather_fragment_child_affinity";
 
     public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
 
@@ -485,7 +551,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
+    public static final String BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR =
+            "broadcast_mem_exceeded_penalty_factor";
+    public static final double MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR = 1_000_000.0;
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
+    public static final String BROADCAST_MEM_THRESHOLD = "broadcast_mem_threshold";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
@@ -628,6 +698,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
     public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
+    public static final String ENABLE_EXCHANGE_SINK_BUFFER_FLUSH =
+            "enable_exchange_sink_buffer_flush";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -644,6 +716,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING =
+            "enable_iceberg_eq_delete_runtime_filter_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
@@ -1171,6 +1245,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
     public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
+    public static final String ENABLE_SHARE_JSON_PARSE = "enable_share_json_parse";
+    public static final String SHARE_JSON_PARSE_MIN_EXTRACTIONS = "share_json_parse_min_extractions";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
 
@@ -1332,6 +1408,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
     private boolean enableGatherFragmentLocalityOptimization = false;
 
+    /**
+     * When enabled, the gather fragment (UNPARTITIONED, single instance) is assigned to a worker
+     * already used by one of its child fragments, rather than via global round-robin.
+     * Child fragment workers are label-constrained through data locality, so this keeps the
+     * gather fragment within the same label boundary. Disable to revert to legacy behavior.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY)
+    private boolean enableGatherFragmentChildAffinity = false;
+
     @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
     private boolean skipLocalDiskCache = false;
 
@@ -1393,6 +1478,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_TABLET_WRITE_MODE)
+    private String lakeMultiNodeTabletWriteMode = "auto";
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_WRITE_MAX_NODES)
+    private int lakeMultiNodeWriteMaxNodes = 6;
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE)
+    private long lakeMultiNodeWriteBytesPerNode = 2147483648L;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -1935,8 +2029,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
 
+    // Cost penalty for estimated broadcast inputs above the memory threshold.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)
+    private double broadcastMemExceededPenaltyFactor = 1000.0;
+
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
+
+    // Estimated broadcast bytes per backend above which the optimizer applies a cost penalty.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_THRESHOLD)
+    private long broadcastMemThreshold = 2147483648L; // 2GB
 
     @VariableMgr.VarAttr(name = BROADCAST_RIGHT_TABLE_SCALE_FACTOR, flag = VariableMgr.INVISIBLE)
     private double broadcastRightTableScaleFactor = 10.0;
@@ -2094,6 +2196,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
+
+    // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling; the
+    // threshold is the BE config exchange_sink_buffer_flush_threshold_bytes.
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_SINK_BUFFER_FLUSH)
+    private boolean enableExchangeSinkBufferFlush = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePerf = false;
@@ -2348,6 +2455,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enablePredicateExprReuse = true;
+
+    // Parse a VARCHAR document once when several get_json_xxx calls in one projection read it.
+    @VarAttr(name = ENABLE_SHARE_JSON_PARSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShareJsonParse = true;
+
+    // Minimum number of distinct get_json_xxx calls on one VARCHAR document before its parse is shared.
+    @VarAttr(name = SHARE_JSON_PARSE_MIN_EXTRACTIONS, flag = VariableMgr.INVISIBLE)
+    private int shareJsonParseMinExtractions = 2;
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
@@ -3415,7 +3530,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
-    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
+    private boolean enableReadIcebergEqDeleteWithPartitionEvolution = true;
+
+    // Let a runtime filter on an identity partition column skip the equality delete files of the partitions it rejects.
+    @VarAttr(name = ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING)
+    private boolean enableIcebergEqDeleteRuntimeFilterPruning = true;
 
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
@@ -3589,6 +3708,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergEqDeleteWithPartitionEvolution(boolean enableReadIcebergEqDeleteWithPartitionEvolution) {
         this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
+    }
+
+    public boolean isEnableIcebergEqDeleteRuntimeFilterPruning() {
+        return enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public void setEnableIcebergEqDeleteRuntimeFilterPruning(boolean enableIcebergEqDeleteRuntimeFilterPruning) {
+        this.enableIcebergEqDeleteRuntimeFilterPruning = enableIcebergEqDeleteRuntimeFilterPruning;
     }
 
     public boolean enablePaimonColumnStatistics() {
@@ -3990,6 +4117,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableGatherFragmentLocalityOptimization;
     }
 
+    public boolean isEnableGatherFragmentChildAffinity() {
+        return enableGatherFragmentChildAffinity;
+    }
+
     public boolean isSkipLocalDiskCache() {
         return skipLocalDiskCache;
     }
@@ -4155,6 +4286,54 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public String getLakeMultiNodeTabletWriteMode() {
+        return lakeMultiNodeTabletWriteMode;
+    }
+
+    // Named for the field so VariableMgr's SETTER_MAP picks it up: a bad mode must fail the SET
+    // rather than be stored and quietly read as something else later.
+    public void setLakeMultiNodeTabletWriteMode(String mode) {
+        this.lakeMultiNodeTabletWriteMode = parseMultiNodeTabletWriteMode(mode).name().toLowerCase();
+    }
+
+    public MultiNodeTabletWriteMode getMultiNodeTabletWriteMode() {
+        return parseMultiNodeTabletWriteMode(lakeMultiNodeTabletWriteMode);
+    }
+
+    // Public so a load that planned its sink from a persisted snapshot of this variable resolves the
+    // mode exactly as a SET does, rejection included.
+    public static MultiNodeTabletWriteMode parseMultiNodeTabletWriteMode(String mode) {
+        if (mode != null) {
+            for (MultiNodeTabletWriteMode candidate : MultiNodeTabletWriteMode.values()) {
+                if (candidate.name().equalsIgnoreCase(mode.trim())) {
+                    return candidate;
+                }
+            }
+        }
+        throw new SemanticException("Invalid " + LAKE_MULTI_NODE_TABLET_WRITE_MODE + ": '" + mode
+                + "'. Valid values are off, auto, force.");
+    }
+
+    public int getLakeMultiNodeWriteMaxNodes() {
+        return lakeMultiNodeWriteMaxNodes;
+    }
+
+    public void setLakeMultiNodeWriteMaxNodes(int lakeMultiNodeWriteMaxNodes) {
+        this.lakeMultiNodeWriteMaxNodes = lakeMultiNodeWriteMaxNodes;
+    }
+
+    public long getLakeMultiNodeWriteBytesPerNode() {
+        return lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public void setLakeMultiNodeWriteBytesPerNode(long lakeMultiNodeWriteBytesPerNode) {
+        this.lakeMultiNodeWriteBytesPerNode = lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public long getQueryMemLimit() {
+        return queryMemLimit;
     }
 
     public int getQueryTimeoutS() {
@@ -4746,12 +4925,43 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.cboMaxReorderNodeUseExhaustive;
     }
 
+    public double getBroadcastMemExceededPenaltyFactor() {
+        return broadcastMemExceededPenaltyFactor;
+    }
+
+    public void setBroadcastMemExceededPenaltyFactor(double multiplier) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        this.broadcastMemExceededPenaltyFactor = checkBroadcastMemExceededPenaltyFactor(multiplier);
+    }
+
+    public static double checkBroadcastMemExceededPenaltyFactor(double multiplier) {
+        if (!Double.isFinite(multiplier) || multiplier < 1.0 || multiplier > MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, multiplier,
+                    "a finite number in [1.0, " + MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR + "]");
+        }
+        return multiplier;
+    }
+
     public long getBroadcastRowCountLimit() {
         return broadcastRowCountLimit;
     }
 
     public void setBroadcastRowCountLimit(long broadcastRowCountLimit) {
         this.broadcastRowCountLimit = broadcastRowCountLimit;
+    }
+
+    public long getBroadcastMemThreshold() {
+        return broadcastMemThreshold;
+    }
+
+    public void setBroadcastMemThreshold(long broadcastMemThreshold) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (broadcastMemThreshold < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_THRESHOLD, broadcastMemThreshold, "a non-negative integer");
+        }
+        this.broadcastMemThreshold = broadcastMemThreshold;
     }
 
     public double getBroadcastRightTableScaleFactor() {
@@ -5247,6 +5457,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableExchangePassThrough() {
         return enableExchangePassThrough;
+    }
+
+    public boolean isEnableExchangeSinkBufferFlush() {
+        return enableExchangeSinkBufferFlush;
+    }
+
+    public void setEnableExchangeSinkBufferFlush(boolean enable) {
+        this.enableExchangeSinkBufferFlush = enable;
     }
 
     public boolean isEnableExchangePerf() {
@@ -6363,6 +6581,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePredicateExprReuse;
     }
 
+    public void setEnableShareJsonParse(boolean enableShareJsonParse) {
+        this.enableShareJsonParse = enableShareJsonParse;
+    }
+
+    public boolean isEnableShareJsonParse() {
+        return enableShareJsonParse;
+    }
+
+    public void setShareJsonParseMinExtractions(int shareJsonParseMinExtractions) {
+        this.shareJsonParseMinExtractions = shareJsonParseMinExtractions;
+    }
+
+    public int getShareJsonParseMinExtractions() {
+        return shareJsonParseMinExtractions;
+    }
+
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
@@ -6864,6 +7098,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setK_factor(kFactor);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_exchange_sink_buffer_flush(enableExchangeSinkBufferFlush);
         tResult.setExchange_hash_function_version(exchangeHashFunctionVersion);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         tResult.setJit_level(jitLevel);

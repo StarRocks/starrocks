@@ -18,6 +18,7 @@
 
 #include "data_sink/result/file_result_writer.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/runtime/query_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
 
@@ -28,6 +29,16 @@ class ExprContext;
 namespace pipeline {
 
 class FileSinkIOBuffer;
+
+// The statistics the file sink hands to the result sender when it closes. Like ResultSinkOperator, it is the
+// final statistics of the query, which includes what the upstream BEs sent through exchange.
+// Inline so that exec_runtime_test can cover it without linking the Exec library.
+inline std::shared_ptr<QueryStatistics> build_file_sink_query_statistic(QueryContext* query_ctx,
+                                                                        int64_t num_written_rows) {
+    auto query_statistic = query_ctx->final_query_statistic();
+    query_statistic->set_returned_rows(num_written_rows);
+    return query_statistic;
+}
 
 class FileSinkOperator final : public Operator {
 public:

@@ -248,6 +248,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1302,6 +1303,11 @@ public class RedirectStatus {
         }
 
         @Override
+        public RedirectStatus visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
         public RedirectStatus visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, Void context) {
             return visitShowStatement(statement, context);
         }
@@ -1753,7 +1759,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, Void context) {
-            return RedirectStatus.NO_FORWARD;
+            // A global baseline is persisted in the leader's statistics table and journalled, so it can only be
+            // built on the leader. A session baseline lives in the issuing ConnectContext alone, and the leader
+            // runs a forwarded statement against a throwaway proxy context, so forwarding one would store it
+            // where nobody can ever see it again. Split the two the way SET GLOBAL / SET is split above.
+            return statement.isGlobal() ? visitDDLStatement(statement, context) : RedirectStatus.NO_FORWARD;
         }
 
         @Override

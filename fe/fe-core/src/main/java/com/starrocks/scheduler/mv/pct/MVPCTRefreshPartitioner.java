@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -28,10 +29,14 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.partitiontraits.PrefetchedPartitionInfos;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.ExecuteOption;
@@ -66,9 +71,14 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getDroppedTrackedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsAffectedByDrops;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvPartitionsWithUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
+import static com.starrocks.catalog.MvRefreshArbiter.hasUntrackedRows;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.catalog.MvRefreshArbiter.tracksPartitionVersions;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
 /**
@@ -112,7 +122,8 @@ public abstract class MVPCTRefreshPartitioner {
 
     // Set of table types that support adaptive materialized view (MV) refresh.
     //
-    // Internal tables (e.g., OLAP) have direct access to partition information,
+    // Internal tables (OLAP/cloud-native tables and materialized views, both shared-nothing
+    // and shared-data) have direct access to partition information,
     // enabling accurate and efficient adaptive MV refresh.
     //
     // For external tables (e.g., Hive, Iceberg, Hudi, Delta Lake),
@@ -122,6 +133,9 @@ public abstract class MVPCTRefreshPartitioner {
     // which currently only supports these external table types (since v3.3.0).
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH = EnumSet.of(
             Table.TableType.OLAP,
+            Table.TableType.CLOUD_NATIVE,
+            Table.TableType.MATERIALIZED_VIEW,
+            Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW,
             Table.TableType.HIVE,
             Table.TableType.ICEBERG,
             Table.TableType.HUDI,
@@ -462,6 +476,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected PCellSortedSet getMvPartitionNamesToRefresh(PCellSortedSet toRefreshPartitions) {
         PCellSortedSet result = PCellSortedSet.of();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         for (Table baseTable : refBaseTablePartitionColumns.keySet()) {
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
@@ -476,6 +493,21 @@ public abstract class MVPCTRefreshPartitioner {
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), toRefreshPartitions));
+            }
+
+            // Partition sync only drops an mv partition that lost every base partition it covered; a coarser one
+            // survives still holding the dropped partition's rows.
+            PCellSortedSet affectedByDrops = PCellSortedSet.of(toRefreshPartitions);
+            affectedByDrops.retainAllNames(getMvPartitionsAffectedByDrops(mv, baseTable,
+                    getDroppedTrackedPartitions(mv, baseTable, pinnedRangeFor(baseTable))));
+            result.addAll(affectedByDrops);
+
+            PCellSortedSet withUntrackedRows = PCellSortedSet.of(toRefreshPartitions);
+            withUntrackedRows.retainAllNames(getMvPartitionsWithUntrackedRows(mv, baseTable, mvToBasePartitions));
+            if (!withUntrackedRows.isEmpty()) {
+                logger.info("No tracked partition of base table {} accounts for the rows of mv partitions {}",
+                        baseTable.getName(), withUntrackedRows);
+                result.addAll(withUntrackedRows);
             }
 
             PCellSortedSet refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPCells();
@@ -525,6 +557,10 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
+            // A non-ref base table is not partition-aligned with the mv, so losing a partition invalidates all of it.
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRangeFor(snapshotTable))) {
+                return true;
+            }
         }
         return false;
     }
@@ -546,12 +582,58 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
+            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
+                return true;
+            }
+            if (hasUntrackedRows(mv, snapshotTable)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Fetch, before the detection lock is taken, the external partition infos that change detection
+     * ({@link #getMVPartitionsToRefreshWithCheck}) reads under it. The lock covers only the MV, so these
+     * connector round trips bought no protection there; the comparison against the MV's refresh state still
+     * runs under the lock. See {@link PrefetchedPartitionInfos}.
+     *
+     * <p>It covers the snapshot base tables, which the non-ref and non-partitioned checks read, and the ref base
+     * tables as {@link MaterializedView#getRefBaseTablePartitionColumns()} resolves them, which is what the
+     * ref-table check reads. A forced refresh detects nothing and prefetches nothing.
+     *
+     * @return the open scope, to be closed once the lock is released
+     */
+    public PrefetchedPartitionInfos prefetchExternalPartitionInfos(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+        PrefetchedPartitionInfos prefetched = PrefetchedPartitionInfos.open();
+        if (mvRefreshParams.isForce()) {
+            return prefetched;
+        }
+        try (Timer ignored = Tracers.watchScope("MVRefreshPrefetchPartitionInfos")) {
+            List<Table> tables = Lists.newArrayList();
+            snapshotBaseTables.values().forEach(snapshotInfo -> tables.add(snapshotInfo.getBaseTable()));
+            try {
+                tables.addAll(mv.getRefBaseTablePartitionColumns().keySet());
+            } catch (Exception e) {
+                // The ref-table check resolves them again under the lock and reports any failure there.
+                logger.debug("Cannot resolve ref base tables to prefetch their partitions: {}", e.getMessage());
+            }
+            for (Table table : tables) {
+                if (table.isNativeTableOrMaterializedView() || table.isView() || !isPartitionRefreshSupported(table)) {
+                    continue;
+                }
+                prefetched.prefetch(table, pinnedRangeFor(table), tracksPartitionVersions(mv, table));
+            }
+        } catch (RuntimeException e) {
+            prefetched.close();
+            throw e;
+        }
+        return prefetched;
+    }
+
+    /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
+    private TvrVersionRange pinnedRangeFor(Table baseTable) {
+        return mvContext.getRefreshRuntimeState().getPinnedTvrMap().get(baseTable.getUUID());
     }
 
     public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {

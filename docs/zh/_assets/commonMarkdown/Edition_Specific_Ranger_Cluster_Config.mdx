@@ -1,0 +1,109 @@
+### 在 FE 节点上启用 Ranger
+
+1. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+
+   - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
+   - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
+
+   如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalMs` 来更改拉取权限变更的时间。
+
+   ```SQL
+   vim ranger-starrocks-security.xml
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.service.name</name>
+           <value>starrocks</value> --改为 StarRocks Service 的名称。
+           <description>
+               Name of the Ranger service containing policies for this StarRocks instance
+           </description>
+       </property>
+   ...
+
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.policy.rest.url</name>
+           <value>http://localhost:6080</value> --改为 Ranger admin 的地址。
+           <description>
+               URL to Ranger Admin
+           </description>
+       </property>   
+   ...
+   ```
+
+2. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
+
+   StarRocks 支持两种 Ranger 审计日志目的地，同一时间只能使用其中一种：
+
+   - Solr：使用模板中的 `xasecure.audit.solr.*` 配置项。不支持用 `xasecure.audit.destination.solr` 配置 Solr。
+   - 本地文件：把 `xasecure.audit.destination.file` 设为 `true`，并把 `xasecure.audit.destination.file.dir` 设为审计文件所在的目录。
+
+   只要启用了任何一个 `xasecure.audit.destination.*` 配置项，Ranger 就会忽略所有 `xasecure.audit.<destination>.*` 配置项，包括 Solr 的配置项。`ranger-hive-audit.xml` 同样如此。
+
+3. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
+
+   ```SQL
+   vim fe.conf
+   access_control=ranger 
+   ```
+
+4. 重启所有 FE。
+
+   ```SQL
+   -- 回到 FE 文件夹内
+   cd..
+
+   bin/stop_fe.sh
+   bin/start_fe.sh
+   ```
+
+## 复用其他 Service 来为外表鉴权
+
+对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
+
+1. 复制您 Hive 集群中的 Ranger 相关配置文件 [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) 和 [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 拷贝至所有 FE 机器的 `fe/conf` 文件下，请确保配置文件中 Ranger 的 IP 以及端口正确。
+2. 重启所有 FE。
+3. 配置 Catalog。
+
+   - 创建 External Catalog 时，添加 PROPERTIES `"ranger.plugin.hive.service.name"`.
+
+    ```SQL
+      CREATE EXTERNAL CATALOG hive_catalog_1
+      PROPERTIES (
+          "type" = "hive",
+          "hive.metastore.type" = "hive",
+          "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+          "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
+      )
+    ```
+
+    - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
+
+    ```SQL
+      ALTER CATALOG hive_catalog_1
+      SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
+    ```
+
+4. （可选）在库名前拼接 Catalog 名。只要 External Catalog 设置了 `ranger.plugin.hive.service.name`（例如 Hive、Iceberg、Hudi Catalog），本节就适用。
+
+   Ranger 的 Hive Service 只有 `database`、`table`、`column` 三级，没有 Catalog 这一层。当多个 External Catalog 共用同一个 Hive Service（例如多个 AWS Glue Catalog）时，出现在多个 Catalog 里的同名库会命中同一批策略。为这类 Catalog 设置属性 `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` 后，StarRocks 向 Ranger 发送的 `database` 资源会变成 `<catalog_name>_<database_name>`，而不是裸库名。例如，访问 `glue_prod.sales.orders` 时，会按 database 为 `glue_prod_sales` 的 Ranger 策略进行鉴权。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 也可以对已有的 Catalog 设置，语句返回后新值即生效。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 取值只能是 `true` 或 `false`，其他值会导致 CREATE 或 ALTER CATALOG 失败。
+   - 未设置该属性时，Catalog 跟随 FE 配置项 `ranger_hive_catalog_prefix_enabled`（默认 `false`）。未设置 `ranger.plugin.hive.service.name` 的 Catalog 会忽略该属性。
+   - Catalog 名与库名之间的分隔符由 FE 配置项 `ranger_hive_catalog_prefix_separator` 决定（默认 `_`）。共用同一个 Ranger Service 的所有 Catalog 必须使用相同的分隔符，因此该项只在全局配置。

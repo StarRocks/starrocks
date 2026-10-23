@@ -214,7 +214,7 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType() && !isVariantType();
+                !isMapType() && !isArrayType() && !isVariantType() && !isFileType();
     }
 
     public boolean canJoinOn() {
@@ -234,7 +234,7 @@ public abstract class Type implements Cloneable {
         }
 
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType() && !isGeoType();
+                !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canGroupBy() {
@@ -253,7 +253,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType() && !isGeoType();
+                !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canOrderBy() {
@@ -272,7 +272,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isMapType() && !isVariantType() && !isGeoType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canPartitionBy() {
@@ -281,7 +281,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType() && !isGeoType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canDistinct() {
@@ -296,13 +296,13 @@ public abstract class Type implements Cloneable {
             return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType() && !isGeoType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType() && !isVariantType() && !isGeoType();
+                && !isBinaryType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     // Returns true if this type is VARIANT or transitively contains a VARIANT inside an
@@ -325,6 +325,24 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
+    // Returns true if this type is FILE or transitively contains a FILE inside an ARRAY/MAP/STRUCT.
+    // FILE is a read-only external reference with no native storage write path.
+    public boolean containsFile() {
+        if (isFileType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsFile();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsFile() || ((MapType) this).getValueType().containsFile();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsFile());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key.
@@ -333,12 +351,12 @@ public abstract class Type implements Cloneable {
         // double, not a storable/encodable column type) and would crash the BE short-key encoder, so
         // exclude it here alongside the other non-encodable types.
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isVariantType() && !isTime() && !isGeoType();
+                && !isFunctionType() && !isVariantType() && !isFileType() && !isTime() && !isGeoType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
-                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType());
+                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType() || isFileType());
     }
 
     /**
@@ -383,6 +401,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isVariantType() {
         return isScalarType(PrimitiveType.VARIANT);
+    }
+
+    public boolean isFileType() {
+        return isScalarType(PrimitiveType.FILE);
     }
 
     public boolean isGeoType() {

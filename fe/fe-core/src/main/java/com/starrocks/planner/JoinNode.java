@@ -318,7 +318,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SlotRef probeSlotRefExpr = probeExpr.cast();
         int slotId = probeSlotRefExpr.getSlotId().asInt();
         boolean probeExprIsNotJoinColumn = eqJoinConjuncts.stream()
-                .filter(conj -> conj.getOp().equals(BinaryType.EQ))
+                .filter(conj -> conj.getOp().equals(BinaryType.EQ) ||
+                        isIcebergEqDeletePruningConjunct(conj, context.getDescription()))
                 .noneMatch(conj -> ExprUtils.getUsedSlotIds(conj).contains(slotId));
 
         if (probeExprIsNotJoinColumn) {
@@ -333,11 +334,56 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
 
+    // A filter from an ancestor join may also reach the delete side of an Iceberg equality-delete anti join through a
+    // `<=>` on an identity partition column. Dropping the deletes of a rejected partition lets its data rows through
+    // this join, but the join that built the filter drops them: only a join filter of an inner or left semi join
+    // whose probe side holds this join guarantees that, and only if no limit on the way can keep such a row in place
+    // of a live one.
+    private boolean isIcebergEqDeletePruningConjunct(BinaryPredicate conj, RuntimeFilterDescription description) {
+        if (!joinOp.isLeftAntiJoin() || joinOp.isNullAwareLeftAntiJoin() || conj.getOp() != BinaryType.EQ_FOR_NULL ||
+                description.runtimeFilterType() != RuntimeFilterDescription.RuntimeFilterType.JOIN_FILTER) {
+            return false;
+        }
+        if (!(description.getBuildPlanNode() instanceof JoinNode buildJoin) ||
+                !(buildJoin.getJoinOp().isInnerJoin() || buildJoin.getJoinOp().isLeftSemiJoin()) ||
+                !isOnPathWithoutLimit(buildJoin.getChild(0), this)) {
+            return false;
+        }
+        PlanNode deleteScan = getChild(1);
+        while (deleteScan instanceof ExchangeNode && deleteScan.getChildren().size() == 1) {
+            deleteScan = deleteScan.getChild(0);
+        }
+        if (!(deleteScan instanceof IcebergScanNode icebergScan)) {
+            return false;
+        }
+        for (Expr side : conj.getChildren()) {
+            if (side instanceof SlotRef slot && ExprUtils.isBoundByTupleIds(slot, getChild(1).getTupleIds())) {
+                return icebergScan.isRuntimeFilterPruningSlot(slot.getSlotId());
+            }
+        }
+        return false;
+    }
+
+    // whether target is under root and no node from root down to target, both included, has a limit
+    private static boolean isOnPathWithoutLimit(PlanNode root, PlanNode target) {
+        if (root == target) {
+            return !root.hasLimit();
+        }
+        if (root.hasLimit()) {
+            return false;
+        }
+        return root.getChildren().stream().anyMatch(child -> isOnPathWithoutLimit(child, target));
+    }
+
     private Optional<Boolean> pushDownRuntimeFilterUnilaterally(RuntimeFilterPushDownContext context,
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
-        if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
+        if (joinOp.isAsofJoin()) {
+            // an ASOF join picks each left row's match among the right rows: filtering the right input makes it pick
+            // another (earlier) row instead of dropping the left row
+            sides = ImmutableList.of(0);
+        } else if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
             sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);

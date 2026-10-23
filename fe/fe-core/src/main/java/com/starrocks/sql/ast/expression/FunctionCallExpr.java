@@ -67,7 +67,7 @@ public class FunctionCallExpr extends Expr {
 
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
-            new ImmutableSet.Builder<String>().add(FunctionSet.YEAR).build();
+            new ImmutableSet.Builder<String>().add(FunctionSet.YEAR, FunctionSet.DATE_TRUNC).build();
 
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;

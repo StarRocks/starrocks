@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.GroupNameMatch;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
@@ -184,6 +185,8 @@ public class AuthorizationMgr {
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -220,6 +223,8 @@ public class AuthorizationMgr {
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_FUNCTION,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
@@ -324,6 +329,8 @@ public class AuthorizationMgr {
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.AI_FUNCTION.equals(objectType)
+                || ObjectType.AI_PROVIDER.equals(objectType)
                 || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*")));
@@ -607,8 +614,9 @@ public class AuthorizationMgr {
                     throw new PrivilegeException("role name '" + role + "' not found");
                 }
 
-                groupToRoleList.putIfAbsent(groupName, new HashSet<>());
-                Set<Long> roleSet = groupToRoleList.get(groupName);
+                String storedKey = existingGroupKeyIgnoreCase(groupName);
+                groupToRoleList.putIfAbsent(storedKey, new HashSet<>());
+                Set<Long> roleSet = groupToRoleList.get(storedKey);
                 roleSet.add(roleId);
 
                 roleIdList.add(roleId);
@@ -625,8 +633,9 @@ public class AuthorizationMgr {
         lockForRoleUpdate();
         try {
             for (Long roleId : roleIdList) {
-                groupToRoleList.putIfAbsent(groupName, new HashSet<>());
-                Set<Long> roleSet = groupToRoleList.get(groupName);
+                String storedKey = existingGroupKeyIgnoreCase(groupName);
+                groupToRoleList.putIfAbsent(storedKey, new HashSet<>());
+                Set<Long> roleSet = groupToRoleList.get(storedKey);
                 roleSet.add(roleId);
             }
         } finally {
@@ -785,7 +794,7 @@ public class AuthorizationMgr {
                     throw new PrivilegeException("role name '" + role + "' not found");
                 }
 
-                Set<Long> roleSet = groupToRoleList.get(groupName);
+                Set<Long> roleSet = groupToRoleList.get(existingGroupKeyIgnoreCase(groupName));
                 if (roleSet != null) {
                     roleSet.remove(roleId);
                 }
@@ -804,7 +813,7 @@ public class AuthorizationMgr {
         lockForRoleUpdate();
         try {
             for (Long roleId : roleIdList) {
-                Set<Long> roleSet = groupToRoleList.get(groupName);
+                Set<Long> roleSet = groupToRoleList.get(existingGroupKeyIgnoreCase(groupName));
                 if (roleSet != null) {
                     roleSet.remove(roleId);
                 }
@@ -880,10 +889,62 @@ public class AuthorizationMgr {
         }
     }
 
+    /**
+     * The key `groupToRoleList` already stores this group under, matched the way
+     * {@link GroupNameMatch} says (ignoring case unless the cluster is configured otherwise), or
+     * `groupName` itself when the group is not stored yet.
+     * <p>
+     * Every read and write of `groupToRoleList` goes through this, so GRANT, REVOKE, their replays
+     * and {@link #getRoleIdListByGroup} all agree on which entry a directory group maps to. Without
+     * it the relaxed read stands alone: a role that starts taking effect because the spellings
+     * differ cannot be revoked by naming either spelling, and no error is raised. Callers must hold
+     * the role lock.
+     * <p>
+     * An exact hit wins. Beyond that, an image written before this fix can already hold two keys
+     * differing only in case; the smallest one is picked rather than the first the map happens to
+     * yield, so that a leader and a replaying follower reach the same state from the same log.
+     */
+    private String existingGroupKeyIgnoreCase(String groupName) {
+        if (groupToRoleList.containsKey(groupName)) {
+            return groupName;
+        }
+        String match = null;
+        for (String stored : groupToRoleList.keySet()) {
+            if (GroupNameMatch.equal(stored, groupName) && (match == null || stored.compareTo(match) < 0)) {
+                match = stored;
+            }
+        }
+        return match == null ? groupName : match;
+    }
+
     public Set<Long> getRoleIdListByGroup(String groupName) {
         roleReadLock();
         try {
-            return groupToRoleList.getOrDefault(groupName, Set.of());
+            Set<Long> exactMatch = groupToRoleList.get(groupName);
+            if (exactMatch != null) {
+                return exactMatch;
+            }
+
+            // No exact match: fall back to the relaxed comparison (ignoring case unless
+            // authentication_group_case_insensitive is off). An LDAP `cn` is case-insensitive in
+            // the directory, so a GRANT written with a different case than the directory returns
+            // must not silently have no effect. Only the lookup is relaxed - neither the stored keys
+            // nor the group names of the session are rewritten, because the group name strings are
+            // handed to Ranger, which matches them case-sensitively.
+            // The number of groups that have been granted a role is small, so the scan is cheap.
+            // Several keys can differ only in case (old clusters really do hold both `SR Analysts`
+            // and `sr analysts`); the roles of all of them are unioned, because picking one would
+            // depend on map iteration order and failing would lock out a user who could log in before.
+            Set<Long> caseInsensitiveMatch = null;
+            for (Map.Entry<String, Set<Long>> entry : groupToRoleList.entrySet()) {
+                if (GroupNameMatch.equal(entry.getKey(), groupName)) {
+                    if (caseInsensitiveMatch == null) {
+                        caseInsensitiveMatch = new HashSet<>();
+                    }
+                    caseInsensitiveMatch.addAll(entry.getValue());
+                }
+            }
+            return caseInsensitiveMatch == null ? Set.of() : caseInsensitiveMatch;
         } finally {
             roleReadUnlock();
         }

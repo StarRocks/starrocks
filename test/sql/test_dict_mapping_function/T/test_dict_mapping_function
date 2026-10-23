@@ -67,3 +67,38 @@ SELECT bit_shift_left(1, dict_mapping("dict", col_1, col_2)) FROM t;
 SELECT count(*) FROM t;
 
 DROP DATABASE test_dictmapping_nested_null_key;
+
+-- name: test_dictmapping_nested_rewritten_key @native
+CREATE DATABASE test_dictmapping_nested_rewritten_key;
+use test_dictmapping_nested_rewritten_key;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO dict VALUES (1, "abc", default, 0);
+
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t VALUES (1, "abc");
+
+-- The single-level call this is built from, as a reference for what the dictionary holds.
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+
+-- test_dictmapping_nested_null_key keys both calls off col_1, so nothing under the outer
+-- dict_mapping is ever rewritten and its shuttle hands the operator back untouched. Keying the
+-- inner call off a different column does rewrite a child, and BaseScalarOperatorShuttle then looks
+-- up a clone function that was never registered for DictQueryOperator: planning died on a
+-- NullPointerException and the client got a bare "Unknown error" with nothing to act on. The
+-- statement is still expected to fail -- the inner lookup does not produce a valid composite key --
+-- but it has to fail in the engine, with a message that says what went wrong.
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_2, col_2)) FROM t;
+
+DROP DATABASE test_dictmapping_nested_rewritten_key;

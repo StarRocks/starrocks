@@ -35,11 +35,12 @@
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
-#include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/page_io.h"
 #include "storage/storage_metrics.h"
@@ -217,7 +218,7 @@ static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unor
 }
 
 MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata)
-        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
+        : _tablet(tablet), _tablet_meta(std::move(metadata)), _primary_key_mgr(_tablet.primary_key_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
@@ -350,6 +351,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // A rewritten segment makes this rowset's data private to this tablet, so it must not
         // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
@@ -1208,6 +1210,38 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
         file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
+
+    // Nothing references the other files this compaction wrote either; without an orphan entry
+    // only a full vacuum would delete them.
+    remove_lcrm_file(op_compaction);
+    for (const auto& sst : op_compaction.ssts()) {
+        auto* added = _tablet_meta->add_orphan_files();
+        added->CopyFrom(sst);
+        added->set_version(_tablet_meta->version());
+    }
+    // The primary index compaction may keep an input sstable as its output: that file is still in
+    // the index and must not become an orphan.
+    std::unordered_set<std::string> input_sst_filenames;
+    for (const auto& input_sstable : op_compaction.input_sstables()) {
+        input_sst_filenames.insert(input_sstable.filename());
+    }
+    auto add_orphan_sstable = [&](const PersistentIndexSstablePB& output_sstable) {
+        if (input_sst_filenames.contains(output_sstable.filename())) {
+            return;
+        }
+        FileMetaPB file_meta;
+        file_meta.set_name(output_sstable.filename());
+        file_meta.set_size(output_sstable.filesize());
+        file_meta.set_shared(output_sstable.shared());
+        file_meta.set_version(_tablet_meta->version());
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+    };
+    if (op_compaction.has_output_sstable()) {
+        add_orphan_sstable(op_compaction.output_sstable());
+    }
+    for (const auto& output_sstable : op_compaction.output_sstables()) {
+        add_orphan_sstable(output_sstable);
+    }
 }
 
 Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels) {
@@ -1358,8 +1392,8 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     }
 
-    // Update the primary index data version in the update manager
-    _update_mgr->update_primary_index_data_version(_tablet, version);
+    // Update the primary index data version in the primary key manager
+    _primary_key_mgr->update_primary_index_data_version(_tablet, version);
 
     // Fill the delete vector cache with the newly finalized delete vectors
     _fill_delvec_cache();
@@ -1377,7 +1411,19 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
                                          iter->second.size()));
         return true;
     }
+    if (_delvecs_reset_by_recover) {
+        (*pdelvec) = std::make_shared<DelVector>();
+        return true;
+    }
     return false;
+}
+
+void MetaFileBuilder::reset_delvecs_for_recover() {
+    _buf.clear();
+    _delvecs.clear();
+    _segmentid_to_delvec.clear();
+    _cache_key_to_segment_id.clear();
+    _delvecs_reset_by_recover = true;
 }
 
 void MetaFileBuilder::_fill_delvec_cache() {
@@ -1857,6 +1903,8 @@ Status MetaFileBuilder::set_final_rowset() {
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+    // The op_writes folded here may come from different statements, some bundled and some standalone.
+    give_standalone_segments_a_bundle_offset(rowset);
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
@@ -1894,6 +1942,7 @@ Status MetaFileBuilder::set_final_rowset() {
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same

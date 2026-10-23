@@ -221,6 +221,62 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
     }
 }
 
+// field_ids / field_physical_names are indexed by child position: one entry per child, with -1 / "" for a
+// field that has none, and empty when no field has one.
+// NOLINTNEXTLINE
+TEST_F(TypeDescriptorTest, test_from_thrift_struct_field_ids) {
+    auto make_struct = [](const std::vector<TStructField>& fields) {
+        TTypeDesc ttype_desc;
+        ttype_desc.__isset.types = true;
+        ttype_desc.types.resize(fields.size() + 1);
+        ttype_desc.types[0].__set_type(TTypeNodeType::STRUCT);
+        ttype_desc.types[0].__set_struct_fields(fields);
+        for (size_t i = 1; i <= fields.size(); ++i) {
+            ttype_desc.types[i].__set_type(TTypeNodeType::SCALAR);
+            ttype_desc.types[i].__set_scalar_type(TScalarType());
+            ttype_desc.types[i].scalar_type.__set_type(TPrimitiveType::INT);
+        }
+        return TypeDescriptor::from_thrift(ttype_desc);
+    };
+
+    TStructField a;
+    a.__set_name("a");
+    a.__set_id(1);
+    a.__set_physical_name("a_phys");
+    TStructField b;
+    b.__set_name("b");
+    TStructField c;
+    c.__set_name("c");
+    c.__set_id(-1);
+    c.__set_physical_name("c_phys");
+    TStructField d;
+    d.__set_name("d");
+    d.__set_id(4);
+    d.__set_physical_name("");
+
+    // struct{a INT, b INT, c INT, d INT}: some fields carry an id and/or a physical name.
+    {
+        auto t = make_struct({a, b, c, d});
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
+        ASSERT_EQ(4, t.children.size());
+        ASSERT_EQ((std::vector<int32_t>{1, -1, -1, 4}), t.field_ids);
+        ASSERT_EQ((std::vector<std::string>{"a_phys", "", "c_phys", ""}), t.field_physical_names);
+    }
+    // struct{b INT}: no field has an id or a physical name.
+    {
+        auto t = make_struct({b});
+        ASSERT_EQ(1, t.children.size());
+        ASSERT_TRUE(t.field_ids.empty());
+        ASSERT_TRUE(t.field_physical_names.empty());
+    }
+    // struct{b INT, d INT}: ids only.
+    {
+        auto t = make_struct({b, d});
+        ASSERT_EQ((std::vector<int32_t>{-1, 4}), t.field_ids);
+        ASSERT_TRUE(t.field_physical_names.empty());
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_F(TypeDescriptorTest, test_to_thrift) {
     // TINYINT

@@ -58,7 +58,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
+        DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
                 const auto val = GetContainer<LT>::get_data(columns[0], row_num);

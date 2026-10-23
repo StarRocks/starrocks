@@ -1,0 +1,110 @@
+### Enable Ranger on the FE nodes
+
+1. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+
+   - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
+   - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
+
+   If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalMs` to change the interval for pulling policy changes.
+
+   ```SQL
+   vim ranger-starrocks-security.xml
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.service.name</name>
+           <value>starrocks</value> -- Change it to the StarRocks Service name.
+           <description>
+               Name of the Ranger service containing policies for this StarRocks instance
+           </description>
+       </property>
+   ...
+
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.policy.rest.url</name>
+           <value>http://localhost:6080</value> -- Change it to Ranger Admin address.
+           <description>
+               URL to Ranger Admin
+           </description>
+       </property>   
+   ...
+   ```
+
+2. (Optional) If you want to use the Audit Log service of Ranger, you need to create the [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) file in the `fe/conf` folder of each FE machine. Copy the content, **replace `solr_url` in `xasecure.audit.solr.solr_url` with your own `solr_url`**, and save the file.
+
+   StarRocks supports two destinations for Ranger audit logs, and you can use only one of them at a time:
+
+   - Solr: Use the `xasecure.audit.solr.*` properties that the template uses. Configuring Solr with `xasecure.audit.destination.solr` is not supported.
+   - Local file: Set `xasecure.audit.destination.file` to `true` and `xasecure.audit.destination.file.dir` to the directory of the audit files.
+
+   Once any `xasecure.audit.destination.*` property is enabled, Ranger ignores all the `xasecure.audit.<destination>.*` properties, including the Solr ones. This also applies to `ranger-hive-audit.xml`.
+
+3. Add the configuration `access_control = ranger` to all FE configuration files.
+
+   ```SQL
+   vim fe.conf
+   access_control=ranger 
+   ```
+
+4. Restart all FE machines.
+
+   ```SQL
+   -- Switch to the FE folder. 
+   cd..
+
+   bin/stop_fe.sh
+   bin/start_fe.sh
+   ```
+
+## Reuse other services to control access to external tables
+
+For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table. The user permissions are consistent with the Ranger user with the same name.
+
+1. Copy Hive's Ranger configuration files [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) and [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) to the `fe/conf` file of all FE machines. Make sure Ranger's IP and port are correct.
+2. Restart all FE machines.
+3. Configure External Catalog.
+
+   - When you create an External Catalog, add the property `"ranger.plugin.hive.service.name"`.
+
+      ```SQL
+        CREATE EXTERNAL CATALOG hive_catalog_1
+        PROPERTIES (
+            "type" = "hive",
+            "hive.metastore.type" = "hive",
+            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
+        )
+      ```
+
+   - You can also add this property to an existing External Catalog.
+  
+       ```SQL
+       ALTER CATALOG hive_catalog_1
+       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
+       ```
+
+​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.
+
+4. (Optional) Prefix the database name with the catalog name. This applies to every External Catalog that sets `ranger.plugin.hive.service.name`, such as Hive, Iceberg, and Hudi catalogs.
+
+   The Ranger Hive Service only knows `database`, `table`, and `column`. It has no catalog level, so when several External Catalogs share one Hive Service (for example, several AWS Glue catalogs), a database that exists in more than one catalog matches the same policies. Set the property `"ranger.plugin.hive.catalog_prefix.enabled"` to `"true"` on such a catalog, and StarRocks sends `<catalog_name>_<database_name>` as the `database` resource to Ranger instead of the bare database name. For example, a query against `glue_prod.sales.orders` is checked against a Ranger policy whose database is `glue_prod_sales`.
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- Or on an existing catalog. The new value takes effect when the statement returns.
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - Valid values are `true` and `false`. Any other value makes CREATE or ALTER CATALOG fail.
+   - When the property is not set, the catalog follows the FE configuration item `ranger_hive_catalog_prefix_enabled` (default `false`). Catalogs that do not set `ranger.plugin.hive.service.name` ignore this property.
+   - The separator between the catalog name and the database name is the FE configuration item `ranger_hive_catalog_prefix_separator` (default `_`). It is global because every catalog that shares one Ranger Service must use the same separator.

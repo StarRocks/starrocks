@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
@@ -138,6 +139,13 @@ public class PrepareStmtPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         if (!isRebindable(executeStmt, queryStmt, execPlan)) {
             // reset, not just skip: the needReAnalyze() call site arrives holding a plan built against the old schema
+            prepareStmtContext.reset();
+            return execPlan;
+        }
+        // isRebindable guarantees the physical plan root is an olap scan
+        OlapTable plannedTable = (OlapTable) ((PhysicalOlapScanOperator) execPlan.getPhysicalPlan().getOp()).getTable();
+        if (prepareStmtContext.isPlannedOnLiveTable(queryStmt, session, plannedTable)) {
+            rejectCaching(executeStmt, "the plan scans the live table");
             prepareStmtContext.reset();
             return execPlan;
         }

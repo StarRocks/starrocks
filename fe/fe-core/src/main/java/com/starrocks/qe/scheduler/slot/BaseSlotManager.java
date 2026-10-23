@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -46,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,8 +106,12 @@ public abstract class BaseSlotManager {
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("slot-mgr-res-%d").build());
 
     private final Map<String, Set<LogicalSlot>> requestFeNameToSlots = new HashMap<>();
-    
+
     protected final ResourceUsageMonitor resourceUsageMonitor;
+
+    // Warehouses whose queue head is held by the memory gate. Added by admission on the request worker, drained by
+    // resource usage reports on the report threads.
+    private final Set<Long> warehousesHeldByMemoryGate = ConcurrentHashMap.newKeySet();
 
     /**
      * The lifecycle of a slot is managed by the slot tracker.
@@ -127,6 +133,53 @@ public abstract class BaseSlotManager {
     public BaseSlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         this.resourceUsageMonitor = resourceUsageMonitor;
         resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
+        resourceUsageMonitor.registerResourceUsageUpdateListener(this::onResourceUsageUpdated);
+    }
+
+    /**
+     * Record that the memory gate of a warehouse held the query at the head of its queue. Called by the admission
+     * of that warehouse; {@link #onResourceUsageUpdated} drains it.
+     */
+    public void onQueryHeldByMemoryGate(long warehouseId) {
+        warehousesHeldByMemoryGate.add(warehouseId);
+    }
+
+    /**
+     * Forget a warehouse once no query waits in its queue, e.g. after the held query was canceled or timed out while
+     * the gate stays closed, or once the warehouse is dropped, so that reports stop re-evaluating its gate.
+     */
+    public void clearHeldByMemoryGate(long warehouseId) {
+        warehousesHeldByMemoryGate.remove(warehouseId);
+    }
+
+    /**
+     * Called after every resource usage report and every backend death. A warehouse held by its memory gate gets
+     * no slot release to wake its admission up when its memory usage drops, so wake the request worker here once
+     * the gate lets queries through again.
+     */
+    @VisibleForTesting
+    void onResourceUsageUpdated() {
+        if (warehousesHeldByMemoryGate.isEmpty()) {
+            return;
+        }
+        boolean released = false;
+        for (Long warehouseId : warehousesHeldByMemoryGate) {
+            boolean blocked;
+            try {
+                blocked = MemoryAdmissionGate.evaluate(warehouseId, this).isBlocked();
+            } catch (Exception e) {
+                // e.g. the warehouse was dropped; waking admission up costs nothing and lets it clean up.
+                LOG.warn("[Slot] failed to evaluate the memory gate of warehouse {}", warehouseId, e);
+                blocked = false;
+            }
+            if (!blocked) {
+                warehousesHeldByMemoryGate.remove(warehouseId);
+                released = true;
+            }
+        }
+        if (released) {
+            notifyResourceUsageAvailable();
+        }
     }
 
     /**
@@ -214,6 +267,15 @@ public abstract class BaseSlotManager {
      */
     public boolean isEnableQueryQueueV2(long warehouseId) {
         return Config.enable_query_queue_v2;
+    }
+
+    /**
+     * The memory usage limit of the warehouse under Query Queue V2: new queries of the warehouse wait while the
+     * process memory usage of any of its alive nodes reaches this fraction of the node's memory limit. Non-positive
+     * means no memory gating. The global variable {@link GlobalVariable#QUERY_QUEUE_MEM_USED_PCT_LIMIT} by default.
+     */
+    public double getQueryQueueMemUsedPctLimit(long warehouseId) {
+        return GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 
     /**

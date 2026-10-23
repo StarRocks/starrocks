@@ -17,8 +17,16 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.starrocks.authentication.AuthCredentials;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
@@ -40,6 +48,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -48,6 +57,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -55,6 +65,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ArrowFlightSqlSessionManagerTest {
@@ -101,7 +113,10 @@ public class ArrowFlightSqlSessionManagerTest {
 
     private void mockAuthentication(MockedStatic<AuthenticationHandler> mockedAuth,
                                     AtomicReference<ArrowFlightSqlConnectContext> contextRef) {
-        mockedAuth.when(() -> AuthenticationHandler.authenticate(any(), any(), any(), any()))
+        // Every entry point goes through authenticate(ctx, AuthCredentials) now; a stub left on an
+        // old entry silently returns null (mockStatic default) instead of running this answer, which
+        // shows up as an NPE in assertAllocatorClosed rather than as an authentication problem.
+        mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
                 .thenAnswer(invocation -> {
                     ConnectContext ctx = invocation.getArgument(0);
                     ctx.setCurrentUserIdentity(null);
@@ -409,5 +424,118 @@ public class ArrowFlightSqlSessionManagerTest {
             assertNotNull(tokenWithoutProxy);
             assertEquals(mockUUID.toString(), tokenWithoutProxy, "Token should be plain UUID when proxy disabled");
         }
+    }
+
+    // ---- JWT sessions: opened like Basic ones, released like Basic ones, and never outliving the JWT.
+    // The handler is mocked, so these pin the session rules, not the verification.
+
+    private interface SessionEnvBody {
+        void run(MockedStatic<AuthenticationHandler> mockedAuth) throws Exception;
+    }
+
+    /** Everything initializeSession needs, with a real UUID per session so two sessions differ. */
+    private void withSessionEnv(SessionEnvBody body) throws Exception {
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+            mockAuthentication(mockedAuth);
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+            mockGlobalStateMgr(mockedGlobalState);
+            body.run(mockedAuth);
+        }
+    }
+
+    /** A well-formed JWT; the signature is irrelevant because the handler is mocked. */
+    private static String jwt(Date exp) throws Exception {
+        JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder().issuer("https://idp.test").subject("alice");
+        if (exp != null) {
+            claims.expirationTime(exp);
+        }
+        SignedJWT signed = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims.build());
+        signed.sign(new MACSigner(new byte[32]));
+        return signed.serialize();
+    }
+
+    @Test
+    public void testEachJwtAuthenticationOpensItsOwnSessionLikeBasic() throws Exception {
+        // Symmetric with Basic: a connection that presents a JWT gets its own session, and a second
+        // connection with the same JWT gets another. Sessions are per connection, not per token, so
+        // USE / SET on one connection never leak into another.
+        withSessionEnv(mockedAuth -> {
+            String token = jwt(new Date(System.currentTimeMillis() + 60_000));
+            String first = sessionManager.initializeSessionWithJwt(token, "0.0.0.0");
+            String second = sessionManager.initializeSessionWithJwt(token, "0.0.0.0");
+            assertNotEquals(first, second);
+            verify(mockScheduler, times(2)).registerConnection(any());
+            assertDoesNotThrow(() -> sessionManager.validateToken(first));
+            assertDoesNotThrow(() -> sessionManager.validateToken(second));
+            // ... and each is released on its own CloseSession.
+            sessionManager.closeSession(first);
+            assertThrows(IllegalArgumentException.class, () -> sessionManager.validateToken(first));
+            assertDoesNotThrow(() -> sessionManager.validateToken(second));
+        });
+    }
+
+    @Test
+    public void testJwtSessionDoesNotOutliveTheJwt() throws Exception {
+        // The client switches to the session token after the first call, so without this the
+        // session would run on for arrow_token_cache_expire_second (days) after the JWT expired.
+        withSessionEnv(mockedAuth -> {
+            // exp is serialized in whole seconds, so pick the second boundary 2 s ahead: the first
+            // validation has at least a second of margin, and sleeping past the boundary is deterministic.
+            Date exp = new Date((System.currentTimeMillis() / 1000 + 2) * 1000);
+            String sessionToken = sessionManager.initializeSessionWithJwt(jwt(exp), "0.0.0.0");
+            assertDoesNotThrow(() -> sessionManager.validateToken(sessionToken));
+            Thread.sleep(Math.max(0, exp.getTime() - System.currentTimeMillis()) + 200);
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> sessionManager.validateToken(sessionToken));
+            assertTrue(e.getMessage().contains("expired"), e.getMessage());
+            // and it is gone for good, not just refused once
+            assertThrows(IllegalArgumentException.class, () -> sessionManager.validateToken(sessionToken));
+        });
+    }
+
+    @Test
+    public void testJwtWithoutExpAndBasicSessionsHaveNoDeadlineOfTheirOwn() throws Exception {
+        withSessionEnv(mockedAuth -> {
+            String fromJwt = sessionManager.initializeSessionWithJwt(jwt(null), "0.0.0.0");
+            String fromBasic = sessionManager.initializeSession("testUser", "127.0.0.1", "testPassword");
+            Thread.sleep(50);
+            assertDoesNotThrow(() -> sessionManager.validateToken(fromJwt),
+                    "no exp means only the configured cache TTL applies");
+            assertDoesNotThrow(() -> sessionManager.validateToken(fromBasic));
+        });
+    }
+
+    @Test
+    public void testJwtAuthenticationHonoursTheBearerSwitch() throws Exception {
+        // Nothing is cached ahead of the handler, so the kill switch is honoured on every
+        // authentication simply because every authentication goes through the handler.
+        withSessionEnv(mockedAuth -> {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        if (!Config.enable_rest_bearer_authentication) {
+                            throw new AuthenticationException("Bearer token authentication is disabled");
+                        }
+                        ConnectContext ctx = invocation.getArgument(0);
+                        ctx.setQualifiedUser("testUser");
+                        return null;
+                    });
+            String token = jwt(new Date(System.currentTimeMillis() + 60_000));
+            assertNotNull(sessionManager.initializeSessionWithJwt(token, "0.0.0.0"));
+            boolean saved = Config.enable_rest_bearer_authentication;
+            Config.enable_rest_bearer_authentication = false;
+            try {
+                FlightRuntimeException e = assertThrows(FlightRuntimeException.class,
+                        () -> sessionManager.initializeSessionWithJwt(token, "0.0.0.0"));
+                assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
+            } finally {
+                Config.enable_rest_bearer_authentication = saved;
+            }
+        });
     }
 }

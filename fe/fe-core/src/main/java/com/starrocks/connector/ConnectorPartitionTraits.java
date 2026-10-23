@@ -140,15 +140,24 @@ public abstract class ConnectorPartitionTraits {
      * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
      * Other connectors store the range but ignore it in their partition methods.
      */
-    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
-        ConnectorPartitionTraits traits = build(table);
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table,
+                                                 TvrVersionRange pinnedVersionRange) {
+        ConnectorPartitionTraits traits = build(mv, table);
         if (pinnedVersionRange != null) {
             traits.setPinnedVersionRange(pinnedVersionRange);
         }
         return traits;
     }
 
-    private static ConnectorPartitionTraits buildWithoutCache(Table table) {
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        return build(null, table, pinnedVersionRange);
+    }
+
+    /**
+     * Build the partition traits for the table without the query-context cache wrapper, whatever the current
+     * thread's context.
+     */
+    public static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;

@@ -258,12 +258,36 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### blacklist_backup_routing
 
 * **范围**：Session
-* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。`TABLET_HASH` 对 tablet 与各候选节点计算哈希（rendezvous hashing），选取哈希值最大的节点：不可用节点上的 tablet 会均匀分散到其余节点，而同一个 tablet 在不同查询中始终落到同一个备份节点，其数据只需缓存在这一个节点上。Colocate 扫描以 Colocation Group 和分桶代替 tablet 计算哈希，同一 Group 内各表的同一分桶会选中同一个备份节点。只要各 FE 看到的候选节点相同，它们为同一 tablet 选出的备份节点也相同。导入（例如 `INSERT`）写入的 tablet 所在计算节点不可用时，同样按本变量选择备份节点。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
 
 * **默认值**：`CIRCULAR`
 * **类型**：String
-* **合法取值**：`CIRCULAR`、`RANDOM`
+* **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
 * **引入版本**：-
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **描述**: 设置广播 CPU、内存和网络成本的惩罚因子，在每个 BE/CN 的构建侧估算数据量超过广播内存阈值时生效。设置为 `1.0` 可禁用此惩罚。
+* **作用域**: Session, Global
+* **默认值**: `1000.0`
+* **数据类型**: Double
+* **有效值**: `[1.0, 1000000.0]` 范围内的有限数值。超出此范围的值、非数值、`NaN` 和无穷大均会被拒绝。
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置。例如：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **描述**：设置构建侧预估大小阈值，超过此阈值时优化器会惩罚广播计划。此阈值适用于预估发送到每个 BE 的字节数。预估大小等于阈值时不会受到惩罚。此变量是优化器阈值，而非运行时内存限制。它独立于 `exec_mem_limit`；`broadcast_row_limit` 仍控制广播选择的行数检查。设置为 `0` 时，所有预估大小大于零的广播都会受到惩罚。
+* **范围**：Session、Global
+* **默认值**：`2147483648`（2 GiB）
+* **单位**：字节
+* **类型**：long
+* **合法取值**：[0, 9223372036854775807]
 
 ### catalog（3.2.4 及以后）
 
@@ -614,11 +638,23 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_exchange_sink_buffer_flush
+
+* 描述：是否限制 Exchange Sink 在 Shuffle 时用于缓存待发送数据的内存。Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，通常在 Chunk 填满后才发送；当该变量为 `true` 且一个 Driver 的这些 Chunk 占用的内存超过 BE 配置项 `exchange_sink_buffer_flush_threshold_bytes` 时，会立即发送。设置为 `false` 可在当前会话中恢复之前的行为。
+* 默认值：true
+* 引入版本：-
+
 ### enable_force_rule_based_mv_rewrite
 
 * 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
 * 默认值：true
 * 引入版本：v3.3
+
+### enable_gather_fragment_child_affinity
+
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：扫描外部 Catalog 表（如 Hive 或 Iceberg）、`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 默认值：false
+* 引入版本：v4.2
 
 ### enable_gin_filter
 
@@ -648,6 +684,12 @@ FROM test;
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
 
 ### enable_incremental_mv
 
@@ -1350,7 +1392,12 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
+
+  * `AUTO`：由 StarRocks 自动选择合适的读取模式。
+  * `JNI`：强制使用 Paimon Java Reader，通过 JNI 读取。
+  * `NATIVE`：兼容时使用 StarRocks 文件 Reader，否则要求使用兼容的 paimon-cpp Reader；无法支持时查询报错，不回退到 JNI。
+  * 设置 `paimon_force_jni_reader=true` 等价于选择 `JNI`，优先于本变量的设置。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2
@@ -1510,7 +1557,7 @@ FROM test;
 
 ### query_queue_mem_used_pct_limit (global)
 
-* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。
+* 描述：单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。设置为 `0` 表示没有限制。在 Query Queue v1 下，它作用于集群中的每个 BE 和 CN 节点。在 Query Queue v2 下，任一存活节点达到该上限时，新查询会等待。详细信息，参见 [内存准入](../administration/management/resource_management/query_queues.md#内存准入)。
 * 默认值：`0`
 * 取值范围：[0, 1]
 
@@ -1692,6 +1739,37 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### system_time_zone (global)
 
 显示当前系统时区。不可更改。
+
+### lake_multi_node_tablet_write_mode
+
+* **描述**：仅在存算分离模式下生效。控制导入是否可以把同一个 tablet 的写入分散到多个计算节点，而不是把每一行都发给该 tablet 归属的那一个节点。三个取值：
+  * `off` —— 永不生效，即本功能出现之前的行为。
+  * `auto`（默认）—— 当目标表采用 **range bucket** 分布、且其分区的 tablet 数仍少于本次导入的数据量所对应的写入节点数（见 `lake_multi_node_write_bytes_per_node`）时生效。presplit 会在语句规划之前执行并等待完成，因此这里读到的 tablet 数就是 presplit 的**结果**：presplit 切得足够宽则 `auto` 不介入；presplit 被跳过、或其等待超时而导入退回按当前可见布局继续，则 `auto` 生效。**对所有 key 类型都适用**：相同 key 的行按 key 列的哈希路由，会全部落到同一个节点，因此导入结果与哪个节点写了哪一行无关，无需额外确认。哈希分桶表被排除在外，因为它只要增加分桶数就能占满集群。
+  * `force` —— 只要其余前置条件允许就生效，包括哈希分桶分布。当你希望在 `auto` 不会接管的表上也分散写入时使用。
+* 无论哪种模式，还需同时满足：存算分离表且开启 `file_bundling`、事务使用 combined txn log、且分区的 tablet 数少于本次导入实际分散到的节点数。该宽度取三者的最小值：按导入大小算出的节点数（见 `lake_multi_node_write_bytes_per_node`）、`lake_multi_node_write_max_nodes`、以及存活的计算节点数。tablet 数已经达到该宽度的分区，即使指定 `force` 也仍走单节点写入——六个计算节点的 Warehouse 上有五个 tablet 时，若这次导入的数据量只够三个写入节点，就不会分散。Stream Load 与 Routine Load 一律不参与：这两条路径在规划阶段拿不到导入大小，若把未知大小当成大导入处理，反而会让最小、最频繁的那批写入分散得最宽。部分列更新（行模式与列模式）、条件更新、缺少自增列的导入、以及 schema change 期间的导入均受支持。
+* 由自动分区在导入过程中新建的分区同样会分散写入。这类分区不在执行计划里，其 tablet 是随后通过 create-partition RPC 交给导入的：分散宽度沿用该导入在规划阶段定下的节点数，具体节点则在新建分区的那一刻从当时存活的计算节点中挑选——耗时较长的导入完全可能跨越计算节点的上下线。新建分区的数据边界尚未出现，通常只有一个 tablet，正是本变量所针对的形态。
+* 自动分桶（`bucket_size`）在导入过程中新增的子分区同样会分散写入。自动分桶只适用于 `RANDOM` 分布，因此只在 `force` 模式下生效。
+* **默认值**：auto
+* **类型**：String
+* **粒度**：Session
+* **引入版本**：v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **描述**：允许并行写入**同一个 tablet** 的最大计算节点数。位于该列表中的每个节点都会为该 tablet 建立自己的 delta writer 并产出自己的 segment，因此在节点数很多的 Warehouse 中，一次普通规模的导入会被切成同样多的小 segment。超出该上限的节点仍会运行自己的 sink 实例，只是它们的数据会走网络发往列表内的节点——也就是本功能出现之前的行为。该值是上限而非实际并行度：最终使用的并行度取三者中的最小值——本变量、根据导入预估大小推算出的节点数（`lake_multi_node_write_bytes_per_node`）、以及存活计算节点数。设置为小于等于 `0` 表示不设上限。
+* **默认值**：6
+* **类型**：Int
+* **粒度**：Session
+* **引入版本**：v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **描述**：仅在存算分离模式下生效，且只有在开启 `lake_multi_node_tablet_write_mode` 后才起作用。表示在把下一个节点加入某个 tablet 的写入集合之前，先给一个计算节点分配多少字节的导入量。节点数量等于该导入的预估大小除以本变量（整除，因此只有凑满一整份时才会增加一个节点），最终使用的并行度取该数值、会话变量 `lake_multi_node_write_max_nodes` 以及存活计算节点数量三者中的最小值。例如 10 GB 的导入在默认 2 GB 下得到 5 个节点，在 3 节点的 Warehouse 上再被夹到 3。分散写入并非没有代价：tablet 节点列表中的每一个节点都会写出自己的 segment 并产生自己的部分事务日志，而且无论某个节点最终是否分到数据，open/close 都会发送到列表中的每一个节点——因此把小规模导入摊得过开，只会按节点数多付出 segment 和事务日志，收益却很有限。大小来源：`INSERT` 取优化器的预估值，Broker Load 取已解析的文件列表。主键表的 `UPDATE` 和 `DELETE` 根据预估输出行数及实际写入列的宽度估计大小：部分列更新计算主键及实际更新或生成的列，删除计算主键、必需的生成分区列及操作列，不使用源数据的扫描大小。当行数可信但列宽未知时，使用类型大小；行数缺失或不准确时保留未知大小，并沿用既有节点上限及存活节点数限制。Stream Load 与 Routine Load 则是例外，根本不会分散：对这两条路径而言，大小未知恰恰说明这是一次小批量写入，而不是没能估算出来的大批量导入。设置为 0 表示关闭按大小推算。
+* **默认值**：2147483648（2 GB）
+* **单位**：字节
+* **类型**：Long
+* **粒度**：Session
+* **引入版本**：v4.2
 
 ### time_zone
 

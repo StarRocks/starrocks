@@ -39,8 +39,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeType;
@@ -77,10 +77,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -132,13 +130,14 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
-        String url = request.getRequest().uri();
+        // Logged when the uri cannot be sanitized; the query may hold a credential.
+        String url = WebUtils.hideHttpReqQuery(request.getRequest().uri());
         try {
             url = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
             execute(request, response);
         } catch (AccessDeniedException accessDeniedException) {
             LOG.warn("failed to process url: {}", url, accessDeniedException);
-            response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+            addAuthChallenges(response);
             response.appendContent(new RestBaseResult(getErrorRespWhenUnauthorized(accessDeniedException)).toJson());
             writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
@@ -184,47 +183,32 @@ public class RestBaseAction extends BaseAction {
         HttpConnectContext ctx = request.getConnectContext();
 
         if (needAuth()) {
-            ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
+            // Parse Basic or Bearer into a protocol-neutral credential.
+            AuthCredentials cred = parseAuthCredentials(request);
 
-            // Authenticate via a temporary ConnectContext so AuthenticationHandler can populate
-            // identity *and* group-derived roles on it. The legacy BaseAction.checkPassword(authInfo)
-            // overload drops the temp ctx and only returns UserIdentity, which means group roles
-            // (e.g. db_admin granted via LDAP group mapping) would be lost on the real ctx and
-            // requireXxxIfHttpAuthEnabled() helpers would wrongly deny access.
-            ConnectContext authCtx = new ConnectContext();
-            UserIdentity currentUser;
-            Set<Long> currentRoleIds;
-            Set<String> currentGroups;
-            try {
-                AuthenticationHandler.authenticate(authCtx, authInfo.fullUserName,
-                        authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
-                currentUser = authCtx.getCurrentUserIdentity();
-                currentRoleIds = authCtx.getCurrentRoleIds();
-                currentGroups = authCtx.getGroups();
-            } catch (AuthenticationException e) {
-                throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
-            }
+            // A SQL action's ctx lives as long as its keep-alive channel, so it may still carry a
+            // previous caller. Authenticate onto a fresh access-control context - everything
+            // authentication writes (identity, roles, groups, token, integration, distinguished
+            // name) lives in that one object - and install it only once the whole attempt has
+            // succeeded. A refused attempt then leaves nothing of itself on the live context, not
+            // even a field somebody forgot to restore, and a Basic request never inherits the
+            // Bearer token an earlier request on the connection presented (IcebergRESTCatalog
+            // forwards whatever token the context carries). The roles its groups map to come
+            // along with the object, which is what the old temp-ctx-plus-field-copy design lost.
+            AccessControlContext previous = ctx.getAccessControlContext();
+            String prevUserName = ctx.getQualifiedUser();
+            ConnectContext attempt = new ConnectContext();
+            checkCredential(attempt, cred);
+            ctx.setAccessControlContext(attempt.getAccessControlContext());
 
             // Change user for ConnectContext if necessary
-            UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
-            Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
-            String prevUserName = ctx.getQualifiedUser();
-            Set<String> prevGroups = ctx.getGroups();
-
-            ctx.setCurrentUserIdentity(currentUser);
-            ctx.setCurrentRoleIds(currentRoleIds);
-            ctx.setGroups(currentGroups);
-            ctx.setQualifiedUser(authInfo.fullUserName);
-
-            if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+            String newUserName = ctx.getQualifiedUser();
+            if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(newUserName)) {
                 ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
                 Pair<Boolean, String> userChangeRes =
-                        connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+                        connectScheduler.onUserChanged(ctx, prevUserName, newUserName);
                 if (!userChangeRes.first) {
-                    ctx.setCurrentUserIdentity(prevUserIdentity);
-                    ctx.setCurrentRoleIds(prevRoleIds);
-                    ctx.setGroups(prevGroups);
-                    ctx.setQualifiedUser(prevUserName);
+                    ctx.setAccessControlContext(previous);
                     throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
                 }
             }

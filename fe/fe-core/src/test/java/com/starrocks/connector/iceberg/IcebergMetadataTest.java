@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -178,6 +179,7 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
@@ -189,9 +191,13 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1418,6 +1424,120 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(fileSize, dataFile.fileSizeInBytes());
         Assertions.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
         Assertions.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    // End-to-end regression for the decimal manifest bound encoding bug: BE reports raw, fixed-width
+    // Parquet statistics (little-endian INT32/INT64 for decimal32/64, sign-extended 16-byte
+    // FIXED_LEN_BYTE_ARRAY for decimal128) exactly as it does in production; this drives them through the
+    // real commit path (IcebergMetadata.finishSink -> IcebergApiConverter.buildDataFileMetrics -> a real
+    // Iceberg append/commit) and reads the committed DataFile back from a real manifest via
+    // TableScan#includeColumnStats, so it fails the same way a strict REST catalog (e.g. Unity Catalog)
+    // would if the bounds were not minimally encoded per spec Appendix D.
+    @Test
+    public void testFinishSinkDecimalManifestBoundsAreSpecCompliant() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableDecimal, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // decimal(9,2) -> decimal32, physical type INT32
+        long d32Lower = -12345L;
+        long d32Upper = 123456L;
+        // decimal(18,5) -> decimal64, physical type INT64
+        long d64Lower = 150000L;
+        long d64Upper = 999999999999L;
+        // decimal(38,5) -> decimal128, physical type FIXED_LEN_BYTE_ARRAY(16); values match the
+        // 1.50000 / 2.50000 case from the reported Unity Catalog commit failure.
+        long d128Lower = 150000L;
+        long d128Upper = 250000L;
+
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        lowerBounds.put(2, rawLittleEndianStat(d32Lower, 4));
+        upperBounds.put(2, rawLittleEndianStat(d32Upper, 4));
+        lowerBounds.put(3, rawLittleEndianStat(d64Lower, 8));
+        upperBounds.put(3, rawLittleEndianStat(d64Upper, 8));
+        lowerBounds.put(4, rawPaddedBigEndianStat(d128Lower, 16));
+        upperBounds.put(4, rawPaddedBigEndianStat(d128Upper, 16));
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(new HashMap<>());
+        columnStats.setValue_counts(new HashMap<>());
+        columnStats.setNull_value_counts(new HashMap<>());
+        columnStats.setLower_bounds(lowerBounds);
+        columnStats.setUpper_bounds(upperBounds);
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableDecimal.location() + "/data/decimal-bounds.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(2);
+        tIcebergDataFile.setFile_size_in_bytes(1000);
+        tIcebergDataFile.setColumn_stats(columnStats);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        mockedNativeTableDecimal.refresh();
+
+        TableScan scan = mockedNativeTableDecimal.newScan().includeColumnStats();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(scan.planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size());
+        DataFile committed = fileScanTasks.get(0).file();
+
+        assertMinimalDecimalBound(committed.lowerBounds().get(2), 9, 2, d32Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(2), 9, 2, d32Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(3), 18, 5, d64Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(3), 18, 5, d64Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(4), 38, 5, d128Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(4), 38, 5, d128Upper);
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal32/decimal64: the raw
+    // native-endian (little-endian) fixed-width Parquet INT32/INT64 physical statistic.
+    private static ByteBuffer rawLittleEndianStat(long unscaledValue, int width) {
+        ByteBuffer buf = ByteBuffer.allocate(width).order(ByteOrder.LITTLE_ENDIAN);
+        if (width == 4) {
+            buf.putInt((int) unscaledValue);
+        } else {
+            buf.putLong(unscaledValue);
+        }
+        buf.flip();
+        return buf;
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal128: the raw, sign-extended,
+    // fixed-width big-endian Parquet FIXED_LEN_BYTE_ARRAY physical statistic.
+    private static ByteBuffer rawPaddedBigEndianStat(long unscaledValue, int width) {
+        byte[] minimal = BigInteger.valueOf(unscaledValue).toByteArray();
+        byte[] padded = new byte[width];
+        Arrays.fill(padded, (byte) (unscaledValue < 0 ? 0xFF : 0x00));
+        System.arraycopy(minimal, 0, padded, width - minimal.length, minimal.length);
+        return ByteBuffer.wrap(padded);
+    }
+
+    // Asserts a committed Iceberg manifest decimal bound follows spec Appendix D: the unscaled value as
+    // two's-complement big-endian binary using the minimum number of bytes, and decodes to the right value.
+    private static void assertMinimalDecimalBound(ByteBuffer bound, int precision, int scale, long expectedUnscaled) {
+        Assertions.assertNotNull(bound);
+        byte[] expectedMinimal = BigInteger.valueOf(expectedUnscaled).toByteArray();
+        byte[] actual = new byte[bound.remaining()];
+        bound.duplicate().get(actual);
+        Assertions.assertArrayEquals(expectedMinimal, actual,
+                "decimal(" + precision + "," + scale + ") bound must use the minimum number of bytes");
+        BigDecimal decoded = (BigDecimal) Conversions.fromByteBuffer(Types.DecimalType.of(precision, scale), bound);
+        Assertions.assertEquals(new BigDecimal(BigInteger.valueOf(expectedUnscaled), scale), decoded);
     }
 
     @Test
@@ -3649,6 +3769,169 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPositionDeleteKeepsDataFileSpecAfterPartitionEvolution() throws Exception {
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_evolved_pos_delete", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        table.updateSpec().addField("id").commit();
+
+        // Planned on spec 1: the BE partitions the delete rows by spec 1, so the path carries spec 1's tuple.
+        commitPositionDeleteOfFileA(table, table.spec().specId(), "data_bucket=0/id=5/", "00");
+
+        DeleteFile committed = Iterables.getOnlyElement(
+                Iterables.getOnlyElement(table.newScan().planFiles()).deletes());
+        Assertions.assertEquals(FILE_A.specId(), committed.specId());
+        Assertions.assertEquals(FILE_A.partition(), committed.partition());
+
+        // Replacing a spec-1 partition must not drop the delete of the untouched spec-0 data file.
+        DataFile replacement = DataFiles.builder(table.spec())
+                .withPath(table.location() + "/data/data_bucket=0/id=5/new.parquet")
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0/id=5")
+                .withRecordCount(1)
+                .build();
+        table.newReplacePartitions().addFile(replacement).commit();
+        FileScanTask oldFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(FILE_A.location())));
+        Assertions.assertEquals(1, oldFileTask.deletes().size());
+    }
+
+    @Test
+    public void testPositionDeleteUsesPlanSpecWhenSpecEvolvesBeforeCommit() throws Exception {
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_spec_evolves_before_commit", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        int planSpecId = table.spec().specId();
+        // A concurrent ALTER adds a partition field after planning; the BE path still carries spec 0's tuple.
+        table.updateSpec().addField("id").commit();
+
+        commitPositionDeleteOfFileA(table, planSpecId, "data_bucket=0/", "0");
+
+        DeleteFile committed = Iterables.getOnlyElement(
+                Iterables.getOnlyElement(table.newScan().planFiles()).deletes());
+        Assertions.assertEquals(FILE_A.specId(), committed.specId());
+        Assertions.assertEquals(FILE_A.partition(), committed.partition());
+    }
+
+    @Test
+    public void testRowDeltaDataFileUsesPlanSpecWhenSpecEvolvesBeforeCommit() throws Exception {
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_update_spec_evolves_before_commit", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        int planSpecId = table.spec().specId();
+        // A concurrent ALTER adds a partition field after an UPDATE was planned; the BE wrote spec 0 paths.
+        table.updateSpec().addField("id").commit();
+
+        TIcebergDataFile newDataFile = new TIcebergDataFile();
+        newDataFile.setPath(table.location() + "/data/data_bucket=0/updated.parquet");
+        newDataFile.setFormat("parquet");
+        newDataFile.setRecord_count(1);
+        newDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        newDataFile.setPartition_path(table.location() + "/data/data_bucket=0/");
+        newDataFile.setFile_size_in_bytes(100);
+        newDataFile.setPartition_null_fingerprint("0");
+        newDataFile.setColumn_stats(new TIcebergColumnStats());
+        commitPositionDeleteOfFileA(table, planSpecId, "data_bucket=0/", "0", newDataFile);
+
+        FileScanTask newFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(newDataFile.getPath())));
+        Assertions.assertEquals(planSpecId, newFileTask.file().specId());
+        Assertions.assertEquals(FILE_A.partition(), newFileTask.file().partition());
+        FileScanTask oldFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(FILE_A.location())));
+        DeleteFile committedDelete = Iterables.getOnlyElement(oldFileTask.deletes());
+        Assertions.assertEquals(FILE_A.specId(), committedDelete.specId());
+        Assertions.assertEquals(FILE_A.partition(), committedDelete.partition());
+    }
+
+    @Test
+    public void testPositionDeleteFailsWhenPlanSpecNoLongerExists() throws Exception {
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_plan_spec_removed", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        table.updateSpec().addField("id").commit();
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> commitPositionDeleteOfFileA(table, 99, "data_bucket=0/", "0"));
+        Assertions.assertTrue(ex.getMessage().contains("no longer exists"), ex.getMessage());
+    }
+
+    @Test
+    public void testOtherSpecLookupStopsAtFirstCompleteCacheHit() throws Exception {
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_other_spec_cache_hit", 2);
+        // Two spec-0 manifests; the newest one, listed first, holds FILE_A.
+        table.newFastAppend().appendFile(FILE_A_1).commit();
+        table.newFastAppend().appendFile(FILE_A).commit();
+        table.updateSpec().addField("id").commit();
+        CachingIcebergCatalog cachingCatalog = Mockito.mock(CachingIcebergCatalog.class);
+        Mockito.when(cachingCatalog.findCachedDataFiles(Mockito.any(), Mockito.any()))
+                .thenReturn(Map.of(FILE_A.location(), FILE_A));
+
+        commitPositionDeleteOfFileA(cachingCatalog, table, table.spec().specId(), "data_bucket=0/id=5/", "00");
+
+        Mockito.verify(cachingCatalog, Mockito.times(1)).findCachedDataFiles(Mockito.any(), Mockito.any());
+        FileScanTask oldFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(FILE_A.location())));
+        Assertions.assertEquals(FILE_A.specId(), Iterables.getOnlyElement(oldFileTask.deletes()).specId());
+    }
+
+    private void commitPositionDeleteOfFileA(TestTables.TestTable table, int writeSpecId, String relativePartitionPath,
+                                             String nullFingerprint, TIcebergDataFile... newDataFiles)
+            throws Exception {
+        commitPositionDeleteOfFileA(new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG), table,
+                writeSpecId, relativePartitionPath, nullFingerprint, newDataFiles);
+    }
+
+    private void commitPositionDeleteOfFileA(IcebergCatalog catalog, TestTables.TestTable table, int writeSpecId,
+                                             String relativePartitionPath, String nullFingerprint,
+                                             TIcebergDataFile... newDataFiles) throws Exception {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, catalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        String partitionPath = table.location() + "/data/" + relativePartitionPath;
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(partitionPath + "delete.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(1);
+        deleteFile.setFile_size_in_bytes(100);
+        deleteFile.setPartition_path(partitionPath);
+        deleteFile.setPartition_null_fingerprint(nullFingerprint);
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(FILE_A.location());
+        deleteFile.setColumn_stats(new TIcebergColumnStats());
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIceberg_data_file(deleteFile);
+        List<TSinkCommitInfo> commitInfos = Lists.newArrayList(commitInfo);
+        for (TIcebergDataFile newDataFile : newDataFiles) {
+            TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+            dataCommit.setIceberg_data_file(newDataFile);
+            commitInfos.add(dataCommit);
+        }
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setWriteSpecId(writeSpecId);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", commitInfos, null, extra, connectContext);
+        table.refresh();
+    }
+
+    @Test
     public void testDeleteOperationWithConflictDetection() throws Exception {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -5382,6 +5665,62 @@ public class IcebergMetadataTest extends TableTestBase {
         QueryStatement latestStmt =
                 (QueryStatement) AnalyzeTestUtil.analyzeSuccess("SELECT * FROM iceberg_tt_catalog.db.tb");
         Assertions.assertEquals(List.of("k1", "k2_renamed"), latestStmt.getQueryRelation().getColumnOutputNames());
+    }
+
+    @Test
+    public void testBranchReadUsesCurrentSchema() throws Exception {
+        // A branch is read with the table's current schema; a tag keeps the schema of its snapshot.
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        String createCatalog = "CREATE EXTERNAL CATALOG iceberg_branch_catalog PROPERTIES(\"type\"=\"iceberg\", " +
+                "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        new StarRocksAssert().withCatalog(createCatalog);
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        mockedNativeTableB.manageSnapshots().createTag("tag_s1", s1).createBranch("branch_s1", s1).commit();
+        // Rename k2, and drop and re-add k1 under the same name (a new field id), after the branch head.
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.updateSchema().deleteColumn("k1").commit();
+        mockedNativeTableB.updateSchema().addColumn("k1", Types.IntegerType.get()).commit();
+        mockedNativeTableB.refresh();
+        Schema currentSchema = mockedNativeTableB.schema();
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+        };
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        QueryStatement branchStmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(
+                "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'branch_s1'");
+        Assertions.assertEquals(List.of("k2_renamed", "k1"), branchStmt.getQueryRelation().getColumnOutputNames());
+        TableRelation branchRelation = (TableRelation) ((SelectRelation) branchStmt.getQueryRelation()).getRelation();
+        Assertions.assertEquals(Optional.of(s1), branchRelation.getTvrVersionRange().end());
+        Schema branchReadSchema = ((IcebergTable) branchRelation.getTable()).getReadSchema();
+        Assertions.assertEquals(currentSchema.schemaId(), branchReadSchema.schemaId());
+        Assertions.assertEquals(currentSchema.findField("k1").fieldId(), branchReadSchema.findField("k1").fieldId());
+
+        QueryStatement tagStmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(
+                "SELECT * FROM iceberg_branch_catalog.db.tb VERSION AS OF 'tag_s1'");
+        Assertions.assertEquals(List.of("k1", "k2"), tagStmt.getQueryRelation().getColumnOutputNames());
+        TableRelation tagRelation = (TableRelation) ((SelectRelation) tagStmt.getQueryRelation()).getRelation();
+        Schema tagReadSchema = ((IcebergTable) tagRelation.getTable()).getReadSchema();
+        Assertions.assertNotEquals(currentSchema.findField("k1").fieldId(), tagReadSchema.findField("k1").fieldId());
     }
 
     @Test
