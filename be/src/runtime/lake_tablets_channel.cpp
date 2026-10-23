@@ -145,6 +145,10 @@ private:
                     writer_global_dicts->find(item.first) != writer_global_dicts->end()) {
                     info->add_valid_dict_cache_columns(item.first);
                     info->add_valid_dict_collected_version(writer_global_dicts->at(item.first).version);
+                    const auto& identity = writer_global_dicts->at(item.first).content_identity;
+                    if (identity.has_value()) {
+                        info->add_valid_dict_content_identities(*identity);
+                    }
                 } else {
                     info->add_invalid_dict_cache_columns(item.first);
                 }
@@ -945,6 +949,9 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                 GlobalDictsWithVersion<GlobalDictMap> dict;
                 dict.dict = std::move(global_dict);
                 dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                if (slot.has_global_dict_content_identity()) {
+                    dict.content_identity = slot.global_dict_content_identity();
+                }
                 _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
             }
         }

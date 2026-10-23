@@ -16,12 +16,15 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.google.gson.Gson;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Comparator;
 
 public final class ColumnDict extends StatsVersion {
@@ -49,6 +52,7 @@ public final class ColumnDict extends StatsVersion {
     };
 
     private final ImmutableMap<ByteBuffer, Integer> dict;
+    private final long contentIdentity;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
@@ -59,11 +63,27 @@ public final class ColumnDict extends StatsVersion {
         Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
+        this.contentIdentity = computeContentIdentity(dict);
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
         super(collectedVersion, version);
         this.dict = dict;
+        this.contentIdentity = computeContentIdentity(dict);
+    }
+
+    private static long computeContentIdentity(ImmutableMap<ByteBuffer, Integer> dict) {
+        ByteBuffer[] keys = dict.keySet().toArray(new ByteBuffer[0]);
+        Arrays.sort(keys, UNSIGNED_LEX);
+        Hasher hasher = Hashing.murmur3_128().newHasher().putInt(keys.length);
+        for (ByteBuffer key : keys) {
+            hasher.putInt(key.remaining()).putBytes(key.duplicate()).putInt(dict.get(key));
+        }
+        return hasher.hash().asLong();
+    }
+
+    public long getContentIdentity() {
+        return contentIdentity;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {

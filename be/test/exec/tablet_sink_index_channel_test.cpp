@@ -23,6 +23,8 @@
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
@@ -596,6 +598,119 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     EXPECT_TRUE(init_acquired_lock.load());
 
     (void)sink->close(runtime_state.get(), Status::OK());
+}
+
+TEST_F(TabletSinkIndexChannelTest, LoadDictIdentityIsOptionalAndDoesNotReplaceVersion) {
+    auto make_global_dict = [](int32_t column_id, int64_t version, std::vector<int32_t> ids,
+                               std::vector<std::string> strings) {
+        TGlobalDict dict;
+        dict.__set_columnId(column_id);
+        dict.__set_version(version);
+        dict.__set_ids(std::move(ids));
+        dict.__set_strings(std::move(strings));
+        return dict;
+    };
+    RuntimeState state;
+    state._obj_pool = std::make_shared<ObjectPool>();
+    state._instance_mem_pool = std::make_unique<MemPool>();
+    auto legacy = make_global_dict(1, 100, {1}, {"A"});
+    auto zero = make_global_dict(2, 200, {1}, {"B"});
+    auto negative = make_global_dict(3, 300, {1}, {"C"});
+    zero.__set_content_identity(0);
+    negative.__set_content_identity(-7);
+    ASSERT_OK(state.init_load_global_dict({legacy, zero, negative}));
+    EXPECT_EQ(0, state.load_dict_content_identities().count(1));
+    EXPECT_EQ(0, state.load_dict_content_identities().at(2));
+    EXPECT_EQ(-7, state.load_dict_content_identities().at(3));
+    EXPECT_EQ(100, state.load_dict_versions().at(1));
+    EXPECT_EQ(200, state.load_dict_versions().at(2));
+    EXPECT_EQ(300, state.load_dict_versions().at(3));
+}
+
+TEST_F(TabletSinkIndexChannelTest, DictionaryIdentityAggregationPreservesColumnOrder) {
+    TQueryOptions options;
+    auto state = _build_runtime_state(options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(state.get(), _object_pool.get(), _desc_tbl, &desc_tbl, config::vector_chunk_size));
+    state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, state.get());
+    ASSERT_OK(sink->init(_data_sink, state.get()));
+    ASSERT_OK(sink->prepare(state.get()));
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+        auto* rpc = static_cast<std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*>(arg);
+        *rpc->second = true;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto receive = [&](NodeChannel& channel, const PTabletInfo& tablet) {
+        ASSERT_OK(channel.init(state.get()));
+        ReusableClosure<PTabletWriterAddBatchResult> closure;
+        closure.request_size = 0;
+        closure.result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure.result.add_tablet_vec()->CopyFrom(tablet);
+        closure.ref();
+        closure.ref();
+        closure.Run();
+        ASSERT_OK(channel._wait_request(&closure));
+        EXPECT_TRUE(closure.unref());
+    };
+    {
+        NodeChannel channel(sink.get(), 0, false);
+        PTabletInfo legacy;
+        legacy.set_tablet_id(1);
+        legacy.set_schema_hash(0);
+        legacy.add_valid_dict_cache_columns("c");
+        legacy.add_valid_dict_collected_version(100);
+        receive(channel, legacy);
+        receive(channel, legacy);
+        EXPECT_TRUE(channel._valid_dict_cache_info.content_identities.empty());
+        ASSERT_OK(channel.close_wait(state.get()));
+        EXPECT_TRUE(channel._tablet_commit_infos[0].valid_dict_content_identities.empty());
+        EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+        EXPECT_EQ(100, channel._valid_dict_cache_info.valid_dict_cache_column_set.at("c"));
+    }
+
+    NodeChannel channel(sink.get(), 0, false);
+    PTabletInfo report;
+    report.set_tablet_id(1);
+    report.set_schema_hash(0);
+    report.add_valid_dict_cache_columns("c");
+    report.add_valid_dict_collected_version(100);
+    report.add_valid_dict_content_identities(0);
+    report.add_valid_dict_cache_columns("d");
+    report.add_valid_dict_collected_version(101);
+    report.add_valid_dict_content_identities(-7);
+    receive(channel, report);
+    PTabletInfo reordered = report;
+    reordered.set_valid_dict_cache_columns(0, "d");
+    reordered.set_valid_dict_cache_columns(1, "c");
+    reordered.set_valid_dict_collected_version(0, 101);
+    reordered.set_valid_dict_collected_version(1, 100);
+    reordered.set_valid_dict_content_identities(0, -7);
+    reordered.set_valid_dict_content_identities(1, 0);
+    receive(channel, reordered);
+    PTabletInfo secondary;
+    secondary.set_tablet_id(2);
+    secondary.set_schema_hash(0);
+    receive(channel, secondary);
+    EXPECT_EQ(0, channel._valid_dict_cache_info.content_identities.at("c"));
+    EXPECT_EQ(-7, channel._valid_dict_cache_info.content_identities.at("d"));
+    EXPECT_TRUE(channel._valid_dict_cache_info.invalid_dict_cache_column_set.empty());
+    ASSERT_OK(channel.close_wait(state.get()));
+    const auto& commit = channel._tablet_commit_infos[0];
+    ASSERT_EQ(2, commit.valid_dict_cache_columns.size());
+    ASSERT_EQ(2, commit.valid_dict_collected_versions.size());
+    ASSERT_EQ(2, commit.valid_dict_content_identities.size());
+    for (size_t i = 0; i < commit.valid_dict_cache_columns.size(); ++i) {
+        const auto& column = commit.valid_dict_cache_columns[i];
+        EXPECT_EQ(channel._valid_dict_cache_info.valid_dict_cache_column_set.at(column),
+                  commit.valid_dict_collected_versions[i]);
+        EXPECT_EQ(channel._valid_dict_cache_info.content_identities.at(column),
+                  commit.valid_dict_content_identities[i]);
+    }
 }
 
 } // namespace starrocks

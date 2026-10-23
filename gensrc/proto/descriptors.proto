@@ -55,6 +55,7 @@ message PSlotDescriptor {
     // valid UTF-8, so this must stay `bytes` (wire-compatible with the old `string`).
     repeated bytes global_dict_words = 11;
     optional int64 global_dict_version = 12;
+    optional int64 global_dict_content_identity = 15;
 };
 
 message PTupleDescriptor {
