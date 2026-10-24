@@ -990,11 +990,12 @@ public class TabletChecker extends LeaderDaemon {
             }
             stats.incrAliveCnt();
 
-            if (replica.needFurtherRepair() && stats.getNeedFurtherRepairReplica() == null) {
+            if (replica.needFurtherRepair() && !replica.isVersionCompleteForFurtherRepair(visibleVersion)
+                    && stats.getNeedFurtherRepairReplica() == null) {
                 stats.setNeedFurtherRepairReplica(replica);
             }
 
-            if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
+            if (!replica.isVersionCompleteForFurtherRepair(visibleVersion)) {
                 // this replica is alive but version incomplete
                 continue;
             }
