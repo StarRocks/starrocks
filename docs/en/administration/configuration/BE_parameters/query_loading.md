@@ -795,6 +795,15 @@ This topic introduces the following types of BE configurations:
 - Description: Comma-separated list of writable scratch directories used by query execution to spill intermediate data (for example, external sorts, hash joins, and other operators). Specify one or more paths separated by `;` (e.g. `/mnt/ssd1/tmp;/mnt/ssd2/tmp`). Directories should be accessible and writable by the BE process and have sufficient free space; StarRocks will pick among them to distribute spill I/O. Changes require a restart to take effect. If a directory is missing, not writable, or full, spilling may fail or degrade query performance.
 - Introduced in: v3.2.0
 
+### radix_sort_threshold
+
+- Default: 256
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Minimum tie-range row count to use SIMD 8-bit LSD radix sort instead of `pdqsort` when sorting fixed-length numeric and temporal columns (`int8`/`int16`/`int32`/`int64`, `uint8`/`uint16`/`uint32`/`uint64`, `float`, `double`, `DATE`, and `DATETIME`). Sub-ranges shorter than this threshold continue to use comparison-based `pdqsort`. Setting this value to `0` or a negative integer disables radix sort and falls back to `pdqsort` for all sub-ranges.
+- Introduced in: -
+
 ### result_buffer_cancelled_interval_time
 
 - Default: 300
