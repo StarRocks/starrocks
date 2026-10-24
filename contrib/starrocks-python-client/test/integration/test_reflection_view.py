@@ -21,6 +21,7 @@ from starrocks.common.params import TableInfoKey
 from starrocks.common.utils import TableAttributeNormalizer, get_dialect_option
 from starrocks.datatype import BOOLEAN, DATE, DECIMAL, INTEGER, VARCHAR
 from starrocks.engine.interfaces import ReflectedViewState
+from test.util import VIEW_SECURITY_NEEDS_3_4_1
 
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,7 @@ class ReflectionViewsTest(fixtures.TestBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
+    @VIEW_SECURITY_NEEDS_3_4_1
     def test_reflect_view_with_security(self, connection):
         """Test reflection of a view with security definer/invoker using Table.autoload_with."""
         view_name = "test_reflect_view_with_security"
@@ -536,6 +538,7 @@ class ReflectionViewsTest(fixtures.TestBase):
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name_lower}"))
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name_upper}"))
 
+    @VIEW_SECURITY_NEEDS_3_4_1
     def test_reflect_view_via_table_autoload(self, connection):
         """
         End-to-end test for view reflection using the primary Table.autoload_with mechanism.
@@ -644,6 +647,7 @@ class ReflectionViewsTest(fixtures.TestBase):
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
             connection.execute(text("DROP TABLE IF EXISTS type_test_table"))
 
+    @VIEW_SECURITY_NEEDS_3_4_1
     def test_reflect_comprehensive_view_with_all_attributes(self, connection):
         """
         Comprehensive test: reflection of a view with ALL attributes combined using Table.autoload_with.
