@@ -34,6 +34,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(PaimonSplitScanner.class);
     private final String splitInfo;
     private final String predicateInfo;
+    private final String runtimePredicateInfo;
     private final String[] requiredFields;
     private final String encodedTable;
     private ColumnType[] requiredTypes;
@@ -61,6 +63,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
+        this.runtimePredicateInfo = params.get("runtime_predicate_info");
         this.encodedTable = params.get("native_table");
         this.classLoader = this.getClass().getClassLoader();
         this.timeZone = params.get("time_zone");
@@ -101,7 +104,12 @@ public class PaimonSplitScanner extends ConnectorScanner {
         int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
         readBuilder.withProjection(projected);
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
-        readBuilder.withFilter(predicates);
+        List<Predicate> allPredicates = new ArrayList<>(predicates);
+        // Runtime-filter-derived predicates from the BE are best-effort pruning hints;
+        // the BE re-applies the originating filters row-wise, so they only need to be
+        // a superset of the rows the query will keep.
+        allPredicates.addAll(PaimonRuntimePredicates.parse(rowType, runtimePredicateInfo));
+        readBuilder.withFilter(allPredicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
         RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
