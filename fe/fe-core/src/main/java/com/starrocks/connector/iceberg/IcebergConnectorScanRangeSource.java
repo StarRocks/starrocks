@@ -60,6 +60,7 @@ import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -207,6 +208,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    private boolean readsRowLineage() {
+        return desc != null && desc.getSlots().stream().map(slot -> slot.getColumn().getName())
+                .anyMatch(name -> name.equalsIgnoreCase(ROW_ID) || name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER));
+    }
+
     @Override
     public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
@@ -215,7 +221,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
-                checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
+                checkFileFormatSupportedDelete(fileScanTask, usedForDelete, usedForDelete && readsRowLineage());
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -322,6 +328,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             target.setFull_path(deleteFile.path().toString());
             target.setFile_content(TIcebergFileContent.POSITION_DELETES);
             target.setLength(deleteFile.fileSizeInBytes());
+            if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
+                // a position delete file may have another format than its data file (write.delete.format.default)
+                target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
+            }
             posDeleteFiles.add(target);
         }
 

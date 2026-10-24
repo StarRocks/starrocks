@@ -1599,7 +1599,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public RemoteFileInfo getOutput() {
                 FileScanTask fileScanTask = iterator.next();
-                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
+                // the scan range source repeats the check knowing whether the scan reads row lineage
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete(), false);
                 return new IcebergRemoteFileInfo(fileScanTask);
             }
 
@@ -1719,7 +1720,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public RemoteFileInfo getOutput() {
                 FileScanTask fileScanTask = iterator.next();
-                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
+                // the scan range source repeats the check knowing whether the scan reads row lineage
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete(), false);
                 return new IcebergRemoteFileInfo(fileScanTask);
             }
 

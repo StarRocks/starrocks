@@ -35,6 +35,10 @@ public:
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
 
+    // Reads a position delete file in its own format when the FE sent it, else in `data_file_format`: a delete file
+    // may have another format than its data file (write.delete.format.default).
+    Status build_position_delete(const TIcebergDeleteFile& delete_file, THdfsFileFormat::type data_file_format) const;
+
 private:
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
             const TIcebergDeleteFile& delete_file, HdfsScannerStats& fs_stats, HdfsScannerStats& app_stats,

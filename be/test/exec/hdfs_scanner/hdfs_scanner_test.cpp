@@ -956,6 +956,119 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
 }
 
 // ====================================================================================================
+// Iceberg `_pos` on ORC: the scanner fills it from the ORC row number.
+
+static SlotDesc string_key_value_with_pos_orc_desc[] = {
+        {"key", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+        {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+        {"_pos", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {""}};
+static const std::string string_key_value_10k_orc_file =
+        "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
+
+// Reads every row of `scanner` as (key, _pos).
+static Status read_keys_and_row_positions(HdfsScanner* scanner, RuntimeState* state, const TupleDescriptor& tuple_desc,
+                                          std::vector<std::pair<std::string, int64_t>>* rows) {
+    const SlotId key_slot = tuple_desc.slots()[0]->id();
+    const SlotId pos_slot = tuple_desc.slots()[2]->id();
+    ChunkPtr chunk = ChunkHelper::new_chunk(tuple_desc, 0);
+    for (;;) {
+        chunk->reset();
+        Status st = scanner->get_next(state, &chunk);
+        if (!st.ok() && !st.is_end_of_file()) return st;
+        if (chunk->num_rows() > 0) {
+            const auto& keys = chunk->get_column_by_slot_id(key_slot);
+            const auto& positions = chunk->get_column_by_slot_id(pos_slot);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows->emplace_back(keys->get(i).get_slice().to_string(), positions->get(i).get_int64());
+            }
+        }
+        if (st.is_end_of_file()) return Status::OK();
+    }
+}
+
+// A dict filter drops rows from the ORC batch; `_pos` must be filtered the same way and stay aligned with its row.
+TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithDictFilter) {
+    auto* tuple_desc = _create_tuple_desc(string_key_value_with_pos_orc_desc);
+
+    std::vector<std::pair<std::string, int64_t>> all_rows;
+    {
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+        auto* range = _create_scan_range(string_key_value_10k_orc_file, 0, 0);
+        auto* ctx = _create_ctx(string_key_value_10k_orc_file, range, tuple_desc);
+        ASSERT_OK(scanner->init(_runtime_state, ctx));
+        ASSERT_OK(scanner->open(_runtime_state));
+        ASSERT_OK(read_keys_and_row_positions(scanner.get(), _runtime_state, *tuple_desc, &all_rows));
+        scanner->close();
+    }
+    ASSERT_EQ(10000u, all_rows.size());
+    std::vector<std::string> key_by_pos(all_rows.size());
+    for (size_t i = 0; i < all_rows.size(); i++) {
+        ASSERT_EQ(static_cast<int64_t>(i), all_rows[i].second);
+        key_by_pos[i] = all_rows[i].first;
+    }
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    auto* range = _create_scan_range(string_key_value_10k_orc_file, 0, 0);
+    auto* ctx = _create_ctx(string_key_value_10k_orc_file, range, tuple_desc);
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "gggggggggg");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
+        ctx->conjuncts.by_slot[tuple_desc->slots()[0]->id()].push_back(create_expr_context(&_pool, nodes));
+    }
+    for (auto& it : ctx->conjuncts.by_slot) {
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+    }
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    scanner->disable_use_orc_sargs();
+    ASSERT_OK(scanner->open(_runtime_state));
+    std::vector<std::pair<std::string, int64_t>> rows;
+    ASSERT_OK(read_keys_and_row_positions(scanner.get(), _runtime_state, *tuple_desc, &rows));
+    // the dict filter ran on the ORC batch, so only the matching rows were materialized
+    EXPECT_EQ(1000, scanner->raw_rows_read());
+    scanner->close();
+
+    ASSERT_EQ(1000u, rows.size());
+    for (const auto& [key, pos] : rows) {
+        ASSERT_EQ("gggggggggg", key);
+        ASSERT_GE(pos, 0);
+        ASSERT_LT(pos, static_cast<int64_t>(key_by_pos.size()));
+        EXPECT_EQ(key, key_by_pos[pos]) << "pos=" << pos;
+    }
+}
+
+// The scanner fills `_pos` itself, so it also evaluates the conjuncts on `_pos`.
+TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionConjunct) {
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    auto* range = _create_scan_range(string_key_value_10k_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(string_key_value_with_pos_orc_desc);
+    auto* ctx = _create_ctx(string_key_value_10k_orc_file, range, tuple_desc);
+    SlotDescriptor* pos_slot = tuple_desc->slots()[2];
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::BIGINT, 10);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LT, pos_slot, TPrimitiveType::BIGINT, lit_node);
+        ctx->conjuncts.by_slot[pos_slot->id()].push_back(create_expr_context(&_pool, nodes));
+    }
+    for (auto& it : ctx->conjuncts.by_slot) {
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+    }
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    scanner->disable_use_orc_sargs();
+    ASSERT_OK(scanner->open(_runtime_state));
+    std::vector<std::pair<std::string, int64_t>> rows;
+    ASSERT_OK(read_keys_and_row_positions(scanner.get(), _runtime_state, *tuple_desc, &rows));
+    scanner->close();
+
+    std::vector<int64_t> positions;
+    for (const auto& row : rows) positions.push_back(row.second);
+    EXPECT_EQ((std::vector<int64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}), positions);
+}
+
+// ====================================================================================================
 
 /**
  *
