@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "外部 AI サービスプロバイダー (embedding または rerank) を SQL で管理されるクラスターメタデータとして登録します。"
+description: "chat、embedding、rerank タイプの外部 AI サービスを、クラスターの AI Provider として登録します。"
 ---
 
 # CREATE AI PROVIDER
@@ -9,7 +9,7 @@ description: "外部 AI サービスプロバイダー (embedding または rera
 異なる**タイプ**のプロバイダーを保持し、**タイプごとに**1 つのデフォルトを保持します。
 
 - `embedding` — OpenAI 互換の `/v1/embeddings` エンドポイント。セマンティックコンテキストモジュールが
-  `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際と、[ai_embed](../../../sql-functions/ai-functions/ai_embed.md) で使用されます。
+  `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際と、[ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) で使用されます。
 - `rerank` — Cohere 互換の `/rerank` エンドポイント (Cohere / Jina / Voyage / OpenRouter / ローカル TEI)。
   `/api/context/search` のオプションであるクロスエンコーダーによる第 2 フェーズで使用されます。
 - `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。
@@ -17,7 +17,7 @@ description: "外部 AI サービスプロバイダー (embedding または rera
 各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
 が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
 
-[ai_complete](../../../sql-functions/ai-functions/ai_complete.md) と [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) は現在 `openai` プロトコルを必要とします。これらの関数に他の登録済みプロトコルを指定すると、クエリの計画時にエラーになります。
+[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) と [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) は現在 `openai` プロトコルを必要とします。これらの関数に他の登録済みプロトコルを指定すると、クエリの計画時にエラーになります。
 
 プロバイダーオブジェクトは `api_key` プロパティを含めて FE のメタデータジャーナルとイメージに永続化されるため、
 クラスターの再起動やアップグレード後も認証情報は保持されます。これらの設定に対応する `fe.conf` の項目はありません。

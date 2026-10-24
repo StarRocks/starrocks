@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQL 管理的集群元数据。"
+description: "将 chat、embedding 或 rerank 类型的外部 AI 服务注册为集群中的 AI Provider。"
 ---
 
 # CREATE AI PROVIDER
@@ -9,7 +9,7 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 并按**类型各自保留一个默认值**：
 
 - `embedding`——OpenAI 兼容的 `/v1/embeddings` 端点，供 semantic-context 模块在 `CONTEXT UPSERT`
-  写入和 `query_text` 检索时计算 embedding，也供 [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) 使用。
+  写入和 `query_text` 检索时计算 embedding，也供 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 使用。
 - `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
   `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
 - `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
@@ -17,7 +17,7 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
 为 `openai`，`rerank` 为 `cohere`。
 
-[ai_complete](../../../sql-functions/ai-functions/ai_complete.md) 和 [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
+[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) 和 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
 
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。

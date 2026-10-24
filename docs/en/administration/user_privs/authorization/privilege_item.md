@@ -26,13 +26,14 @@ This section describes privileges that are available on different objects.
 
 <PrivCreateWarehouse />
 
-### AI FUNCTION / AI PROVIDER
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
 
-| Privilege | Description |
-| --- | --- |
-| USAGE | Uses the specified public AI function family or provider. `ON ALL AI FUNCTIONS` and `ON ALL AI PROVIDERS` grant usage across the respective object type, including future objects. Function and provider privileges remain independent. |
+| Object | Privilege | Purpose |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | Use the specified AI function. |
+| AI PROVIDER | USAGE | Use the specified AI Provider. |
 
-All AI functions require USAGE on the selected Provider, including the default. Provider CREATE, ALTER, DROP, SET DEFAULT, SHOW, and DESC still require SYSTEM OPERATE; USAGE does not authorize those management operations.
+> Note: Calling an AI function requires USAGE on both the function and the selected Provider, including the default Provider. Managing Providers requires SYSTEM OPERATE.
 
 
 ### RESOURCE GROUP

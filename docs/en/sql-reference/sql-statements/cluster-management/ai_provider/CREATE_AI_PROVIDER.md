@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Register an external AI service provider (embedding or rerank) as SQL-managed cluster metadata."
+description: "Register an external AI service of type chat, embedding, or rerank as an AI Provider in the cluster."
 ---
 
 # CREATE AI PROVIDER
@@ -9,7 +9,7 @@ Registers an external AI service provider in the cluster. A single, unified AI-p
 holds providers of different **types** and keeps one default **per type**:
 
 - `embedding` — OpenAI-compatible `/v1/embeddings` endpoint, used by the semantic-context module to
-  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_embed](../../../sql-functions/ai-functions/ai_embed.md).
+  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed).
 - `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
   used by the optional cross-encoder second phase of `/api/context/search`.
 - `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
@@ -18,7 +18,7 @@ Each provider also declares the wire **protocol** its endpoint speaks via the `p
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
 `cohere` for `rerank`.
 
-[ai_complete](../../../sql-functions/ai-functions/ai_complete.md) and [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
+[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) and [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
 
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these
