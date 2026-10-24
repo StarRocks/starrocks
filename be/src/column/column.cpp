@@ -68,44 +68,8 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-<<<<<<< HEAD
-bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
-    DCHECK_EQ(null_data.size(), this->size());
-    if (!is_array() && !is_map()) {
-        throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
-    }
-    bool need_empty = false;
-    size_t size = this->size();
-    if (size + 1 != offsets.size()) {
-        throw std::runtime_error(
-                fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
-    }
-=======
-StatusOr<Column::MutablePtr> Column::downgrade_helper_func(Column* col) {
-    auto ret = col->downgrade();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() == nullptr) {
-        return nullptr;
-    } else {
-        return std::move(ret.value());
-    }
-}
-
-StatusOr<Column::MutablePtr> Column::upgrade_helper_func(Column* col) {
-    auto ret = col->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() == nullptr) {
-        return nullptr;
-    } else {
-        return std::move(ret.value());
-    }
-}
-
 bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows) {
     bool found = false;
->>>>>>> 9523b3b0c63... [Enhancement] Size `repeat`'s allocation from what the rows produce, stop `RepeatOperator` copying columns it blanks out (#61752)
 #if defined(__AVX2__) && !defined(__AVX512F__)
     // Branchless scan of 8 entries per step: a null entry that still spans a non-empty range needs emptying.
     {

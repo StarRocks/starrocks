@@ -14,11 +14,7 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include "column/column_helper.h"
-#include "common/config_scan_io_fwd.h"
->>>>>>> 9523b3b0c63... [Enhancement] Size `repeat`'s allocation from what the rows produce, stop `RepeatOperator` copying columns it blanks out (#61752)
 #include "common/storage_define.h"
 #include "exprs/string_functions.h"
 
@@ -103,8 +99,6 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     }
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(StringFunctionRepeatTest, repeatConstExactLimitWithOversizeRow) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto str = BinaryColumn::create();
@@ -173,5 +167,4 @@ TEST_F(StringFunctionRepeatTest, repeatConstOversizeRowsDoNotInflateTheOutput) {
     ASSERT_EQ(kProducedBytes, data_column->get_immutable_bytes().size());
 }
 
->>>>>>> 9523b3b0c63... [Enhancement] Size `repeat`'s allocation from what the rows produce, stop `RepeatOperator` copying columns it blanks out (#61752)
 } // namespace starrocks

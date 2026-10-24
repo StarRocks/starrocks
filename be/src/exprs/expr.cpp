@@ -137,11 +137,8 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_MAP:
         case TYPE_JSON:
         case TYPE_VARIANT:
-<<<<<<< HEAD
         case TYPE_GEOGRAPHY:
         case TYPE_GEOMETRY:
-=======
->>>>>>> 9523b3b0c63... [Enhancement] Size `repeat`'s allocation from what the rows produce, stop `RepeatOperator` copying columns it blanks out (#61752)
             break;
 
         default:
