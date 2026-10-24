@@ -48,7 +48,7 @@ from starrocks.alembic.compare import compare_starrocks_table
 from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix
 from starrocks.common.types import PartitionType, SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
-from test.util import normalize_sql
+from test.util import STATISTIC_COLLECT_PROPERTY_MISSING, normalize_sql
 
 
 logger = logging.getLogger(__name__)
@@ -847,21 +847,25 @@ class EnableStatisticCollectOnFirstLoadIntegrationTest(fixtures.TestBase):
         finally:
             connection.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
 
+    @STATISTIC_COLLECT_PROPERTY_MISSING
     def test_meta_true_db_true_no_phantom_diff(self, connection):
         """The reported bug: model sets true, DB has it true (so it is not reported)."""
         ops = self._ops_for(connection, "stat_true_true", db_value="true", meta_props={self.PROP: "true"})
         assert len(ops) == 0, f"Unexpected phantom diff: {[type(o).__name__ for o in ops]}"
 
+    @STATISTIC_COLLECT_PROPERTY_MISSING
     def test_meta_absent_db_false_no_implicit_reset(self, connection):
         """DB has it false but the model does not manage it -> no spurious reset."""
         ops = self._ops_for(connection, "stat_absent_false", db_value="false", meta_props={})
         assert len(ops) == 0, f"Unexpected implicit reset: {[type(o).__name__ for o in ops]}"
 
+    @STATISTIC_COLLECT_PROPERTY_MISSING
     def test_meta_false_db_false_no_change(self, connection):
         """Both sides false -> no change."""
         ops = self._ops_for(connection, "stat_false_false", db_value="false", meta_props={self.PROP: "false"})
         assert len(ops) == 0, f"Unexpected diff: {[type(o).__name__ for o in ops]}"
 
+    @STATISTIC_COLLECT_PROPERTY_MISSING
     def test_meta_true_db_false_detects_change(self, connection):
         """Model wants true while DB has it false -> a real change is detected."""
         from starrocks.alembic.ops import AlterTablePropertiesOp
