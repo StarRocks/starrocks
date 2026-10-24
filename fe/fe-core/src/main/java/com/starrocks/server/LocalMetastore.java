@@ -1171,8 +1171,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
-            Partition partition =
-                    createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet, computeResource);
+            // Size buckets with this partition's replication_num (no-op if bucketNum already set).
+            DistributionInfo dist = copiedTable.getDefaultDistributionInfo().copy();
+            copiedTable.inferDistribution(dist, partitionDesc.getReplicationNum());
+            Partition partition = createPartition(db, copiedTable, partitionId, partitionName, version,
+                    tabletIdSet, dist, computeResource);
 
             partitionList.add(Pair.create(partition, partitionDesc));
             tabletIdSetForAll.addAll(tabletIdSet);
@@ -1395,10 +1398,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
-            olapTable.inferDistribution(distributionInfo);
-
-            // check colocation
-            checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            // Auto-bucket is filled per partition in createPartitionMap using that partition's
+            // replication_num. Colocate still needs a concrete bucket count before checkDistribution.
+            if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                olapTable.inferDistribution(distributionInfo);
+                checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            }
             // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
             // shards to; re-validated under the WRITE lock before commit.
             metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
@@ -1774,8 +1779,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
                                                       Partition partition, ComputeResource computeResource) throws DdlException {
         long partitionId = partition.getId();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
-        olapTable.inferDistribution(distributionInfo);
+        olapTable.inferDistribution(distributionInfo, replicationNum);
         // create sub partition
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         // physical partitions in the same logical partition use the same shard_group_id,
@@ -1797,8 +1804,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
             MaterializedIndex index = entry.getValue();
@@ -2075,7 +2080,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet, ComputeResource computeResource) throws DdlException {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
-        table.inferDistribution(distributionInfo);
+        short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
+        table.inferDistribution(distributionInfo, replicationNum);
 
         return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo, computeResource);
     }
