@@ -775,9 +775,11 @@ public class Utils {
             return true;
         }
 
-        // 2. Respect user hint
-        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        // 2. Respect the requested stage and grouped mode's single finalized consumer.
+        var variables = ConnectContext.get().getSessionVariable();
+        int aggStage = variables.getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage == AUTO.ordinal() && variables.isGroupedRangeScan()) ||
                 (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
             return false;
         }

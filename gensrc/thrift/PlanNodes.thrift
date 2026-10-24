@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  LAKE_GROUPED_SCAN_NODE = 46
 }
 
 // phases of an execution node
@@ -483,6 +484,13 @@ struct TBinlogScanRange {
   11: optional Types.TBinlogOffset offset
 }
 
+// Query-local clip; never persisted in tablet metadata.
+struct TGroupedRangeTask {
+  1: optional i32 group_id
+  2: optional Types.TTabletRange key_range
+  3: optional list<i32> sort_key_unique_ids
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -496,6 +504,7 @@ struct TScanRange {
   20: optional THdfsScanRange hdfs_scan_range
 
   30: optional TBinlogScanRange binlog_scan_range
+  52: optional TGroupedRangeTask grouped_range_task
 }
 
 struct TMySQLScanNode {

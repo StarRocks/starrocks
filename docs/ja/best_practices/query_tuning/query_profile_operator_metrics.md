@@ -206,6 +206,7 @@ OLAP_SCAN オペレーターに似ていますが、Iceberg/Hive/Hudi/Detal な�
 | Table | テーブル名。 |
 | TabletCount | タブレットの数。 |
 | MorselsCount | モーセルの数。 |
+| RangeClipTasks | 正常にオープンされた lake のグループ範囲クリップタスク数。`DataSource` 配下に表示されます。行を返さないタスクも含め、検証済みのデータソースタスクごとに 1 回だけカウントし、セグメントの読み取りや Reader の再オープンでは増加しません。 |
 | Predicates | 述語式。 |
 | PredicatesPartition | パーティションに適用される述語式。 |
 | SharedScan | `enable_shared_scan` セッション変数が有効かどうか。 |

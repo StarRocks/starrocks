@@ -33,6 +33,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
+#include "storage/query/range_group_task.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -277,6 +278,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
+    if (options.grouped_range_task != nullptr) {
+        if (options.rowid_range_option != nullptr || options.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support split rowset readers");
+        }
+        // Validate the archived UID order before decoding positional seek tuples.
+        ASSIGN_OR_RETURN(seg_options.task_range, decode_range_group_seek(*options.grouped_range_task, _tablet_schema));
+    }
     seg_options.pred_tree = options.pred_tree;
     seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.runtime_filter_preds = options.runtime_filter_preds;
@@ -372,6 +380,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
             continue;
+        }
+        if (options.grouped_range_task != nullptr) {
+            RETURN_IF_ERROR(validate_range_group_schema(*options.grouped_range_task, seg_ptr->tablet_schema()));
         }
         if (seg_ptr->num_rows() == 0) {
             continue;

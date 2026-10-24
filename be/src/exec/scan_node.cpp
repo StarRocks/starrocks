@@ -34,8 +34,12 @@
 
 #include "exec/scan_node.h"
 
+#include <optional>
+#include <unordered_map>
+
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "storage/query/range_group_task.h"
 
 namespace starrocks {
 
@@ -158,6 +162,63 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan) {
+    if (type() == TPlanNodeType::LAKE_GROUPED_SCAN_NODE) {
+        if (!in_colocate_exec_group || pipeline_dop <= 0 || !global_scan_ranges.empty() ||
+            scan_ranges_per_driver_seq.empty() || output_chunk_by_bucket()) {
+            return Status::InvalidArgument("grouped scan requires per-driver ranges in a colocate execution group");
+        }
+        std::unordered_map<int32_t, int32_t> group_owner;
+        size_t task_count = 0;
+        for (const auto& [driver, ranges] : scan_ranges_per_driver_seq) {
+            if (driver < 0 || driver >= pipeline_dop) {
+                return Status::InvalidArgument("grouped scan driver sequence exceeds logical DOP");
+            }
+            std::optional<int32_t> driver_group;
+            for (const auto& range : ranges) {
+                if (range.__isset.has_more && range.has_more) {
+                    return Status::InvalidArgument("grouped scan requires complete fixed task queues");
+                }
+                if (range.__isset.empty && range.empty) continue;
+                const auto& scan = range.scan_range;
+                if (!scan.__isset.internal_scan_range || !scan.__isset.grouped_range_task) {
+                    return Status::InvalidArgument("grouped scan requires owned internal ranges and task envelopes");
+                }
+                ASSIGN_OR_RETURN(auto task, decode_range_group_task(scan.grouped_range_task));
+                if (!scan.internal_scan_range.__isset.bucket_sequence ||
+                    scan.internal_scan_range.bucket_sequence != task->group_id) {
+                    return Status::InvalidArgument("grouped scan bucket sequence must match its task group ID");
+                }
+                if (driver_group.has_value() && *driver_group != task->group_id) {
+                    return Status::InvalidArgument("grouped scan driver must own one complete group");
+                }
+                driver_group = task->group_id;
+                auto [owner, inserted] = group_owner.emplace(task->group_id, driver);
+                if (!inserted && owner->second != driver) {
+                    return Status::InvalidArgument("grouped scan group cannot span multiple drivers");
+                }
+                if (++task_count > 8192 || group_owner.size() > 1024) {
+                    return Status::InvalidArgument("grouped scan exceeds the group or clip-task budget");
+                }
+            }
+        }
+        std::map<int, pipeline::MorselQueuePtr> queues;
+        // Preserve a fixed queue for every logical driver, with truly empty padding.
+        // The complete queue's EOS is the blocking aggregate finalization boundary.
+        const std::vector<TScanRangeParams> empty_ranges;
+        for (int driver = 0; driver < pipeline_dop; ++driver) {
+            auto it = scan_ranges_per_driver_seq.find(driver);
+            const auto& ranges = it == scan_ranges_per_driver_seq.end() ? empty_ranges : it->second;
+            ASSIGN_OR_RETURN(auto queue, convert_scan_range_to_morsel_queue(ranges, node_id, pipeline_dop, false,
+                                                                            tablet_internal_parallel_mode, task_count));
+            if (queue->type() != pipeline::MorselQueue::FIXED) {
+                return Status::InvalidArgument("grouped scan requires fixed independent driver queues");
+            }
+            queue->set_has_more_scan_ranges(false);
+            queue->set_has_more_from_split(false);
+            queues.emplace(driver, std::move(queue));
+        }
+        return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queues), false, false);
+    }
     if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
@@ -225,8 +286,9 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     [[maybe_unused]] bool has_more_morsel = false;
-    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
-                                             &has_more_morsel);
+    pipeline::ScanMorsel::build_scan_morsels(
+            node_id, scan_ranges, type() == TPlanNodeType::LAKE_GROUPED_SCAN_NODE || accept_empty_scan_ranges(),
+            &morsels, &has_more_morsel);
     DCHECK(has_more_morsel == false);
     return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
 }

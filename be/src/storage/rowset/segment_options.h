@@ -52,6 +52,9 @@ public:
     // Specified ranges outside the segment, is used to support parallel-reading within a tablet
     std::vector<SeekRange> ranges;
 
+    // Independent AND with query ranges and physical tablet ownership.
+    std::optional<SeekRange> task_range;
+
     // Use to filter the data by range distribution key
     std::optional<SeekRange> tablet_range;
 

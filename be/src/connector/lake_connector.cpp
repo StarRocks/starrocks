@@ -14,6 +14,7 @@
 
 #include "connector/lake_connector.h"
 
+#include <charconv>
 #include <vector>
 
 #include "column/column_access_path.h"
@@ -33,6 +34,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
+#include "storage/query/range_group_task.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
@@ -41,7 +43,13 @@
 namespace starrocks::connector {
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
-        : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
+        : _provider(provider),
+          _scan_range(scan_range.internal_scan_range),
+          _wire_grouped_range_task(scan_range.__isset.grouped_range_task
+                                           ? std::make_optional(scan_range.grouped_range_task)
+                                           : std::nullopt) {
+    _scan_range_status = provider->validate_scan_range(scan_range);
+}
 
 LakeDataSource::~LakeDataSource() {
     _reader.reset();
@@ -53,6 +61,14 @@ std::string LakeDataSource::name() const {
 }
 
 Status LakeDataSource::open(RuntimeState* state) {
+    RETURN_IF_ERROR(_scan_range_status);
+    if (_provider->is_grouped_scan()) {
+        RETURN_IF(!state->enable_pipeline_engine(),
+                  Status::InvalidArgument("grouped scan requires pipeline execution"));
+        RETURN_IF(_split_context != nullptr || (_morsel != nullptr && (_morsel->get_split_context() != nullptr ||
+                                                                       _morsel->from_version() != 0)),
+                  Status::InvalidArgument("grouped scan does not support physical split or incremental history"));
+    }
     _runtime_state = state;
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -122,6 +138,10 @@ Status LakeDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(build_scan_range(_runtime_state));
 
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
+    if (_params.grouped_range_task != nullptr && !_range_clip_task_counted) {
+        COUNTER_UPDATE(ADD_COUNTER(_runtime_profile, "RangeClipTasks", TUnit::UNIT), 1);
+        _range_clip_task_counted = true;
+    }
     return Status::OK();
 }
 
@@ -402,6 +422,12 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+    if (_wire_grouped_range_task.has_value()) {
+        // Validate captured sort identity before access-path augmentation.
+        ASSIGN_OR_RETURN(auto task, decode_range_group_task(*_wire_grouped_range_task));
+        RETURN_IF_ERROR(validate_range_group_schema(*task, *_tablet_schema));
+        _params.grouped_range_task = std::move(task);
+    }
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
@@ -1177,13 +1203,19 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
 // ================================
 
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
+        : _scan_node(scan_node),
+          _t_lake_scan_node(plan_node.lake_scan_node),
+          _is_grouped_scan(plan_node.node_type == TPlanNodeType::LAKE_GROUPED_SCAN_NODE),
+          _has_lake_scan_node(plan_node.__isset.lake_scan_node) {}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    RETURN_IF(_is_grouped_scan && !state->enable_pipeline_engine(),
+              Status::InvalidArgument("grouped scan requires pipeline execution"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
@@ -1209,6 +1241,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    for (const auto& range : scan_ranges) {
+        if (_is_grouped_scan && range.__isset.has_more && range.has_more) {
+            return Status::InvalidArgument("grouped scan requires complete fixed task queues");
+        }
+        if (range.__isset.empty && range.empty) continue;
+        RETURN_IF_ERROR(validate_scan_range(range.scan_range));
+    }
+    if (_is_grouped_scan) {
+        pipeline::Morsels morsels;
+        bool has_more = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more);
+        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    }
     int64_t lake_scan_parallelism = 0;
     if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
@@ -1227,6 +1273,43 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         morsel_queue->set_has_more_from_split(true);
     }
     return morsel_queue;
+}
+
+Status LakeDataSourceProvider::validate_grouped_scan() const {
+    if (!_is_grouped_scan) return Status::OK();
+    if (!_has_lake_scan_node) {
+        return Status::InvalidArgument("grouped scan requires a lake scan node payload");
+    }
+    if ((_t_lake_scan_node.__isset.sorted_by_keys_per_tablet && _t_lake_scan_node.sorted_by_keys_per_tablet) ||
+        (_t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket)) {
+        return Status::InvalidArgument("grouped scan does not support sorted or bucket output");
+    }
+    return Status::OK();
+}
+
+Status LakeDataSourceProvider::validate_scan_range(const TScanRange& range) const {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    if (!_is_grouped_scan) {
+        return range.__isset.grouped_range_task
+                       ? Status::InvalidArgument("grouped range task requires LAKE_GROUPED_SCAN_NODE")
+                       : Status::OK();
+    }
+    if (!range.__isset.internal_scan_range || !range.__isset.grouped_range_task) {
+        return Status::InvalidArgument("grouped scan requires an internal range and grouped task envelope");
+    }
+    ASSIGN_OR_RETURN(auto task, decode_range_group_task(range.grouped_range_task));
+    const auto& internal = range.internal_scan_range;
+    if (!internal.__isset.bucket_sequence || internal.bucket_sequence != task->group_id) {
+        return Status::InvalidArgument("grouped scan bucket sequence must match its task group ID");
+    }
+    int64_t version = 0;
+    auto [end, error] =
+            std::from_chars(internal.version.data(), internal.version.data() + internal.version.size(), version);
+    if (internal.tablet_id <= 0 || error != std::errc{} || end != internal.version.data() + internal.version.size() ||
+        version <= 0) {
+        return Status::InvalidArgument("grouped scan requires a physical tablet and captured positive source version");
+    }
+    return Status::OK();
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(

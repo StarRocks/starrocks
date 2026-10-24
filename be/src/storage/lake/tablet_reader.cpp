@@ -31,6 +31,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
+#include "storage/query/range_group_task.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -118,6 +119,13 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (read_params.grouped_range_task != nullptr) {
+        if (_need_split || read_params.rowid_range_option != nullptr ||
+            read_params.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support split readers");
+        }
+        RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
+    }
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -335,6 +343,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
+    rs_opts.grouped_range_task = params.grouped_range_task;
     rs_opts.pred_tree = params.pred_tree;
     rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;

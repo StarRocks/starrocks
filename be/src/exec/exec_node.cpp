@@ -543,6 +543,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
+    case TPlanNodeType::LAKE_GROUPED_SCAN_NODE:
     case TPlanNodeType::LAKE_SCAN_NODE: {
         TPlanNode new_node = tnode;
         new_node.connector_scan_node = make_connector_scan_node(tnode, connector::Connector::LAKE);
@@ -863,6 +864,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_GROUPED_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
