@@ -1012,13 +1012,66 @@ public class ExpressionTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         assertContains(planFragment, "PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'");
 
+        // adding years or months can't be undone, see testMonthAndYearAdditionsAreNotMovedAcrossComparisons
         sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_sub(8: id_datetime, 2) = '2020-12-21 00:00:00'");
 
         sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_add(8: id_datetime, 2) = '2020-12-21 00:00:00'");
+    }
+
+    // Adding months or years clamps the day to the end of a shorter month, so it can't be undone: 2026-01-28, 29, 30
+    // and 31 plus one month are all 2026-02-28, and 2026-02-28 12:00:00 plus one month is not after 2026-03-30, though
+    // it is after 2026-03-30 minus one month (2026-02-28). Moving the constant to the other side of a comparison
+    // would give wrong results.
+    @Test
+    public void testMonthAndYearAdditionsAreNotMovedAcrossComparisons() throws Exception {
+        // also when there is a cast to DATE around the addition
+        String plan = getFragmentPlan("select t1a from test_all_type " +
+                "where cast(id_date + interval 1 month as date) > cast('2026-03-30' as date)");
+        assertContains(plan, "months_add(CAST(9: id_date AS DATETIME), 1)");
+
+        String[][] kept = {
+                {"months_add(id_datetime, 1) > '2026-03-30 00:00:00'",
+                        "months_add(8: id_datetime, 1) > '2026-03-30 00:00:00'"},
+                {"months_add(id_datetime, 1) = '2026-02-28 12:00:00'",
+                        "months_add(8: id_datetime, 1) = '2026-02-28 12:00:00'"},
+                {"months_sub(id_datetime, 1) < '2026-03-30 00:00:00'",
+                        "months_sub(8: id_datetime, 1) < '2026-03-30 00:00:00'"},
+                {"years_add(id_datetime, 1) >= '2025-02-28 00:00:00'",
+                        "years_add(8: id_datetime, 1) >= '2025-02-28 00:00:00'"},
+                {"years_sub(id_datetime, 1) <= '2023-02-28 00:00:00'",
+                        "years_sub(8: id_datetime, 1) <= '2023-02-28 00:00:00'"},
+                {"id_datetime + interval 1 month > '2026-03-30 00:00:00'",
+                        "months_add(8: id_datetime, 1) > '2026-03-30 00:00:00'"},
+                {"id_datetime - interval 1 month = '2026-02-28 12:00:00'",
+                        "months_sub(8: id_datetime, 1) = '2026-02-28 12:00:00'"},
+                {"date_add(id_datetime, interval 1 year) < '2027-02-28 00:00:00'",
+                        "years_add(8: id_datetime, 1) < '2027-02-28 00:00:00'"},
+                {"adddate(id_datetime, interval 1 month) > '2026-03-30 00:00:00'",
+                        "months_add(8: id_datetime, 1) > '2026-03-30 00:00:00'"},
+                {"subdate(id_datetime, interval 1 month) > '2026-03-30 00:00:00'",
+                        "months_sub(8: id_datetime, 1) > '2026-03-30 00:00:00'"},
+        };
+        for (String[] predicate : kept) {
+            plan = getFragmentPlan("select t1a from test_all_type where " + predicate[0]);
+            assertContains(plan, "PREDICATES: " + predicate[1]);
+        }
+
+        // days are the same length, so adding them can still be undone
+        String[][] moved = {
+                {"days_add(id_datetime, 1) > '2026-03-30 00:00:00'", "8: id_datetime > '2026-03-29 00:00:00'"},
+                {"days_sub(id_datetime, 2) = '2026-03-30 00:00:00'", "8: id_datetime = '2026-04-01 00:00:00'"},
+                {"id_datetime + interval 1 day > '2026-03-30 00:00:00'", "8: id_datetime > '2026-03-29 00:00:00'"},
+                {"date_add(id_datetime, interval 2 day) <= '2026-03-30 00:00:00'",
+                        "8: id_datetime <= '2026-03-28 00:00:00'"},
+        };
+        for (String[] predicate : moved) {
+            plan = getFragmentPlan("select t1a from test_all_type where " + predicate[0]);
+            assertContains(plan, "PREDICATES: " + predicate[1]);
+        }
     }
 
     @Test
