@@ -8,3 +8,10 @@
 extern "C" __attribute__((weak)) JNIEnv* getJNIEnv(void) {
     return nullptr;
 }
+
+extern "C" __attribute__((weak)) jint JNI_GetCreatedJavaVMs(JavaVM** vmBuf, jsize bufLen, jsize* nVMs) {
+    if (nVMs != nullptr) {
+        *nVMs = 0;
+    }
+    return JNI_OK;
+}

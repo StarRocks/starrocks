@@ -324,10 +324,17 @@ if [[ -z ${THIRD_PARTY_BUILD_WITH_AVX2} ]]; then
     THIRD_PARTY_BUILD_WITH_AVX2=ON
 fi
 
+if [[ -z ${THIRD_PARTY_BUILD_WITH_SSE4_2} ]]; then
+    THIRD_PARTY_BUILD_WITH_SSE4_2=${USE_SSE4_2:-ON}
+fi
+
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
     if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
         THIRD_PARTY_BUILD_WITH_AVX2=OFF
+    fi
+    if [[ -z $(grep -o 'sse4_2' /proc/cpuinfo) || -z $(grep -o 'pclmulqdq' /proc/cpuinfo) ]]; then
+        THIRD_PARTY_BUILD_WITH_SSE4_2=OFF
     fi
 fi
 
@@ -1161,34 +1168,51 @@ build_bitshuffle() {
 }
 
 # croaring bitmap
-# If open AVX512 default, current version will be compiled failed on some machine, so close AVX512 default,
-# When this problem is solved, a switch will be added to control.
+# CRoaring compiles AVX2 and AVX-512 (VBMI2/BITALG/VPOPCNTDQ) kernels using function-scoped
+# target pragmas (CROARING_TARGET_AVX2, CROARING_TARGET_AVX512) and dispatches at runtime via
+# cpuid + xgetbv (croaring_hardware_support()). Keep FORCE_AVX=OFF so FindOptions.cmake does not
+# inject global -mavx2 -mbmi2 into baseline code, while appending -msse4.2 -mpclmul on x86_64
+# so scalar roaring_hamming() (__builtin_popcountll) emits hardware popcnt instead of __popcountdi2.
 build_croaringbitmap() {
-    FORCE_AVX=ON
-    # avx2 is not supported by aarch64.
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        FORCE_AVX=FALSE
-    fi
-    if [[ `cat /proc/cpuinfo |grep avx|wc -l` == "0" ]]; then
-        FORCE_AVX=FALSE
-    fi
     check_if_source_exist $CROARINGBITMAP_SOURCE
     cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
+    rm -rf "$TP_INSTALL_DIR/lib/libroaring.a" "$TP_INSTALL_DIR/include/roaring"
+
+    local croaring_c_flags="${CFLAGS}"
+    local croaring_cxx_flags="${CXXFLAGS}"
+    if [[ "${MACHINE_TYPE}" == "x86_64" && "${THIRD_PARTY_BUILD_WITH_SSE4_2}" == "ON" ]]; then
+        croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
+        croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
+    fi
+
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
+    -DCMAKE_C_FLAGS="${croaring_c_flags}" \
+    -DCMAKE_CXX_FLAGS="${croaring_cxx_flags}" \
     -DENABLE_ROARING_TESTS=OFF \
+    -DENABLE_ROARING_BENCHMARKS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
-    -DFORCE_AVX=$FORCE_AVX \
-    -DROARING_DISABLE_AVX512=ON \
+    -DFORCE_AVX=${FORCE_AVX:-OFF} \
+    -DROARING_DISABLE_AVX512=${ROARING_DISABLE_AVX512:-OFF} \
     -DROARING_USE_CPM=OFF \
     -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+
+    local expected_version="${CROARINGBITMAP_SOURCE#CRoaring-}"
+    for required_hdr in roaring.h roaring64.h roaring.hh roaring64.hh roaring64map.hh roaring_version.h; do
+        if [[ ! -s "$TP_INSTALL_DIR/include/roaring/${required_hdr}" ]]; then
+            echo "ERROR: Missing CRoaring header $TP_INSTALL_DIR/include/roaring/${required_hdr}" >&2
+            exit 1
+        fi
+    done
+    grep -Fq "#define ROARING_VERSION \"${expected_version}\"" "$TP_INSTALL_DIR/include/roaring/roaring_version.h"
+    test -s "$TP_INSTALL_DIR/lib/libroaring.a"
 }
 #orc
 build_orc() {
