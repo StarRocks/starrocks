@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -43,11 +44,16 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -1823,5 +1829,94 @@ public class InsertPlanTest extends PlanTestBase {
         } catch (SemanticException e) {
             // ignore.
         }
+    }
+
+    @Test
+    public void testColumnSubsetInsertOnEmptyPartitionsIsPlainInsert() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tpk_defaults (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v1 int NOT NULL DEFAULT \"0\",\n" +
+                "  v2 varchar(16) NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withTable("CREATE TABLE tpk_strict (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v1 int NOT NULL,\n" +
+                "  v2 int NOT NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("tpk_defaults");
+        PhysicalPartition partition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 1, partition.getNextVersion());
+        String sql = "insert into tpk_defaults (pk, v1) values (1, 2)";
+
+        // No transaction has ever committed to the partition: a plain insert, not a partial update.
+        ExecPlan plan = getExecPlan(sql);
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // A missing NOT NULL column without a default cannot be filled: stays a partial update.
+        plan = getExecPlan("insert into tpk_strict (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // Once any transaction has committed to the partition, back to a partial update.
+        partition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 2);
+        try {
+            plan = getExecPlan(sql);
+            Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+            Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                    ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+        } finally {
+            partition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        }
+
+        // Inside an explicit transaction the shortcut is off: an earlier statement of the same
+        // transaction may already have written rows that the partition version cannot show yet.
+        TransactionStmtExecutor.beginStmt(connectContext, new BeginStmt(NodePosition.ZERO));
+        try {
+            Assertions.assertNotEquals(0, connectContext.getTxnId());
+            plan = getExecPlan(sql);
+            Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        } finally {
+            TransactionStmtExecutor.rollbackStmt(connectContext, new RollbackStmt(NodePosition.ZERO));
+        }
+        Assertions.assertEquals(0, connectContext.getTxnId());
+
+        // The decision belongs to the plan, not the statement: planning the same statement again after
+        // the partition advanced must not inherit an earlier attempt's decision.
+        plan = getExecPlan(sql);
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
+
+        // INSERT OVERWRITE never takes the shortcut.
+        plan = getExecPlan("insert overwrite tpk_defaults (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+
+        // A missing auto increment column is left to the partial update path.
+        starRocksAssert.withTable("CREATE TABLE tpk_autoinc (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  id bigint AUTO_INCREMENT,\n" +
+                "  v1 int NULL\n" +
+                ") PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        plan = getExecPlan("insert into tpk_autoinc (pk, v1) values (1, 2)");
+        Assertions.assertFalse(plan.isPlainInsertOnEmptyPartitions());
+        Assertions.assertNotEquals(TPartialUpdateMode.UNKNOWN_MODE,
+                ((OlapTableSink) plan.getFragments().get(0).getSink()).getPartialUpdateMode());
+
+        // An automatic-partition table with no partition yet: nothing has ever been committed to it, the
+        // partitions this load creates start at the initial version and the commit check covers them.
+        starRocksAssert.withTable("CREATE TABLE tpk_autopart (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  dt date NOT NULL,\n" +
+                "  v1 int NULL\n" +
+                ") PRIMARY KEY(pk, dt) PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        plan = getExecPlan("insert into tpk_autopart (pk, dt) values (1, '2026-10-15')");
+        Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
     }
 }

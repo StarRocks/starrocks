@@ -45,6 +45,7 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1608,5 +1609,60 @@ public class GlobalTransactionMgrTest {
         } finally {
             dbMgrs.remove(dbId);
         }
+    }
+
+    // A column-subset INSERT planned as a plain insert on never-committed partitions filled its
+    // missing columns with defaults; once another transaction has committed to a partition, letting
+    // it commit would overwrite that transaction's columns, so the commit must reject it.
+    @Test
+    public void testPlainInsertOnEmptyPartitionsRejectedOnceAnotherTxnCommitted() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        Partition testPartition = masterGlobalStateMgr.getLocalMetastore()
+                .getTable(GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1)
+                .getPartition(GlobalStateMgrTestUtil.testPartition1);
+        PhysicalPartition physicalPartition = testPartition.getDefaultPhysicalPartition();
+        // Rewind the fixture partition to a never-committed state (updateVisibleVersion leaves
+        // nextVersion alone, so set it explicitly: that is the value the check reads).
+        physicalPartition.updateVisibleVersion(PhysicalPartition.PARTITION_INIT_VERSION);
+        physicalPartition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 1, physicalPartition.getNextVersion());
+
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+
+        // The first plain insert finds the partition untouched: it commits and takes the initial version.
+        long txn1 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "plain_insert_on_empty_1",
+                transactionSource, LoadJobSourceType.INSERT_STREAMING, Config.stream_load_default_timeout_second);
+        InsertTxnCommitAttachment plainInsert1 = new InsertTxnCommitAttachment(1);
+        plainInsert1.setRequireEmptyPartitions(true);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txn1, transTablets,
+                Lists.newArrayList(), plainInsert1);
+        assertEquals(TransactionStatus.COMMITTED, fakeEditLog.getTransaction(txn1).getTransactionStatus());
+        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 2, physicalPartition.getNextVersion());
+
+        // The second one was planned on the same assumption, which no longer holds.
+        long txn2 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "plain_insert_on_empty_2",
+                transactionSource, LoadJobSourceType.INSERT_STREAMING, Config.stream_load_default_timeout_second);
+        InsertTxnCommitAttachment plainInsert2 = new InsertTxnCommitAttachment(1);
+        plainInsert2.setRequireEmptyPartitions(true);
+        PlainInsertOnEmptyPartitionsConflictException e = Assertions.assertThrows(
+                PlainInsertOnEmptyPartitionsConflictException.class,
+                () -> masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txn2, transTablets,
+                        Lists.newArrayList(), plainInsert2));
+        assertTrue(e.getMessage().contains("retry the statement"), e.getMessage());
+        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 2, physicalPartition.getNextVersion());
+
+        // An INSERT that made no such assumption (a partial update, or a full-row insert) is unaffected.
+        long txn3 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "regular_insert_3",
+                transactionSource, LoadJobSourceType.INSERT_STREAMING, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txn3, transTablets,
+                Lists.newArrayList(), new InsertTxnCommitAttachment(1));
+        assertEquals(TransactionStatus.COMMITTED, fakeEditLog.getTransaction(txn3).getTransactionStatus());
+        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION + 3, physicalPartition.getNextVersion());
     }
 }
