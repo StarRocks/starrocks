@@ -233,21 +233,22 @@ public class IcebergUtilTest {
         FileScanTask orcFileScanTask = createMockFileScanTask(FileFormat.ORC);
         FileScanTask avroFileScanTask = createMockFileScanTask(FileFormat.AVRO);
 
-        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true);
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true, false);
+        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true, true);
+        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true, false);
 
         StarRocksConnectorException orcException = assertThrows(StarRocksConnectorException.class,
-                () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true));
-        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true, true));
+        assertEquals("Iceberg row lineage is not supported on ORC data files yet. " +
                 "Found ORC format file: /test/orc/file.orc", orcException.getMessage());
 
         StarRocksConnectorException avroException = assertThrows(StarRocksConnectorException.class,
-                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true));
-        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
+                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true, false));
+        assertEquals("Delete operations on Iceberg tables are only supported for Parquet and ORC format files. " +
                 "Found AVRO format file: /test/avro/file.avro", avroException.getMessage());
 
-        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
-        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
-        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
+        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false, true);
+        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false, true);
     }
 
     @Test

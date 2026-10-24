@@ -48,7 +48,7 @@ private:
     bool _should_skip_file;
 
     // hdfs_scanner_orc will only eval conjunctions in _eval_conjunct_ctxs_by_materialized_slot
-    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
+    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file, or be _pos, which the scanner fills
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
     Status build_iceberg_delete_builder();
@@ -77,6 +77,8 @@ private:
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
     // Current Iceberg name of each top-level ORC column, set when the file carries Iceberg field ids.
     std::vector<std::string> _iceberg_column_names;
+    // Iceberg `_pos` slot (the row's position in the data file), filled by the scanner; null when not read.
+    const SlotDescriptor* _row_position_slot = nullptr;
 };
 
 } // namespace starrocks
