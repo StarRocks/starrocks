@@ -119,7 +119,6 @@ class AlterTableIntegrationTest(fixtures.TestBase):
 
     __backend__ = True
     __only_on__ = "starrocks"
-    __requires__ = ("sqlalchemy_2",)
 
     @classmethod
     def setup_test_class(cls):
@@ -841,7 +840,6 @@ class EnableStatisticCollectOnFirstLoadIntegrationTest(fixtures.TestBase):
 
     __backend__ = True
     __only_on__ = "starrocks"
-    __requires__ = ("sqlalchemy_2",)
 
     @classmethod
     def setup_test_class(cls):

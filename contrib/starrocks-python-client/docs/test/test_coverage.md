@@ -69,6 +69,7 @@ Tests the comparison logic that detects differences between database state and m
 - **`test_reflection_defaults.py`**: Tests default value reflection logic.
 - **`test_sql_normalization.py`**: Tests SQL normalization utilities.
 - **`test_view_schema.py`**: Tests view schema handling.
+- **`test_requirements.py`**: Tests that every suite requirement the dialect opens or closes gives its reason in a docstring.
 
 ## 5. End-to-End System Tests (`test/system/`)
 

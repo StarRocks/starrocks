@@ -59,7 +59,6 @@ from sqlalchemy import (
     log,
     schema as sa_schema,
     text,
-    types as sqltypes,
     util,
 )
 from sqlalchemy.dialects.mysql.base import (
@@ -2260,9 +2259,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         table_name = format_table_name(self, alter.table_name, alter.schema)
         order_by = self._sort_key_text(alter.order_by)
 
-        # notice users about such a time consuming operation
         from_db_clause = f"FROM {alter.schema} " if alter.schema else ""
-        show_clause = f"SHOW ALTER TABLE OPTIMIZE {from_db_clause}WHERE TableName='{alter.table_name}'"
+        show_clause = f"SHOW ALTER TABLE COLUMN {from_db_clause}WHERE TableName='{alter.table_name}'"
         logger.info(f"You probably should use ({show_clause}) to check the execution status "
                     f"of altering ORDER before doing another ALTER TABLE statement.")
 

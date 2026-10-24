@@ -16,6 +16,7 @@ import decimal
 import logging
 
 from sqlalchemy import (
+    DDL,
     Integer,
     MetaData,
     Numeric,
@@ -25,6 +26,7 @@ from sqlalchemy import (
     cast,
     column,
     func,
+    inspect,
     literal,
     literal_column,
     schema,
@@ -37,7 +39,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql.sqltypes import CHAR, Float
 from sqlalchemy.testing import config, fixtures
-from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
+from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_, is_false, is_true
 from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
@@ -62,7 +64,7 @@ from test.util import TRANSACTIONS_NEED_3_5, normalize_sql
 
 
 if IS_SQLALCHEMY_2:
-    from sqlalchemy.testing.suite import TrueDivTest as _TrueDivTest
+    from sqlalchemy.testing.suite import ArrayTest as _ArrayTest, TrueDivTest as _TrueDivTest
 else:
     from sqlalchemy.testing.suite import (
         LikeFunctionsTest as _LikeFunctionsTest,
@@ -197,6 +199,31 @@ class ComponentReflectionTest(_ComponentReflectionTest):
     if not IS_SQLALCHEMY_2:
         test_get_indexes = testing.requires.index_reflection(_ComponentReflectionTest.test_get_indexes)
 
+    if IS_SQLALCHEMY_2:
+
+        @testing.requires.schema_reflection
+        @testing.requires.schema_create_delete
+        def test_schema_cache(self, connection):
+            """Upstream's test, with a schema named after the worker's database rather than ``foo_bar``.
+
+            A StarRocks database is server-wide, so a fixed name collides between runs on one server, and one a
+            killed run leaves behind fails every later run.
+            """
+            name = f"{config.db.url.database}_schema_cache"
+            insp = inspect(connection)
+
+            is_false(name in insp.get_schema_names())
+            is_false(insp.has_schema(name))
+            connection.execute(DDL(f"CREATE SCHEMA {name}"))
+            try:
+                is_false(name in insp.get_schema_names())
+                is_false(insp.has_schema(name))
+                insp.clear_cache()
+                is_true(name in insp.get_schema_names())
+                is_true(insp.has_schema(name))
+            finally:
+                connection.execute(DDL(f"DROP SCHEMA {name} FORCE"))
+
 
 if not IS_SQLALCHEMY_2:
 
@@ -226,6 +253,20 @@ class FetchLimitOffsetTest(_FetchLimitOffsetTest):
             ],
         )
 
+
+
+ARRAY_FIRST_COLUMN = testing.skip(
+    "starrocks", "the table's only column is the ARRAY, and StarRocks cannot use an ARRAY as a table's first column"
+)
+
+
+if IS_SQLALCHEMY_2:
+
+    class ArrayTest(_ArrayTest):
+        """Upstream's ARRAY tests, with the literal round trips skipped: their table holds only the ARRAY column."""
+
+        test_literal_simple = ARRAY_FIRST_COLUMN(_ArrayTest.test_literal_simple)
+        test_literal_complex = ARRAY_FIRST_COLUMN(_ArrayTest.test_literal_complex)
 
 
 class NumericTest(_NumericTest,):

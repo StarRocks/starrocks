@@ -50,8 +50,14 @@ _COLUMN_JOB_CONSTRUCTS = (
     AlterTableProperties,
     alembic_base.AddColumn,
     alembic_base.DropColumn,
-    alembic_base.AlterColumn,  # covers Column{Nullable,Type,Default,Comment} + MySQL modify/change
+    alembic_base.AlterColumn,
 )
+"""DDL that can start a column schema-change job, listed by SHOW ALTER TABLE COLUMN.
+
+StarRocks runs one schema-change job per table at a time, so with the wait on, the impl polls after each of these
+for the job to end. A sort key change (ORDER BY) starts such a job, a property set may (bloom_filter_columns does),
+and ``AlterColumn`` covers Alembic's nullable, type, default and comment changes and MySQL's MODIFY and CHANGE.
+"""
 
 _OPTIMIZE_JOB_CONSTRUCTS = (AlterTableDistribution,)
 """DDL that starts an OPTIMIZE job, which SHOW ALTER TABLE COLUMN does not list: a distribution change."""

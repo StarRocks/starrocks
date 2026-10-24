@@ -22,6 +22,7 @@ from sqlalchemy.schema import sort_tables_and_constraints
 from sqlalchemy.testing.provision import (
     configure_follower,
     create_db,
+    drop_all_schema_objects_pre_tables,
     drop_db,
     generate_driver_url,
     temp_table_keyword_args,
@@ -66,6 +67,30 @@ def _starrocks_drop_db(cfg: Any, eng: Engine, ident: str) -> None:
     with eng.begin() as conn:
         for database in _worker_databases(eng, ident):
             conn.exec_driver_sql(f"DROP DATABASE IF EXISTS {database} FORCE")
+
+
+@drop_all_schema_objects_pre_tables.for_db("starrocks")
+def _starrocks_drop_materialized_views_and_views(cfg: Any, eng: Engine) -> None:
+    """Drop the materialized views, then the views, that earlier runs left in the test database and its two extra
+    schemas, before ``--dropfirst`` drops their tables.
+
+    SQLAlchemy's own cleanup drops materialized views only for a dialect whose ``materialized_views`` requirement
+    is open, and with DROP VIEW, which StarRocks refuses for one. It drops views only in the test database and the
+    first extra schema, and SQLAlchemy 1.4 looks for that schema under its default name rather than the worker's.
+    """
+    schemas = (None, cfg.test_schema, cfg.test_schema_2)
+    with eng.begin() as conn:
+        for schema in schemas:
+            for name in inspect(conn).get_materialized_view_names(schema=schema):
+                conn.exec_driver_sql(f"DROP MATERIALIZED VIEW IF EXISTS {_qualified_name(eng, schema, name)}")
+        for schema in schemas:
+            for name in inspect(conn).get_view_names(schema=schema):
+                conn.exec_driver_sql(f"DROP VIEW IF EXISTS {_qualified_name(eng, schema, name)}")
+
+
+def _qualified_name(eng: Engine, schema: str | None, name: str) -> str:
+    preparer = eng.dialect.identifier_preparer
+    return ".".join(preparer.quote(part) for part in (schema, name) if part)
 
 
 @temp_table_keyword_args.for_db("starrocks")

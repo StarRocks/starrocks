@@ -163,7 +163,6 @@ class SecondaryIndexReflectionTest(fixtures.TestBase):
         assert sorted(columns) == ["id", "keep", "old"]
         assert indexes == ["old_idx"]
 
-    @testing.requires.sqlalchemy_2
     @testing.combinations((False,), (True,), argnames="translated")
     def test_drop_index_after_its_column_was_dropped(self, connection, indexed_table, translated):
         """A hand-written migration may drop the column first; StarRocks has then dropped the index with it.

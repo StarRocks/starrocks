@@ -138,7 +138,7 @@ class AlterViewOp(ops.MigrateOperation):
         existing_comment: Optional[str] = None,
         existing_security: Optional[str] = None,
         starrocks_security: Optional[str] = None,
-    ):
+    ) -> Any:
         """Invoke an ALTER VIEW operation.
 
         ``starrocks_security`` is ``security`` spelled as ``op.create_view`` does; give one of them.

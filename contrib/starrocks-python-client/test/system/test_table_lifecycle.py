@@ -15,10 +15,11 @@
 import logging
 import re
 
-from sqlalchemy import Column, inspect, testing
+from sqlalchemy import Column, inspect
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.testing.assertions import eq_
+from sqlalchemy.testing.assertions import eq_, expect_raises_message
 from sqlalchemy.testing.suite import is_true
 
 from starrocks.common.params import TableInfoKeyWithPrefix
@@ -188,12 +189,12 @@ class TableLifecycleTest(_AlembicLifecycleBase):
         is_true(re.search(EMPTY_UPGRADE_PATTERN, script_content), "Upgrade script should be empty")
         is_true(re.search(EMPTY_DOWNGRADE_PATTERN, script_content), "Downgrade script should be empty")
 
-    @testing.skip("starrocks", "SR doesn't support submiting multiple alter table cluases.")
     def test_alter_table_columns_comprehensive(self, database, alembic_env, sr_engine):
-        """Tests comprehensive column alterations: ADD, DROP, ALTER.
-        TODO: we may batch ALTER COLUMN clauses into one clause.
+        """Tests comprehensive column alterations, ADD, DROP and ALTER, and their downgrade.
+
+        The ALTER changes only the comment, which StarRocks can change back; see
+        test_a_type_change_starrocks_cannot_undo_fails_its_downgrade for one it can't.
         """
-        # 1. Initial state
         Base = declarative_base()
         class User(Base):
             __tablename__ = "t_alter_columns"
@@ -207,58 +208,69 @@ class TableLifecycleTest(_AlembicLifecycleBase):
         alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Initial columns")
         alembic_env.harness.upgrade("head")
 
-        # 2. Alter columns in metadata
         AlteredBase = declarative_base()
         class AlteredUser(AlteredBase):
             __tablename__ = "t_alter_columns"
             id = Column(INTEGER, primary_key=True)
-            col_to_modify = Column(BIGINT, nullable=True, comment="Modified comment")
-            # col_to_drop is removed
+            col_to_modify = Column(INTEGER, nullable=False, comment="Modified comment")
             col_added = Column(VARCHAR(100))
             __table_args__ = {
                 "starrocks_primary_key": "id",
-                "starrocks_distributed_by": "HASH(id)",  # auto added by SR
+                "starrocks_distributed_by": "HASH(id)",
                 "starrocks_properties": {"replication_num": "1"},
             }
         alembic_env.harness.generate_autogen_revision(metadata=AlteredBase.metadata, message="Alter columns")
 
-        # 3. Verify and apply the ALTER script
         script_content = ScriptContentParser.check_script_content(alembic_env, 1, "alter_columns")
-        # upgrade_contnt = ScriptContentParser.extract_upgrade_content(script_content).lower()
-
         assert "op.add_column('t_alter_columns', sa.Column('col_added', VARCHAR(length=100), nullable=True))" in script_content
         assert "op.drop_column('t_alter_columns', 'col_to_drop')" in script_content
         assert "op.alter_column('t_alter_columns', 'col_to_modify'," in script_content
-        assert "type_=BIGINT()" in script_content
-        assert "nullable=True" in script_content
         assert "comment='Modified comment'" in script_content
 
         alembic_env.harness.upgrade("head")
-
-        # 4. Verify in DB and then downgrade
         wait_for_alter_table_column_or_optimization(sr_engine, "t_alter_columns", "COLUMN")
-        inspector = inspect(sr_engine)
-        columns = inspector.get_columns("t_alter_columns")
-        col_names = [c['name'] for c in columns]
-        assert 'col_to_drop' not in col_names
-        assert 'col_added' in col_names
-        for col in columns:
-            if col['name'] == 'col_to_modify':
-                assert isinstance(col['type'], BIGINT)
-                assert col['nullable'] is True
-                assert col['comment'] == 'Modified comment'
+        columns = {c["name"]: c for c in inspect(sr_engine).get_columns("t_alter_columns")}
+        assert sorted(columns) == ["col_added", "col_to_modify", "id"]
+        assert columns["col_to_modify"]["comment"] == "Modified comment"
 
         alembic_env.harness.downgrade("-1")
-        inspector.clear_cache()
-        columns = inspector.get_columns("t_alter_columns")
-        col_names = [c['name'] for c in columns]
-        assert 'col_to_drop' in col_names
-        assert 'col_added' not in col_names
-        for col in columns:
-            if col['name'] == 'col_to_modify':
-                assert isinstance(col['type'], INTEGER)
-                assert col['nullable'] is False
-                assert col['comment'] == 'Original comment'
+        wait_for_alter_table_column_or_optimization(sr_engine, "t_alter_columns", "COLUMN")
+        columns = {c["name"]: c for c in inspect(sr_engine).get_columns("t_alter_columns")}
+        assert sorted(columns) == ["col_to_drop", "col_to_modify", "id"]
+        assert isinstance(columns["col_to_modify"]["type"], INTEGER)
+        assert columns["col_to_modify"]["nullable"] is False
+        assert columns["col_to_modify"]["comment"] == "Original comment"
+
+    def test_a_type_change_starrocks_cannot_undo_fails_its_downgrade(self, database, alembic_env, sr_engine):
+        """StarRocks can widen INT to BIGINT but not narrow it back, so the downgrade fails and changes nothing."""
+        Base = declarative_base()
+        class Narrow(Base):
+            __tablename__ = "t_widened"
+            id = Column(INTEGER, primary_key=True)
+            amount = Column(INTEGER)
+            __table_args__ = {"starrocks_primary_key": "id", "starrocks_properties": {"replication_num": "1"}}
+        alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Initial")
+        alembic_env.harness.upgrade("head")
+
+        WideBase = declarative_base()
+        class Wide(WideBase):
+            __tablename__ = "t_widened"
+            id = Column(INTEGER, primary_key=True)
+            amount = Column(BIGINT)
+            __table_args__ = {
+                "starrocks_primary_key": "id",
+                "starrocks_distributed_by": "HASH(id)",
+                "starrocks_properties": {"replication_num": "1"},
+            }
+        alembic_env.harness.generate_autogen_revision(metadata=WideBase.metadata, message="Widen")
+        alembic_env.harness.upgrade("head")
+        wait_for_alter_table_column_or_optimization(sr_engine, "t_widened", "COLUMN")
+
+        with expect_raises_message(DBAPIError, "Can not change BIGINT to INT"):
+            alembic_env.harness.downgrade("-1")
+        columns = {c["name"]: c for c in inspect(sr_engine).get_columns("t_widened")}
+        assert sorted(columns) == ["amount", "id"]
+        assert isinstance(columns["amount"]["type"], BIGINT)
 
     def test_add_agg_table_key_column(self, database, alembic_env, sr_engine):
         """Tests adding a key column to an AGGREGATE KEY table.
@@ -381,7 +393,6 @@ class TableLifecycleTest(_AlembicLifecycleBase):
         assert 'page_views2' not in col_names
         # assert 'last_visit_time2' not in col_names
 
-    @testing.skip("starrocks", "Adding a key column is time-consuming, so it fails to add a value column immediately after the key column.")
     def test_add_agg_table_key_and_value_columns(self, database, alembic_env, sr_engine):
         """Tests adding both a key column and a value column to an AGGREGATE KEY table."""
         # 1. Initial state

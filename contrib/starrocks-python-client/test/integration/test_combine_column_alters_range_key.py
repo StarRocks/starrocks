@@ -27,10 +27,11 @@ batch (``SchemaChangeHandler``):
 ``ALTER TABLE``, so such a revision becomes unexecutable even though the same
 changes work as separate statements.
 
-These tests require a shared-data cluster whose default distribution is RANGE;
-they skip on a shared-nothing cluster (where ``needsRangeRewriteSchemaChange``
-returns false immediately and the restriction cannot trigger). The tables live in
-the plugin's alternate test schema, which each parallel worker has its own of.
+These tests require a shared-data cluster whose default distribution is RANGE, and skip elsewhere. A
+shared-nothing StarRocks 4.1 can make RANGE tables too, by default or with ``SET enable_range_distribution =
+true``, but there it refuses a DROP of a sort-key column outright, on its own as in a batch ("DROP COLUMN on a
+sort-key column is not supported on tables with range distribution"), so batching makes no difference.
+The tables live in the plugin's alternate test schema, which each parallel worker has its own of.
 """
 
 import logging
@@ -44,14 +45,15 @@ from sqlalchemy.testing import config, expect_raises_message, fixtures
 
 from starrocks import INTEGER
 from starrocks.alembic.ops import AlterTableColumnsOp, _combine_column_alters
+from starrocks.common.types import SystemRunMode
 
 
 logger = logging.getLogger(__name__)
 
 COALESCES_RANGE_SORT_KEY_CHANGES = testing.fails_on(
     "starrocks",
-    "combine_column_alters coalesces unconditionally; range sort-key changes must stay standalone, because the "
-    "FE rejects them in a multi-clause ALTER",
+    "combine_column_alters coalesces unconditionally; on a shared-data RANGE table, range sort-key changes must "
+    "stay standalone, because the FE rejects them in a multi-clause ALTER",
 )
 
 
@@ -86,10 +88,15 @@ class CombineColumnAltersOnRangeTableTest(fixtures.TestBase):
     @classmethod
     def setup_test_class(cls):
         with config.db.begin() as connection:
+            if connection.dialect.run_mode != SystemRunMode.SHARED_DATA:
+                config.skip_test(
+                    "the cluster is not shared-data; the FE routes range sort-key changes to single-clause rewrite "
+                    "jobs only on shared-data RANGE tables"
+                )
             if not _range_distribution_available(connection):
                 config.skip_test(
-                    "cluster has no RANGE-distributed tables (shared-nothing run_mode); "
-                    "the FE's single-clause routing restriction cannot trigger here"
+                    "the cluster's default distribution is not RANGE; the FE routes range sort-key changes to "
+                    "single-clause rewrite jobs only on shared-data RANGE tables"
                 )
 
     @testing.fixture
