@@ -49,6 +49,9 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -122,6 +125,10 @@ public class PipeManagerTest {
 
         starRocksAssert.withTable(
                 "create table tbl1 (col_int int, col_string string) properties('replication_num'='1') ");
+
+        starRocksAssert.withTable("create table tbl_pk (col_int int not null, col_version decimal(38, 0) not null, " +
+                "col_string string) primary key(col_int) distributed by hash(col_int) " +
+                "properties('replication_num'='1')");
 
         // Disable global scheduler
         GlobalStateMgr.getCurrentState().getPipeListener().setStop();
@@ -1060,6 +1067,189 @@ public class PipeManagerTest {
             SqlParser.parse(sql, new SessionVariable());
             dropPipe(pipeName);
         }
+    }
+
+    @Test
+    public void testInsertSqlPreservesProperties() throws Exception {
+        mockRepoExecutor();
+        String pipeName = "p_insert_properties";
+        createPipe("create pipe p_insert_properties as insert into tbl_pk (col_int, col_version, col_string) " +
+                "properties('merge_condition'='col_version', 'strict_mode'='true', 'max_filter_ratio'='0', 'timeout'='60') " +
+                "select col_int, cast(col_int as decimal(38, 0)), col_string " +
+                "from files('path'='fake://pipe', 'format'='parquet') where col_int > 0");
+        try {
+            Pipe pipe = getPipe(pipeName);
+            InsertStmt original = (InsertStmt) SqlParser.parse(pipe.getOriginSql(), new SessionVariable()).get(0);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "new.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "old.parquet", "v1", 1));
+
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            InsertStmt task = (InsertStmt) SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertEquals(original.getProperties(), task.getProperties());
+            Assertions.assertEquals(original.getTargetColumnNames(), task.getTargetColumnNames());
+            Assertions.assertEquals("insert_label", task.getLabel());
+            SelectRelation select = (SelectRelation) task.getQueryStatement().getQueryRelation();
+            FileTableFunctionRelation files = (FileTableFunctionRelation) select.getRelation();
+            Assertions.assertEquals("new.parquet,old.parquet", files.getProperties().get("path"));
+            Assertions.assertEquals("parquet", files.getProperties().get("format"));
+            Assertions.assertNotNull(select.getWhereClause());
+        } finally {
+            dropPipe(pipeName);
+        }
+    }
+
+    @Test
+    public void testConditionalUpdateRetryAll() throws Exception {
+        assertConditionalUpdateRetry(true);
+    }
+
+    @Test
+    public void testConditionalUpdateRetryFile() throws Exception {
+        assertConditionalUpdateRetry(false);
+    }
+
+    private void assertConditionalUpdateRetry(boolean retryAll) throws Exception {
+        mockRepoExecutor();
+        Pipe pipe = prepareConditionalUpdatePipe("p_cdc_retry");
+        List<Task> submissions = new ArrayList<>();
+        AtomicBoolean fail = new AtomicBoolean(true);
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                submissions.add(task);
+                CompletableFuture<Constants.TaskRunState> future = CompletableFuture.completedFuture(
+                        fail.get() ? Constants.TaskRunState.FAILED : Constants.TaskRunState.SUCCESS);
+                return new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED, future);
+            }
+        };
+
+        // Exercise automatic retries, then explicit RETRY ALL / RETRY FILE after exhaustion.
+        pipeRetryFailedTask(pipe, retryAll);
+        Assertions.assertTrue(submissions.size() > 1);
+        String firstSql = submissions.get(0).getDefinition();
+        for (Task task : submissions) {
+            assertConditionalUpdateTask(task);
+            Assertions.assertEquals(firstSql, task.getDefinition(), "automatic retry must retain the INSERT label");
+        }
+        Assertions.assertNotEquals(submissions.get(0).getName(), submissions.get(1).getName());
+
+        int failedSubmissions = submissions.size();
+        fail.set(false);
+        pipe.schedule();
+        pipe.schedule();
+        Assertions.assertEquals(failedSubmissions + 1, submissions.size());
+        Task retried = submissions.get(failedSubmissions);
+        assertConditionalUpdateTask(retried);
+        InsertStmt first = (InsertStmt) SqlParser.parse(firstSql, new SessionVariable()).get(0);
+        InsertStmt last = (InsertStmt) SqlParser.parse(retried.getDefinition(), new SessionVariable()).get(0);
+        Assertions.assertNotEquals(first.getLabel(), last.getLabel(), "explicit file retry builds a new task");
+        Assertions.assertTrue(pipe.getRunningTasks().isEmpty());
+        Assertions.assertEquals(1,
+                pipe.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+    }
+
+    @Test
+    public void testConditionalUpdateAbortedLoadRecovery() throws Exception {
+        assertConditionalUpdateSnapshotRecovery(TransactionStatus.ABORTED);
+    }
+
+    @Test
+    public void testConditionalUpdateCommittedLoadRecovery() throws Exception {
+        assertConditionalUpdateSnapshotRecovery(TransactionStatus.COMMITTED);
+    }
+
+    private void assertConditionalUpdateSnapshotRecovery(TransactionStatus transactionStatus) throws Exception {
+        mockRepoExecutor();
+        Pipe original = prepareConditionalUpdatePipe("p_cdc_recovery");
+        mockTaskSubmission(() -> new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED,
+                new CompletableFuture<Constants.TaskRunState>()));
+        // Persist while the file is LOADING, before the scheduler observes the transaction outcome.
+        original.schedule();
+        Assertions.assertEquals(1, original.getRunningTasks().size());
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        ctx.getGlobalStateMgr().getPipeManager().getRepo().save(image.getImageWriter());
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
+                return new TransactionStateSnapshot(transactionStatus, "");
+            }
+        };
+        PipeManager restoredManager = new PipeManager();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        try {
+            restoredManager.getRepo().load(reader);
+        } finally {
+            reader.close();
+        }
+        Pipe restored = restoredManager.mayGetPipe(new PipeName(PIPE_TEST_DB, original.getName())).get();
+        Assertions.assertEquals(original.getOriginSql(), restored.getOriginSql());
+        Assertions.assertFalse(restored.isRecovered());
+        Assertions.assertTrue(restored.getRunningTasks().isEmpty());
+        restored.recovery();
+        FileListRepo repo = restored.getPipeSource().getFileListRepo();
+        Assertions.assertTrue(restored.isRunnable());
+        if (transactionStatus == TransactionStatus.COMMITTED) {
+            Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+            // A committed transaction must not be rebuilt or submitted again after recovery.
+            new MockUp<TaskManager>() {
+                @Mock
+                public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                    Assertions.fail("recovery must not resubmit a committed file");
+                    return null;
+                }
+            };
+            restored.schedule();
+            Assertions.assertTrue(restored.getRunningTasks().isEmpty());
+            Assertions.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0).isEmpty());
+            return;
+        }
+        Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+
+        AlterPipeStmt retry = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter pipe p_cdc_recovery retry all", ctx);
+        restored.retry((AlterPipeClauseRetry) retry.getAlterPipeClause());
+        List<Task> submissions = new ArrayList<>();
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                submissions.add(task);
+                return new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED,
+                        CompletableFuture.completedFuture(Constants.TaskRunState.SUCCESS));
+            }
+        };
+        restored.schedule();
+        restored.schedule();
+        Assertions.assertEquals(1, submissions.size());
+        assertConditionalUpdateTask(submissions.get(0));
+        Assertions.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+        Assertions.assertTrue(restored.getRunningTasks().isEmpty());
+    }
+
+    private Pipe prepareConditionalUpdatePipe(String name) throws Exception {
+        createPipe("create pipe " + name + " properties('task.time_zone'='UTC') " +
+                "as insert into tbl_pk (col_int, col_version, col_string) " +
+                "properties('merge_condition'='col_version', 'strict_mode'='true', 'max_filter_ratio'='0') " +
+                "select col_int, cast(col_int as decimal(38, 0)), col_string " +
+                "from files('path'='fake://pipe', 'format'='parquet') where col_int > 0");
+        Pipe pipe = getPipe(name);
+        pipe.getPipeSource().getFileListRepo().stageFiles(
+                Lists.newArrayList(new PipeFileRecord(pipe.getId(), "cdc.parquet", "v1", 1)));
+        return pipe;
+    }
+
+    private void assertConditionalUpdateTask(Task task) {
+        InsertStmt insert = (InsertStmt) SqlParser.parse(task.getDefinition(), new SessionVariable()).get(0);
+        Assertions.assertEquals(ImmutableMap.of("merge_condition", "col_version", "strict_mode", "true",
+                "max_filter_ratio", "0"), insert.getProperties());
+        Assertions.assertEquals(Lists.newArrayList("col_int", "col_version", "col_string"),
+                insert.getTargetColumnNames());
+        SelectRelation select = (SelectRelation) insert.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation files = (FileTableFunctionRelation) select.getRelation();
+        Assertions.assertEquals("cdc.parquet", files.getProperties().get("path"));
+        Assertions.assertNotNull(select.getWhereClause());
+        Assertions.assertEquals("UTC", task.getProperties().get("time_zone"));
     }
 
     @Test
