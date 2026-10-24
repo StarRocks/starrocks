@@ -25,42 +25,18 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
-<<<<<<< HEAD:be/test/exec/hdfs_scanner/hdfs_scanner_test.cpp
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/fragment_context.h"
-=======
-#include "common/config_cache_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "compute_env/global_dict/fragment_dict_state.h"
-#include "compute_env/query/fragment_runtime_state.h"
-#include "connector/hive/scanner/hdfs_scanner_avro.h"
-#include "connector/hive/scanner/hdfs_scanner_orc.h"
-#include "connector/hive/scanner/hdfs_scanner_parquet.h"
-#include "connector/hive/scanner/hdfs_scanner_text.h"
-#include "connector/hive/scanner/jni_scanner.h"
-#include "exprs/expr_executor.h"
-#include "exprs/expr_factory.h"
-#include "formats/column_evaluator.h"
-#include "formats/csv/csv_defaults.h"
-#include "formats/iceberg/iceberg_delete_builder.h"
-#include "formats/parquet/file_writer.h"
-#include "formats/parquet/parquet_file_writer.h"
-#include "runtime/chunk_helper.h"
->>>>>>> 6e83ecc ([Enhancement] Support DELETE on Iceberg ORC data files (#81435)):be/test/connector/hive/scanner/hdfs_scanner_test.cpp
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD:be/test/exec/hdfs_scanner/hdfs_scanner_test.cpp
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
-=======
-#include "testutil/column_test_helper.h"
->>>>>>> 6e83ecc ([Enhancement] Support DELETE on Iceberg ORC data files (#81435)):be/test/connector/hive/scanner/hdfs_scanner_test.cpp
 
 namespace starrocks {
 
@@ -995,7 +971,7 @@ static Status read_keys_and_row_positions(HdfsScanner* scanner, RuntimeState* st
                                           std::vector<std::pair<std::string, int64_t>>* rows) {
     const SlotId key_slot = tuple_desc.slots()[0]->id();
     const SlotId pos_slot = tuple_desc.slots()[2]->id();
-    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(tuple_desc, 0);
     for (;;) {
         chunk->reset();
         Status st = scanner->get_next(state, &chunk);
@@ -1009,72 +985,6 @@ static Status read_keys_and_row_positions(HdfsScanner* scanner, RuntimeState* st
         }
         if (st.is_end_of_file()) return Status::OK();
     }
-}
-
-TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithParquetPositionDelete) {
-    const std::string tmp_dir = "./ut_dir/hdfs_scanner_orc_row_position_test";
-    const std::string delete_path = tmp_dir + "/position_delete.parquet";
-    (void)FileSystem::Default()->delete_dir_recursive(tmp_dir);
-    ASSERT_OK(FileSystem::Default()->create_dir_recursive(tmp_dir));
-
-    // a Parquet position delete file for an ORC data file: rows 0, 4097 (2nd batch) and 9999 (last row) are deleted.
-    {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
-        auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
-        auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
-        writer_options->column_ids = {
-                formats::FileColumnId{formats::IcebergDeleteFileMeta::get_delete_file_path_slot().id(), {}},
-                formats::FileColumnId{formats::IcebergDeleteFileMeta::get_delete_file_pos_slot().id(), {}}};
-        ASSIGN_OR_ABORT(auto writable_file, FileSystem::Default()->new_writable_file(delete_path));
-        auto output_stream = std::make_shared<parquet::ParquetOutputStream>(std::move(writable_file));
-        formats::ParquetFileWriter writer(delete_path, std::move(output_stream), {"file_path", "pos"}, type_descs,
-                                          std::move(column_evaluators), TCompressionType::NO_COMPRESSION,
-                                          std::move(writer_options), [] {}, {false, false});
-        ASSERT_OK(writer.init());
-        std::vector<Slice> file_paths{Slice(string_key_value_10k_orc_file), Slice("another_data_file.orc"),
-                                      Slice(string_key_value_10k_orc_file), Slice(string_key_value_10k_orc_file)};
-        std::vector<int64_t> delete_positions{0, 1, 4097, 9999};
-        auto chunk = std::make_shared<Chunk>();
-        chunk->append_column(ColumnTestHelper::build_column<Slice>(file_paths), 0);
-        chunk->append_column(ColumnTestHelper::build_column<int64_t>(delete_positions), 1);
-        ASSERT_OK(writer.write(chunk.get()));
-        ASSERT_OK(writer.close().io_status);
-    }
-    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_path));
-    TIcebergDeleteFile delete_file;
-    delete_file.__set_full_path(delete_path);
-    delete_file.__set_file_format(THdfsFileFormat::PARQUET);
-    delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
-    delete_file.__set_length(delete_file_size);
-
-    auto scanner = std::make_shared<HdfsOrcScanner>();
-    auto* range = _create_scan_range(string_key_value_10k_orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(string_key_value_with_pos_orc_desc);
-    auto* ctx = _create_ctx(string_key_value_10k_orc_file, range, tuple_desc);
-    ctx->profile.runtime_profile = _runtime_profile;
-    ctx->table_specific.iceberg_delete_files.emplace_back(&delete_file);
-
-    ASSERT_OK(scanner->init(_runtime_state, ctx));
-    ASSERT_OK(scanner->open(_runtime_state));
-    std::vector<std::pair<std::string, int64_t>> rows;
-    ASSERT_OK(read_keys_and_row_positions(scanner.get(), _runtime_state, *tuple_desc, &rows));
-    // The delete builder needs a runtime profile, but the scanner's own counters are created by HiveDataSource,
-    // which this test does not build; clear the profile so close() skips update_counter().
-    ctx->profile.runtime_profile = nullptr;
-    scanner->close();
-
-    // `_pos` is the row's position in the whole file, so it keeps counting across batches and stripes,
-    // and the deleted positions are gone.
-    std::vector<int64_t> expected_positions;
-    for (int64_t pos = 0; pos < 10000; pos++) {
-        if (pos != 0 && pos != 4097 && pos != 9999) expected_positions.push_back(pos);
-    }
-    std::vector<int64_t> positions;
-    for (const auto& row : rows) positions.push_back(row.second);
-    EXPECT_EQ(expected_positions, positions);
-
-    (void)FileSystem::Default()->delete_dir_recursive(tmp_dir);
 }
 
 // A dict filter drops rows from the ORC batch; `_pos` must be filtered the same way and stay aligned with its row.
@@ -1105,12 +1015,12 @@ TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithDictFilter) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "gggggggggg");
         push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
-        ctx->format_scan_context.conjuncts.by_slot[tuple_desc->slots()[0]->id()].push_back(
+        ctx->conjuncts.by_slot[tuple_desc->slots()[0]->id()].push_back(
                 create_expr_context(&_pool, nodes));
     }
-    for (auto& it : ctx->format_scan_context.conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
+    for (auto& it : ctx->conjuncts.by_slot) {
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
     ASSERT_OK(scanner->init(_runtime_state, ctx));
     scanner->disable_use_orc_sargs();
@@ -1141,11 +1051,11 @@ TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionConjunct) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_int_literal_node(TPrimitiveType::BIGINT, 10);
         push_binary_pred_texpr_node(nodes, TExprOpcode::LT, pos_slot, TPrimitiveType::BIGINT, lit_node);
-        ctx->format_scan_context.conjuncts.by_slot[pos_slot->id()].push_back(create_expr_context(&_pool, nodes));
+        ctx->conjuncts.by_slot[pos_slot->id()].push_back(create_expr_context(&_pool, nodes));
     }
-    for (auto& it : ctx->format_scan_context.conjuncts.by_slot) {
-        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
-        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
+    for (auto& it : ctx->conjuncts.by_slot) {
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
     ASSERT_OK(scanner->init(_runtime_state, ctx));
     scanner->disable_use_orc_sargs();

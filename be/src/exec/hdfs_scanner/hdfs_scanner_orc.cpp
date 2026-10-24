@@ -24,11 +24,7 @@
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
-<<<<<<< HEAD:be/src/exec/hdfs_scanner/hdfs_scanner_orc.cpp
-=======
-#include "formats/paimon/paimon_delete_file_builder.h"
 #include "formats/reserved_columns.h"
->>>>>>> 6e83ecc ([Enhancement] Support DELETE on Iceberg ORC data files (#81435)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
 #include "gen_cpp/orc_proto.pb.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -335,11 +331,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-<<<<<<< HEAD:be/src/exec/hdfs_scanner/hdfs_scanner_orc.cpp
-            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
-=======
-            RETURN_IF_ERROR(iceberg_delete_builder.build_position_delete(*delete_file, THdfsFileFormat::ORC));
->>>>>>> 6e83ecc ([Enhancement] Support DELETE on Iceberg ORC data files (#81435)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
+            RETURN_IF_ERROR(iceberg_delete_builder->build_position_delete(*delete_file, THdfsFileFormat::ORC));
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                delete_file->file_content);
@@ -430,12 +422,12 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     }
 
     _row_position_slot = nullptr;
-    for (const auto* slot : _scanner_ctx->format_scan_context.reserved_field_slots) {
+    for (const auto* slot : _scanner_ctx->reserved_field_slots) {
         if (slot->col_name() == formats::kIcebergRowPositionColumnName) {
             _row_position_slot = slot;
             // the scanner fills _pos itself, so it also evaluates the single-slot conjuncts on it
-            auto it = _scanner_ctx->format_scan_context.conjuncts.by_slot.find(slot->id());
-            if (it != _scanner_ctx->format_scan_context.conjuncts.by_slot.end()) {
+            auto it = _scanner_ctx->conjuncts.by_slot.find(slot->id());
+            if (it != _scanner_ctx->conjuncts.by_slot.end()) {
                 _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
             }
         }
