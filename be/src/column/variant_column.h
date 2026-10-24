@@ -107,11 +107,7 @@ public:
     size_t reference_memory_usage() const override;
     size_t reference_memory_usage(size_t from, size_t size) const override;
     size_t byte_size(size_t from, size_t size) const override;
-<<<<<<< HEAD
-=======
     Datum get(size_t n) const override;
-    void reserve(size_t n) override;
->>>>>>> 52b11fd7593... [BugFix] Take over the ObjectColumn members VariantColumn's shredded storage invalidates (#62584)
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
     void remove_first_n_values(size_t count) override;

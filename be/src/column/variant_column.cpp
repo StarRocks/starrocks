@@ -16,21 +16,15 @@
 
 #include <cctz/time_zone.h>
 
-<<<<<<< HEAD
 #include <algorithm>
-=======
 #include <stdexcept>
->>>>>>> 52b11fd7593... [BugFix] Take over the ObjectColumn members VariantColumn's shredded storage invalidates (#62584)
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "base/coding.h"
-<<<<<<< HEAD
 #include "base/simd/simd.h"
-=======
 #include "base/status.h"
->>>>>>> 52b11fd7593... [BugFix] Take over the ObjectColumn members VariantColumn's shredded storage invalidates (#62584)
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -809,7 +803,7 @@ size_t VariantColumn::capacity() const {
 }
 
 // ObjectColumn reports `_pool.capacity() * type_size()`, which is always 0 for a variant and hides
-// the reservation reserve() now places on the base payload. Report the storage that actually holds
+// the rows held in the base payload. Report the storage that actually holds
 // the rows, matching what capacity() and byte_size() already sum over.
 size_t VariantColumn::container_memory_usage() const {
     size_t usage = 0;
