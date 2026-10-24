@@ -1279,4 +1279,119 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
         }
     }
 }
+
+template <LogicalType LT>
+static void run_date_or_datetime_case_when_test(const RuntimeState& state) {
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    constexpr size_t kNumRows = 65; // Crosses multiple 16-row NEON chunks + scalar tail
+    TExprNode node;
+    node.opcode = TExprOpcode::ADD;
+    node.child_type = TPrimitiveType::BOOLEAN;
+    node.node_type = TExprNodeType::CASE_EXPR;
+    node.num_children = 5;
+    node.__isset.opcode = true;
+    node.__isset.child_type = true;
+    node.type = gen_type_desc(to_thrift(LT));
+    node.case_expr.has_case_expr = false;
+    node.case_expr.has_else_expr = true;
+
+    auto make_val = [](size_t seed) -> CppType {
+        if constexpr (LT == TYPE_DATE) {
+            return DateValue{static_cast<int32_t>(DateValue::MIN_DATE_VALUE._julian + seed)};
+        } else {
+            return TimestampValue{static_cast<int64_t>(TimestampValue::MIN_TIMESTAMP_VALUE._timestamp + seed * 1000)};
+        }
+    };
+
+    // Build WHEN0 and WHEN1 non-null boolean columns
+    auto when0_col = BooleanColumn::create();
+    auto when1_col = BooleanColumn::create();
+    for (size_t i = 0; i < kNumRows; ++i) {
+        when0_col->append(static_cast<uint8_t>((i % 3) == 0 ? 1 : 0));
+        when1_col->append(static_cast<uint8_t>((i % 3) == 1 ? 1 : 0));
+    }
+
+    // Mode 0: all variable non-null columns (exercises SIMD multi_select_if var path)
+    // Mode 1: variable THEN0 + ConstColumn THEN1 (size 1) + ConstColumn ELSE (size 1) (exercises ConstColumn path)
+    // Mode 2: nullable THEN0 with has_null() == true (exercises nullable fallback path)
+    for (int mode : {0, 1, 2}) {
+        SCOPED_TRACE(mode);
+        ObjectPool pool;
+        Expr* expr = pool.add(VectorizedCaseExprFactory::from_thrift(node, LT, TYPE_BOOLEAN));
+        expr->set_type(TypeDescriptor(LT));
+
+        auto then0_data = ColumnType::create();
+        auto then1_data = ColumnType::create();
+        auto else_data = ColumnType::create();
+        for (size_t i = 0; i < kNumRows; ++i) {
+            then0_data->append(make_val(100 + i));
+            then1_data->append(make_val(200 + i));
+            else_data->append(make_val(300 + i));
+        }
+
+        ColumnPtr then0_col = then0_data;
+        ColumnPtr then1_col = then1_data;
+        ColumnPtr else_col = else_data;
+
+        const CppType const_then1_val = make_val(777);
+        const CppType const_else_val = make_val(888);
+        if (mode == 1) {
+            auto c1 = ColumnType::create();
+            c1->append(const_then1_val);
+            then1_col = ConstColumn::create(std::move(c1), kNumRows);
+
+            auto ce = ColumnType::create();
+            ce->append(const_else_val);
+            else_col = ConstColumn::create(std::move(ce), kNumRows);
+        } else if (mode == 2) {
+            auto null_map = NullColumn::create(kNumRows, 0);
+            null_map->get_data()[0] = 1; // Row 0 is NULL in THEN0
+            then0_col = NullableColumn::create(std::move(then0_data), std::move(null_map));
+        }
+
+        Chunk chunk;
+        chunk.append_column(when0_col->clone(), 0);
+        chunk.append_column(when1_col->clone(), 1);
+        chunk.append_column(std::move(then0_col), 2);
+        chunk.append_column(std::move(then1_col), 3);
+        chunk.append_column(std::move(else_col), 4);
+
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 0)));
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(LT), 2)));
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 1)));
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(LT), 3)));
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(LT), 4)));
+
+        const int32_t saved_ratio = config::case_when_selective_eval_ratio;
+        DeferOp restore([&]() { config::case_when_selective_eval_ratio = saved_ratio; });
+        config::case_when_selective_eval_ratio = 0; // Ensure non-selective path so SIMD multi_select_if is exercised
+
+        ColumnPtr res = expr->evaluate(nullptr, &chunk);
+        ASSERT_EQ(kNumRows, res->size());
+        ColumnViewer<LT> viewer(res);
+        for (size_t i = 0; i < kNumRows; ++i) {
+            if (mode == 2 && i == 0) {
+                ASSERT_TRUE(viewer.is_null(i));
+                continue;
+            }
+            ASSERT_FALSE(viewer.is_null(i));
+            CppType expected_val;
+            if ((i % 3) == 0) {
+                expected_val = make_val(100 + i);
+            } else if ((i % 3) == 1) {
+                expected_val = (mode == 1) ? const_then1_val : make_val(200 + i);
+            } else {
+                expected_val = (mode == 1) ? const_else_val : make_val(300 + i);
+            }
+            ASSERT_EQ(expected_val, viewer.value(i)) << "row=" << i;
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, whenNoCaseDateTimeAndDateSimdAndFallback) {
+    run_date_or_datetime_case_when_test<TYPE_DATETIME>(runtime_state);
+    run_date_or_datetime_case_when_test<TYPE_DATE>(runtime_state);
+}
 } // namespace starrocks

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "base/simd/simd_utils.h"
@@ -429,6 +430,7 @@ public:
                 constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
 
                 for (int j = 0; j < data_size; j++) {
+                    loaded_datas[select_list_size - 1] = zero_vector;
                     // load select data
                     for (int i = 0; i < select_list_size; ++i) {
                         // date columns except the last column, if mask is zero, no need to load it
@@ -437,7 +439,9 @@ public:
                         }
 
                         if (then_column_is_const[i]) {
-                            loaded_datas[i] = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(handle_select_data[i]));
+                            uint32_t bits = 0;
+                            std::memcpy(&bits, handle_select_data[i], sizeof(bits));
+                            loaded_datas[i] = vdupq_n_u32(bits);
                         } else {
                             loaded_datas[i] = vld1q_u32(reinterpret_cast<const uint32_t*>(handle_select_data[i]));
                         }
@@ -489,6 +493,130 @@ public:
                 // update handle_select_vec
                 for (int i = 0; i < select_vec_size; ++i) {
                     handle_select_vec[i] += 16;
+                }
+            }
+        } else if constexpr (data_size == 8) {
+            constexpr int kMaxSimdWhenSize = 8;
+            if (select_vec_size <= kMaxSimdWhenSize) {
+                uint8x16_t win_masks[kMaxSimdWhenSize];
+                uint64x2_t const_vecs[kMaxSimdWhenSize + 1];
+                for (int i = 0; i < select_list_size; ++i) {
+                    if (then_column_is_const[i]) {
+                        uint64_t bits = 0;
+                        std::memcpy(&bits, handle_select_data[i], sizeof(bits));
+                        const_vecs[i] = vdupq_n_u64(bits);
+                    }
+                }
+
+                const uint8x16_t zero_u8 = vdupq_n_u8(0);
+                const uint8x16_t idx0 = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
+                const uint8x16_t idx1 = {2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3};
+                const uint8x16_t idx2 = {4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5};
+                const uint8x16_t idx3 = {6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7};
+                const uint8x16_t idx4 = {8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9};
+                const uint8x16_t idx5 = {10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11};
+                const uint8x16_t idx6 = {12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13};
+                const uint8x16_t idx7 = {14, 14, 14, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15};
+
+                auto fill_branch_16 = [&](int branch_idx, uint64_t* out_ptr) {
+                    if (then_column_is_const[branch_idx]) {
+                        uint64x2_t v = const_vecs[branch_idx];
+                        for (int k = 0; k < 8; ++k) {
+                            vst1q_u64(out_ptr + k * 2, v);
+                        }
+                    } else {
+                        std::memcpy(out_ptr, handle_select_data[branch_idx] + processed_rows, 16 * sizeof(uint64_t));
+                    }
+                };
+
+                while (processed_rows + 16 < row_sz) {
+                    uint64_t* out_ptr = reinterpret_cast<uint64_t*>(dst.data() + processed_rows);
+                    uint8x16_t selected_16 = zero_u8;
+                    int active_branches = 0;
+                    int single_winner = -1;
+
+                    for (int i = 0; i < select_vec_size; ++i) {
+                        uint8x16_t raw = vld1q_u8(select_vec[i] + processed_rows);
+                        uint8x16_t m = vtstq_u8(raw, raw);
+                        uint8x16_t win = vbicq_u8(m, selected_16);
+                        win_masks[i] = win;
+                        selected_16 = vorrq_u8(selected_16, m);
+                        active_branches = i + 1;
+                        if (vminvq_u8(selected_16) != 0) {
+                            if (vminvq_u8(win) != 0) {
+                                single_winner = i;
+                            }
+                            break;
+                        }
+                    }
+
+                    if (single_winner >= 0) {
+                        fill_branch_16(single_winner, out_ptr);
+                        processed_rows += 16;
+                        continue;
+                    }
+                    if (vmaxvq_u8(selected_16) == 0) {
+                        fill_branch_16(select_list_size - 1, out_ptr);
+                        processed_rows += 16;
+                        continue;
+                    }
+
+                    uint64x2_t r0, r1, r2, r3, r4, r5, r6, r7;
+                    const int else_idx = select_list_size - 1;
+                    if (vminvq_u8(selected_16) != 0) {
+                        r0 = r1 = r2 = r3 = r4 = r5 = r6 = r7 = vdupq_n_u64(0);
+                    } else if (then_column_is_const[else_idx]) {
+                        r0 = r1 = r2 = r3 = r4 = r5 = r6 = r7 = const_vecs[else_idx];
+                    } else {
+                        const auto* ep =
+                                reinterpret_cast<const uint64_t*>(handle_select_data[else_idx] + processed_rows);
+                        r0 = vld1q_u64(ep + 0);
+                        r1 = vld1q_u64(ep + 2);
+                        r2 = vld1q_u64(ep + 4);
+                        r3 = vld1q_u64(ep + 6);
+                        r4 = vld1q_u64(ep + 8);
+                        r5 = vld1q_u64(ep + 10);
+                        r6 = vld1q_u64(ep + 12);
+                        r7 = vld1q_u64(ep + 14);
+                    }
+
+                    for (int i = 0; i < active_branches; ++i) {
+                        uint8x16_t wm = win_masks[i];
+                        if (vmaxvq_u8(wm) == 0) {
+                            continue;
+                        }
+                        if (then_column_is_const[i]) {
+                            uint64x2_t cv = const_vecs[i];
+                            r0 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx0)), cv, r0);
+                            r1 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx1)), cv, r1);
+                            r2 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx2)), cv, r2);
+                            r3 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx3)), cv, r3);
+                            r4 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx4)), cv, r4);
+                            r5 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx5)), cv, r5);
+                            r6 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx6)), cv, r6);
+                            r7 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx7)), cv, r7);
+                        } else {
+                            const auto* bp = reinterpret_cast<const uint64_t*>(handle_select_data[i] + processed_rows);
+                            r0 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx0)), vld1q_u64(bp + 0), r0);
+                            r1 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx1)), vld1q_u64(bp + 2), r1);
+                            r2 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx2)), vld1q_u64(bp + 4), r2);
+                            r3 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx3)), vld1q_u64(bp + 6), r3);
+                            r4 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx4)), vld1q_u64(bp + 8), r4);
+                            r5 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx5)), vld1q_u64(bp + 10), r5);
+                            r6 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx6)), vld1q_u64(bp + 12), r6);
+                            r7 = vbslq_u64(vreinterpretq_u64_u8(vqtbl1q_u8(wm, idx7)), vld1q_u64(bp + 14), r7);
+                        }
+                    }
+
+                    vst1q_u64(out_ptr + 0, r0);
+                    vst1q_u64(out_ptr + 2, r1);
+                    vst1q_u64(out_ptr + 4, r2);
+                    vst1q_u64(out_ptr + 6, r3);
+                    vst1q_u64(out_ptr + 8, r4);
+                    vst1q_u64(out_ptr + 10, r5);
+                    vst1q_u64(out_ptr + 12, r6);
+                    vst1q_u64(out_ptr + 14, r7);
+                    processed_rows += 16;
                 }
             }
         }
