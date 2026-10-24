@@ -14,10 +14,12 @@
 
 """Tests for performance optimizations and default value updates."""
 
+from sqlalchemy import Boolean, Integer, testing
 from sqlalchemy.testing import fixtures
+from sqlalchemy.testing.assertions import eq_
 
 from starrocks.common.defaults import ReflectionTableDefaults
-from starrocks.common.utils import TableAttributeNormalizer
+from starrocks.common.utils import TableAttributeNormalizer, canonical_default_as_kept
 from starrocks.reflection import StarRocksTableDefinitionParser
 
 
@@ -115,3 +117,94 @@ class DefaultValuesTest(fixtures.TestBase):
         # Test other engine -> unchanged
         result = ReflectionTableDefaults.normalize_engine("MYSQL")
         assert result == "MYSQL"
+
+
+class PropertyValueNormalizationTest(fixtures.TestBase):
+    @testing.combinations(
+        ("name, k", "k, name"),
+        ("`K`,`Name`", "k, name"),
+        ("k,name,", "k,  name"),
+        argnames="model_value,database_value",
+    )
+    def test_bloom_filter_columns_compare_in_any_order_and_case(self, model_value, database_value):
+        eq_(
+            ReflectionTableDefaults.normalize_property_value("bloom_filter_columns", model_value),
+            ReflectionTableDefaults.normalize_property_value("bloom_filter_columns", database_value),
+        )
+
+    def test_another_bloom_filter_column_is_a_change(self):
+        normalize = ReflectionTableDefaults.normalize_property_value
+        assert normalize("bloom_filter_columns", "k, name") != normalize("bloom_filter_columns", "k, other")
+
+    @testing.combinations(
+        ("unique_constraints", "t.id", "default_catalog.db.t.id"),
+        ("unique_constraints", "t.id,t.dt", "default_catalog.db.t.id,dt"),
+        ("unique_constraints", "t.dt, t.id; u.id", "default_catalog.db.u.id;default_catalog.db.t.id,dt"),
+        ("unique_constraints", "`T`.`id`", "default_catalog.db.t.id"),
+        (
+            "foreign_key_constraints",
+            "t(id) REFERENCES u(id)",
+            "default_catalog.db.t(id) REFERENCES default_catalog.db.u(id)",
+        ),
+        (
+            "foreign_key_constraints",
+            "t(a) REFERENCES u(b);t(c) references u(d)",
+            "default_catalog.db.t(c) REFERENCES default_catalog.db.u(d);"
+            " default_catalog.db.t(a) REFERENCES default_catalog.db.u(b)",
+        ),
+        argnames="key,model_value,database_value",
+    )
+    def test_constraints_compare_as_the_database_qualifies_them(self, key, model_value, database_value):
+        eq_(
+            ReflectionTableDefaults.normalize_property_value(key, model_value),
+            ReflectionTableDefaults.normalize_property_value(key, database_value),
+        )
+
+    @testing.combinations(
+        ("unique_constraints", "t.id", "t.dt"),
+        ("unique_constraints", "t.id", "u.id"),
+        ("unique_constraints", "t.id", "t.id,dt"),
+        ("foreign_key_constraints", "t(id) REFERENCES u(id)", "t(id) REFERENCES v(id)"),
+        argnames="key,model_value,database_value",
+    )
+    def test_another_constraint_is_a_change(self, key, model_value, database_value):
+        normalize = ReflectionTableDefaults.normalize_property_value
+        assert normalize(key, model_value) != normalize(key, database_value)
+
+    @testing.combinations(
+        ("excluded_trigger_tables", "t, u", "t,u"),
+        ("excluded_trigger_tables", "u,t", "t,u"),
+        ("excluded_refresh_tables", "db.u , `t`", "t,db.u"),
+        argnames="key,model_value,database_value",
+    )
+    def test_table_lists_compare_in_any_order_and_spacing(self, key, model_value, database_value):
+        eq_(
+            ReflectionTableDefaults.normalize_property_value(key, model_value),
+            ReflectionTableDefaults.normalize_property_value(key, database_value),
+        )
+
+    @testing.combinations(("t,u", "t,v"), ("t", "T"), argnames="model_value,database_value")
+    def test_another_excluded_table_is_a_change(self, model_value, database_value):
+        normalize = ReflectionTableDefaults.normalize_property_value
+        assert normalize("excluded_trigger_tables", model_value) != normalize("excluded_trigger_tables", database_value)
+
+
+class DefaultAsStarRocksKeepsItTest(fixtures.TestBase):
+    """Defaults that StarRocks keeps as one value are equal, however they were written."""
+
+    @testing.combinations(
+        ("now_function", ("expression", "now()"), Integer(), True, ("expression", "current_timestamp")),
+        ("current_timestamp", ("expression", "current_timestamp"), Integer(), True, ("expression", "current_timestamp")),
+        ("current_timestamp_call", ("expression", "current_timestamp()"), Integer(), True, ("expression", "current_timestamp")),
+        ("null_keyword", ("expression", "null"), Integer(), True, None),
+        ("no_default", None, Integer(), True, None),
+        ("another_function", ("expression", "uuid()"), Integer(), True, ("expression", "uuid()")),
+        ("boolean_text", ("literal", "TRUE"), Boolean(), True, ("literal", "1")),
+        ("boolean_text_kept_as_written", ("literal", "TRUE"), Boolean(), False, ("literal", "TRUE")),
+        ("boolean_digit", ("literal", "0"), Boolean(), True, ("literal", "0")),
+        ("text_for_another_type", ("literal", "true"), Integer(), True, ("literal", "true")),
+        argnames="canonical, column_type, kept_as_digits, expected",
+        id_="iaaaa",
+    )
+    def test_default_as_kept(self, canonical, column_type, kept_as_digits, expected):
+        eq_(canonical_default_as_kept(canonical, column_type, kept_as_digits), expected)

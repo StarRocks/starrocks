@@ -18,15 +18,18 @@ The dialect puts the column list, each view clause and ``AS`` on lines of their 
 line breaks, so each expected string literal below is one line of the generated DDL.
 """
 
+from alembic import op
+from alembic.testing.fixtures import op_fixture
 from sqlalchemy import Column, MetaData, Table, exc, func, literal, select, testing
 from sqlalchemy.schema import CreateTable, DropTable
 from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
+import starrocks.alembic  # noqa: F401
 from starrocks.common.types import ViewSecurityType
 from starrocks.datatype import INTEGER, VARCHAR
 from starrocks.dialect import StarRocksDialect
-from starrocks.sql.ddl import AlterView, CreateView, DropView
+from starrocks.sql.ddl import AlterView, AlterViewSecurity, CreateView, DropView
 from starrocks.sql.schema import View
 
 
@@ -330,3 +333,95 @@ class AlterViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         view = View("v", MetaData(), definition=definition)
         self.assert_compile(AlterView(view), "ALTER VIEW v" "AS" + "".join(definition_lines))
         eq_(str(AlterView(view).compile(dialect=self.__dialect__)), "ALTER VIEW v\nAS\n" + definition)
+
+
+class AlterViewSecurityCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
+
+    @testing.combinations(("none", "NONE"), ("invoker", "invoker"), argnames="security, keyword", id_="aa")
+    def test_alter_view_security(self, security, keyword):
+        view = View("my_view", MetaData(), definition="SELECT 1", schema="test_db")
+        self.assert_compile(
+            AlterViewSecurity(view, security), f"ALTER VIEW test_db.my_view SET SECURITY {keyword.upper()}"
+        )
+
+    def test_alter_view_security_refuses_definer(self):
+        view = View("my_view", MetaData(), definition="SELECT 1")
+        with expect_raises_message(exc.CompileError, "SECURITY NONE or INVOKER"):
+            AlterViewSecurity(view, "DEFINER").compile(dialect=self.__dialect__)
+
+
+class AlterViewOperationTest(fixtures.TestBase):
+    """``op.alter_view`` emits the statements that apply what it is given."""
+
+    __requires__ = ("sqlalchemy_2",)
+
+    def test_definition_only_is_alter_view_as(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2")
+        context.assert_("ALTER VIEW vASSELECT 2")
+
+    def test_definition_with_columns_and_no_comment_is_alter_view_as(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2 AS a", columns=[{"name": "a", "comment": "col a"}])
+        context.assert_("ALTER VIEW v (    a COMMENT 'col a')ASSELECT 2 AS a")
+
+    def test_comment_recreates_the_view_with_its_comment(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2", comment="the comment", schema="test_db")
+        context.assert_("CREATE OR REPLACE VIEW test_db.vCOMMENT 'the comment'ASSELECT 2")
+
+    def test_removed_comment_recreates_the_view_without_one(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2", existing_comment="old")
+        context.assert_("CREATE OR REPLACE VIEW vASSELECT 2")
+
+    def test_comment_only_recreates_the_view_from_its_existing_definition(self):
+        context = op_fixture("starrocks")
+        op.alter_view(
+            "v",
+            comment="new",
+            existing_definition="SELECT 1 AS a",
+            existing_columns=[{"name": "a", "comment": "col a"}],
+        )
+        context.assert_("CREATE OR REPLACE VIEW v (    a COMMENT 'col a')COMMENT 'new'ASSELECT 1 AS a")
+
+    def test_comment_without_any_definition_is_refused(self):
+        op_fixture("starrocks")
+        with expect_raises_message(exc.CompileError, "needs the view's definition or existing_definition"):
+            op.alter_view("v", comment="new")
+
+    @testing.combinations(
+        ("security", {"security": "INVOKER"}),
+        ("starrocks_security", {"starrocks_security": "INVOKER"}),
+        argnames="kwargs",
+        id_="ia",
+    )
+    def test_security_only_is_set_security(self, kwargs):
+        context = op_fixture("starrocks")
+        op.alter_view("v", **kwargs)
+        context.assert_("ALTER VIEW v SET SECURITY INVOKER")
+
+    def test_security_unchanged_from_the_existing_one_is_not_set(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2", security="INVOKER", existing_security="invoker")
+        context.assert_("ALTER VIEW vASSELECT 2")
+
+    def test_definition_and_security_are_two_statements(self):
+        context = op_fixture("starrocks")
+        op.alter_view("v", "SELECT 2", starrocks_security="NONE")
+        context.assert_("ALTER VIEW vASSELECT 2", "ALTER VIEW v SET SECURITY NONE")
+
+    def test_conflicting_security_spellings_are_refused(self):
+        op_fixture("starrocks")
+        with expect_raises_message(TypeError, "which are the same option"):
+            op.alter_view("v", security="NONE", starrocks_security="INVOKER")
+
+    def test_security_the_server_lacks_stops_the_op_before_the_definition_changes(self):
+        """StarRocks before 3.4.1 has no view SECURITY, so the op sends nothing, rather than an ALTER VIEW ... AS."""
+        context = op_fixture("starrocks")
+        context.impl.dialect.server_version_info = (3, 3, 22)
+        with expect_raises_message(exc.CompileError, r"View SECURITY \(view 'v'\) needs StarRocks 3.4.1"):
+            op.alter_view("v", "SELECT 2 AS a", security="INVOKER")
+        context.assert_()

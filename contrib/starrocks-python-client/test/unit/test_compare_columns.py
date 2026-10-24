@@ -15,7 +15,9 @@
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
-from sqlalchemy.testing import expect_raises_message, fixtures
+from alembic.operations.ops import AlterColumnOp
+from sqlalchemy import testing
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.compare import (
     compare_starrocks_column_agg_type,
@@ -50,24 +52,41 @@ class CompareColumnAggTypeTest(fixtures.TestBase):
         )
         assert not caplog.records
 
-    def test_changed_agg_type_raises(self):
-        with expect_raises_message(
-            NotImplementedError, "StarRocks does not support changing the aggregation type of a column"
-        ):
-            compare_starrocks_column_agg_type(
-                _starrocks_autogen_context(),
-                None,
-                "test_schema",
-                "t1",
-                "val1",
-                _column_with_agg_type(ColumnAggType.SUM),
-                _column_with_agg_type(ColumnAggType.REPLACE),
-            )
+    def test_changed_agg_type_warns(self, caplog):
+        """StarRocks cannot change a column's aggregate type, so autogenerate warns and carries on."""
+        compare_starrocks_column_agg_type(
+            _starrocks_autogen_context(),
+            None,
+            "test_schema",
+            "t1",
+            "val1",
+            _column_with_agg_type(ColumnAggType.SUM),
+            _column_with_agg_type(ColumnAggType.REPLACE),
+        )
+        assert "StarRocks does not support changing the aggregation type of a column" in caplog.text
 
 
 class CompareColumnAutoIncrementTest(fixtures.TestBase):
     def setup_test(self):
         self.autogen_context = _starrocks_autogen_context()
+
+    @testing.combinations(
+        ("integer_primary_key", "auto", False, False),
+        ("declared_and_present", True, True, False),
+        ("declared_off_and_absent", False, False, False),
+        ("declared_and_absent", True, False, True),
+        ("declared_off_and_present", False, True, True),
+        argnames="declared,in_database,kept",
+        id_="iaaa",
+    )
+    def test_the_alter_keeps_autoincrement_only_when_it_changes(self, declared, in_database, kept):
+        """Alembic puts autoincrement=True on the alter of any integer primary key, which StarRocks would refuse."""
+        alter_column_op = AlterColumnOp("t1", "id", modify_comment="new", autoincrement=True)
+        compare_starrocks_column_autoincrement(
+            self.autogen_context, alter_column_op, "sch", "t1", "id",
+            Mock(autoincrement=in_database), Mock(autoincrement=declared),
+        )
+        assert ("autoincrement" in alter_column_op.kw) is kept
 
     def test_autoincrement_same_noop(self):
         for autoincrement in (True, False):
@@ -95,6 +114,6 @@ class CompareColumnAutoIncrementTest(fixtures.TestBase):
                 Mock(autoincrement=meta_autoincrement),
             )
             assert any(
-                "Detected AUTO_INCREMENT change" in r.getMessage() and r.levelname == "WARNING"
+                "cannot add or remove AUTO_INCREMENT" in r.getMessage() and r.levelname == "WARNING"
                 for r in caplog.records
             )

@@ -14,6 +14,7 @@
 
 """Tests for SQL normalization functions."""
 
+from sqlalchemy import testing
 from sqlalchemy.testing import fixtures
 
 from starrocks.common.utils import TableAttributeNormalizer
@@ -174,11 +175,37 @@ class NormalizeSQLTest(fixtures.TestBase):
         assert result == ""
 
     def test_case_conversion(self):
-        """Test case conversion to lowercase."""
-        sql = "SELECT `ID`, `NAME` FROM `USERS` WHERE `STATUS` = 'ACTIVE'"
-        expected = "select id, name from users where status = 'active'"
+        """Keywords and identifiers are lowercased; a string literal keeps its case, which StarRocks compares by."""
+        sql = "SELECT `ID`, `IT'S` FROM `USERS` WHERE `STATUS` = 'ACTIVE' OR \"NAME\" = \"Bob\""
+        expected = "select id, it's from users where status = 'ACTIVE' or \"NAME\" = \"Bob\""
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
+
+    @testing.combinations(
+        ("SELECT id FROM t WHERE b = 'Active'", "SELECT id FROM t WHERE b = 'ACTIVE'"),
+        ('SELECT id FROM t WHERE b = "Active"', 'SELECT id FROM t WHERE b = "ACTIVE"'),
+        ("SELECT id FROM t WHERE b = 'it''s A'", "SELECT id FROM t WHERE b = 'it''s a'"),
+        ("SELECT 'db.t.x' AS c FROM t", "SELECT 'x' AS c FROM t"),
+        argnames="before, after",
+    )
+    @testing.combinations((False,), (True,), argnames="remove_qualifiers")
+    def test_a_change_inside_a_string_literal_is_kept(self, before, after, remove_qualifiers):
+        normalize = TableAttributeNormalizer.normalize_sql
+        assert normalize(before, remove_qualifiers=remove_qualifiers) != normalize(after, remove_qualifiers=remove_qualifiers)
+
+    @testing.combinations(
+        ("SELECT a FROM t WHERE x > 1.5", "select a from t where x > 1.5"),
+        ("SELECT t1.a * 0.25 FROM db1.t1", "select a * 0.25 from t1"),
+        ("SELECT `2024_sales`.a, 2024_sales.b FROM `db`.`2024_sales`", "select a, b from 2024_sales"),
+        argnames="sql, expected",
+    )
+    def test_a_decimal_number_is_no_qualifier(self, sql, expected):
+        assert TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True) == expected
+
+    def test_qualifiers_are_removed_around_a_string_literal(self):
+        sql = "SELECT `db`.`t`.`id`, concat(t.b, 'db.t.b') FROM `db`.`t` WHERE (`db`.`t`.`b` = 'X.Y')"
+        expected = "select id, concat(b, 'db.t.b') from t where (b = 'X.Y')"
+        assert TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True) == expected
 
 
 class StarRocksSpecificScenariosTest(fixtures.TestBase):
@@ -201,7 +228,7 @@ class StarRocksSpecificScenariosTest(fixtures.TestBase):
     def test_properties_clause(self):
         """Test PROPERTIES clause with quoted values."""
         sql = '''PROPERTIES ("replication_num" = "3", "storage_medium" = "SSD")'''
-        expected = '''properties ("replication_num" = "3", "storage_medium" = "ssd")'''
+        expected = '''properties ("replication_num" = "3", "storage_medium" = "SSD")'''
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
 

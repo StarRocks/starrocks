@@ -17,6 +17,7 @@ import contextlib
 import logging
 from types import MethodType, SimpleNamespace
 from typing import Optional
+from unittest import mock
 
 from lark import LarkError
 from sqlalchemy import MetaData, Table, testing
@@ -490,3 +491,56 @@ class ColumnFlagReflectionTest(fixtures.TestBase):
         assert table.c.k_not_null.nullable is False
         assert table.c.v.primary_key is False
         assert table.c.v.nullable is True
+
+
+class SecondaryIndexParserTest(fixtures.TestBase):
+    @staticmethod
+    def _show_index_row(key_name: str, column_name: str, index_type: str, comment: str) -> dict:
+        """A row of SHOW INDEX FROM, as StarRocks 3.3 and 4.1 return it."""
+        return {
+            "Table": "db.events", "Non_unique": "", "Key_name": key_name, "Seq_in_index": "",
+            "Column_name": column_name, "Collation": "", "Cardinality": "", "Sub_part": "", "Packed": "",
+            "Null": "", "Index_type": index_type, "Comment": comment,
+        }
+
+    def test_reflects_type_properties_and_comment(self):
+        rows = [
+            self._show_index_row("ix_city", "city", "BITMAP", "city's index\nsecond line"),
+            self._show_index_row(
+                "ix name", "name", 'NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "4")', ""
+            ),
+        ]
+
+        assert StarRocksTableDefinitionParser.parse_show_index_rows(rows) == [
+            {
+                "name": "ix_city",
+                "column_names": ["city"],
+                "unique": False,
+                "dialect_options": {"starrocks_using": "BITMAP", "starrocks_comment": "city's index\nsecond line"},
+            },
+            {
+                "name": "ix name",
+                "column_names": ["name"],
+                "unique": False,
+                "dialect_options": {
+                    "starrocks_using": "NGRAMBF",
+                    "starrocks_properties": {"bloom_filter_fpp": "0.05", "case_sensitive": "true", "gram_num": "4"},
+                },
+            },
+        ]
+
+    def test_column_name_containing_a_comma(self):
+        rows = [self._show_index_row("ix_note", "note, with comma", "BITMAP", "")]
+
+        assert StarRocksTableDefinitionParser.parse_show_index_rows(rows)[0]["column_names"] == ["note, with comma"]
+
+    def test_table_without_indexes(self):
+        assert StarRocksTableDefinitionParser.parse_show_index_rows([]) == []
+
+    def test_show_index_is_read_only_for_a_table_with_an_index_line(self):
+        """Every index has a line of SHOW CREATE TABLE that starts with INDEX; a table without one sends no SHOW INDEX."""
+        connection = mock.Mock()
+        without_index = 'CREATE TABLE `t` (\n  `id` int(11) NULL COMMENT "index of it"\n) ENGINE=OLAP'
+
+        assert StarRocksDialect()._secondary_indexes(connection, "`t`", without_index) == []
+        connection.exec_driver_sql.assert_not_called()

@@ -19,14 +19,17 @@ Covers the pieces that need no cluster: the state enum, the shared
 classification used to decide whether to poll at all.
 """
 
+from unittest.mock import Mock
+
 from alembic.ddl import base as alembic_base
-from sqlalchemy import Column
-from sqlalchemy.testing import fixtures
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import Column, testing
+from sqlalchemy.testing import expect_raises_message, fixtures
 
 from starrocks import INTEGER
 from starrocks.alembic.starrocks import SchemaChangeState, StarRocksImpl
 from starrocks.dialect import StarRocksDialect
-from starrocks.sql.ddl import AlterTableColumns
+from starrocks.sql.ddl import AlterTableColumns, AlterTableDistribution, AlterTableOrder, AlterTableProperties
 
 
 class SchemaChangeStateTest(fixtures.TestBase):
@@ -92,3 +95,63 @@ class SchemaChangeTargetTest(fixtures.TestBase):
         construct = AlterTableColumns("t", adds=[Column("a", INTEGER)])
         construct.table_name = None
         assert StarRocksImpl._schema_change_target(construct) is None
+
+
+class OptimizeJobTargetTest(fixtures.TestBase):
+    """A distribution change starts an OPTIMIZE job; sort key and property changes and column changes start COLUMN ones."""
+
+    @testing.combinations(
+        ("distribution", lambda: AlterTableDistribution("t", "HASH(id)", schema="db"), "OPTIMIZE"),
+        ("order", lambda: AlterTableOrder("t", "id", schema="db"), "COLUMN"),
+        ("properties", lambda: AlterTableProperties("t", {"bloom_filter_columns": "id"}, schema="db"), "COLUMN"),
+        ("columns", lambda: AlterTableColumns("t", adds=[Column("a", INTEGER)], schema="db"), "COLUMN"),
+        argnames="make_construct, kind",
+        id_="iaa",
+    )
+    def test_targets_and_job_kind(self, make_construct, kind):
+        construct = make_construct()
+        assert StarRocksImpl._schema_change_target(construct) == ("t", "db")
+        assert StarRocksImpl._schema_change_job_kind(construct) == kind
+
+
+class WaitForNewJobTest(fixtures.TestBase):
+    """The wait looks only at a job newer than the one the table had before the statement."""
+
+    @staticmethod
+    def _impl_with_jobs(rows):
+        context = MigrationContext.configure(
+            dialect=StarRocksDialect(), opts={"starrocks_schema_change_poll_interval": 0}
+        )
+        connection = Mock()
+        connection.execute.return_value.mappings.return_value.first.side_effect = list(rows)
+        context.impl.connection = connection
+        return context.impl, connection
+
+    def test_an_older_cancelled_job_is_not_the_statements_job(self):
+        impl, _ = self._impl_with_jobs([{"JobId": "5", "State": "CANCELLED", "Msg": "Table 1 does not exist"}])
+        impl._wait_for_schema_change("t", None, alter_type="COLUMN", after_job_id=5)
+
+    def test_a_newer_cancelled_job_raises(self):
+        impl, _ = self._impl_with_jobs([{"JobId": "6", "State": "CANCELLED", "Msg": "boom"}])
+        with expect_raises_message(RuntimeError, "CANCELLED: boom"):
+            impl._wait_for_schema_change("t", None, alter_type="COLUMN", after_job_id=5)
+
+    def test_polls_until_the_newer_job_finishes(self):
+        impl, connection = self._impl_with_jobs(
+            [{"JobId": "6", "State": "RUNNING"}, {"JobId": "6", "State": "FINISHED"}]
+        )
+        impl._wait_for_schema_change("t", "db", alter_type="OPTIMIZE", after_job_id=5)
+        assert connection.execute.call_count == 2
+        assert "SHOW ALTER TABLE OPTIMIZE FROM `db`" in str(connection.execute.call_args[0][0])
+
+    def test_no_job_at_all_is_not_waited_for(self):
+        impl, _ = self._impl_with_jobs([None])
+        impl._wait_for_schema_change("t", None, alter_type="COLUMN", after_job_id=0)
+
+    def test_latest_job_id_is_zero_for_a_table_without_jobs(self):
+        impl, _ = self._impl_with_jobs([None])
+        assert impl._latest_job_id("t", None, "COLUMN") == 0
+
+    def test_latest_job_id_reads_the_newest_job(self):
+        impl, _ = self._impl_with_jobs([{"JobId": "71510", "State": "FINISHED"}])
+        assert impl._latest_job_id("t", None, "OPTIMIZE") == 71510

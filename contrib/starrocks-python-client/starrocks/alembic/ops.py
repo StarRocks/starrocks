@@ -15,10 +15,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+import re
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from alembic.autogenerate.rewriter import Rewriter
 from alembic.operations import Operations, ops
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Column, MetaData, Table
 
 from starrocks.common.params import (
@@ -135,8 +137,23 @@ class AlterViewOp(ops.MigrateOperation):
         existing_columns: Union[List[Dict], None] = None,
         existing_comment: Optional[str] = None,
         existing_security: Optional[str] = None,
+        starrocks_security: Optional[str] = None,
     ):
-        """Invoke an ALTER VIEW operation."""
+        """Invoke an ALTER VIEW operation.
+
+        ``starrocks_security`` is ``security`` spelled as ``op.create_view`` does; give one of them.
+
+        ALTER VIEW ... AS drops a view's comment, so an operation that gives ``comment`` or ``existing_comment``
+        recreates the view with CREATE OR REPLACE VIEW, from ``definition`` and ``columns``, or from
+        ``existing_definition`` and ``existing_columns`` when it gives no definition.
+        """
+        if starrocks_security is not None:
+            if security is not None and str(security).upper() != str(starrocks_security).upper():
+                raise TypeError(
+                    f"alter_view got security={security!r} and starrocks_security={starrocks_security!r}, "
+                    "which are the same option; give one."
+                )
+            security = starrocks_security
         op = cls(
             view_name,
             definition,
@@ -1065,6 +1082,24 @@ class AlterTableColumnsOp(ops.AlterTableOp):
         )
 
 
+_NAME_IN_DISTRIBUTION = re.compile(r"`((?:[^`]|``)+)`|([A-Za-z_][A-Za-z0-9_$]*)")
+"""A backquoted or bare name in a distribution, such as ``HASH(`a`, b)``."""
+
+
+def _may_name_any_of(table_change: Any, column_names: Set[str]) -> bool:
+    """Whether a table change may name one of the lower-cased ``column_names``, as :func:`_combine_column_alters` asks.
+
+    A sort key or property change may, and a distribution change does when its new or old distribution names one.
+    """
+    if isinstance(table_change, AlterTableDistributionOp):
+        distributions = f"{table_change.distribution_method} {table_change.existing_distribution_method or ''}"
+        named = {
+            (quoted.replace("``", "`") or bare).lower() for quoted, bare in _NAME_IN_DISTRIBUTION.findall(distributions)
+        }
+        return not named.isdisjoint(column_names)
+    return isinstance(table_change, (AlterTableOrderOp, AlterTablePropertiesOp))
+
+
 # Rewriter that coalesces multiple per-column ALTER TABLE operations on the same
 # table into a single AlterTableColumnsOp, so autogenerate emits one
 # ``ALTER TABLE ... ADD/DROP COLUMN`` statement (one schema-change job) instead
@@ -1074,52 +1109,69 @@ combine_column_alters = Rewriter()
 
 
 @combine_column_alters.rewrites(ops.ModifyTableOps)
-def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
+def _combine_column_alters(
+    context: Optional[MigrationContext], revision: Any, op: ops.ModifyTableOps
+) -> ops.ModifyTableOps:
     """Coalesce a table's AddColumnOp/DropColumnOp into a single combined op.
 
     Every ``ADD COLUMN`` and ``DROP COLUMN`` for the table is folded into one
     ``AlterTableColumnsOp`` (a single ``ALTER TABLE``, hence one
-    schema-change job), placed at the position of the first column change. Other
+    schema-change job), placed at the position of the first column change, which
+    holds a placeholder until all the column changes are collected. Other
     operations keep their relative position. With fewer than two column changes
     there is nothing to combine and the container is returned unchanged.
 
-    No index-drop reordering hazard: the dialect's ``get_indexes`` does not
-    reflect StarRocks bitmap/secondary indexes, so autogenerate never emits a
-    ``DropIndexOp`` for them — removing an indexed column yields only a
-    ``DropColumnOp``. There is therefore no ``DROP INDEX`` that could be
-    reordered relative to a column drop, and StarRocks removes a column's index
-    together with the column anyway.
+    A sort key change, a distribution change, and a property change such as ``bloom_filter_columns``, can name the
+    columns, so it needs its new columns added before it and its old columns dropped after it. When the table's
+    operations include an ``AlterTableOrderOp``, an ``AlterTablePropertiesOp``, or an ``AlterTableDistributionOp``
+    whose new or old distribution names an added or dropped column, the adds are combined before the first one and
+    the drops after the last. StarRocks refuses to drop a column the distribution still names, and it takes a
+    dropped column out of ``bloom_filter_columns`` itself, and then refuses the SET that takes it out, with "Bloom
+    filter index has no change".
+
     """
     adds: List[Column] = []
     drops: List[Column] = []
     new_ops: List[Any] = []
-    combined_pos = -1  # index of the combined-op placeholder in new_ops; -1 until seen
+    combined_pos = -1
 
     for inner in op.ops:
         if isinstance(inner, ops.AddColumnOp):
             adds.append(inner.column)
             if combined_pos == -1:
                 combined_pos = len(new_ops)
-                new_ops.append(None)  # placeholder for the combined op
+                new_ops.append(None)
         elif isinstance(inner, ops.DropColumnOp):
             drops.append(inner.to_column())
             if combined_pos == -1:
                 combined_pos = len(new_ops)
-                new_ops.append(None)  # placeholder for the combined op
+                new_ops.append(None)
         else:
             new_ops.append(inner)
 
-    # Nothing to combine (0 or 1 column change): leave the container as-is.
     if len(adds) + len(drops) < 2:
         return op
 
-    # Drop the combined op into the placeholder slot, preserving the position of
-    # any non-column operations relative to the column changes.
-    new_ops[combined_pos] = AlterTableColumnsOp(
-        table_name=op.table_name,
-        adds=adds,
-        drops=drops,
-        schema=op.schema,
+    changed_columns = {column.name.lower() for column in adds + drops}
+    changes_naming_columns = [
+        index for index, inner in enumerate(new_ops) if _may_name_any_of(inner, changed_columns)
+    ]
+    if not changes_naming_columns:
+        new_ops[combined_pos] = AlterTableColumnsOp(table_name=op.table_name, adds=adds, drops=drops, schema=op.schema)
+        op.ops = new_ops
+        return op
+    del new_ops[combined_pos]
+    first_change, last_change = (
+        index - (index > combined_pos) for index in (changes_naming_columns[0], changes_naming_columns[-1])
     )
+    if drops:
+        new_ops.insert(
+            last_change + 1, AlterTableColumnsOp(table_name=op.table_name, adds=[], drops=drops, schema=op.schema)
+        )
+    if adds:
+        new_ops.insert(
+            min(combined_pos, first_change),
+            AlterTableColumnsOp(table_name=op.table_name, adds=adds, drops=[], schema=op.schema),
+        )
     op.ops = new_ops
     return op

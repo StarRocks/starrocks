@@ -768,3 +768,24 @@ class ViewCommentRoundTripTest(fixtures.TestBase):
             assert inspect(connection).get_table_comment("view_comment_round_trip")["text"] == comment
         finally:
             connection.execute(DropView(view))
+
+
+class EngineBoundInspectorViewTest(fixtures.TestBase):
+    """An inspector bound to an Engine opens its own connection, as SQLAlchemy's own methods do."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    def test_get_view_through_engine_inspector(self):
+        view_name = "engine_inspector_view"
+        with config.db.begin() as connection:
+            connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
+            connection.execute(text(f"CREATE VIEW {view_name} AS SELECT 1 AS id"))
+        try:
+            view_info = inspect(config.db).get_view(view_name, schema=config.db.url.database)
+
+            assert view_info.name == view_name
+            assert "1 AS `id`" in view_info.definition or "1 AS id" in view_info.definition
+        finally:
+            with config.db.begin() as connection:
+                connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))

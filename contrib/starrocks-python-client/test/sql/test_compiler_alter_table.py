@@ -19,8 +19,8 @@ The Alembic operations that emit these statements are checked against the SQL th
 
 from alembic import op
 from alembic.testing.fixtures import op_fixture
-from sqlalchemy import testing
-from sqlalchemy.testing import fixtures
+from sqlalchemy import exc, testing
+from sqlalchemy.testing import expect_raises_message, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 import starrocks.alembic  # noqa: F401
@@ -62,10 +62,21 @@ class AlterTablePropertiesCompileTest(fixtures.TestBase, AssertsCompiledSQL):
                 "dynamic_partition.start": "-7",
                 "dynamic_partition.end": "3",
             },
-            'ALTER TABLE test_table SET ("dynamic_partition.enable" = "true"); '
-            'ALTER TABLE test_table SET ("dynamic_partition.time_unit" = "DAY"); '
-            'ALTER TABLE test_table SET ("dynamic_partition.start" = "-7"); '
-            'ALTER TABLE test_table SET ("dynamic_partition.end" = "3")',
+            'ALTER TABLE test_table SET ("dynamic_partition.enable" = "true", '
+            '"dynamic_partition.time_unit" = "DAY", "dynamic_partition.start" = "-7", '
+            '"dynamic_partition.end" = "3")',
+        ),
+        (
+            "binlog",
+            {"binlog_enable": "true", "binlog_ttl_second": "3600"},
+            'ALTER TABLE test_table SET ("binlog_enable" = "true", "binlog_ttl_second" = "3600")',
+        ),
+        (
+            "grouped_and_single",
+            {"replication_num": "1", "dynamic_partition.start": "-7", "in_memory": "false", "dynamic_partition.end": "3"},
+            'ALTER TABLE test_table SET ("replication_num" = "1"); '
+            'ALTER TABLE test_table SET ("dynamic_partition.start" = "-7", "dynamic_partition.end" = "3"); '
+            'ALTER TABLE test_table SET ("in_memory" = "false")',
         ),
         (
             "bloom_filter",
@@ -102,6 +113,10 @@ class AlterTablePropertiesCompileTest(fixtures.TestBase, AssertsCompiledSQL):
             AlterTableProperties("test_table", {"comment": value}),
             f'ALTER TABLE test_table SET ("comment" = {rendered_value})',
         )
+
+    def test_property_without_a_value_is_refused(self):
+        with expect_raises_message(exc.CompileError, "Property 'colocate_with' has no value"):
+            AlterTableProperties("test_table", {"colocate_with": None}).compile(dialect=StarRocksDialect())
 
     @testing.combinations(
         ("file_path", r'"C:\\temp\\data\\file.txt"'),
@@ -290,9 +305,34 @@ class AlterTableOperationTest(fixtures.TestBase):
         context = op_fixture("starrocks")
         op.alter_table_properties("users", {"replication_num": "3", "storage_medium": "SSD"}, schema="test_db")
         context.assert_(
-            'ALTER TABLE test_db.users SET ("replication_num" = "3"); '
-            'ALTER TABLE test_db.users SET ("storage_medium" = "SSD")'
+            'ALTER TABLE test_db.users SET ("replication_num" = "3")',
+            'ALTER TABLE test_db.users SET ("storage_medium" = "SSD")',
         )
+
+    def test_alter_table_properties_groups_only_dynamic_partition_and_binlog_keys(self):
+        context = op_fixture("starrocks")
+        op.alter_table_properties(
+            "users",
+            {
+                "bloom_filter_columns": "k1",
+                "dynamic_partition.start": "-7",
+                "binlog_enable": "true",
+                "dynamic_partition.end": "3",
+                "binlog_ttl_second": "60",
+            },
+        )
+        context.assert_(
+            'ALTER TABLE users SET ("bloom_filter_columns" = "k1")',
+            'ALTER TABLE users SET ("dynamic_partition.start" = "-7", "dynamic_partition.end" = "3")',
+            'ALTER TABLE users SET ("binlog_enable" = "true", "binlog_ttl_second" = "60")',
+        )
+
+    def test_alter_table_properties_with_a_property_of_no_value_sets_none_of_them(self):
+        """Each group is a statement of its own; one that can't compile stops the op before the first runs."""
+        context = op_fixture("starrocks")
+        with expect_raises_message(exc.CompileError, "Property 'storage_medium' has no value"):
+            op.alter_table_properties("users", {"replication_num": "3", "storage_medium": None})
+        context.assert_()
 
     def test_alter_table_distribution(self):
         context = op_fixture("starrocks")
@@ -303,3 +343,54 @@ class AlterTableOperationTest(fixtures.TestBase):
         context = op_fixture("starrocks")
         op.alter_table_order("events", "timestamp DESC, event_id ASC", schema="analytics_db")
         context.assert_("ALTER TABLE analytics_db.events ORDER BY (timestamp DESC, event_id ASC)")
+
+    @testing.combinations(
+        ("unqualified", None, "ALTER TABLE users RENAME customers"),
+        ("schema", "test_db", "ALTER TABLE test_db.users RENAME customers"),
+        argnames="schema, expected",
+        id_="iaa",
+    )
+    def test_rename_table(self, schema, expected):
+        """StarRocks has no ``RENAME TO``, and the new name stays unqualified when the table has a schema."""
+        context = op_fixture("starrocks")
+        op.rename_table("users", "customers", schema=schema)
+        context.assert_(expected)
+
+
+class ConstraintOperationTest(fixtures.TestBase):
+    """StarRocks tables hold no constraints besides their key, so constraint operations raise before reaching it."""
+
+    @testing.combinations(
+        ("primary_key", lambda: op.create_primary_key("pk_users", "users", ["id"]), "cannot add primary key 'pk_users'"),
+        (
+            "unique",
+            lambda: op.create_unique_constraint("uq_users_email", "users", ["email"]),
+            "cannot add unique constraint 'uq_users_email'",
+        ),
+        (
+            "foreign_key",
+            lambda: op.create_foreign_key("fk_orders_user", "orders", "users", ["user_id"], ["id"]),
+            "cannot add foreign key 'fk_orders_user'",
+        ),
+        (
+            "check",
+            lambda: op.create_check_constraint("ck_users_age", "users", "age > 0"),
+            "cannot add constraint 'ck_users_age'",
+        ),
+        (
+            "drop_foreign_key",
+            lambda: op.drop_constraint("fk_orders_user", "orders", type_="foreignkey"),
+            "cannot drop foreign key 'fk_orders_user'",
+        ),
+        (
+            "drop_unique",
+            lambda: op.drop_constraint("uq_users_email", "users", type_="unique"),
+            "cannot drop unique constraint 'uq_users_email'",
+        ),
+        argnames="operation, message",
+        id_="iaa",
+    )
+    def test_constraint_operation_raises(self, operation, message):
+        op_fixture("starrocks")
+        with expect_raises_message(exc.CompileError, f"StarRocks {message}"):
+            operation()

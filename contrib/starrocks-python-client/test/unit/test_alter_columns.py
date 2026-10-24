@@ -22,7 +22,13 @@ from sqlalchemy.testing import expect_raises, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks import INTEGER, VARCHAR
-from starrocks.alembic.ops import AlterTableColumnsOp, _combine_column_alters
+from starrocks.alembic.ops import (
+    AlterTableColumnsOp,
+    AlterTableDistributionOp,
+    AlterTableOrderOp,
+    AlterTablePropertiesOp,
+    _combine_column_alters,
+)
 from starrocks.alembic.render import _render_alter_table_columns
 from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterTableColumns
@@ -74,6 +80,75 @@ class CombineColumnAltersTest(fixtures.TestBase):
         assert [c.name for c in res.ops[0].adds] == ["a"]
         assert [c.name for c in res.ops[0].drops] == ["c"]
         assert res.ops[1] is other
+
+    def test_adds_go_before_a_sort_key_change_and_drops_after_it(self):
+        """The new sort key needs its column, and the old sort key column can only go once the key has moved."""
+        order = AlterTableOrderOp("t5", "x")
+        mto = ops.ModifyTableOps(
+            "t5",
+            ops=[
+                ops.DropColumnOp("t5", "v"),
+                order,
+                ops.AddColumnOp("t5", Column("x", INTEGER)),
+                ops.AddColumnOp("t5", Column("y", INTEGER)),
+            ],
+        )
+        res = _combine_column_alters(None, None, mto)
+
+        assert [type(o).__name__ for o in res.ops] == ["AlterTableColumnsOp", "AlterTableOrderOp", "AlterTableColumnsOp"]
+        assert ([c.name for c in res.ops[0].adds], res.ops[0].drops) == (["x", "y"], [])
+        assert res.ops[1] is order
+        assert (res.ops[2].adds, [c.name for c in res.ops[2].drops]) == ([], ["v"])
+
+    def test_adds_go_before_a_property_change_and_drops_after_it(self):
+        """``bloom_filter_columns`` may name an added column, and StarRocks refuses to SET it without a dropped one."""
+        properties = AlterTablePropertiesOp(
+            "t7", {"bloom_filter_columns": "a, x"}, existing_properties={"bloom_filter_columns": "a, v"}
+        )
+        mto = ops.ModifyTableOps(
+            "t7",
+            ops=[
+                ops.AddColumnOp("t7", Column("x", INTEGER)),
+                properties,
+                ops.DropColumnOp("t7", "v"),
+                ops.DropColumnOp("t7", "w"),
+            ],
+        )
+        res = _combine_column_alters(None, None, mto)
+
+        assert [type(o).__name__ for o in res.ops] == [
+            "AlterTableColumnsOp", "AlterTablePropertiesOp", "AlterTableColumnsOp"
+        ]
+        assert ([c.name for c in res.ops[0].adds], res.ops[0].drops) == (["x"], [])
+        assert res.ops[1] is properties
+        assert (res.ops[2].adds, [c.name for c in res.ops[2].drops]) == ([], ["v", "w"])
+
+    def test_adds_go_before_a_distribution_change_and_drops_after_it(self):
+        """StarRocks refuses to drop a column the distribution names, and to distribute by one it does not have."""
+        distribution = AlterTableDistributionOp("t8", "HASH(d)", 1, existing_distribution_method="HASH(b)")
+        mto = ops.ModifyTableOps(
+            "t8", ops=[ops.AddColumnOp("t8", Column("d", INTEGER)), ops.DropColumnOp("t8", "b"), distribution]
+        )
+        res = _combine_column_alters(None, None, mto)
+
+        assert [type(o).__name__ for o in res.ops] == [
+            "AlterTableColumnsOp", "AlterTableDistributionOp", "AlterTableColumnsOp"
+        ]
+        assert ([c.name for c in res.ops[0].adds], res.ops[0].drops) == (["d"], [])
+        assert res.ops[1] is distribution
+        assert (res.ops[2].adds, [c.name for c in res.ops[2].drops]) == ([], ["b"])
+
+    def test_a_distribution_change_naming_no_changed_column_leaves_one_combined_op(self):
+        """A change of bucket count alone needs no column order, so the column changes stay one schema-change job."""
+        distribution = AlterTableDistributionOp(
+            "t9", "HASH(`id`)", 4, existing_distribution_method="HASH(id)", existing_buckets=1
+        )
+        mto = ops.ModifyTableOps(
+            "t9", ops=[ops.AddColumnOp("t9", Column("d", INTEGER)), ops.DropColumnOp("t9", "b"), distribution]
+        )
+        res = _combine_column_alters(None, None, mto)
+
+        assert [type(o).__name__ for o in res.ops] == ["AlterTableColumnsOp", "AlterTableDistributionOp"]
 
     def test_only_drops_still_collapse(self):
         mto = ops.ModifyTableOps(

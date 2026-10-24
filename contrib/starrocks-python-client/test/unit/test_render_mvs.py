@@ -27,6 +27,7 @@ from starrocks.alembic.render import (
     _create_materialized_view,
     _drop_materialized_view,
 )
+from starrocks.engine.interfaces import ReflectedRefreshInfo
 from test.util import normalize_py_call
 
 
@@ -72,6 +73,15 @@ class MaterializedViewRenderingTest(fixtures.TestBase):
         assert "properties={'k': 'v'}" in _create_materialized_view(
             self.ctx, op_props
         )
+
+    def test_reflected_refresh_renders_as_its_clause_text(self):
+        """A downgrade's create carries the reflected refresh, which a migration script cannot import."""
+        op = CreateMaterializedViewOp(
+            "mv1", "SELECT 1", starrocks_refresh=ReflectedRefreshInfo(moment="DEFERRED", type="ASYNC")
+        )
+        rendered = _create_materialized_view(self.ctx, op)
+        assert "starrocks_refresh='DEFERRED ASYNC'" in rendered
+        assert "Reflected" not in rendered
 
     def test_render_create_mv_complex(self):
         op = CreateMaterializedViewOp(

@@ -46,13 +46,13 @@ class CombineColumnAltersTest(fixtures.TestBase):
     def table_in_test_schema(self, connection):
         created = []
 
-        def create(name: str) -> str:
+        def create(name: str, properties: str = "", distribution: str = "HASH(id)") -> str:
             connection.exec_driver_sql(f"DROP TABLE IF EXISTS `{config.test_schema}`.`{name}`")
             connection.exec_driver_sql(
                 f"CREATE TABLE `{config.test_schema}`.`{name}` "
                 "(id INT, old_a INT, old_b INT, keep INT) "
-                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 "
-                "PROPERTIES ('replication_num' = '1')"
+                f"DUPLICATE KEY(id) DISTRIBUTED BY {distribution} BUCKETS 1 "
+                f"PROPERTIES ('replication_num' = '1'{properties})"
             )
             created.append(name)
             return name
@@ -147,6 +147,92 @@ class CombineColumnAltersTest(fixtures.TestBase):
         assert statements[0].count("ADD COLUMN") == 2
         assert statements[0].count("DROP COLUMN") == 2
         assert self._columns(connection, table) == {"id", "keep", "new_x", "new_y"}
+
+    @testing.requires.sqlalchemy_2
+    def test_a_bloom_filter_column_is_dropped_after_the_property_change(self, connection, table_in_test_schema):
+        """StarRocks takes a dropped column out of ``bloom_filter_columns`` itself, and then refuses the SET that does.
+
+        So the combined drop comes after the SET, and in the downgrade the combined add comes before it.
+        """
+        table = table_in_test_schema("t_combine_bloom", ", 'bloom_filter_columns' = 'old_b, keep'")
+        target = MetaData()
+        Table(
+            table,
+            target,
+            Column("id", INTEGER),
+            Column("keep", INTEGER),
+            Column("new_x", INTEGER),
+            schema=config.test_schema,
+            starrocks_duplicate_key="id",
+            starrocks_distributed_by="HASH(id) BUCKETS 1",
+            starrocks_properties={"replication_num": "1", "bloom_filter_columns": "keep"},
+        )
+        ctx = MigrationContext.configure(
+            connection=connection,
+            opts={
+                "include_schemas": True,
+                "include_name": lambda name, type_, parent_names: type_ != "schema" or name == config.test_schema,
+                "starrocks_wait_for_schema_change": True,
+            },
+        )
+        migrations = api.produce_migrations(ctx, target)
+        combine_column_alters.process_revision_directives(ctx, None, [migrations])
+        (table_ops,) = [
+            o for o in migrations.upgrade_ops.ops if isinstance(o, ops.ModifyTableOps) and o.table_name == table
+        ]
+        assert [type(o).__name__ for o in table_ops.ops] == [
+            "AlterTableColumnsOp", "AlterTablePropertiesOp", "AlterTableColumnsOp"
+        ]
+
+        operations = Operations(ctx)
+        for inner_op in table_ops.ops:
+            operations.invoke(inner_op)
+        assert self._columns(connection, table) == {"id", "keep", "new_x"}
+        for inner_op in table_ops.reverse().ops:
+            operations.invoke(inner_op)
+        assert self._columns(connection, table) == {"id", "old_a", "old_b", "keep"}
+
+    @testing.requires.sqlalchemy_2
+    def test_a_distribution_column_is_dropped_after_the_distribution_change(self, connection, table_in_test_schema):
+        """StarRocks refuses to drop a column the distribution still names, so the combined drop comes after the
+        distribution change, and in the downgrade the combined add comes before it."""
+        table = table_in_test_schema("t_combine_dist", distribution="HASH(old_b)")
+        target = MetaData()
+        Table(
+            table,
+            target,
+            Column("id", INTEGER),
+            Column("keep", INTEGER),
+            Column("new_x", INTEGER),
+            schema=config.test_schema,
+            starrocks_duplicate_key="id",
+            starrocks_distributed_by="HASH(new_x) BUCKETS 1",
+            starrocks_properties={"replication_num": "1"},
+        )
+        ctx = MigrationContext.configure(
+            connection=connection,
+            opts={
+                "include_schemas": True,
+                "include_name": lambda name, type_, parent_names: type_ != "schema" or name == config.test_schema,
+                "starrocks_wait_for_schema_change": True,
+            },
+        )
+        migrations = api.produce_migrations(ctx, target)
+        combine_column_alters.process_revision_directives(ctx, None, [migrations])
+        (table_ops,) = [
+            o for o in migrations.upgrade_ops.ops if isinstance(o, ops.ModifyTableOps) and o.table_name == table
+        ]
+        assert [type(o).__name__ for o in table_ops.ops] == [
+            "AlterTableColumnsOp", "AlterTableDistributionOp", "AlterTableColumnsOp"
+        ]
+
+        operations = Operations(ctx)
+        for inner_op in table_ops.ops:
+            operations.invoke(inner_op)
+        assert self._columns(connection, table) == {"id", "keep", "new_x"}
+        for inner_op in table_ops.reverse().ops:
+            operations.invoke(inner_op)
+        assert self._columns(connection, table) == {"id", "old_a", "old_b", "keep"}
 
     def test_uncombined_second_statement_hits_the_in_flight_job_error(self, connection, table_in_test_schema):
         """Why the feature exists: back-to-back ALTERs can be refused.

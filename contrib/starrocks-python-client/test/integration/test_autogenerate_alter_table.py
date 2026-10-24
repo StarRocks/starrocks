@@ -36,7 +36,7 @@ import textwrap
 from typing import Callable, Optional
 from unittest.mock import Mock, patch
 
-from alembic.autogenerate import comparators
+from alembic.autogenerate import api, comparators
 from alembic.autogenerate.api import AutogenContext
 from alembic.operations.ops import ModifyTableOps, UpgradeOps
 from alembic.runtime.migration import MigrationContext
@@ -48,10 +48,55 @@ from starrocks.alembic.compare import compare_starrocks_table
 from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix
 from starrocks.common.types import PartitionType, SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
+from starrocks.requirements import IS_SQLALCHEMY_2
 from test.util import STATISTIC_COLLECT_PROPERTY_MISSING, normalize_sql
 
 
 logger = logging.getLogger(__name__)
+
+
+class AutogenerateOnEitherSqlalchemyTest(fixtures.TestBase):
+    """Autogenerate compares tables on SQLAlchemy 1.4 too, whose inspector lists no materialized views itself."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    def test_a_new_table_is_created(self, connection):
+        metadata = MetaData()
+        Table("autogen_either_sqla", metadata, Column("id", Integer), starrocks_properties={"replication_num": "1"})
+
+        def only_this_table(name, type_, parent_names):
+            return type_ != "table" or name == "autogen_either_sqla"
+
+        context = MigrationContext.configure(connection, opts={"include_name": only_this_table})
+        upgrade_ops = api.produce_migrations(context, metadata).upgrade_ops.ops
+        assert [(type(op).__name__, op.table_name) for op in upgrade_ops] == [("CreateTableOp", "autogen_either_sqla")]
+
+    @testing.only_if(lambda: not IS_SQLALCHEMY_2, "SQLAlchemy 2.0 compares views and materialized views")
+    def test_views_and_mvs_are_left_alone_on_sqlalchemy_1_4(self, connection, caplog):
+        connection.exec_driver_sql(
+            "CREATE TABLE autogen_14_base (id INT) DISTRIBUTED BY HASH(id) PROPERTIES('replication_num' = '1')"
+        )
+        try:
+            connection.exec_driver_sql("CREATE VIEW autogen_14_view AS SELECT id FROM autogen_14_base")
+            connection.exec_driver_sql(
+                "CREATE MATERIALIZED VIEW autogen_14_mv REFRESH MANUAL PROPERTIES('replication_num' = '1') "
+                "AS SELECT id FROM autogen_14_base"
+            )
+            metadata = MetaData()
+            Table("autogen_14_base", metadata, Column("id", Integer), starrocks_properties={"replication_num": "1"})
+
+            def only_this_table(name, type_, parent_names):
+                return type_ != "table" or name == "autogen_14_base"
+
+            context = MigrationContext.configure(connection, opts={"include_name": only_this_table})
+            assert api.produce_migrations(context, metadata).upgrade_ops.ops == []
+            assert "leaves the database's alone: autogen_14_view" in caplog.text
+            assert "leaves the database's alone: autogen_14_mv" in caplog.text
+        finally:
+            connection.exec_driver_sql("DROP MATERIALIZED VIEW IF EXISTS autogen_14_mv")
+            connection.exec_driver_sql("DROP VIEW IF EXISTS autogen_14_view")
+            connection.exec_driver_sql("DROP TABLE IF EXISTS autogen_14_base")
 
 
 class AlterTableIntegrationTest(fixtures.TestBase):

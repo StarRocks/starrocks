@@ -22,16 +22,24 @@ import re
 import warnings
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
+    Boolean,
     Column,
     Computed,
     Date,
     DateTime,
+    Float,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
+    Numeric,
+    PrimaryKeyConstraint,
     String,
     Table,
+    Text,
+    Time,
     exc,
     func,
     testing,
@@ -42,12 +50,13 @@ from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks.common.params import ColumnAggInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
-from starrocks.datatype import DOUBLE
+from starrocks.datatype import CHAR, DOUBLE, LARGEINT
 from starrocks.dialect import StarRocksDialect, warn_once_of_doubled_percents
 from starrocks.sql.ddl import (
     AlterMaterializedView,
     AlterTableDistribution,
     AlterTableOrder,
+    AlterTableProperties,
     CreateMaterializedView,
     CreateView,
 )
@@ -592,6 +601,7 @@ class DoubledPercentSignWarningTest(fixtures.TestBase):
         ),
         ("distribution", lambda pattern: AlterTableDistribution("t", f"HASH(`p{pattern}ct`)")),
         ("order_by", lambda pattern: AlterTableOrder("t", f"`p{pattern}ct`")),
+        ("properties", lambda pattern: AlterTableProperties("t", {"note": f"p{pattern}ct"})),
         ("mv_refresh", lambda pattern: AlterMaterializedView("mv", refresh=f"ASYNC START('{pattern}')")),
         argnames="build_ddl",
         id_="ia",
@@ -678,3 +688,527 @@ class CreateTablePropertyQuotingTest(fixtures.TestBase, AssertsCompiledSQL):
             f'    "colocate_with"={rendered_value}'
             ")",
         )
+
+
+class PrimaryKeyInferenceOffCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """By default a table with a primary key and no ``starrocks_*_key`` gets no key clause and no warning, as in 1.3.
+
+    StarRocks then makes its default DUPLICATE KEY table, whatever shape the table has.
+    """
+
+    __dialect__ = StarRocksDialect()
+
+    def test_the_inference_is_off_by_default(self):
+        assert self.__dialect__.infer_primary_key is False
+
+    def test_single_column_key(self):
+        tbl = Table("pk_off", MetaData(), Column("id", Integer, primary_key=True), Column("v", String(10)))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            self.assert_compile(CreateTable(tbl), "CREATE TABLE pk_off (    id INTEGER NOT NULL,     v VARCHAR(10))")
+
+    @testing.combinations(
+        ("composite", lambda: [Column("a", Integer, primary_key=True), Column("b", Integer, primary_key=True)], {}),
+        ("constraint", lambda: [Column("b", Integer), Column("a", Integer), PrimaryKeyConstraint("b", "a")], {}),
+        (
+            "partitioned_on_the_key",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', dt)"},
+        ),
+        ("key_not_first", lambda: [Column("v0", String(10)), Column("id", Integer, primary_key=True)], {}),
+        ("char_key", lambda: [Column("id", CHAR(32), primary_key=True)], {}),
+        (
+            "nullable_key",
+            lambda: [Column("a", Integer, primary_key=True), Column("b", Integer, primary_key=True, nullable=True)],
+            {},
+        ),
+        ("random", lambda: [Column("id", Integer, primary_key=True)], {"starrocks_distributed_by": "RANDOM"}),
+        argnames="columns, table_kwargs",
+        id_="iaa",
+    )
+    def test_no_shape_gets_a_key_clause_or_a_warning(self, columns, table_kwargs):
+        """These include shapes the inference makes PRIMARY KEY tables, and shapes it warns about."""
+        tbl = Table("pk_off", MetaData(), *columns(), Column("v", Integer), **table_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+
+class InferredPrimaryKeyCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """With ``starrocks_infer_primary_key`` on, a table with a primary key and no ``starrocks_*_key`` is a PRIMARY
+    KEY table where StarRocks can hold one.
+
+    Its key columns lead it in key order and are of the types StarRocks keys on, and its partition, distribution,
+    sort key and properties are ones a PRIMARY KEY table takes. Otherwise it gets no key clause, as before, so
+    StarRocks makes a DUPLICATE KEY table, and the dialect warns.
+    """
+
+    __dialect__ = StarRocksDialect(starrocks_infer_primary_key=True)
+
+    def test_single_column(self):
+        tbl = Table("pk_inferred", MetaData(), Column("id", Integer, primary_key=True), Column("v", String(10)))
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_inferred ("
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (id)",
+        )
+
+    def test_composite_key_in_column_order(self):
+        tbl = Table(
+            "pk_composite",
+            MetaData(),
+            Column("tenant", Integer, primary_key=True),
+            Column("id", Integer, primary_key=True),
+            Column("v", String(10)),
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_composite ("
+            "    tenant INTEGER NOT NULL, "
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (tenant, id)",
+        )
+
+    def test_key_constraint_leading_in_its_order(self):
+        tbl = Table(
+            "pk_constraint",
+            MetaData(),
+            Column("b", Integer),
+            Column("a", Integer),
+            Column("v", String(10)),
+            PrimaryKeyConstraint("b", "a"),
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_constraint ("
+            "    b INTEGER NOT NULL, "
+            "    a INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "PRIMARY KEY (b, a)",
+        )
+
+    def test_key_columns_not_first_get_no_key_clause(self):
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with expect_warnings(r"Table 'pk_late' has the primary key \(id\) and names no starrocks_\*_key"):
+            self.assert_compile(
+                CreateTable(tbl),
+                "CREATE TABLE pk_late ("
+                "    v VARCHAR(10), "
+                "    id INTEGER NOT NULL"
+                ")",
+            )
+
+    def test_key_columns_not_first_get_advice_to_put_them_first(self):
+        """StarRocks needs any key's columns first, so naming starrocks_duplicate_key on them would be refused too."""
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            CreateTable(tbl).compile(dialect=self.__dialect__)
+        message = str(caught[0].message)
+        assert "key columns first, in key order, and its first columns are v. " in message, message
+        assert "Put the key columns first, in key order, to make it a PRIMARY KEY table" in message, message
+        assert "starrocks_duplicate_key" not in message, message
+
+    def test_the_warning_names_the_filter_that_silences_it(self):
+        tbl = Table("pk_late", MetaData(), Column("v", String(10)), Column("id", Integer, primary_key=True))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            CreateTable(tbl).compile(dialect=self.__dialect__)
+        warning_filter = re.search(r"warnings\.filterwarnings\(.*\)$", str(caught[0].message)).group(0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eval(warning_filter)
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    @testing.combinations(
+        ("after_the_class_columns", {}, None),
+        ("put_first", {"sort_order": -1}, "PRIMARY KEY (id)"),
+        argnames="mixin_column_arguments, key_clause",
+        id_="iaa",
+    )
+    def test_a_mixin_key_leads_with_sort_order(self, mixin_column_arguments, key_clause):
+        """SQLAlchemy 2.0 declarative puts a mixin's columns after the class's own, unless sort_order puts them
+        first.
+        """
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class Base(DeclarativeBase):
+            pass
+
+        class IdMixin:
+            id: Mapped[int] = mapped_column(primary_key=True, **mixin_column_arguments)
+
+        class User(IdMixin, Base):
+            __tablename__ = "pk_shape"
+            name: Mapped[str] = mapped_column(String(20))
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ddl = str(CreateTable(User.__table__).compile(dialect=self.__dialect__))
+        if key_clause is None:
+            assert "KEY (" not in ddl and "its first columns are name" in str(caught[0].message), ddl
+        else:
+            assert key_clause in ddl and not caught, ddl
+
+    def test_key_declared_in_another_order_than_the_columns_gets_no_key_clause(self):
+        tbl = Table(
+            "pk_order",
+            MetaData(),
+            Column("a", Integer),
+            Column("b", Integer),
+            Column("v", String(10)),
+            PrimaryKeyConstraint("b", "a"),
+        )
+        with expect_warnings(r"Table 'pk_order' has the primary key \(b, a\)"):
+            self.assert_compile(
+                CreateTable(tbl),
+                "CREATE TABLE pk_order ("
+                "    a INTEGER NOT NULL, "
+                "    b INTEGER NOT NULL, "
+                "    v VARCHAR(10)"
+                ")",
+            )
+
+    def test_named_key_model_wins(self):
+        tbl = Table(
+            "pk_duplicate",
+            MetaData(),
+            Column("id", Integer, primary_key=True),
+            Column("v", String(10)),
+            starrocks_duplicate_key="id",
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE pk_duplicate ("
+            "    id INTEGER NOT NULL, "
+            "    v VARCHAR(10)"
+            ")"
+            "DUPLICATE KEY (id)",
+        )
+
+    def test_no_primary_key_columns_leave_the_key_to_starrocks(self):
+        tbl = Table("no_pk", MetaData(), Column("id", Integer), Column("v", String(10)))
+        self.assert_compile(CreateTable(tbl), "CREATE TABLE no_pk (" "    id INTEGER, " "    v VARCHAR(10)" ")")
+
+    @staticmethod
+    def _shape(columns, **table_kwargs):
+        return Table("pk_shape", MetaData(), *columns, Column("v", Integer), Column("w", Integer), **table_kwargs)
+
+    @testing.combinations(
+        ("char", lambda: [Column("id", CHAR(32), primary_key=True)], {}, "key column id is CHAR"),
+        ("decimal", lambda: [Column("id", Numeric(10, 2), primary_key=True)], {}, "key column id is NUMERIC"),
+        (
+            "binary",
+            lambda: [Column("id", Integer, primary_key=True), Column("b", LargeBinary, primary_key=True)],
+            {},
+            "key column b is BINARY",
+        ),
+        ("float", lambda: [Column("id", Float, primary_key=True)], {}, "key column id is FLOAT"),
+        ("json", lambda: [Column("id", JSON, primary_key=True)], {}, "key column id is JSON"),
+        ("time", lambda: [Column("id", Time, primary_key=True)], {}, "key column id is TIME"),
+        (
+            "generated",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("g", BigInteger, Computed("id + 1"), primary_key=True, nullable=True),
+            ],
+            {},
+            "key column g is a generated column",
+        ),
+        (
+            "nullable",
+            lambda: [Column("id", Integer, primary_key=True), Column("ref", Integer, primary_key=True, nullable=True)],
+            {},
+            "key column ref is nullable, and StarRocks makes a PRIMARY KEY table's key columns NOT NULL",
+        ),
+        (
+            "all_nullable",
+            lambda: [
+                Column("a", Integer, primary_key=True, nullable=True),
+                Column("b", Integer, primary_key=True, nullable=True),
+            ],
+            {},
+            "key columns a and b are nullable",
+        ),
+        (
+            "expression_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', v)"},
+            "PARTITION BY uses v, not a key column",
+        ),
+        (
+            "range_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "RANGE(`V`) (PARTITION id VALUES LESS THAN ('10'))"},
+            "PARTITION BY uses v, not a key column",
+        ),
+        (
+            "column_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "v, w"},
+            "PARTITION BY uses v and w, not key columns",
+        ),
+        (
+            "hash_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(id, v) BUCKETS 4"},
+            "DISTRIBUTED BY HASH uses v, not a key column",
+        ),
+        (
+            "random_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "RANDOM BUCKETS 4"},
+            "it is distributed by RANDOM",
+        ),
+        (
+            "sort_key_type",
+            lambda: [Column("id", Integer, primary_key=True), Column("amount", Numeric(10, 2))],
+            {"starrocks_order_by": "amount"},
+            "ORDER BY uses amount, which is NUMERIC",
+        ),
+        (
+            "cooldown_property",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"storage_medium": "SSD", "storage_cooldown_ttl": "1 day"}},
+            "StarRocks refuses the storage_cooldown_ttl property",
+        ),
+        (
+            "compaction_property",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"base_compaction_forbidden_time_ranges": "* * * * *"}},
+            "StarRocks refuses the base_compaction_forbidden_time_ranges property",
+        ),
+        (
+            "in_memory_index",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"enable_persistent_index": "false"}},
+            "enable_persistent_index is false",
+        ),
+        (
+            "bucket_size_with_the_default_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_properties": {"bucket_size": "1073741824"}},
+            "StarRocks 4.1 allows bucket_size only with RANDOM distribution",
+        ),
+        (
+            "varchar_over_the_size_limit",
+            lambda: [Column("id", String(255), primary_key=True)],
+            {},
+            "its key columns can take 255 bytes a row",
+        ),
+        (
+            "varchar_before_int_over_the_size_limit",
+            lambda: [Column("s", String(123), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "its key columns can take 129 bytes a row",
+        ),
+        (
+            "auto_increment_and_varchar_over_the_size_limit",
+            lambda: [
+                Column("id", Integer, primary_key=True, autoincrement=True),
+                Column("s", String(122), primary_key=True),
+            ],
+            {},
+            "its key columns can take 130 bytes a row",
+        ),
+        (
+            "fixed_widths_over_the_size_limit",
+            lambda: [Column(f"c{i}", LARGEINT, primary_key=True) for i in range(8)]
+            + [Column("b", Boolean, primary_key=True)],
+            {},
+            "its key columns can take 129 bytes a row",
+        ),
+        ("string", lambda: [Column("id", String(), primary_key=True)], {}, "key column id is STRING, which has no length"),
+        ("text", lambda: [Column("id", Text, primary_key=True)], {}, "key column id is STRING, which has no length"),
+        (
+            "partition_by_a_column_named_like_an_interval_unit",
+            lambda: [Column("id", Integer, primary_key=True), Column("day", DateTime)],
+            {"starrocks_partition_by": "time_slice(day, INTERVAL 1 day)"},
+            "PARTITION BY uses day, not a key column",
+        ),
+        (
+            "unread_partition",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', no_such_column)"},
+            "the dialect can't tell which columns PARTITION BY",
+        ),
+        (
+            "unread_distribution",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(no_such_column)"},
+            "the dialect can't tell which columns DISTRIBUTED BY",
+        ),
+        argnames="columns, table_kwargs, obstacle",
+        id_="iaaa",
+    )
+    def test_shape_starrocks_cannot_hold_as_a_primary_key_table_gets_no_key_clause(
+        self, columns, table_kwargs, obstacle
+    ):
+        """StarRocks refuses each of these as a PRIMARY KEY table, or its rows, or the dialect can't read the clause,
+        so the dialect creates it with no key clause. The integration tests of the inference check each refusal.
+        """
+        tbl = self._shape(columns(), **table_kwargs)
+        with expect_warnings(
+            r"Table 'pk_shape' has the primary key \(.*\) and names no starrocks_\*_key, but it can't be made a "
+            r"PRIMARY KEY table: " + re.escape(obstacle)
+        ):
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl, ddl
+
+    @testing.combinations(
+        (
+            "partition_on_the_key",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('day', dt)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "partition_values_naming_other_columns",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "RANGE(dt) (PARTITION v VALUES LESS THAN ('2026-01-01'))"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "literal_naming_another_column",
+            lambda: [Column("id", Integer, primary_key=True), Column("dt", Date, primary_key=True)],
+            {"starrocks_partition_by": "date_trunc('v', dt)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "interval_unit_named_like_a_column",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("dt", DateTime, primary_key=True),
+                Column("day", Integer),
+            ],
+            {"starrocks_partition_by": "time_slice(dt, INTERVAL 1 day)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "interval_unit_and_boundary_named_like_columns",
+            lambda: [
+                Column("id", Integer, primary_key=True),
+                Column("dt", DateTime, primary_key=True),
+                Column("Week", Integer),
+                Column("floor", Integer),
+            ],
+            {"starrocks_partition_by": "time_slice(dt, interval 2 WEEK, FLOOR)"},
+            "PRIMARY KEY (id, dt)",
+        ),
+        (
+            "hash_on_the_key_in_another_case",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_distributed_by": "HASH(`ID`) BUCKETS 4"},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "sort_key_of_a_value_column",
+            lambda: [Column("id", Integer, primary_key=True), Column("name", String(10))],
+            {"starrocks_order_by": ["name", "id"]},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "olap_engine_and_persistent_index",
+            lambda: [Column("id", Integer, primary_key=True)],
+            {"starrocks_engine": "olap", "starrocks_properties": {"enable_persistent_index": "TRUE"}},
+            "PRIMARY KEY (id)",
+        ),
+        (
+            "accepted_key_types",
+            lambda: [
+                Column("b", Boolean, primary_key=True),
+                Column("i", BigInteger, primary_key=True),
+                Column("l", LARGEINT, primary_key=True),
+                Column("d", Date, primary_key=True),
+                Column("t", DateTime, primary_key=True),
+                Column("s", String(10), primary_key=True),
+            ],
+            {},
+            "PRIMARY KEY (b, i, l, d, t, s)",
+        ),
+        (
+            "varchar_and_int",
+            lambda: [Column("s", String(100), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "PRIMARY KEY (s, id)",
+        ),
+        ("varchar_at_the_size_limit", lambda: [Column("s", String(128), primary_key=True)], {}, "PRIMARY KEY (s)"),
+        (
+            "varchar_before_int_at_the_size_limit",
+            lambda: [Column("s", String(122), primary_key=True), Column("id", Integer, primary_key=True)],
+            {},
+            "PRIMARY KEY (s, id)",
+        ),
+        (
+            "int_then_varchar_at_the_size_limit",
+            lambda: [Column("id", Integer, primary_key=True), Column("s", String(124), primary_key=True)],
+            {},
+            "PRIMARY KEY (id, s)",
+        ),
+        (
+            "fixed_widths_at_the_size_limit",
+            lambda: [Column(f"c{i}", LARGEINT, primary_key=True) for i in range(8)],
+            {},
+            "PRIMARY KEY (c0, c1, c2, c3, c4, c5, c6, c7)",
+        ),
+        (
+            "nullable_auto_increment",
+            lambda: [Column("id", Integer, primary_key=True, autoincrement=True, nullable=True)],
+            {},
+            "PRIMARY KEY (id)",
+        ),
+        argnames="columns, table_kwargs, key_clause",
+        id_="iaaa",
+    )
+    def test_shape_starrocks_holds_as_a_primary_key_table(self, columns, table_kwargs, key_clause):
+        tbl = self._shape(columns(), **table_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert key_clause in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    def test_uuid_key_is_char_and_gets_no_key_clause(self):
+        """``sa.Uuid()`` is CHAR(32), which StarRocks takes in no primary key."""
+        from sqlalchemy import Uuid
+
+        tbl = self._shape([Column("id", Uuid, primary_key=True)])
+        with expect_warnings(r"Table 'pk_shape' .* can't be made a PRIMARY KEY table: key column id is CHAR\(32\), "):
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "id CHAR(32) NOT NULL" in ddl and "KEY (" not in ddl, ddl
+
+    @testing.requires.sqlalchemy_2
+    def test_optional_mapped_key_is_nullable_and_gets_no_key_clause(self):
+        """``Mapped[Optional[int]]`` makes the key column nullable, which StarRocks would make NOT NULL."""
+        from typing import Optional
+
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class Base(DeclarativeBase):
+            pass
+
+        class Event(Base):
+            __tablename__ = "pk_shape"
+            id: Mapped[Optional[int]] = mapped_column(primary_key=True)
+            v: Mapped[int]
+
+        with expect_warnings(r"Table 'pk_shape' .* can't be made a PRIMARY KEY table: key column id is nullable"):
+            ddl = str(CreateTable(Event.__table__).compile(dialect=self.__dialect__))
+        assert "id INTEGER," in ddl and "KEY (" not in ddl, ddl
+
+    def test_external_table_gets_neither_a_key_clause_nor_a_warning(self):
+        """A table of another engine has no key: StarRocks refuses any key clause on it."""
+        tbl = self._shape([Column("id", Integer, primary_key=True)], starrocks_engine="mysql")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ddl = str(CreateTable(tbl).compile(dialect=self.__dialect__))
+        assert "KEY (" not in ddl and "ENGINE=mysql" in ddl, ddl

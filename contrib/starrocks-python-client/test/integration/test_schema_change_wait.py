@@ -32,7 +32,7 @@ from unittest.mock import patch
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Column
+from sqlalchemy import Column, testing
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.testing import config, fixtures
 
@@ -157,9 +157,9 @@ class SchemaChangeWaitQuotingTest(fixtures.TestBase):
 
         real = ctx.impl._wait_for_schema_change
 
-        def spy(table_name, schema):
+        def spy(table_name, schema, **kwargs):
             calls.append((table_name, schema))
-            return real(table_name, schema)
+            return real(table_name, schema, **kwargs)
 
         with patch.object(ctx.impl, "_wait_for_schema_change", spy):
             Operations(ctx).add_column(table, Column("added", INTEGER), schema=self.schema)
@@ -190,3 +190,56 @@ class SchemaChangeWaitQuotingTest(fixtures.TestBase):
         finally:
             for name in found:
                 connection.exec_driver_sql(f"DROP DATABASE IF EXISTS `{name}` FORCE")
+
+
+class SequentialSchemaChangeTest(fixtures.TestBase):
+    """Operations that start schema-change jobs run one after another, each waiting for the job before it."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    @staticmethod
+    def _operations(connection) -> Operations:
+        return Operations(MigrationContext.configure(connection=connection, opts=WAIT_OPTIONS))
+
+    @staticmethod
+    def _create_table(connection, name: str) -> None:
+        connection.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+        connection.exec_driver_sql(
+            f"CREATE TABLE {name} (k INT, v VARCHAR(10)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+            "PROPERTIES ('replication_num' = '1')"
+        )
+
+    @testing.combinations(
+        ("bloom_first", {"bloom_filter_columns": "v", "in_memory": "false"}),
+        ("bloom_last", {"in_memory": "false", "bloom_filter_columns": "v"}),
+        argnames="properties",
+        id_="ia",
+    )
+    def test_properties_that_start_a_job_do_not_fail_the_next(self, connection, properties) -> None:
+        """One SET per property: a packet of several fails with "A schema change operation is in progress"."""
+        table = "t_wait_properties"
+        self._create_table(connection, table)
+        try:
+            self._operations(connection).alter_table_properties(table, properties)
+
+            ddl = connection.exec_driver_sql(f"SHOW CREATE TABLE {table}").fetchone()[1]
+            assert '"bloom_filter_columns" = "v"' in ddl
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")
+
+    def test_distribution_then_order_wait_for_their_jobs(self, connection) -> None:
+        """A distribution change is an OPTIMIZE job and a sort key change a COLUMN one; the next ALTER waits for each."""
+        table = "t_wait_optimize"
+        self._create_table(connection, table)
+        try:
+            operations = self._operations(connection)
+            operations.alter_table_distribution(table, "HASH(k)", buckets=2)
+            operations.alter_table_distribution(table, "HASH(k)", buckets=3)
+            operations.alter_table_order(table, "v")
+
+            ddl = connection.exec_driver_sql(f"SHOW CREATE TABLE {table}").fetchone()[1]
+            assert "BUCKETS 3" in ddl
+            assert "ORDER BY(`v`)" in ddl
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")

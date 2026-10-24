@@ -115,6 +115,32 @@ def tables_read_by_query(sql: str) -> Set[TableReference]:
     }
 
 
+EVERY_COLUMN = "*"
+"""What :func:`names_in_query` holds for a query that may read every column of a table it reads."""
+
+
+def names_in_query(sql: str) -> Set[str]:
+    """Return every name a query holds, lower-cased, and :data:`EVERY_COLUMN` when it holds a ``*``.
+
+    A name is a word or a backquoted name outside literals, comments and join hints: a column, table, alias,
+    function or keyword. So a column the query reads is among them, whatever qualifies it. A ``*`` outside
+    them, as in ``SELECT *`` or ``t.*``, may read every column; so, as far as this reading tells, may the one of
+    ``COUNT(*)`` or of a multiplication.
+    """
+    names: Set[str] = set()
+    end = 0
+    for match in _SQL_TOKEN.finditer(sql):
+        if "*" in sql[end:match.start()]:
+            names.add(EVERY_COLUMN)
+        end = match.end()
+        name = _token_name(match.groups())
+        if name is not None:
+            names.add(name.lower())
+    if "*" in sql[end:]:
+        names.add(EVERY_COLUMN)
+    return names
+
+
 def _query_tokens(sql: str) -> List[_QueryToken]:
     """Split a query into (backquoted name, word, punctuation) tokens, leaving out literals, comments and hints."""
     return [match.groups() for match in _SQL_TOKEN.finditer(sql) if any(match.groups())]

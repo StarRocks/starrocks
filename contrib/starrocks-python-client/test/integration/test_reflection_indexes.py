@@ -12,38 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Canary tests for StarRocks secondary-index reflection.
+"""Secondary indexes: creating them from metadata, reflecting them, and migrations that drop indexed columns.
 
-The Alembic column-coalescing rewriter (``starrocks.alembic.ops._combine_column_alters``)
-folds every ADD/DROP COLUMN for a table into one ``ALTER TABLE`` and assumes it
-never has to order a ``DROP INDEX`` against a column drop. That assumption holds
-ONLY because the dialect does not reflect secondary indexes (bitmap, GIN, vector,
-...): ``get_indexes`` returns just the table KEY, so autogenerate never emits a
-``DropIndexOp`` for a secondary index and there is nothing to reorder.
-
-If secondary-index reflection is added later, these tests fail on purpose — that
-is the signal to revisit the rewriter, because Alembic could then emit
-``AddColumnOp, DropIndexOp, DropColumnOp`` and the rewriter would need to keep
-the ``DROP INDEX`` -> ``DROP COLUMN`` dependency (StarRocks drops a column's
-index together with the column, so a standalone ``DROP INDEX`` afterward fails).
+StarRocks drops a column's index together with the column, and runs each index or column change as an
+asynchronous job that blocks the next one on the same table. Autogenerate emits both a ``drop_index`` and a
+``drop_column`` for a removed indexed column; the dialect waits for the running job before each statement, and
+the Alembic impl skips a ``drop_index`` whose index StarRocks dropped with a column earlier in the migration.
 """
 
 import time
 
 from alembic.autogenerate import api
+from alembic.operations import Operations, ops as alembic_ops
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import Column, Index, MetaData, String, Table, inspect, testing
-from sqlalchemy.testing import fixtures
+from sqlalchemy import Column, Index, MetaData, String, Table, exc, inspect, testing
+from sqlalchemy.testing import config, expect_raises_message, fixtures
 
 from starrocks import INTEGER
 from starrocks.alembic.compare import combine_include_object
+from starrocks.provision import wait_for_schema_changes
 
 
 INDEXED_TABLE = "idx_reflect_t"
 
 
 class SecondaryIndexReflectionTest(fixtures.TestBase):
-    """Guards the rewriter's assumption that secondary indexes are not reflected."""
+    """BITMAP and other secondary indexes are reflected, and autogenerate handles indexed columns."""
 
     __backend__ = True
     __only_on__ = "starrocks"
@@ -57,7 +51,7 @@ class SecondaryIndexReflectionTest(fixtures.TestBase):
                 id INT,
                 old INT,
                 keep INT,
-                INDEX old_idx (old) USING BITMAP
+                INDEX old_idx (old) USING BITMAP COMMENT 'old values'
             )
             DUPLICATE KEY(id)
             DISTRIBUTED BY HASH(id) BUCKETS 1
@@ -67,63 +61,150 @@ class SecondaryIndexReflectionTest(fixtures.TestBase):
         yield INDEXED_TABLE
         connection.exec_driver_sql(f"DROP TABLE IF EXISTS {INDEXED_TABLE}")
 
-    def test_bitmap_secondary_index_is_not_reflected(self, connection, indexed_table):
-        """get_indexes must NOT surface the bitmap secondary index.
-
-        Canary: when this starts failing, secondary-index reflection has been
-        added and the coalescing rewriter must be revisited (see module docstring).
-        """
-        raw = [r[2] for r in connection.exec_driver_sql(f"SHOW INDEX FROM {indexed_table}")]
-        assert "old_idx" in raw, "precondition: the bitmap index should exist in StarRocks"
-
-        reflected_names = {ix.get("name") for ix in inspect(connection).get_indexes(indexed_table)}
-        assert "old_idx" not in reflected_names, (
-            "Secondary-index reflection appears to have been added: get_indexes now "
-            "returns the bitmap index 'old_idx'. Revisit "
-            "starrocks.alembic.ops._combine_column_alters — autogenerate can now emit "
-            "a DropIndexOp that must not be reordered across a column drop."
-        )
-
-    @testing.requires.sqlalchemy_2
-    def test_dropping_indexed_column_emits_no_drop_index(self, connection, indexed_table):
-        """Autogenerate must emit no DropIndexOp when removing an indexed column.
-
-        Because the bitmap index is not reflected, removing column ``old`` yields
-        only a column drop. If a DropIndexOp appears here, the rewriter's
-        no-reordering assumption is broken. The model has neither column ``old``
-        nor any index.
-        """
-        md = MetaData()
-        Table(
-            indexed_table,
-            md,
-            Column("id", INTEGER),
-            Column("keep", INTEGER),
+    @staticmethod
+    def _model(columns, indexes=()):
+        metadata = MetaData()
+        table = Table(
+            INDEXED_TABLE,
+            metadata,
+            *[Column(name, INTEGER) for name in columns],
             starrocks_duplicate_key="id",
             starrocks_distributed_by="HASH(id) BUCKETS 1",
             starrocks_properties={"replication_num": "1"},
         )
+        for name, column, kwargs in indexes:
+            Index(name, table.c[column], **kwargs)
+        return metadata
 
-        def _only_this_table(obj, name, type_, reflected, compare_to):
-            return not (type_ == "table" and name != indexed_table)
+    @staticmethod
+    def _migration(connection, metadata):
+        def only_this_table(obj, name, type_, reflected, compare_to):
+            return not (type_ == "table" and name != INDEXED_TABLE)
 
-        mc = MigrationContext.configure(
+        context = MigrationContext.configure(
             connection=connection,
-            opts={"target_metadata": md, "include_object": combine_include_object(_only_this_table)},
+            opts={"target_metadata": metadata, "include_object": combine_include_object(only_this_table)},
         )
-        script = api.produce_migrations(mc, md)
+        return context, api.produce_migrations(context, metadata)
 
-        all_ops = []
-        for outer in script.upgrade_ops.ops:
-            all_ops.append(outer)
-            all_ops.extend(getattr(outer, "ops", []))
+    @staticmethod
+    def _run(context, container):
+        operations = Operations(context)
+        for outer in container.ops:
+            for op in outer.ops if isinstance(outer, alembic_ops.ModifyTableOps) else [outer]:
+                operations.invoke(op)
 
-        drop_index_ops = [o for o in all_ops if type(o).__name__ == "DropIndexOp"]
-        assert not drop_index_ops, (
-            "autogenerate emitted a DropIndexOp for a secondary index; the "
-            "coalescing rewriter must be updated to preserve DROP INDEX -> DROP "
-            "COLUMN ordering (see starrocks.alembic.ops._combine_column_alters)."
+    @staticmethod
+    def _state(connection):
+        columns = [column["name"] for column in inspect(connection).get_columns(INDEXED_TABLE)]
+        deadline = time.monotonic() + 60
+        while True:
+            indexes = [row[2] for row in connection.exec_driver_sql(f"SHOW INDEX FROM {INDEXED_TABLE}")]
+            jobs = connection.exec_driver_sql(
+                f"SHOW ALTER TABLE COLUMN WHERE TableName = '{INDEXED_TABLE}' ORDER BY JobId DESC LIMIT 1"
+            ).mappings().all()
+            if not jobs or jobs[0]["State"] in ("FINISHED", "CANCELLED") or time.monotonic() > deadline:
+                return columns, indexes
+            time.sleep(1)
+
+    def test_bitmap_index_is_reflected(self, connection, indexed_table):
+        reflected = [ix for ix in inspect(connection).get_indexes(indexed_table) if ix["name"] == "old_idx"]
+        assert reflected == [
+            {
+                "name": "old_idx",
+                "column_names": ["old"],
+                "unique": False,
+                "dialect_options": {"starrocks_using": "BITMAP", "starrocks_comment": "old values"},
+            }
+        ]
+
+    def test_indexes_are_those_show_index_lists(self, connection):
+        """SHOW CREATE TABLE prints comments as they are: a column comment holding a line that reads like an index,
+        and an index comment holding a newline."""
+        connection.exec_driver_sql(
+            "CREATE TABLE idx_comment_lines_t (k INT NOT NULL, "
+            "note VARCHAR(100) COMMENT 'first line\nINDEX ghost (`k`) USING BITMAP\nlast line', "
+            "INDEX ix_note (note) USING BITMAP COMMENT 'index\ncomment') "
+            "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')"
         )
+        try:
+            indexes = inspect(connection).get_indexes("idx_comment_lines_t")
+        finally:
+            connection.exec_driver_sql("DROP TABLE IF EXISTS idx_comment_lines_t")
+
+        assert indexes == [
+            {
+                "name": "ix_note",
+                "column_names": ["note"],
+                "unique": False,
+                "dialect_options": {"starrocks_using": "BITMAP", "starrocks_comment": "index\ncomment"},
+            }
+        ]
+
+    @testing.requires.sqlalchemy_2
+    def test_model_with_the_index_has_no_diff(self, connection, indexed_table):
+        """Before indexes were reflected, every model Index came back as a new create_index on each run."""
+        metadata = self._model(["id", "old", "keep"], [("old_idx", "old", {"starrocks_using": "BITMAP"})])
+        _, script = self._migration(connection, metadata)
+        assert script.upgrade_ops.is_empty()
+
+    @testing.requires.sqlalchemy_2
+    @testing.combinations((False,), (True,), argnames="translated")
+    def test_drop_index_after_its_column_was_dropped(self, connection, indexed_table, translated):
+        """A hand-written migration may drop the column first; StarRocks has then dropped the index with it.
+
+        Under a ``schema_translate_map`` of None to the connection's database, DROP COLUMN still names the table
+        without a schema and DROP INDEX names it with the database, and the two are known to be one table.
+        """
+        if translated:
+            database = connection.exec_driver_sql("SELECT DATABASE()").scalar()
+            connection = connection.execution_options(schema_translate_map={None: database})
+        operations = Operations(MigrationContext.configure(connection=connection))
+        operations.drop_column(INDEXED_TABLE, "old")
+        operations.drop_index("old_idx", table_name=INDEXED_TABLE)
+        assert self._state(connection) == (["id", "keep"], [])
+
+    def test_drop_index_if_exists_drops_an_index_that_exists(self, connection, indexed_table):
+        """StarRocks has no DROP INDEX IF EXISTS; online, the impl checks first and drops without it."""
+        operations = Operations(MigrationContext.configure(connection=connection))
+        operations.drop_index("old_idx", table_name=INDEXED_TABLE, if_exists=True)
+        assert self._state(connection)[1] == []
+        operations.drop_index("old_idx", table_name=INDEXED_TABLE, if_exists=True)
+
+    def test_drop_index_names_the_index_without_regard_to_case(self, connection, indexed_table):
+        """StarRocks matches index names without regard to case, so a drop of OLD_IDX drops old_idx.
+
+        With ``if_exists``, the impl looks for the index first, so it must match the name as StarRocks does too.
+        """
+        Operations(MigrationContext.configure(connection=connection)).drop_index(
+            "OLD_IDX", table_name=INDEXED_TABLE, if_exists=True
+        )
+        assert self._state(connection)[1] == []
+
+    def test_drop_index_of_a_missing_index_raises(self, connection, indexed_table):
+        """Without if_exists, an index no column took with it is StarRocks' to refuse, as a misspelt name is."""
+        operations = Operations(MigrationContext.configure(connection=connection))
+        with expect_raises_message(exc.DBAPIError, "does not exist"):
+            operations.drop_index("old_idx_misspelt", table_name=INDEXED_TABLE)
+        assert self._state(connection)[1] == ["old_idx"]
+
+    def test_drop_index_through_a_schema_translate_map(self, connection):
+        """DROP INDEX reaches the schema the connection's schema_translate_map names, so the impl reads it there."""
+        schema = config.test_schema
+        connection.exec_driver_sql(
+            f"CREATE TABLE {schema}.{INDEXED_TABLE} (id INT, old INT, INDEX old_idx (old) USING BITMAP) "
+            "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')"
+        )
+        try:
+            with config.db.begin() as translated:
+                translated = translated.execution_options(schema_translate_map={None: schema})
+                Operations(MigrationContext.configure(connection=translated)).drop_index(
+                    "old_idx", table_name=INDEXED_TABLE
+                )
+            wait_for_schema_changes(connection, INDEXED_TABLE, schema)
+            assert connection.exec_driver_sql(f"SHOW INDEX FROM {schema}.{INDEXED_TABLE}").all() == []
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {schema}.{INDEXED_TABLE}")
 
 
 class SecondaryIndexCreateTest(fixtures.TestBase):

@@ -23,7 +23,7 @@ from unittest.mock import Mock
 import warnings
 
 from alembic.operations import ops
-from sqlalchemy import Column, MetaData, Table
+from sqlalchemy import Column, MetaData, Table, testing
 from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 
 from starrocks.alembic.compare import _autogen_for_views, compare_view
@@ -31,7 +31,7 @@ from starrocks.alembic.ops import AlterViewOp, CreateViewOp, DropViewOp
 from starrocks.common.defaults import ReflectionViewDefaults
 from starrocks.common.params import TableKind, TableObjectInfoKey
 from starrocks.datatype import VARCHAR
-from starrocks.sql.schema import View
+from starrocks.sql.schema import MaterializedView, View
 
 
 class AutogenerateViewsTest(fixtures.TestBase):
@@ -282,12 +282,7 @@ class CompareViewTest(fixtures.TestBase):
     # ========================================================================
 
     def test_alter_view_comment_none_to_value(self):
-        """ALTER COMMENT: None → value (generates AlterViewOp with warning).
-
-        StarRocks does not support altering comment via ALTER VIEW currently.
-        Compare generates AlterViewOp with the new comment for future compatibility.
-        A warning is issued to inform users about current limitation.
-        """
+        """ALTER COMMENT: None → value (generates AlterViewOp, with no warning)."""
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (no comment)
@@ -320,15 +315,14 @@ class CompareViewTest(fixtures.TestBase):
 
             # Validate reverse (existing/database) values for downgrade
             eq_(op.existing_comment, None)  # Changed (was None)
-            eq_(op.existing_definition, None)  # Not changed
+            eq_(op.existing_definition, 'SELECT 1')  # Carried, to recreate the view
             eq_(op.existing_security, None)  # Not changed
 
             # Should have warning about comment not supported
-            assert len(w) == 1
-            assert "does not support altering view comments" in str(w[0].message)
+            eq_(len(w), 0)
 
     def test_alter_view_comment_value_to_none(self):
-        """ALTER COMMENT: value → None (generates AlterViewOp with warning)."""
+        """ALTER COMMENT: value → None (generates AlterViewOp)."""
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (with comment)
@@ -362,15 +356,14 @@ class CompareViewTest(fixtures.TestBase):
             eq_(op.security, None)  # Not changed
 
             # Validate reverse (existing/database) values for downgrade
-            eq_(op.existing_definition, None)  # Not changed
+            eq_(op.existing_definition, 'SELECT 1')  # Carried, to recreate the view
             eq_(op.existing_comment, 'Old comment')  # Changed (was 'Old comment')
             eq_(op.existing_security, None)  # Not changed
 
-            assert len(w) == 1
-            assert "does not support altering view comments" in str(w[0].message)
+            eq_(len(w), 0)
 
     def test_alter_view_comment_value_to_different(self):
-        """ALTER COMMENT: value1 → value2 (generates AlterViewOp with warning)."""
+        """ALTER COMMENT: value1 → value2 (generates AlterViewOp)."""
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (old comment)
@@ -404,12 +397,11 @@ class CompareViewTest(fixtures.TestBase):
             eq_(op.security, None)  # Not changed
 
             # Validate reverse (existing/database) values for downgrade
-            eq_(op.existing_definition, None)  # Not changed
+            eq_(op.existing_definition, 'SELECT 1')  # Carried, to recreate the view
             eq_(op.existing_comment, 'Old comment')  # Changed
             eq_(op.existing_security, None)  # Not changed
 
-            assert len(w) == 1
-            assert "does not support altering view comments" in str(w[0].message)
+            eq_(len(w), 0)
 
     def test_alter_view_comment_no_change(self):
         """ALTER COMMENT: No change (identical comment)."""
@@ -436,11 +428,11 @@ class CompareViewTest(fixtures.TestBase):
         eq_(len(upgrade_ops.ops), 0)
 
     # ========================================================================
-    # ALTER VIEW - Security (StarRocks limitation - not supported via ALTER)
+    # ALTER VIEW - Security (applied with ALTER VIEW ... SET SECURITY)
     # ========================================================================
 
     def test_alter_view_security_none_to_invoker(self):
-        """ALTER SECURITY: None → INVOKER (generates AlterViewOp with warning)."""
+        """ALTER SECURITY: None → INVOKER (generates AlterViewOp)."""
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (no security)
@@ -474,53 +466,23 @@ class CompareViewTest(fixtures.TestBase):
             eq_(op.existing_definition, None)  # Not changed
             eq_(op.existing_comment, None)  # Not changed
 
-            assert len(w) == 1
-            assert "does not support altering view security" in str(w[0].message)
+            eq_(len(w), 0)
 
-    def test_alter_view_security_invoker_to_none(self):
-        """ALTER SECURITY: INVOKER → None (generates AlterViewOp with warning)."""
+    def test_omitted_security_is_left_alone(self):
+        """A metadata view without starrocks_security keeps the INVOKER security it has in the database."""
         upgrade_ops = ops.UpgradeOps([])
-
-        # Database view (with security)
-        conn_view = self._create_reflected_view(
-            'my_test_view',
-            definition='SELECT 1',
-            security='INVOKER'
-        )
-
-        # Metadata view (no security)
+        conn_view = self._create_reflected_view('my_test_view', definition='SELECT 1', security='INVOKER')
         meta_view = View('my_test_view', MetaData(), definition='SELECT 1')
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            compare_view(
-                self.mock_autogen_context,
-                upgrade_ops,
-                None,
-                'my_test_view',
-                conn_view,
-                meta_view
-            )
+            compare_view(self.mock_autogen_context, upgrade_ops, None, 'my_test_view', conn_view, meta_view)
 
-            eq_(len(upgrade_ops.ops), 1)
-            op = upgrade_ops.ops[0]
-            assert isinstance(op, AlterViewOp)
-
-            # Validate forward (new/metadata) values - only security changed
-            eq_(op.definition, None)  # Not changed
-            eq_(op.comment, None)  # Not changed
-            assert op.security is None or op.security == ReflectionViewDefaults.security()  # Changed (removed)
-
-            # Validate reverse (existing/database) values for downgrade
-            eq_(op.existing_definition, None)  # Not changed
-            eq_(op.existing_comment, None)  # Not changed
-            eq_(op.existing_security, 'INVOKER')  # Changed (was INVOKER)
-
-            assert len(w) == 1
-            assert "does not support altering view security" in str(w[0].message)
+            eq_(upgrade_ops.ops, [])
+            eq_(len(w), 0)
 
     def test_alter_view_security_change_value(self):
-        """ALTER SECURITY: INVOKER → NONE (generates AlterViewOp with warning).
+        """ALTER SECURITY: INVOKER → NONE (generates AlterViewOp).
         """
         upgrade_ops = ops.UpgradeOps([])
 
@@ -559,8 +521,7 @@ class CompareViewTest(fixtures.TestBase):
             eq_(op.existing_comment, None)  # Not changed
             eq_(op.existing_security, 'INVOKER')  # Changed (was INVOKER)
 
-            assert len(w) == 1
-            assert "does not support altering view security" in str(w[0].message)
+            eq_(len(w), 0)
 
     def test_alter_view_security_no_change(self):
         """ALTER SECURITY: No change (identical security)."""
@@ -634,8 +595,8 @@ class CompareViewTest(fixtures.TestBase):
             # Note: Currently there's no warning for columns when definition changes
             # assert any("columns" in str(warning.message) for warning in w)
 
-    def test_alter_view_columns_only_raises_error(self):
-        """ALTER COLUMNS: Changed without definition (raises ValueError)."""
+    def test_alter_view_columns_only(self):
+        """ALTER COLUMNS: Changed without definition (generates AlterViewOp with the unchanged definition)."""
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view
@@ -657,16 +618,23 @@ class CompareViewTest(fixtures.TestBase):
             definition='SELECT id, name FROM users'  # Same definition!
         )
 
-        # Should raise NotImplementedError
-        with expect_raises_message(NotImplementedError, "does not support altering view columns independently"):
-            compare_view(
-                self.mock_autogen_context,
-                upgrade_ops,
-                None,
-                'my_view',
-                conn_view,
-                meta_view
-            )
+        compare_view(
+            self.mock_autogen_context,
+            upgrade_ops,
+            None,
+            'my_view',
+            conn_view,
+            meta_view
+        )
+
+        eq_(len(upgrade_ops.ops), 1)
+        op = upgrade_ops.ops[0]
+        assert isinstance(op, AlterViewOp)
+        eq_(op.definition, 'SELECT id, name FROM users')
+        eq_([(col['name'], col.get('comment')) for col in op.columns], [('id', None), ('name', 'New comment')])
+        eq_(op.existing_definition, 'SELECT id, name FROM users')
+        eq_([(col['name'], col.get('comment')) for col in op.existing_columns], [('id', None), ('name', 'Old comment')])
+        eq_(op.security, None)
 
     def test_alter_view_columns_no_change(self):
         """ALTER COLUMNS: No change (identical columns)."""
@@ -777,3 +745,143 @@ class ViewExceptionsTest(fixtures.TestBase):
         assert view2.columns['a'].comment == 'Column A'
         assert view2.columns['b'].comment is None
 
+
+
+def _connection_without_temp_views(failing_only_for=None, error=None):
+    """A connection on which temporary views fail to be created, as for a user without CREATE VIEW.
+
+    With ``failing_only_for``, only a temporary view whose SQL holds that text fails, as for a definition that reads
+    a column the database does not have yet. ``error`` is what StarRocks says instead.
+    """
+    def execute(statement, *args, **kwargs):
+        if statement.startswith("CREATE") and (failing_only_for is None or failing_only_for in statement):
+            raise RuntimeError(error or ("Access denied" if failing_only_for is None else "Column cannot be resolved"))
+        return Mock(fetchone=Mock(return_value=("SELECT canonical",)))
+
+    return Mock(exec_driver_sql=Mock(side_effect=execute))
+
+
+class ViewDefinitionWithoutTempViewTest(fixtures.TestBase):
+    """Without the temporary view, a difference only the in-process normalizer sees is a change only sometimes.
+
+    Before 4.0.7 StarRocks keeps a view's SQL rewritten, with table-qualified columns, so the normalizer sees a
+    difference in every view; the database's definition below is how 3.3 shows ``SELECT id FROM t``.
+    """
+
+    __requires__ = ("sqlalchemy_2",)
+
+    _REWRITTEN = "SELECT `db`.`t`.`id` FROM `db`.`t`"
+
+    @classmethod
+    def _operations_for(
+        cls, server_version, model_reads="t", database_reads="t", revision_operations=(), model_mvs=(), database_mvs=(),
+        model_columns="id", failing_only_for=None, error=None, database_definition=None, name_filter=None,
+    ):
+        context = Mock()
+        context.opts = {}
+        context.run_name_filters = Mock(side_effect=name_filter or (lambda name, type_, parent_names: True))
+        context.dialect.name = "starrocks"
+        context.dialect.default_schema_name = "db"
+        context.dialect.server_version_info = server_version
+        context.connection = _connection_without_temp_views(failing_only_for, error)
+        context.migration_context.opts = {}
+        context.metadata = MetaData()
+        context.inspector.get_materialized_view_names = Mock(return_value=list(database_mvs))
+        model_view = View("v", context.metadata, definition=f"SELECT {model_columns} FROM {model_reads}")
+        for name in model_mvs:
+            MaterializedView(name, context.metadata, definition="SELECT id FROM t", starrocks_refresh="MANUAL")
+        database_view = View(
+            "v", MetaData(), definition=database_definition or cls._REWRITTEN.replace("`t`", f"`{database_reads}`")
+        )
+        upgrade_ops = ops.UpgradeOps(list(revision_operations))
+        compare_view(context, upgrade_ops, None, "v", database_view, model_view)
+        return [type(op) for op in upgrade_ops.ops[len(revision_operations):]]
+
+    @testing.combinations(((3, 3, 22),), ((3, 5, 21),), ((4, 0, 6),), (None,), argnames="server_version")
+    def test_before_4_0_7_an_unchanged_view_is_left_alone(self, server_version, caplog):
+        eq_(self._operations_for(server_version), [])
+        assert "could not canonicalize them through a temporary view" in caplog.text
+
+    @testing.combinations(((4, 0, 7),), ((4, 1, 0),), ((4, 1, 6),), argnames="server_version")
+    def test_from_4_0_7_a_text_difference_is_a_change(self, server_version):
+        """StarRocks keeps a view's SQL as written from 4.0.7 (StarRocks #68040, backported as #69192)."""
+        eq_(self._operations_for(server_version), [AlterViewOp])
+
+    def test_a_definition_reading_a_table_the_revision_creates_is_a_change(self):
+        created = ops.CreateTableOp.from_table(Table("x", MetaData(), Column("id", VARCHAR(10))))
+        eq_(self._operations_for((3, 3, 22), model_reads="x", revision_operations=[created]), [AlterViewOp])
+
+    def test_a_definition_reading_a_view_the_revision_creates_is_a_change(self):
+        """Autogenerate adds the creates of new views before it compares the existing ones."""
+        created = CreateViewOp("x", "SELECT id FROM t")
+        eq_(self._operations_for((3, 3, 22), model_reads="x", revision_operations=[created]), [AlterViewOp])
+
+    def test_a_definition_reading_a_materialized_view_the_model_adds_is_a_change(self):
+        """Views are compared before materialized views, so the model and the database tell which ones are new."""
+        eq_(self._operations_for((3, 3, 22), model_reads="x", model_mvs=["x"]), [AlterViewOp])
+
+    def test_a_definition_reading_an_existing_materialized_view_is_not_certain(self, caplog):
+        eq_(self._operations_for((3, 3, 22), model_reads="x", model_mvs=["x"], database_mvs=["x"]), [])
+        assert "could not canonicalize them through a temporary view" in caplog.text
+
+    def test_a_database_definition_reading_a_table_the_revision_drops_is_a_change(self):
+        dropped = ops.DropTableOp.from_table(Table("x", MetaData(), Column("id", VARCHAR(10))))
+        eq_(self._operations_for((3, 3, 22), database_reads="x", revision_operations=[dropped]), [AlterViewOp])
+
+    @staticmethod
+    def _dropping(table, column):
+        return ops.ModifyTableOps(table, [ops.DropColumnOp.from_column_and_tablename(None, table, Column(column))])
+
+    @testing.combinations(
+        ("a_column_it_names", "SELECT `db`.`t`.`id` FROM `db`.`t`", "id"),
+        ("a_column_its_star_may_read", "SELECT * FROM `db`.`t`", "other"),
+        argnames="database_definition, dropped",
+        id_="iaa",
+    )
+    def test_a_database_definition_reading_a_column_the_revision_drops_is_a_change(
+        self, database_definition, dropped
+    ):
+        """The model cannot read a column it removes, so the definition did change; the view would break."""
+        operations = self._operations_for(
+            (3, 3, 22), revision_operations=[self._dropping("t", dropped)], database_definition=database_definition
+        )
+        eq_(operations, [AlterViewOp])
+
+    def test_a_column_the_database_definition_does_not_read_makes_no_change_certain(self, caplog):
+        eq_(self._operations_for((3, 3, 22), revision_operations=[self._dropping("t", "other")]), [])
+        assert "could not canonicalize them through a temporary view" in caplog.text
+
+    def test_a_database_definition_reading_a_materialized_view_the_model_removes_is_a_change(self):
+        """Views are compared before materialized views, so the model and the database tell which ones go."""
+        eq_(self._operations_for((3, 3, 22), database_reads="x", database_mvs=["x"]), [AlterViewOp])
+
+    def test_a_materialized_view_the_name_filters_leave_alone_is_not_dropped(self, caplog):
+        """Autogenerate drops no materialized view the include_name filter leaves out, so nothing is certain."""
+        operations = self._operations_for(
+            (3, 3, 22), database_reads="x", database_mvs=["x"],
+            name_filter=lambda name, type_, parent_names: type_ != "materialized_view",
+        )
+        eq_(operations, [])
+        assert "could not canonicalize them through a temporary view" in caplog.text
+
+    def test_a_definition_only_the_model_cannot_create_a_temporary_view_for_is_a_change(self):
+        """The database's definition goes through the temporary view, so the model's reads something new."""
+        operations = self._operations_for((3, 3, 22), model_columns="id, added", failing_only_for="added")
+        eq_(operations, [AlterViewOp])
+
+    @testing.combinations(
+        ("access_denied", "Access denied; you need the CREATE VIEW privilege on DATABASE tmp", "Grant the migration user CREATE VIEW"),
+        ("unknown_database", "Unknown database 'db'", "Create the schema"),
+        ("unknown_other_database", "Unknown database 'tmp'", None),
+        ("table_select_denied", "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE t2 for this operation.", None),
+        ("a_refused_definition", "Duplicate column name 'id'", None),
+        argnames="error, advice",
+        id_="iaa",
+    )
+    def test_the_warning_says_what_starrocks_said_and_advises_only_what_would_cure_it(
+        self, caplog, error, advice
+    ):
+        eq_(self._operations_for((3, 3, 22), error=error), [])
+        assert f"StarRocks said: {error}." in caplog.text, caplog.text
+        for step in ("Grant the migration user CREATE VIEW", "Create the schema"):
+            eq_(step in caplog.text, step == advice)

@@ -16,16 +16,23 @@ from functools import cache, lru_cache
 import logging
 import re
 from textwrap import dedent
-from typing import Any, Callable, Dict, Final, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Collection, Dict, Final, List, Optional, Sequence, Tuple, Type, Union
 
-from alembic.ddl.base import alter_table, format_column_name, format_server_default, format_table_name
+from alembic.ddl.base import (
+    ColumnName,
+    RenameTable,
+    alter_table,
+    format_column_name,
+    format_server_default,
+    format_table_name,
+)
 from alembic.ddl.mysql import (
     MySQLAlterDefault,
     MySQLChangeColumn,
     MySQLModifyColumn,
 )
 from alembic.operations.ops import AlterColumnOp
-from alembic.util.sqla_compat import compiles
+from alembic.util.sqla_compat import _literal_bindparam, compiles
 from sqlalchemy import (
     Column,
     Table,
@@ -64,6 +71,7 @@ from sqlalchemy.sql.elements import (
 from sqlalchemy.sql.expression import CompoundSelect, Delete, Insert, Select, TableClause, Update
 
 from starrocks.common import utils
+from starrocks.common.consts import TableConfigKey
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
 from starrocks.common.params import (
     ColumnAggInfoKey,
@@ -74,7 +82,13 @@ from starrocks.common.params import (
     TableKind,
     TableObjectInfoKey,
 )
-from starrocks.common.types import ColumnAggType, SystemRunMode, TableEngine, TableType, ViewSecurityType
+from starrocks.common.types import (
+    ColumnAggType,
+    SystemRunMode,
+    TableEngine,
+    TableType,
+    ViewSecurityType,
+)
 from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.reserved_words import STARROCKS_RESERVED_WORDS
 from starrocks.sql.schema import View
@@ -115,7 +129,7 @@ from .datatype import (
     stored_collection_type,
 )
 from .engine.interfaces import ReflectedMVState, ReflectedState, ReflectedViewState
-from .reflection import StarRocksInspector, StarRocksTableDefinitionParser
+from .reflection import StarRocksInspector
 from .sql.ddl import (
     AlterMaterializedView,
     AlterTableColumns,
@@ -126,10 +140,12 @@ from .sql.ddl import (
     AlterTablePartition,
     AlterTableProperties,
     AlterView,
+    AlterViewSecurity,
     CreateMaterializedView,
     CreateView,
     DropMaterializedView,
     DropView,
+    group_properties_for_set,
 )
 
 
@@ -219,6 +235,19 @@ colspecs = {
     sqltypes.JSON.JSONIndexType: JSONIndexType,
     sqltypes.JSON.JSONPathType: JSONPathType,
 }
+
+def require_server_version(dialect: "StarRocksDialect", minimum: Tuple[int, ...], feature: str) -> None:
+    """Raise CompileError when the connected StarRocks is older than ``minimum``, the first version with ``feature``.
+
+    Compiling without a connection, as Alembic's offline mode does, knows no server version and checks nothing.
+    """
+    version = dialect.server_version_info
+    if version and tuple(version) < minimum:
+        raise exc.CompileError(
+            f"{feature} needs StarRocks {'.'.join(map(str, minimum))} or later; "
+            f"the server is {'.'.join(map(str, version))}"
+        )
+
 
 @cache
 def _dialect_leaving_percents_single() -> "StarRocksDialect":
@@ -399,6 +428,7 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
         return "PERCENTILE"
 
     def visit_VARIANT(self, type_, **kw):
+        require_server_version(self.dialect, (4, 1), "The VARIANT type")
         return "VARIANT"
 
     def visit_BLOB(self, type_: sqltypes.LargeBinary, **kw: Any) -> str:
@@ -1061,6 +1091,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         return '"%s"' % str(value).replace("\\", "\\\\").replace('"', '\\"')
 
     def quoted_property_pair(self, key: Any, value: Any, separator: str = " = ") -> str:
+        """Quote a ``"key" = "value"`` PROPERTIES pair, refusing a missing value rather than writing "None"."""
+        if value is None:
+            raise exc.CompileError(f"Property {key!r} has no value; StarRocks properties are strings")
         return self.sql_text(f"{self.quoted_property(key)}{separator}{self.quoted_property(value)}")
 
     _COLUMN_LIST: Final[re.Pattern[str]] = re.compile(
@@ -1093,6 +1126,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if "%%" in sql:
             warn_once_of_doubled_percents(sql)
         return self.sql_compiler.post_process_text(sql)
+
     def visit_create_index(self, create: sa_schema.CreateIndex, **kw: Any) -> str:  # type: ignore[override]
         """Compile ``CREATE INDEX name ON table (columns) [USING <type> [(properties)]] [COMMENT '...']``.
 
@@ -1169,8 +1203,37 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 "properties only after an index type"
             )
         return "(%s)" % ", ".join(
-            f"{self.quoted_property(key)} = {self.quoted_property(value)}" for key, value in properties.items()
+            self.quoted_property_pair(key, value) for key, value in properties.items()
         )
+
+    def visit_add_constraint(self, create: sa_schema.AddConstraint, **kw: Any) -> str:
+        """Refuse ``ADD CONSTRAINT``, which StarRocks does not have, rather than send it to the server."""
+        raise exc.CompileError(self._unholdable_constraint_message(create.element, "add"))
+
+    def visit_drop_constraint(self, drop: sa_schema.DropConstraint, **kw: Any) -> str:
+        """Refuse ``DROP CONSTRAINT``: a StarRocks table has no constraint to drop."""
+        raise exc.CompileError(self._unholdable_constraint_message(drop.element, "drop"))
+
+    @staticmethod
+    def _unholdable_constraint_message(constraint: sa_schema.Constraint, action: str) -> str:
+        """Explain why StarRocks cannot add or drop a constraint, and what it offers instead."""
+        name = f" {constraint.name!r}" if constraint.name else ""
+        if isinstance(constraint, sa_schema.PrimaryKeyConstraint):
+            return (
+                f"StarRocks cannot {action} primary key{name}: a table's key is fixed when the table is created, "
+                "with starrocks_primary_key or another starrocks_*_key"
+            )
+        if isinstance(constraint, sa_schema.UniqueConstraint):
+            return (
+                f"StarRocks cannot {action} unique constraint{name}: use a PRIMARY KEY or UNIQUE KEY table, "
+                "or the unique_constraints table property"
+            )
+        if isinstance(constraint, sa_schema.ForeignKeyConstraint):
+            return (
+                f"StarRocks cannot {action} foreign key{name}: the foreign_key_constraints table property "
+                "records foreign keys for the optimizer"
+            )
+        return f"StarRocks cannot {action} constraint{name}: its tables hold no constraints besides their key"
 
     def _indexed_column_name(self, index: sa_schema.Index, expression: Any) -> str:
         """Return the quoted name of an indexed column, refusing expressions, which StarRocks cannot index."""
@@ -1277,7 +1340,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 break  # Found the key, no need to check for others
 
         if not key_str:
-            return  # No key defined, nothing to validate
+            self._warn_of_primary_key_left_to_duplicate_key(table)
+            return
 
         key_column_names = [k.strip() for k in key_str.split(',')]
         table_column_names = {c.name for c in table.columns}
@@ -1292,6 +1356,29 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         # 2. Specific Check: For AGGREGATE KEY tables, validate column order.
         if key_type == TableType.AGGREGATE_KEY:
             self._validate_aggregate_key_order(table, key_column_names)
+
+    def _warn_of_primary_key_left_to_duplicate_key(self, table: sa_schema.Table) -> None:
+        """Warn when a table's implied primary key cannot make it a PRIMARY KEY table.
+
+        With ``starrocks_infer_primary_key`` on, a table that names no ``starrocks_*_key``, and that StarRocks
+        can't hold as a PRIMARY KEY table on its primary key columns (see
+        :func:`starrocks.common.utils.primary_key_table_obstacle`), is created with no key clause, as earlier
+        versions of the dialect did, so StarRocks makes its default DUPLICATE KEY table. With it off, every such
+        table is, as in earlier versions, so none gets a warning. A table of another engine, such as an external
+        MySQL table, has no key at all, so it gets no warning either.
+        """
+        key_columns = utils.implied_primary_key_columns(table)
+        if not key_columns or not utils.infers_primary_keys(self.dialect) or not utils.table_engine_is_olap(table):
+            return
+        obstacle = utils.primary_key_table_obstacle(table, key_columns, self.dialect)
+        if obstacle is None:
+            return
+        util.warn(
+            f"Table {table.name!r} has the primary key ({', '.join(key_columns)}) and names no starrocks_*_key, but "
+            f"it can't be made a PRIMARY KEY table: {obstacle}. It is created with no key clause, as earlier "
+            "versions of the dialect did, so StarRocks makes a DUPLICATE KEY table. "
+            f"{utils.primary_key_table_remedy(table, key_columns, self.dialect)}"
+        )
 
     def _validate_aggregate_key_order(self, table: sa_schema.Table, key_column_names: List[str]) -> None:
         """
@@ -1376,7 +1463,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # Key / Table Type (Primary key, Duplicate key, Aggregate key, Unique key)
         primary_keys = kw.get("primary_keys", [])
-        if key_desc := self._get_create_table_key_desc(primary_keys, opts):
+        key_desc = self._get_create_table_key_desc(primary_keys, opts)
+        if key_desc is None and primary_keys:
+            key_desc = self._inferred_primary_key_desc(table)
+        if key_desc:
             table_opts.append(key_desc)
 
         # Comment
@@ -1439,7 +1529,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         #     props_dict.setdefault("replication_num", str(self.dialect.test_replication_num))
         if props_dict:
             props = ",\n".join(
-                f"{self.indent}{self.quoted_property(k)}={self.quoted_property(v)}" for k, v in props_dict.items()
+                f"{self.indent}{self.quoted_property_pair(k, v, separator='=')}" for k, v in props_dict.items()
             )
             table_opts.append(f"PROPERTIES(\n{props}\n)")
 
@@ -1493,6 +1583,17 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                                             f"primary_keys: {primary_keys}, SR's key_columns: ({key_columns_str})")
                 key_desc = f"{key_type} ({key_columns_str})"
         return key_desc
+
+    def _inferred_primary_key_desc(self, table: sa_schema.Table) -> Optional[str]:
+        """Return the PRIMARY KEY clause of a table that names no key model but implies one, or None.
+
+        See :func:`starrocks.common.utils.inferred_primary_key_columns` for when a primary key becomes the table's
+        PRIMARY KEY.
+        """
+        key_columns = utils.inferred_primary_key_columns(table, self.dialect)
+        if key_columns is None:
+            return None
+        return f"{TableType.PRIMARY_KEY} ({', '.join(self.preparer.quote(name) for name in key_columns)})"
 
 
     def _has_column_info_key(self, column: sa_schema.Column, key: str) -> bool:
@@ -1607,6 +1708,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             type_: sqltypes.TypeEngine,
             autoincrement: Optional[bool],
             comment: Optional[Any],
+            key_or_aggregate: Optional[str] = None,
              **kw: Any) -> str:
         """Builds ALTER COLUMN DDL for StarRocks, handling StarRocks-specific features.
 
@@ -1625,8 +1727,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         Args:
             column: The `sqlalchemy.schema.Column` object to process.
+            key_or_aggregate: ``KEY`` for a key column, or a value column's aggregate type, which StarRocks wants
+                after the type of a MODIFY COLUMN. The Alembic impl reads it from the database.
             **kw: Additional keyword arguments from the compiler.
-                - aggregate info should be stored here. But, it's not passed now.
 
         Returns:
             The DDL string for the alter column definition, without name.
@@ -1637,18 +1740,20 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if type_:
             type_: str = self.dialect.type_compiler.process(type_)
             colspec.append(type_)
-
-            # Get and set column-level aggregate information for aggregate key tables.
-            # TODO: But currently it's not supported. we need to implement it.
-            # if agg_info := self._get_column_agg_info(column):
-            #     colspec.append(agg_info)
+            if key_or_aggregate:
+                colspec.append(key_or_aggregate)
 
         # NULL or NOT NULL.
         if nullable is not None:
             colspec.append("NULL" if nullable else "NOT NULL")
 
         if autoincrement:
-            colspec.append("AUTO_INCREMENT")
+            raise exc.CompileError(
+                f"StarRocks cannot set AUTO_INCREMENT in MODIFY COLUMN (column {name!r}); "
+                "op.alter_column leaves an unchanged AUTO_INCREMENT out. From 4.1.3, StarRocks takes a MODIFY "
+                "COLUMN of an AUTO_INCREMENT column only when it changes nothing but the comment, and keeps the "
+                "AUTO_INCREMENT; earlier versions refuse any MODIFY COLUMN of an AUTO_INCREMENT column"
+            )
         # DEFAULT: include if provided (even if 0 or empty string), but not when False
         elif default is not False and default is not None:
             default = format_server_default(self, default)
@@ -1774,13 +1879,15 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if view.columns:
             text += self._get_view_column_clauses(view)
 
-        # StarRocks does not support altering COMMENT or SECURITY via ALTER VIEW.
-        # TODO: we can optimize it when StarRocks supports it in the future
-        # Only redefine the SELECT statement.
         text += f"AS\n{self.sql_text(view.definition)}"
 
         logger.debug("Compiled SQL for AlterView: \n%s", text)
         return text
+
+    def visit_alter_view_security(self, alter: AlterViewSecurity, **kw: Any) -> str:
+        """Compile ALTER VIEW ... SET SECURITY, the only way to change a view's security."""
+        keyword = self._view_security_keyword(alter.element, alter.security)
+        return f"ALTER VIEW {self.preparer.format_table(alter.element)} SET SECURITY {keyword}"
 
     def _get_view_column_clauses(self, view: View) -> str:
         """
@@ -1874,9 +1981,12 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """
         return cls._SCHEDULE_REFRESH.sub(r"\1ASYNC", str(refresh), count=1)
 
-    @staticmethod
-    def _view_security_keyword(view: Table, security: str) -> str:
-        """Return the view's SECURITY keyword, refusing anything but the NONE and INVOKER that StarRocks has."""
+    def _view_security_keyword(self, view: Table, security: str) -> str:
+        """Return the view's SECURITY keyword, refusing anything but the NONE and INVOKER that StarRocks has.
+
+        StarRocks takes a view's SECURITY from 3.4.1; 3.4.0 and older reject the clause as a syntax error.
+        """
+        require_server_version(self.dialect, (3, 4, 1), f"View SECURITY (view {view.name!r})")
         keyword = str(security).upper()
         if keyword not in ViewSecurityType.ALLOWED_ITEMS - {ViewSecurityType.EMPTY}:
             raise exc.CompileError(
@@ -1941,7 +2051,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         # ALTER PROPERTIES
         if alter.properties is not None:
             props_str = ", ".join(
-                f"{self.quoted_property(k)} = {self.quoted_property(v)}" for k, v in alter.properties.items()
+                self.quoted_property_pair(k, v) for k, v in alter.properties.items()
             )
             statements.append(f"ALTER MATERIALIZED VIEW {mv_name} SET ({props_str})")
 
@@ -2100,15 +2210,17 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         """Compile ALTER TABLE SET (...) DDL for StarRocks.
 
         Note:
-            Currently, SR only support one property in an ALTER TABLE SET statement.
-            So, we will generate multiple ALTER TABLE SET statements if there are multiple properties.
+            SR supports one property in an ALTER TABLE SET statement, except for the ones sharing the
+            ``dynamic_partition.`` or ``binlog_`` prefix. So, we will generate a SET statement for each
+            group of properties from `group_properties_for_set`.
         """
         table_name = format_table_name(self, alter.table_name, alter.schema)
-        # logger.debug("ALTER TABLE %r SET (%s)", table_name, alter.properties)
 
         multi_set_statement = "; ".join(
-            f"ALTER TABLE {table_name} SET ({self.quoted_property(k)} = {self.quoted_property(v)})"
-            for k, v in alter.properties.items()
+            f"ALTER TABLE {table_name} SET ("
+            + ", ".join(self.quoted_property_pair(k, v) for k, v in group.items())
+            + ")"
+            for group in group_properties_for_set(alter.properties)
         )
         logger.debug("Compiled SQL for AlterTableProperties: \n%s", multi_set_statement)
         return multi_set_statement
@@ -2168,6 +2280,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     ischema_names = ischema_names
     colspecs = colspecs
+
+    _PRELOADED_STATES_KEY = "starrocks_preloaded_table_states"
+    _MULTI_REFLECT_CHUNK_SIZE = 500
     inspector = StarRocksInspector
 
     statement_compiler = StarRocksSQLCompiler
@@ -2179,11 +2294,23 @@ class StarRocksDialect(MySQLDialect_pymysql):
     # Use regex to find the PARTITION BY clause. It can be multi-line.
     # _PARTITION_BY_PATTERN = re.compile(r"PARTITION BY\s+(.*?)(?:\s*DISTRIBUTED BY|\s*ORDER BY|\s*PROPERTIES|AS|;|$)", re.DOTALL | re.IGNORECASE)
 
-    def __init__(self, *args, **kwargs):
-        super(StarRocksDialect, self).__init__(*args, **kwargs)
+    def __init__(self, starrocks_infer_primary_key: Union[bool, str] = False, **kwargs: Any) -> None:
+        """Take the dialect's argument to ``create_engine``, besides MySQL's.
+
+        Args:
+            starrocks_infer_primary_key: ``True`` makes a table whose ``primary_key=True`` columns name no
+                ``starrocks_*_key`` a PRIMARY KEY table on them, where StarRocks can hold one: see
+                :func:`starrocks.common.utils.inferred_primary_key_columns`. ``False``, the default, sends no key
+                clause for such a table, as earlier versions of the dialect did, so StarRocks makes a DUPLICATE KEY
+                table. Alembic's offline mode takes it in ``context.configure(dialect_opts=...)``.
+
+        It accepts the text an ``engine_from_config`` file gives.
+        """
+        super(StarRocksDialect, self).__init__(**kwargs)
         self.run_mode: Optional[str] = None
         # It may be error to explicitly instantiate the preparer here, `initialize` method will instance it.
         # self.preparer = self.preparer(self)
+        self.infer_primary_key = util.asbool(starrocks_infer_primary_key)
 
         # some test parameters
         # self.test_replication_num: Optional[int] = None
@@ -2346,7 +2473,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
         Key: Query table_kind only once here, leveraging @reflection.cache.
         """
-        # logger.debug("setup parser for table object: %s, schema: %s", table_name, schema)
+        if (state := self._preloaded_table_state(kwargs.get("info_cache"), table_name, schema)) is not None:
+            return state
+
         # 1. Query object type (only once)
         table_kind = self._get_table_kind_from_db(connection, table_name, schema)
 
@@ -2388,6 +2517,24 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
         return TableKind.TABLE  # Default fallback
 
+    def _parsed_state_or_create(
+        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kw: Any
+    ) -> ReflectedState:
+        """
+        Look the parsed state up under plain string names.
+
+        SQLAlchemy 2.0's ``@reflection.cache`` keys a ``quoted_name`` by ``(name, quote)``
+        but a plain ``str`` by its value alone, so the same table reached once through
+        the ``Table`` (a ``quoted_name``) and once through a name list (a ``str``) used to
+        miss the cache and be reflected twice. SQLAlchemy 1.4 keys both by value.
+        """
+        return super()._parsed_state_or_create(
+            connection,
+            None if table_name is None else str(table_name),
+            None if schema is None else str(schema),
+            **kw,
+        )
+
     @reflection.cache
     def get_table_kind(self, connection, table_name, schema = None, **kwargs):
         """
@@ -2403,7 +2550,6 @@ class StarRocksDialect(MySQLDialect_pymysql):
         self, connection, table_name, schema = None, **kwargs
     ):
         charset: Optional[str] = self._connection_charset
-        parser: _reflection.StarRocksTableDefinitionParser = self._tabledef_parser
         # logger.debug("setup table parser for table: %s, schema: %s", table_name, schema)
 
         if not schema:
@@ -2456,13 +2602,49 @@ class StarRocksDialect(MySQLDialect_pymysql):
             table_name=table_name,
         )
 
+        return self._parse_table_state(
+            connection, table_name, schema, table_rows[0], table_config_row, column_rows, charset
+        )
+
+    def _parse_table_state(
+        self,
+        connection: Connection,
+        table_name: str,
+        schema: str,
+        table_row: _DecodingRow,
+        table_config_row: Any,
+        column_rows: List[_DecodingRow],
+        charset: Optional[str],
+        read_aggregate_types: bool = True,
+    ) -> ReflectedState:
+        """
+        Complete the reflected state of a table from the rows already read from information_schema.
+
+        SHOW CREATE TABLE gives the partition clause and the auto increment columns, and SHOW FULL COLUMNS gives the
+        aggregate type of each column. Only an AGGREGATE KEY table has aggregate types, so a caller that knows the
+        table is not one can skip that statement. SHOW INDEX gives the indexes, and their comments, which the
+        partition clause is read past.
+        """
+        parser: _reflection.StarRocksTableDefinitionParser = self._tabledef_parser
         full_name = self._get_quote_full_table_name(table_name, schema=schema)
         show_create_table = self._show_create_table(connection, None, charset, full_name)
-        column_autoinc = self._get_autoinc_from_show_create_table(show_create_table)
+        column_comments = {
+            row.COLUMN_NAME: row.COLUMN_COMMENT for row in sorted(column_rows, key=lambda row: row.ORDINAL_POSITION)
+        }
+        column_types = {row.COLUMN_NAME: row.COLUMN_TYPE for row in column_rows}
+        column_names = list(column_comments)
+        column_autoinc = self._get_autoinc_from_show_create_table(
+            show_create_table, column_names, column_comments, column_types
+        )
+        column_default_kinds = _reflection.column_default_kinds(
+            show_create_table, column_names, column_comments, column_types
+        )
 
         # Get aggregate info from `SHOW FULL COLUMNS`
-        full_column_rows: List[Row] = self._get_show_full_columns(
-            connection, table_name=table_name, schema=schema
+        full_column_rows: List[Row] = (
+            self._get_show_full_columns(connection, table_name=table_name, schema=schema)
+            if read_aggregate_types
+            else []
         )
         column_2_agg_type: Dict[str, str] = {
             row.Field: row.Extra.upper()
@@ -2470,7 +2652,19 @@ class StarRocksDialect(MySQLDialect_pymysql):
             if row.Extra
         }
 
-        partition_clause = self._get_partition_clause_from_create_table(show_create_table)
+        secondary_indexes = self._secondary_indexes(connection, full_name, show_create_table)
+        generated_partition_columns = self._generated_partition_columns(show_create_table)
+        if generated_partition_columns:
+            column_rows = [row for row in column_rows if row.COLUMN_NAME not in generated_partition_columns]
+        partition_clause = self._get_partition_clause_from_create_table(
+            show_create_table,
+            column_names,
+            column_comments,
+            column_types,
+            [index["dialect_options"].get(f"{DialectName}_comment") for index in secondary_indexes],
+        )
+        for name, expression in generated_partition_columns.items() if partition_clause else ():
+            partition_clause = partition_clause.replace(self.identifier_preparer.quote_identifier(name), expression)
         # Add the partition info into table_config row for convenience
         # But the row object is immutable, so we convert it to a dictionary to modify it.
         table_config_dict = dict(table_config_row)
@@ -2478,13 +2672,169 @@ class StarRocksDialect(MySQLDialect_pymysql):
             table_config_dict['PARTITION_CLAUSE'] = partition_clause
 
         return parser.parse_table(
-            table=table_rows[0],
+            table=table_row,
             table_config=table_config_dict,
             columns=column_rows,
             column_2_agg_type=column_2_agg_type,
             column_autoinc=column_autoinc,
+            column_default_kinds=column_default_kinds,
             charset=charset,
+            secondary_indexes=secondary_indexes,
         )
+
+    _SECONDARY_INDEX_LINE: Final[re.Pattern[str]] = re.compile(r"^[ \t]*INDEX[ \t]", re.MULTILINE)
+
+    def _secondary_indexes(
+        self, connection: Connection, full_name: str, show_create_table: str
+    ) -> List[Dict[str, Any]]:
+        """Return the table's BITMAP, NGRAMBF, GIN and VECTOR indexes, as SHOW INDEX lists them.
+
+        SHOW CREATE TABLE prints an index and its comment as they are, so its text can't tell an index line from a
+        line of a multi-line column comment, or where a multi-line index comment ends. SHOW INDEX lists each
+        index as a row. It is read only when a line of SHOW CREATE TABLE starts with ``INDEX``, as every index's
+        line does, so a table without indexes costs no statement.
+        """
+        if not self._SECONDARY_INDEX_LINE.search(show_create_table):
+            return []
+        rows = connection.exec_driver_sql(f"SHOW INDEX FROM {full_name}").mappings().all()
+        return self._tabledef_parser.parse_show_index_rows(rows)
+
+    def get_multi_columns(self, connection: Connection, **kw: Any) -> Any:
+        """
+        Reflect the columns of many tables, reading information_schema once per schema instead of once per table.
+
+        SQLAlchemy 2.0's ``MetaData.reflect()`` calls this first, and the other multi methods and the single table
+        ones then find the tables already parsed in the inspector's cache. Views and materialized views, and any
+        table the bulk read cannot cover, are reflected one by one as before.
+        """
+        self._preload_table_states(connection, **kw)
+        return super().get_multi_columns(connection, **kw)
+
+    def _preload_table_states(
+        self,
+        connection: Connection,
+        kind: Any = None,
+        schema: Optional[str] = None,
+        filter_names: Optional[Collection[str]] = None,
+        scope: Any = None,
+        **kw: Any,
+    ) -> None:
+        """
+        Parse every requested base table of a schema into the inspector cache, from one read of each of
+        information_schema.tables, tables_config and columns, plus SHOW CREATE TABLE per table.
+
+        Nothing is read when there is no inspector cache to hold the result, when the request excludes tables or
+        holds only temporary ones (``ObjectScope.TEMPORARY``), or when the server has no tables_config view; the
+        single table path then does the work. A table that can't be read here, as when it is dropped meanwhile, is
+        left out, so the single table path reports it, and SQLAlchemy skips it, as before.
+        """
+        info_cache: Optional[Dict[Any, Any]] = kw.get("info_cache")
+        if info_cache is None or not self._request_can_hold_base_tables(kind, scope):
+            return
+        schema = schema or connection.dialect.default_schema_name
+        names = None if not filter_names else sorted(set(filter_names))
+        charset: Optional[str] = self._connection_charset
+        try:
+            table_rows = self._read_schema_rows(connection, "tables", schema, names, charset)
+            base_table_rows = {row.TABLE_NAME: row for row in table_rows if row.TABLE_TYPE == "BASE TABLE"}
+            if not base_table_rows:
+                return
+            config_rows = {
+                row.TABLE_NAME: row
+                for row in self._read_schema_rows(connection, "tables_config", schema, list(base_table_rows), charset)
+            }
+        except exc.NoSuchTableError:
+            return
+        column_rows = self._group_rows_by_table(
+            self._read_schema_rows(connection, "columns", schema, list(base_table_rows), charset)
+        )
+
+        states: Dict[Tuple[str, str], ReflectedState] = info_cache.setdefault(self._PRELOADED_STATES_KEY, {})
+        for table_name, table_row in base_table_rows.items():
+            config_row = config_rows.get(table_name, {})
+            try:
+                states[(schema, table_name)] = self._parse_table_state(
+                    connection,
+                    table_name,
+                    schema,
+                    table_row,
+                    config_row,
+                    column_rows.get(table_name, []),
+                    charset,
+                    read_aggregate_types=self._is_aggregate_key_model(config_row),
+                )
+            except exc.NoSuchTableError:
+                continue
+
+    @staticmethod
+    def _request_can_hold_base_tables(kind: Any, scope: Any) -> bool:
+        """Whether a multi reflection request's ``kind`` and ``scope`` take in base tables of the default scope.
+
+        A request without them, as SQLAlchemy 1.4 has none, takes them in.
+        """
+        object_kind = getattr(reflection, "ObjectKind", None)
+        object_scope = getattr(reflection, "ObjectScope", None)
+        if object_kind is not None and kind is not None and object_kind.TABLE not in kind:
+            return False
+        return object_scope is None or scope is None or object_scope.DEFAULT in scope
+
+    def _preloaded_table_state(
+        self, info_cache: Optional[Dict[Any, Any]], table_name: str, schema: Optional[str]
+    ) -> Optional[ReflectedState]:
+        """The state of a table that get_multi_columns already parsed, or None."""
+        if info_cache is None:
+            return None
+        return info_cache.get(self._PRELOADED_STATES_KEY, {}).get((schema or self.default_schema_name, table_name))
+
+    @staticmethod
+    def _is_aggregate_key_model(table_config_row: Any) -> bool:
+        table_model = table_config_row.get(TableConfigKey.TABLE_MODEL) if table_config_row else None
+        return TableInfoKey.MODEL_TO_KEY_MAP.get(table_model) == TableInfoKey.AGGREGATE_KEY
+
+    @staticmethod
+    def _group_rows_by_table(rows: List[_DecodingRow]) -> Dict[str, List[_DecodingRow]]:
+        grouped: Dict[str, List[_DecodingRow]] = {}
+        for row in rows:
+            grouped.setdefault(row.TABLE_NAME, []).append(row)
+        return grouped
+
+    def _read_schema_rows(
+        self,
+        connection: Connection,
+        inf_sch_table: str,
+        schema: str,
+        table_names: Optional[List[str]],
+        charset: Optional[str],
+    ) -> List[_DecodingRow]:
+        """
+        Read the rows of an information_schema view for one schema, restricted to ``table_names`` when given.
+
+        The names are sent in chunks so a long list does not become one huge statement.
+        """
+        chunks: List[Optional[List[str]]] = (
+            [None]
+            if table_names is None
+            else [
+                table_names[start:start + self._MULTI_REFLECT_CHUNK_SIZE]
+                for start in range(0, len(table_names), self._MULTI_REFLECT_CHUNK_SIZE)
+            ]
+        )
+        rows: List[_DecodingRow] = []
+        for chunk in chunks:
+            where = "table_schema = :table_schema" + ("" if chunk is None else " AND table_name IN :table_names")
+            statement = text(f"SELECT * FROM information_schema.{inf_sch_table} WHERE {where}").bindparams(
+                bindparam("table_schema", type_=sqltypes.Unicode),
+                *([] if chunk is None else [bindparam("table_names", type_=sqltypes.Unicode, expanding=True)]),
+            )
+            params = {"table_schema": schema, **({} if chunk is None else {"table_names": chunk})}
+            try:
+                result = connection.execution_options(skip_user_error_events=False).execute(statement, params)
+                rows.extend(_DecodingRow(row, charset) for row in result.mappings().fetchall())
+            except exc.DBAPIError as e:
+                if self._extract_error_code(e.orig) == 1146:
+                    raise exc.NoSuchTableError(f"information_schema.{inf_sch_table}") from e
+                raise
+        return rows
 
     def _get_quote_full_table_name(
         self, table_name: str, schema: Optional[str] = None
@@ -2495,42 +2845,62 @@ class StarRocksDialect(MySQLDialect_pymysql):
             )
         )
 
-    def _get_autoinc_from_show_create_table(self, create_table: str) -> Dict[str, Any]:
+    def _get_autoinc_from_show_create_table(
+        self,
+        create_table: str,
+        column_names: Optional[Sequence[str]] = None,
+        column_comments: _reflection.ColumnComments = None,
+        column_types: _reflection.ColumnTypes = None,
+    ) -> Dict[str, Any]:
         """
         Get the auto increment info from the SHOW CREATE TABLE statement.
 
         Args:
             create_table: The SHOW CREATE TABLE statement.
+            column_names: The table's column names in ORDINAL_POSITION order, which delimit the column definitions.
+            column_comments: Each column's COLUMN_COMMENT, by which its comment is stepped over.
+            column_types: Each column's COLUMN_TYPE, by which its type is stepped over.
 
         Returns:
             A dictionary of column names and their auto increment info.
             The key is the column name, the value is True/False whether the column has auto increment
             Example: `{"col1": True, "col2": False, ...}`
         """
-        if create_table.lstrip().startswith("CREATE VIEW"):
-            return dict()
-        only_create = create_table.split('ENGINE=')[0]
-        only_columns = only_create.split("\n")[1:-1]
-        only_columns = [c.strip() for c in only_columns if c.strip().startswith("`")]
-        col_autoinc = {
-            c.split(' ')[0].strip('`'): 'AUTO_INCREMENT' in c
-            for c in only_columns
-        }
-        # logger.debug("get auto increment info from show create table: %s", col_autoinc)
-        return col_autoinc
+        return _reflection.column_auto_increments(create_table, column_names, column_comments, column_types)
 
-    def _get_partition_clause_from_create_table(self, create_table: str) -> Optional[str]:
+    _GENERATED_PARTITION_COLUMN: Final[re.Pattern[str]] = re.compile(
+        r'^\s*`(__generated_partition_column_\d+)`\s.*?\sAS\s(.+?)\sCOMMENT\s"', re.MULTILINE
+    )
+
+    @classmethod
+    def _generated_partition_columns(cls, create_table: str) -> Dict[str, str]:
+        """Return the hidden columns StarRocks generated for an expression partition, with their expressions.
+
+        StarRocks 3.5 partitions by an expression such as ``substr(s, 1, 2)`` or ``time_slice(dt, ..., ceil)``
+        through a generated column ``__generated_partition_column_N``, which SHOW CREATE TABLE and information_schema
+        list and PARTITION BY names. The model has neither, so reflection leaves the column out and puts its
+        expression back into the partition clause. StarRocks 4.1 hides the column itself.
+        """
+        return {match.group(1): match.group(2) for match in cls._GENERATED_PARTITION_COLUMN.finditer(create_table)}
+
+    def _get_partition_clause_from_create_table(
+        self,
+        create_table: str,
+        column_names: Optional[Sequence[str]] = None,
+        column_comments: _reflection.ColumnComments = None,
+        column_types: _reflection.ColumnTypes = None,
+        index_comments: Optional[Sequence[Optional[str]]] = None,
+    ) -> Optional[str]:
         """
         Get the PARTITION BY clause from the SHOW CREATE TABLE statement.
         Because we can't get the partition info from any information_schema views.
+
+        It is read after the column list and outside literals, so a column or index comment that names PARTITION BY
+        is not taken for it; see :func:`starrocks.reflection.show_create_partition_clause`.
         """
-        # Use regex to find the PARTITION BY clause. It can be multi-line.
-        # match = self._PARTITION_BY_PATTERN.search(create_table_str)
-        match = StarRocksTableDefinitionParser._PARTITION_BY_PATTERN.search(create_table)
-        if match:
-            partition_clause = match.group(1).strip()
-            return partition_clause
-        return None
+        return _reflection.show_create_partition_clause(
+            create_table, column_names, column_comments, column_types, index_comments
+        )
 
     def _get_show_full_columns(
         self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
@@ -2677,6 +3047,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 index_d["dialect_options"] = dialect_options
 
             indexes.append(index_d)
+        indexes.extend(dict(index) for index in parsed_state.secondary_indexes)
         return indexes
 
     @reflection.cache
@@ -2839,9 +3210,17 @@ class StarRocksDialect(MySQLDialect_pymysql):
             except Exception as e:
                 self.logger.info(f"Could not retrieve config for MV '{schema}.{view_name}': {e}")
 
-            # 4. Pass all raw data to the parser
+            # 4. Get the columns from information_schema.columns, as the view path does
+            column_rows: List[_DecodingRow] = self._read_from_information_schema(
+                connection=connection,
+                inf_sch_table="columns",
+                table_schema=schema,
+                table_name=view_name,
+            )
+
+            # 5. Pass all raw data to the parser
             parser = self._tabledef_parser
-            return parser.parse_mv(mv_row, table_row, config_row)
+            return parser.parse_mv(mv_row, table_row, config_row, column_rows)
 
         except Exception as e:
             self.logger.warning(f"Failed to get materialized view info for '{schema}.{view_name}': {e}")
@@ -2879,6 +3258,7 @@ TODO: Then, we can add more StarRocks specific attributes, such as KEY/agg_type.
 
 @compiles(MySQLModifyColumn, DialectName)
 def _starrocks_modify_column(element: MySQLModifyColumn, compiler: StarRocksDDLCompiler, **kw: Any) -> str:
+    """Compile MODIFY COLUMN, with the ``KEY`` or aggregate type the Alembic impl found for the column, if any."""
     return "%s MODIFY COLUMN %s %s" % (
         alter_table(compiler, element.table_name, element.schema),
         format_column_name(compiler, element.column_name),
@@ -2889,24 +3269,28 @@ def _starrocks_modify_column(element: MySQLModifyColumn, compiler: StarRocksDDLC
             type_=element.type_,
             autoincrement=element.autoincrement,
             comment=element.comment,
+            key_or_aggregate=getattr(element, KEY_OR_AGGREGATE_ATTRIBUTE, None),
         ),
     )
 
 
+KEY_OR_AGGREGATE_ATTRIBUTE: Final[str] = "starrocks_key_or_aggregate"
+"""The attribute of a MODIFY or CHANGE COLUMN element that holds the column's ``KEY`` or aggregate type."""
+
+
 @compiles(MySQLChangeColumn, DialectName)
 def _starrocks_change_column(element: MySQLChangeColumn, compiler: StarRocksDDLCompiler, **kw: Any) -> str:
-    """
-    It's a must for RENAMEing a column, because MODIFY COLUMN does not support changing the name.
-    And in StarRocks, there should be two alter clauses if both RENAME and MODIFY
+    """Compile MySQL's CHANGE COLUMN as StarRocks' MODIFY COLUMN, or its RENAME COLUMN.
 
-    NOTE: Currently, MySQL will pass column_type even for RENAME COLUMN. SO, it will also generate
-    an MODIFY COLUMN clause, because we don't know whether the column_type is changed, and StarRocks
-    doesn't support CHANGE COLUMN.
+    StarRocks has no CHANGE COLUMN, and refuses MODIFY COLUMN and RENAME COLUMN in one ALTER TABLE, so a
+    CHANGE that does both raises; ``op.alter_column`` sends the two separately. Alembic's MySQL impl sends a
+    CHANGE to the same name for every DATETIME column, which is a MODIFY alone.
     """
+    renamed = element.newname is not None and element.newname != element.column_name
     rename_clause = "RENAME COLUMN %s TO %s" % (
         format_column_name(compiler, element.column_name),
         format_column_name(compiler, element.newname),
-    ) if element.newname else None
+    ) if renamed else None
 
     modify_clause = "MODIFY COLUMN %s %s" % (
         format_column_name(compiler, element.column_name),
@@ -2917,6 +3301,7 @@ def _starrocks_change_column(element: MySQLChangeColumn, compiler: StarRocksDDLC
             type_=element.type_,
             autoincrement=element.autoincrement,
             comment=element.comment,
+            key_or_aggregate=getattr(element, KEY_OR_AGGREGATE_ATTRIBUTE, None),
         ),
     ) if (element.nullable is not None
             or element.type_ is not None
@@ -2926,22 +3311,66 @@ def _starrocks_change_column(element: MySQLChangeColumn, compiler: StarRocksDDLC
 
     alter_claus_header: str = alter_table(compiler, element.table_name, element.schema)
     if rename_clause and modify_clause:
-        return "%s %s, %s" % (alter_claus_header, modify_clause, rename_clause)
-    elif rename_clause:
-        return "%s %s" % (alter_claus_header, rename_clause)
-    else:
-        return "%s %s" % (alter_claus_header, modify_clause)
+        raise exc.CompileError(
+            f"StarRocks cannot MODIFY and RENAME column {element.column_name!r} in one ALTER TABLE; "
+            "op.alter_column sends them separately"
+        )
+    return "%s %s" % (alter_claus_header, rename_clause or modify_clause)
+
+
+@compiles(ColumnName, DialectName)
+def _starrocks_rename_column(element: ColumnName, compiler: StarRocksDDLCompiler, **kw: Any) -> str:
+    """StarRocks renames a column with ``RENAME COLUMN``, where Alembic's default leaves out ``COLUMN``."""
+    return "%s RENAME COLUMN %s TO %s" % (
+        alter_table(compiler, element.table_name, element.schema),
+        format_column_name(compiler, element.column_name),
+        format_column_name(compiler, element.newname),
+    )
+
+
+@compiles(RenameTable, DialectName)
+def _starrocks_rename_table(element: RenameTable, compiler: StarRocksDDLCompiler, **kw: Any) -> str:
+    """StarRocks renames with ``ALTER TABLE t RENAME new_name``: there is no ``TO``, and the new name is unqualified."""
+    return "%s RENAME %s" % (
+        alter_table(compiler, element.table_name, element.schema),
+        format_table_name(compiler, element.new_table_name, None),
+    )
 
 
 @compiles(MySQLAlterDefault, DialectName)
 def _starrocks_alter_default(element: MySQLAlterDefault, compiler: StarRocksDDLCompiler, **kw: Any) -> str:  # type: ignore[name-defined]
     """
-    StarRocks only supports MODIFY DEFAULT, no DROP DEFAULT now.
+    StarRocks cannot change a column's default value, so refuse instead of rendering a statement it rejects.
+
+    The statement Alembic's MySQL dialect builds, ``MODIFY COLUMN c DEFAULT ...``, has no column type, and
+    StarRocks rejects it with "Column's type is null" even before it reaches the real limitation.
     """
-    return "%s MODIFY COLUMN %s %s" % (
-        alter_table(compiler, element.table_name, element.schema),
-        format_column_name(compiler, element.column_name),
-        (
-            "DEFAULT %s" % format_server_default(compiler, element.default)
-        ),
+    raise column_default_change_error(element.table_name, element.column_name)
+
+
+@compiles(_literal_bindparam, DialectName)
+def _starrocks_inline_literal(
+    element: _literal_bindparam,
+    compiler: StarRocksSQLCompiler,
+    skip_bind_expression: bool = False,
+    **kw: Any,
+) -> str:
+    """Render an Alembic inline literal inside its type's bind expression, as SQLAlchemy renders a literal bind.
+
+    Alembic renders ``op.inline_literal`` and, in offline mode, each value of ``op.bulk_insert`` as this
+    construct, and compiles it to the literal alone. An ARRAY, MAP or STRUCT literal is the JSON document that
+    its bind expression builds the value from, and the server cast the bare document to NULLs.
+    """
+    impl = element.type.dialect_impl(compiler.dialect)
+    if not skip_bind_expression and impl._has_bind_expression:
+        return compiler.process(impl.bind_expression(element), skip_bind_expression=True, **kw)
+    return compiler.render_literal_bindparam(element, **kw)
+
+
+def column_default_change_error(table_name: str, column_name: str) -> exc.CompileError:
+    """Return the CompileError for a change of a column's default value, which StarRocks cannot make."""
+    return exc.CompileError(
+        f"StarRocks cannot change a column's default value ('Can not change default value'), so the default "
+        f"of column {column_name!r} of table {table_name!r} cannot be altered. Recreate the table or the "
+        f"column with the new default instead."
     )

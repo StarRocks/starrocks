@@ -14,14 +14,13 @@
 
 import logging
 
-from sqlalchemy import Column, Table, inspect, text
+from sqlalchemy import Column, MetaData, Table, inspect, text
 from sqlalchemy.orm import declarative_base
 
 from starrocks.common.utils import TableAttributeNormalizer
-from starrocks.datatype import INTEGER, VARCHAR
+from starrocks.datatype import DATE, INTEGER, VARCHAR
 from starrocks.sql.schema import MaterializedView, View
 from test.system.lifecycle import (
-    VIEW_CREATED_BEFORE_ITS_TABLE,
     ScriptContentParser,
     _AlembicLifecycleBase,
     wait_for_alter_table_column_or_optimization,
@@ -33,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
-    @VIEW_CREATED_BEFORE_ITS_TABLE
     def test_create_mv_basic(self, alembic_env, sr_engine):
         """Tests creating a basic MV."""
         Base = declarative_base()
@@ -57,7 +55,99 @@ class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
         mv_names = inspector.get_materialized_view_names()
         assert "mv1" not in mv_names
 
-    @VIEW_CREATED_BEFORE_ITS_TABLE
+    def test_recreate_downgrade_restores_the_mv_columns_and_data(self, alembic_env, sr_engine):
+        """A change ALTER cannot make drops and creates the MV; the downgrade recreates the database's MV.
+
+        The MV is sorted by its second SELECT column, which information_schema lists first, and the downgrade's
+        column list must still follow the SELECT.
+        """
+        Base = declarative_base()
+        Table(
+            "t_recreate",
+            Base.metadata,
+            Column("k", INTEGER),
+            Column("name", VARCHAR(10)),
+            starrocks_duplicate_key="k",
+            starrocks_properties={"replication_num": "1"},
+        )
+        mv = MaterializedView(
+            "mv_recreate",
+            Base.metadata,
+            definition="SELECT name, k FROM t_recreate",
+            starrocks_refresh="MANUAL",
+            starrocks_order_by="k",
+            starrocks_properties={"replication_num": "1"},
+        )
+        alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Create MV")
+        alembic_env.harness.upgrade("head")
+        with sr_engine.begin() as conn:
+            conn.exec_driver_sql("INSERT INTO t_recreate VALUES (1, 'alice')")
+
+        mv.comment = "changed"
+        alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Comment MV")
+        downgrade_content = ScriptContentParser.extract_downgrade_content(
+            ScriptContentParser.check_script_content(alembic_env, 1, "comment_mv")
+        )
+        assert "Reflected" not in downgrade_content
+        alembic_env.harness.upgrade("head")
+        alembic_env.harness.downgrade("-1")
+
+        with sr_engine.begin() as conn:
+            conn.exec_driver_sql("REFRESH MATERIALIZED VIEW mv_recreate WITH SYNC MODE")
+            assert conn.exec_driver_sql("SELECT name, k FROM mv_recreate").all() == [("alice", 1)]
+        assert [c["name"] for c in inspect(sr_engine).get_columns("mv_recreate")] == ["name", "k"]
+
+    def test_a_changed_definition_with_a_percent_sign_is_recreated(self, alembic_env, sr_engine):
+        """A ``%`` in the definitions reaches the temporary views as written, so StarRocks compares them.
+
+        Before 4.0.2 StarRocks stores an MV's SQL rewritten, and without the temporary views the change would only
+        be warned about.
+        """
+        def model(month_format):
+            metadata = MetaData()
+            Table("t_pct", metadata, Column("id", INTEGER), Column("dt", DATE), starrocks_properties={"replication_num": "1"})
+            MaterializedView(
+                "mv_month", metadata, definition=f"SELECT id, date_format(dt, '{month_format}') AS ym FROM t_pct",
+                starrocks_refresh="MANUAL", starrocks_properties={"replication_num": "1"},
+            )
+            return metadata
+
+        alembic_env.harness.generate_autogen_revision(metadata=model("%Y-%m"), message="create")
+        alembic_env.harness.upgrade("head")
+
+        alembic_env.harness.generate_autogen_revision(metadata=model("%Y%m"), message="new format")
+
+        upgrade_content = ScriptContentParser.extract_upgrade_content(
+            ScriptContentParser.check_script_content(alembic_env, 1, "new_format")
+        )
+        assert "op.drop_materialized_view('mv_month'" in upgrade_content, upgrade_content
+        alembic_env.harness.upgrade("head")
+        assert "%Y%m" in inspect(sr_engine).get_materialized_view_definition("mv_month")
+
+    def test_an_mv_reading_a_column_the_revision_adds_is_recreated(self, alembic_env, sr_engine):
+        """The temporary view fails while the column is missing, but the database's definition goes through it, so
+        the change is certain even before 4.0.2, where StarRocks shows the MV's SQL rewritten."""
+        def model(*columns):
+            metadata = MetaData()
+            Table("t_widened", metadata, Column("id", INTEGER), *columns, starrocks_properties={"replication_num": "1"})
+            names = ", ".join(["id", *(column.name for column in columns)])
+            MaterializedView(
+                "mv_widened", metadata, definition=f"SELECT {names} FROM t_widened",
+                starrocks_refresh="MANUAL", starrocks_properties={"replication_num": "1"},
+            )
+            return metadata
+
+        alembic_env.harness.generate_autogen_revision(metadata=model(), message="create")
+        alembic_env.harness.upgrade("head")
+        alembic_env.harness.generate_autogen_revision(metadata=model(Column("name", VARCHAR(20))), message="widen")
+
+        upgrade_content = ScriptContentParser.extract_upgrade_content(
+            ScriptContentParser.check_script_content(alembic_env, 1, "widen")
+        )
+        assert "op.drop_materialized_view('mv_widened'" in upgrade_content, upgrade_content
+        alembic_env.harness.upgrade("head")
+        assert "name" in inspect(sr_engine).get_materialized_view_definition("mv_widened")
+
     def test_create_mv_comprehensive(self, alembic_env, sr_engine):
         """Tests creating a comprehensive MV with all attributes."""
         Base = declarative_base()
@@ -85,7 +175,6 @@ class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
         alembic_env.harness.upgrade("head")
         # Verification of reflected attributes is covered in reflection tests
 
-    @VIEW_CREATED_BEFORE_ITS_TABLE
     def test_alter_mv_lifecycle(self, alembic_env, sr_engine):
         """Tests altering an MV's mutable attributes."""
         # 1. Initial state
@@ -111,7 +200,7 @@ class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
             AlteredBase.metadata,
             definition=f"SELECT t_alter.id FROM {schema}.t_alter",
             starrocks_refresh="MANUAL",
-            starrocks_properties={"replication_num": "1", "session.insert_timeout": "1000"},
+            starrocks_properties={"replication_num": "1", "session.query_timeout": "1000"},
         )
         alembic_env.harness.generate_autogen_revision(metadata=AlteredBase.metadata, message="Alter MV")
 
@@ -120,12 +209,11 @@ class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
         upgrade_content = ScriptContentParser.extract_upgrade_content(script_content)
         assert "op.alter_materialized_view('mv_to_alter'" in upgrade_content
         assert "refresh='MANUAL'" in upgrade_content
-        assert "'session.insert_timeout': '1000'" in upgrade_content
+        assert "'session.query_timeout': '1000'" in upgrade_content
 
         alembic_env.harness.upgrade("head")
         # Downgrade and verify is complex, covered by integration tests
 
-    @VIEW_CREATED_BEFORE_ITS_TABLE
     def test_mixed_schema_lifecycle(self, alembic_env, sr_engine):
         """
         Tests a complex migration with mixed operations on Tables, Views, and MVs.
@@ -205,7 +293,6 @@ class MaterializedViewLifecycleTest(_AlembicLifecycleBase):
         assert "mv1" in mv_names
         assert "mv2" not in mv_names
 
-    @VIEW_CREATED_BEFORE_ITS_TABLE
     def test_multi_schema_support(self, database, alembic_env, sr_engine):
         """Tests that autogenerate correctly handles multiple schemas with filtering.
 

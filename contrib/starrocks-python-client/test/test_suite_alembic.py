@@ -17,6 +17,8 @@
 Tests are re-bound to the upstream function wrapped in an exclusion, so upstream combinations are kept.
 """
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from alembic.testing import suite as alembic_suite
 from alembic.testing.suite import *  # noqa: F403
 from alembic.testing.suite import (
@@ -28,12 +30,6 @@ from sqlalchemy import testing
 from sqlalchemy.testing.fixtures import TestBase
 
 
-RENAME_COMBINED_WITH_MODIFY = testing.fails_on(
-    "starrocks", "the dialect combines MODIFY COLUMN with RENAME COLUMN, which StarRocks rejects as conflicting"
-)
-MODIFY_KEY_COLUMN_WITHOUT_KEY = testing.fails_on(
-    "starrocks", "the dialect leaves KEY out of MODIFY COLUMN for a key column, so StarRocks finds no key column left"
-)
 FLOAT_FIRST_COLUMN = testing.skip("starrocks", "StarRocks cannot use FLOAT as a table's first (key) column")
 DEFAULT_CANNOT_CHANGE = testing.skip("starrocks", "StarRocks cannot change a column's default value")
 UNQUOTED_DEFAULT = testing.skip(
@@ -45,6 +41,12 @@ AUTO_INCREMENT_IS_BIGINT = testing.skip(
     "starrocks",
     "StarRocks requires an AUTO_INCREMENT column to be BIGINT, so the dialect creates the INTEGER column as BIGINT "
     "and there is no type change to detect",
+)
+AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES = testing.skip(
+    "starrocks",
+    "StarRocks can't add or remove AUTO_INCREMENT, and from 4.1.3 takes a MODIFY COLUMN of an AUTO_INCREMENT column "
+    "only when it changes nothing but the comment, so the dialect leaves autoincrement off an alter unless the model "
+    "declares one the database lacks; upstream expects it on the alter",
 )
 
 
@@ -78,17 +80,37 @@ class AutoincrementTest(_AutoincrementTest):
     test_alter_column_autoincrement_pk_explicit_true = AUTO_INCREMENT_IS_BIGINT(
         _AutoincrementTest.test_alter_column_autoincrement_pk_explicit_true
     )
+    test_alter_column_autoincrement_pk_false = AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES(
+        _AutoincrementTest.test_alter_column_autoincrement_pk_false
+    )
+    test_alter_column_autoincrement_pk_implicit_true = AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES(
+        _AutoincrementTest.test_alter_column_autoincrement_pk_implicit_true
+    )
+    test_alter_column_autoincrement_nonpk_false = AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES(
+        _AutoincrementTest.test_alter_column_autoincrement_nonpk_false
+    )
+    test_alter_column_autoincrement_nonpk_explicit_true = AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES(
+        _AutoincrementTest.test_alter_column_autoincrement_nonpk_explicit_true
+    )
+    test_alter_column_autoincrement_compositepk_false = AUTOINCREMENT_LEFT_OFF_UNLESS_IT_CHANGES(
+        _AutoincrementTest.test_alter_column_autoincrement_compositepk_false
+    )
 
 
 class BackendAlterColumnTest(_BackendAlterColumnTest):
+    def setUp(self):
+        """Wait for each schema change to end before the test reads the table back.
+
+        StarRocks runs a column change as an asynchronous job, so without the wait the test can reflect the
+        table as it was.
+        """
+        super().setUp()
+        self.ctx = MigrationContext.configure(self.conn, opts={"starrocks_wait_for_schema_change": True})
+        self.op = Operations(self.ctx)
+
     test_add_server_default_int = DEFAULT_CANNOT_CHANGE(_BackendAlterColumnTest.test_add_server_default_int)
     test_modify_server_default_int = UNQUOTED_DEFAULT(_BackendAlterColumnTest.test_modify_server_default_int)
-    test_modify_non_nullable_to_nullable = MODIFY_KEY_COLUMN_WITHOUT_KEY(
-        _BackendAlterColumnTest.test_modify_non_nullable_to_nullable
-    )
     test_modify_nullable_to_non = NULLABLE_TO_NOT_NULL(_BackendAlterColumnTest.test_modify_nullable_to_non)
-    test_modify_type_int_str = MODIFY_KEY_COLUMN_WITHOUT_KEY(_BackendAlterColumnTest.test_modify_type_int_str)
-    test_rename_column = RENAME_COMBINED_WITH_MODIFY(_BackendAlterColumnTest.test_rename_column)
 
 
 def _require_sqlalchemy_2(namespace: dict[str, object]) -> None:

@@ -18,6 +18,7 @@ from sqlalchemy import testing
 from sqlalchemy.testing import fixtures
 
 from starrocks.common.params import TableInfoKeyWithPrefix
+from starrocks.engine.interfaces import ReflectedMVState
 from starrocks.reflection import StarRocksTableDefinitionParser
 
 
@@ -83,3 +84,56 @@ class ReflectionMVRefreshTest(fixtures.TestBase):
     )
     def test_mv_refresh_clause_fully_extracted(self, refresh_clause, expected):
         assert _reflect_refresh(refresh_clause) == expected
+
+    @testing.combinations(
+        ("areas", "areas"),
+        ("last_refresh", "last_refresh"),
+        ("x_properties", "x_properties"),
+        ("lookup_properties (dt)", "dt"),
+        ("haswith_x", "haswith_x"),
+        argnames="partition_expression, column",
+        id_="aa",
+    )
+    def test_a_bare_name_ending_in_a_clause_keyword(self, partition_expression, column):
+        """A name printed without backquotes that ends in AS, REFRESH or PROPERTIES, or reads AS WITH inside."""
+        parser = StarRocksTableDefinitionParser.__new__(StarRocksTableDefinitionParser)
+        ddl = (
+            f"CREATE MATERIALIZED VIEW `m` (`{column}`, `val`)\n"
+            f"PARTITION BY {partition_expression}\n"
+            "DISTRIBUTED BY RANDOM\n"
+            "REFRESH DEFERRED SCHEDULE EVERY(INTERVAL 1 DAY)\n"
+            'PROPERTIES ("colocate_with" = "g1")\n'
+            f"AS SELECT {column}, val FROM t"
+        )
+        state = parser._parse_mv_ddl("m", ddl, schema="db")
+
+        assert str(state.table_options.get(TableInfoKeyWithPrefix.PARTITION_BY)) == partition_expression
+        assert str(state.table_options.get(TableInfoKeyWithPrefix.REFRESH)) == "DEFERRED ASYNC EVERY(INTERVAL 1 DAY)"
+        assert dict(state.table_options[TableInfoKeyWithPrefix.PROPERTIES]) == {"colocate_with": "g1"}
+        assert state.definition == f"SELECT {column}, val FROM t"
+
+    def test_the_fallback_reading_keeps_the_async_after_a_moment(self):
+        """The regex used when the REFRESH grammar can't read the clause."""
+        parser = StarRocksTableDefinitionParser.__new__(StarRocksTableDefinitionParser)
+        state = ReflectedMVState(table_name="m", definition="SELECT 1")
+
+        parser._parse_mv_refresh_with_regex('REFRESH DEFERRED ASYNC\nPROPERTIES ("replication_num" = "1")\n', state)
+
+        assert str(state.table_options[TableInfoKeyWithPrefix.REFRESH]) == "DEFERRED ASYNC"
+
+    def test_comments_naming_clauses_are_not_read_as_them(self):
+        """A column comment and the MV comment that say PARTITION BY, REFRESH or AS SELECT, as StarRocks prints them."""
+        parser = StarRocksTableDefinitionParser.__new__(StarRocksTableDefinitionParser)
+        ddl = (
+            'CREATE MATERIALIZED VIEW `mv` (`k` COMMENT "no PARTITION BY k, 12\\" wide", `v`)\n'
+            'COMMENT "was \\"REFRESH ASYNC EVERY (INTERVAL 1 DAY)\\", AS SELECT 1"\n'
+            "DISTRIBUTED BY HASH(`k`) BUCKETS 1 \n"
+            "REFRESH MANUAL\n"
+            'PROPERTIES (\n"replication_num" = "1"\n)\n'
+            "AS SELECT k, v FROM t;"
+        )
+        state = parser._parse_mv_ddl("mv", ddl, schema="db")
+
+        assert str(state.table_options.get(TableInfoKeyWithPrefix.REFRESH)) == "MANUAL"
+        assert TableInfoKeyWithPrefix.PARTITION_BY not in state.table_options
+        assert state.definition == "SELECT k, v FROM t"

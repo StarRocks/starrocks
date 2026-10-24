@@ -15,9 +15,12 @@
 # Implementation functions for alter_table_xxx, ordered:
 # view → mv, alter → create → drop
 import logging
+from typing import List, Sequence
 
 from alembic.operations import Operations
 from sqlalchemy import MetaData
+from sqlalchemy.exc import CompileError
+from sqlalchemy.sql.elements import ClauseElement
 
 from starrocks.alembic.ops import (
     AlterMaterializedViewOp,
@@ -36,11 +39,14 @@ from starrocks.alembic.ops import (
 )
 from starrocks.sql.ddl import (
     AlterMaterializedView,
+    AlterTableProperties,
     AlterView,
+    AlterViewSecurity,
     CreateMaterializedView,
     CreateView,
     DropMaterializedView,
     DropView,
+    group_properties_for_set,
 )
 from starrocks.sql.schema import MaterializedView, View
 
@@ -48,12 +54,69 @@ from starrocks.sql.schema import MaterializedView, View
 logger = logging.getLogger(__name__)
 
 
+def _view_to_recreate(op: AlterViewOp) -> View:
+    """Build the view CREATE OR REPLACE VIEW recreates for an AlterViewOp, without its security.
+
+    The definition and columns are the op's own when it has a definition, and the existing ones otherwise, as in
+    a comment-only change.
+
+    Raises:
+        CompileError: if the op has no definition to recreate the view with.
+    """
+    has_definition = op.definition is not None
+    definition = op.definition if has_definition else op.existing_definition
+    if not definition:
+        raise CompileError(
+            f"alter_view({op.view_name!r}) changes the comment, which StarRocks can only do by recreating the "
+            "view, so it needs the view's definition or existing_definition."
+        )
+    return View(
+        op.view_name,
+        MetaData(),
+        definition=definition,
+        schema=op.schema,
+        columns=op.columns if has_definition else op.existing_columns,
+        comment=op.comment,
+    )
+
+
+def _view_security_changes(op: AlterViewOp) -> bool:
+    """Return whether the op carries a security that differs from the existing one, or has no existing one."""
+    if op.security is None:
+        return False
+    return op.existing_security is None or str(op.security).upper() != str(op.existing_security).upper()
+
+
+def _execute_once_every_statement_compiles(operations: Operations, statements: Sequence[ClauseElement]) -> None:
+    """Execute an op's statements one at a time, once every one of them has compiled.
+
+    StarRocks runs each DDL statement on its own, and nothing undoes one that has run. Compiling them all first
+    means that a statement the dialect refuses, such as SET SECURITY before StarRocks 3.4.1 or a property with
+    no value, stops the op before it changes anything.
+    """
+    for statement in statements:
+        statement.compile(dialect=operations.impl.dialect)
+    for statement in statements:
+        operations.execute(statement)
+
+
 @Operations.implementation_for(AlterViewOp)
-def alter_view(operations: Operations, op: AlterViewOp):
-    """Execute an ALTER VIEW statement."""
+def alter_view(operations: Operations, op: AlterViewOp) -> None:
+    """Execute the statements that apply an AlterViewOp, one at a time, once they all compile.
+
+    ALTER VIEW ... AS drops the view's comment, and nothing alters the comment alone, so an op that states a
+    comment, or an existing one, is applied as CREATE OR REPLACE VIEW with the full content. CREATE OR REPLACE
+    VIEW keeps the view's security whatever it says, so security is always changed with ALTER VIEW ... SET SECURITY.
+    """
     logger.debug("implementation alter_view: %s", op.view_name)
-    view = op.to_view()
-    operations.execute(AlterView(view))
+    statements: List[ClauseElement] = []
+    if op.comment is not None or op.existing_comment is not None:
+        statements.append(CreateView(_view_to_recreate(op), or_replace=True))
+    elif op.definition is not None:
+        statements.append(AlterView(op.to_view()))
+    if _view_security_changes(op):
+        statements.append(AlterViewSecurity(op.to_view(), op.security))
+    _execute_once_every_statement_compiles(operations, statements)
 
 
 @Operations.implementation_for(CreateViewOp)
@@ -78,9 +141,13 @@ def alter_materialized_view(operations: Operations, op: AlterMaterializedViewOp)
     """
     Execute ALTER MATERIALIZED VIEW statement.
 
-    Only supports altering mutable attributes: refresh, properties.
+    Only supports altering mutable attributes: refresh, properties. The downgrade of a property change whose
+    previous values could not be determined has neither, and does nothing.
     """
     logger.debug("implementation alter_materialized_view: %s", op.view_name)
+    if op.refresh is None and not op.properties:
+        logger.warning("Nothing to alter on materialized view %r: no refresh and no properties.", op.view_name)
+        return
     operations.execute(AlterMaterializedView(
         mv_name=op.view_name,
         schema=op.schema,
@@ -164,10 +231,17 @@ def alter_table_order(operations, op: AlterTableOrderOp):
 
 
 @Operations.implementation_for(AlterTablePropertiesOp)
-def alter_table_properties(operations, op: AlterTablePropertiesOp):
-    from starrocks.sql.ddl import AlterTableProperties
-    operations.execute(
-        AlterTableProperties(op.table_name, op.properties, schema=op.schema)
+def alter_table_properties(operations: Operations, op: AlterTablePropertiesOp) -> None:
+    """Execute one ALTER TABLE ... SET per property, or per group of ``dynamic_partition.`` or ``binlog_`` ones.
+
+    One packet of several statements fails midway when the first starts a schema-change job, as
+    ``bloom_filter_columns`` does. Each statement is executed on its own, so the impl can wait for the
+    job to finish before the next one when ``starrocks_wait_for_schema_change`` is on. They all compile before the
+    first runs.
+    """
+    _execute_once_every_statement_compiles(
+        operations,
+        [AlterTableProperties(op.table_name, group, schema=op.schema) for group in group_properties_for_set(op.properties)],
     )
 
 

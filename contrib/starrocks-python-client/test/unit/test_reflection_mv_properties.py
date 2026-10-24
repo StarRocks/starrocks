@@ -77,6 +77,60 @@ class ReflectionMVPropertiesTest(fixtures.TestBase):
         make autogenerate warn about unmanaged database values on every run."""
         assert prop not in _ddl_properties()
 
+    @testing.combinations(
+        ("session.query_timeout", "900"),
+        ("session.enable_spill", "true"),
+        ("query_rewrite_consistency", "loose"),
+        ("enable_query_rewrite", "false"),
+        ("force_external_table_query_rewrite", "true"),
+        ("partition_retention_condition", "dt >= current_date() - interval 3 month"),
+        ("excluded_refresh_tables", "db.u"),
+        ("resource_group", "wg1"),
+        ("unique_constraints", "default_catalog.db.t.id,dt;default_catalog.db.u.id"),
+        ("foreign_key_constraints", "default_catalog.db.t(id) REFERENCES default_catalog.db.u(id)"),
+        argnames="prop,value",
+    )
+    def test_properties_tables_config_leaves_out_are_taken_from_ddl(self, prop, value):
+        ddl = MV_DDL.replace('"colocate_with" = "cg_test"', f'"{prop}" = "{value}"')
+        assert _ddl_properties(ddl) == {prop: value}
+
+    @testing.combinations(
+        ("single_quotes", "dt >= '2020-01-01'", "dt >= '2020-01-01'"),
+        ("double_quotes_as_printed", 'dt >= "2020-01-01"', 'dt >= "2020-01-01"'),
+        ("double_quotes_escaped", 'dt >= \\"2020-01-01\\"', 'dt >= "2020-01-01"'),
+        ("comma_and_quote", 'dt IN ("a", "b")', 'dt IN ("a", "b")'),
+        argnames="printed, value",
+        id_="iaa",
+    )
+    def test_a_value_holding_quotes(self, printed, value):
+        """StarRocks 4.1.6 prints a property value's ``"`` as it is, and the value ends before the next key."""
+        ddl = MV_DDL.replace(
+            '"colocate_with" = "cg_test"', f'"partition_retention_condition" = "{printed}",\n"session.x" = "1"'
+        )
+        assert _ddl_properties(ddl) == {"partition_retention_condition": value, "session.x": "1"}
+
+    @testing.combinations(
+        ("one_literal", "city <> 'zz'"),
+        ("two_literals", "city <> 'zz' AND k <> 'y'"),
+        ("double_quoted_literal", 'city <> "zz"'),
+        argnames="where",
+        id_="ia",
+    )
+    def test_a_property_value_with_an_unpaired_quote_leaves_the_select_whole(self, where):
+        """4.1.6 prints ``city != "O'Brien"`` raw, and its ``'`` must not pair with a quote of the SELECT."""
+        ddl = MV_DDL.replace(
+            '"colocate_with" = "cg_test"',
+            '"partition_retention_condition" = "city != "O\'Brien"",\n"session.x" = "1"',
+        ).replace(
+            "AS SELECT id, sum(v) AS sv FROM t GROUP BY id", f"AS SELECT id, sum(v) AS sv FROM t WHERE {where} GROUP BY id;"
+        )
+        state = _parser()._parse_mv_ddl("m", ddl, schema="db")
+        assert state.definition == f"SELECT id, sum(v) AS sv FROM t WHERE {where} GROUP BY id"
+        assert dict(state.table_options[TableInfoKeyWithPrefix.PROPERTIES]) == {
+            "partition_retention_condition": "city != \"O'Brien\"",
+            "session.x": "1",
+        }
+
     def test_mv_without_colocation_has_no_ddl_properties(self):
         ddl = MV_DDL.replace(',\n"colocate_with" = "cg_test"', "")
         assert _ddl_properties(ddl) == {}

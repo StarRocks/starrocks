@@ -14,17 +14,7 @@
 
 import re
 
-from alembic import util as alembic_util
 from sqlalchemy import testing
-
-
-def alembic_runs_dialect_comparators_first(config: object) -> bool:
-    """Whether Alembic runs the comparators in its global registry ahead of its own.
-
-    Alembic's PriorityDispatcher (1.18 and later) copies the global registry, which holds the dialect's
-    comparators, before adding its own, so the dialect's ``schema`` and ``table`` comparators run first.
-    """
-    return hasattr(alembic_util, "PriorityDispatcher")
 
 
 def normalize_sql(sql: str) -> str:
@@ -63,6 +53,9 @@ def _server_version(config: object) -> tuple:
 
 
 VIEW_SECURITY_NEEDS_3_4_1 = testing.skip_if("starrocks<3.4.1", "StarRocks has no view SECURITY before 3.4.1")
+MV_PARTITION_RETENTION_NEEDS_3_5 = testing.skip_if(
+    "starrocks<3.5", "partition_retention_condition is a materialized view property from StarRocks 3.5"
+)
 STATISTIC_COLLECT_PROPERTY_MISSING = testing.skip_if(
     lambda config: (version := _server_version(config)) < (3, 5, 10) or (4, 0, 0) <= version < (4, 0, 2),
     "enable_statistic_collect_on_first_load is a table property from StarRocks 3.5.10 and 4.0.2",
@@ -77,7 +70,56 @@ JSON_TO_MAP_CAST_NEEDS_3_4_3 = testing.skip_if("starrocks<3.4.3", "StarRocks cas
 TIME_SLICE_CEIL_PARTITION_NEEDS_3_4_1 = testing.skip_if(
     "starrocks<3.4.1", "StarRocks before 3.4.1 refuses time_slice(..., ceil) in PARTITION BY"
 )
+AUTO_INCREMENT_COMMENT_MODIFY_NEEDS_4_1_3 = testing.skip_if(
+    "starrocks<4.1.3",
+    "Before 4.1.3, StarRocks refuses any MODIFY COLUMN of an AUTO_INCREMENT column; from 4.1.3 it takes one that "
+    "changes nothing but the comment",
+)
+GENERATED_COLUMN_IN_THE_DEFAULT_KEY_BEFORE_3_4 = testing.skip_if(
+    "starrocks<3.4",
+    "Before 3.4, StarRocks puts a generated column in the DUPLICATE KEY it picks for a table that names no key, "
+    "and then refuses it",
+)
+
+
+def _keeps_boolean_defaults_as_digits(config: object) -> bool:
+    version = _server_version(config)
+    return (3, 5, 11) <= version < (4, 0) or version >= (4, 0, 4)
+
+
+BOOLEAN_DEFAULT_KEPT_AS_DIGITS = testing.skip_if(
+    lambda config: not _keeps_boolean_defaults_as_digits(config),
+    "StarRocks keeps a BOOLEAN column's 'true' and 'false' defaults as '1' and '0' from 3.5.11, 4.0.4 and 4.1.0",
+)
+BOOLEAN_DEFAULT_KEPT_AS_WRITTEN = testing.skip_if(
+    _keeps_boolean_defaults_as_digits,
+    "Before 3.5.11, and before 4.0.4 in 4.0, StarRocks keeps a BOOLEAN column's default as written",
+)
+BUCKET_SIZE_NEEDS_RANDOM_DISTRIBUTION_FROM_4_1 = testing.skip_if(
+    "starrocks<4.1",
+    "StarRocks 4.1 refuses bucket_size unless the table is distributed by RANDOM; 3.3 takes it for any distribution",
+)
+IN_MEMORY_PRIMARY_KEY_INDEX_REFUSED_FROM_3_5 = testing.skip_if(
+    "starrocks<3.5", "StarRocks refuses a PRIMARY KEY table whose enable_persistent_index is false from 3.5"
+)
+PRIMARY_KEY_TABLE_SORTED_BY_BINARY_FROM_4_0 = testing.skip_if(
+    "starrocks>=4.0",
+    "From 4.0 StarRocks sorts a PRIMARY KEY table by VARBINARY, which the dialect refuses on every version, so that "
+    "a model gives the same table everywhere",
+)
+MV_TEXT_REWRITTEN_BEFORE_4_0_2 = testing.skip_if(
+    "starrocks<4.0.2", "Before 4.0.2 StarRocks shows an MV definition rewritten, so its text is not compared"
+)
+MV_TEXT_STORED_AS_WRITTEN_FROM_4_0_2 = testing.skip_if(
+    "starrocks>=4.0.2", "From 4.0.2 StarRocks shows an MV definition as written, so its text is compared"
+)
 VIEW_TEXT_REWRITTEN_BEFORE_4_0_7 = testing.skip_if(
     "starrocks<4.0.7",
     "Before 4.0.7 StarRocks stores a view's SQL rewritten, and the backslash of an escape such as \\t is lost",
+)
+VIEW_TEXT_NOT_COMPARED_BEFORE_4_0_7 = testing.skip_if(
+    "starrocks<4.0.7", "Before 4.0.7 StarRocks keeps a view's SQL rewritten, so its text is not compared"
+)
+VIEW_TEXT_COMPARED_FROM_4_0_7 = testing.skip_if(
+    "starrocks>=4.0.7", "From 4.0.7 StarRocks keeps a view's SQL as written, so its text is compared"
 )

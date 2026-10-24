@@ -42,7 +42,7 @@ from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
-    CompositeKeyReflectionTest,
+    CompositeKeyReflectionTest as _CompositeKeyReflectionTest,
     CTETest as _CTETest,
     FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONLegacyStringCastIndexTest as _JSONLegacyStringCastIndexTest,
@@ -499,6 +499,37 @@ class JSONLegacyStringCastIndexTest(_JSONLegacyStringCastIndexTest):
 
 
 FOR_UPDATE = testing.skip("starrocks", "StarRocks does not support SELECT ... FOR UPDATE")
+class CompositeKeyReflectionTest(_CompositeKeyReflectionTest):
+    """Upstream's tables, with tb1's columns in its key's order.
+
+    StarRocks needs a PRIMARY KEY table's key columns first, in key order. Upstream's tb1 lists its key (name, id,
+    attr) in another order than its columns, so the dialect would create it as a DUPLICATE KEY table, with a warning,
+    and a DUPLICATE KEY table reflects no primary key.
+    """
+
+    @classmethod
+    def define_tables(cls, metadata):
+        tb1 = Table(
+            "tb1",
+            metadata,
+            Column("name", String(20)),
+            Column("id", Integer),
+            Column("attr", Integer),
+            schema.PrimaryKeyConstraint("name", "id", "attr", name="pk_tb1"),
+            test_needs_fk=True,
+        )
+        Table(
+            "tb2",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("pid", Integer),
+            Column("pattr", Integer),
+            Column("pname", String(20)),
+            schema.ForeignKeyConstraint(
+                ["pname", "pid", "pattr"], [tb1.c.name, tb1.c.id, tb1.c.attr], name="fk_tb1_name_id_attr"
+            ),
+            test_needs_fk=True,
+        )
 
 
 NO_AUTOINCREMENT_IN_THE_1_4_FIXTURE = testing.skip(
@@ -613,7 +644,6 @@ class LongNameBlowoutTest(_LongNameBlowoutTest):
                 eq_(overlap, reflected_name)
 
 
-CompositeKeyReflectionTest.__requires__ = ('primary_key_constraint_reflection',) # This will make it also skip the fixture which is not creating succesfully
 if not IS_SQLALCHEMY_2:
     HasIndexTest.__requires__ = ('index_reflection',)
 
