@@ -50,7 +50,7 @@ dependencies = [
     "pymysql>=1.1.0",
     "lark>=1.3.1",
     "alembic>=1.14.0",
-    "asyncmy2>=0.2.20",
+    "asyncmy>=0.2.17",
 ]
 dynamic = ["readme", "version"]
 
