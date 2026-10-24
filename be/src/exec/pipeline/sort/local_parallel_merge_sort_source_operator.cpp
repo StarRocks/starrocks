@@ -61,6 +61,10 @@ bool LocalParallelMergeSortSourceOperator::has_output() const {
         return false;
     }
     if (_merger->is_pending(_merge_parallel_id)) {
+        // The merger has no leaf data to merge. If a spilled partition drained its buffer without reaching
+        // EOF, nothing re-arms its restore task (SpillerReader only re-arms from a pull), so this source
+        // would report "no output" forever and stay parked. Re-arm before giving up on this round.
+        _sort_context->rearm_stalled_restores();
         return false;
     }
     return true;

@@ -186,6 +186,7 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
 }
 
 Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* state) {
+    _state = state;
     RETURN_IF_ERROR(AggregateDistinctBlockingSourceOperator::prepare(state));
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
@@ -218,7 +219,30 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_aggregator->is_spilled_eos() && _has_last_chunk) {
         return true;
     }
+    // No buffered chunk, not at EOF, and nothing in flight: the restore chain has stalled. A restore task
+    // is only re-armed from SpillerReader::restore(), which needs a chunk to pull, so without this the
+    // operator would report "no output" forever and the query would hang silently. Re-arm here, the same
+    // way the partitionwise distinct and hash-join probe sources do.
+    _rearm_restore_if_stalled();
     return false;
+}
+
+void SpillableAggregateDistinctBlockingSourceOperator::_rearm_restore_if_stalled() const {
+    const auto& spiller = _aggregator->spiller();
+    if (spiller == nullptr || spiller->is_cancel()) {
+        return;
+    }
+    const auto& reader = spiller->reader();
+    if (reader == nullptr) {
+        return;
+    }
+    RuntimeState* state = _state;
+    Status st = reader->rearm_if_stalled(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(reader)));
+    if (!st.ok()) {
+        // has_output() is const and cannot return a status; record it on the spiller so the next
+        // pull_chunk() fails fast instead of the query hanging.
+        spiller->update_spilled_task_status(std::move(st));
+    }
 }
 
 bool SpillableAggregateDistinctBlockingSourceOperator::is_finished() const {

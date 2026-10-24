@@ -303,6 +303,14 @@ StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, MemGuard&& guard)
 }
 
 template <class TaskExecutor, class MemGuard>
+Status SpillerReader::rearm_if_stalled(RuntimeState* state, MemGuard&& guard) {
+    if (has_restore_task() || has_output_data()) {
+        return Status::OK();
+    }
+    return trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
+}
+
+template <class TaskExecutor, class MemGuard>
 Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
     if (_stream == nullptr) {
         return Status::OK();

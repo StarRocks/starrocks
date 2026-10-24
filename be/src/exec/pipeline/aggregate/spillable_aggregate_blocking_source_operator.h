@@ -48,6 +48,14 @@ public:
 private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
+    // Re-arm a stalled restore chain: no buffered chunk, not at EOF, and no restore task in flight.
+    // Called from has_output() when it is about to report "no output".
+    void _rearm_restore_if_stalled() const;
+
+    // Saved in prepare(). has_output() also runs on the poller thread, where the factory's
+    // runtime_state() is not guaranteed to be set yet.
+    RuntimeState* _state = nullptr;
+
     bool _is_finished = false;
     bool _has_last_chunk = true;
     ChunkPipelineAccumulator _accumulator;
