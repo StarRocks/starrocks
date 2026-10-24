@@ -1,118 +1,56 @@
 ---
 displayed_sidebar: docs
-description: "Calls a configured SYSTEM OpenAI-compatible chat endpoint and returns the generated text."
+description: "Call an OpenAI chat model through an AI Provider."
 ---
 
 # ai_complete
 
-For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
+Calls an OpenAI chat-completions endpoint through an AI Provider and returns generated text. The prompt, model, options, and any FILE content are sent to the selected endpoint.
 
-Calls the administrator-configured SYSTEM chat model with a prompt and an optional inline FILE, and returns its
-generated text. StarRocks sends a non-streaming OpenAI-compatible chat-completions request from a BE.
-
-:::warning
-This function sends the model name, prompt, FILE content if supplied, and options to the configured endpoint. Use only a trusted endpoint,
-which must use HTTPS, and do not include secrets or sensitive data unless the provider is approved to receive them. Calls can
-leave the StarRocks cluster, incur provider charges, and be retained under the provider's data-handling policy.
-:::
+Both `USAGE ON AI FUNCTION <function_name>` and `USAGE ON AI PROVIDER <provider_name>` are required, including for the selected default Provider. See [AI function privileges](ai_functions.mdx#ai-function-privileges).
 
 ## Syntax
 
 ```sql
-ai_complete(<prompt>)
-ai_complete(<prompt>, <options>)
-ai_complete(<model>, <prompt>)
-ai_complete(<model>, <prompt>, <options>)
-ai_complete(<prompt>, <file>)
-ai_complete(<prompt>, <file>, <options>)
-ai_complete(<model>, <prompt>, <file>)
-ai_complete(<model>, <prompt>, <file>, <options>)
+ai_complete(prompt)
+ai_complete(prompt, options)
+ai_complete(prompt, file)
+ai_complete(prompt, file, options)
+ai_complete(model, prompt)
+ai_complete(model, prompt, options)
+ai_complete(model, prompt, file)
+ai_complete(model, prompt, file, options)
+ai_complete(provider, model, prompt)
+ai_complete(provider, model, prompt, options)
+ai_complete(provider, model, prompt, file)
+ai_complete(provider, model, prompt, file, options)
 ```
 
 ## Parameters
 
-- `prompt`: A VARCHAR expression containing the user prompt. An empty string is valid.
-- `file`: An optional typed FILE expression containing a supported inline image or video. See [FILE inputs](#file-inputs).
-- `model`: A VARCHAR expression that selects the model for this call. When omitted, StarRocks uses
-  [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model).
-  An explicit model can vary by row, but a constant model cannot be empty or contain only whitespace.
-- `options`: An optional constant MAP of additional fields to add to the provider request. A typed NULL MAP is treated
-  as an empty MAP.
+Omitting `provider` selects the cluster default Provider for the function type: `chat` for completion and text helpers, `embedding` for embeddings. Omitting `model` uses that Provider's required default model. An explicit model takes precedence and may vary by row. `provider` must be a nonblank constant string; a constant explicit model must not be blank. An explicit Provider call does not require a cluster default.
+
+NULL text, explicit model, or FILE input returns NULL without a model request, whether it is a constant or a runtime column value. A NULL options MAP means no options; a NULL translation source language requests automatic detection. Provider names and helper arrays retain their parameter validation. Nested NULL values inside options retain their JSON-compatible semantics. If an untyped NULL matches different argument types across overloads, specify its type with `CAST`, for example `CAST(NULL AS VARCHAR)` or `CAST(NULL AS MAP<VARCHAR, JSON>)`.
 
 ### Options MAP rules
 
-- The MAP must be constant. Within every top-level or nested MAP, keys must be unique, non-NULL, non-empty VARCHAR
-  values.
-- Option values must be JSON-compatible: NULL, BOOLEAN, a finite numeric value, a string, JSON, ARRAY, MAP, or STRUCT.
-  Keys in nested MAP values must also be VARCHAR.
-- The exact, case-sensitive top-level keys `model`, `messages`, and `stream` are reserved and cannot be supplied.
-  StarRocks constructs these fields and always sends a non-streaming request.
-- A bare NULL in the two-argument form resolves as `ai_complete(<model>, NULL)`. To pass NULL as `options`, cast it to
-  a MAP type, for example `CAST(NULL AS MAP<VARCHAR, JSON>)`.
+`options` is an optional constant MAP. Omit it or use `map{}` for no options. Keys at every MAP depth must be unique, non-NULL, nonempty VARCHAR values. Values may be NULL, BOOLEAN, finite numbers, strings, JSON, ARRAY, MAP, or STRUCT. Unsupported value types are rejected. The case-sensitive top-level keys `model`, `endpoint`, `key`, `api_key`, `protocol`, `provider`, `messages`, and `stream` are reserved. Connection settings and credentials come from the Provider.
 
 ### FILE inputs
 
-`file` is a typed FILE expression, not a URL string. The FILE overloads accept inline JPEG, PNG, or WebP images
-and send the prompt and image as content parts. With the explicitly configured `qwen_compatible` chat protocol,
-inline MP4 video is also accepted; the selected model must support the input modality. The `openai_compatible` protocol rejects video.
-These overloads do not change the FILE type, add a FILE constructor, or fetch URI references.
-There is no implicit conversion between FILE and URL or VARCHAR inputs, and no media-to-text fallback.
+FILE overloads accept typed inline JPEG, PNG, or WebP images for OpenAI chat. The model must support image input. Video, audio, and documents are unsupported. FILE is not implicitly converted from a URL or VARCHAR, and no URI is fetched. Only `inline` may carry content; `uri`, `offset`, and `size` must be NULL. The MIME type is detected from bytes, and a supplied `content_type` must match it.
 
-Only the FILE `inline` field may carry content; `uri`, `offset`, and `size` must be NULL.
-When present, `content_type` must match the detected format. Detection checks bounded container headers, not full
-codec validity; the provider performs decoding. `checksum` is metadata and is not verified by these functions.
-The BE parameter [ai_function_max_input_file_bytes](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)
-limits raw bytes per FILE before AI-owned payload copying and Base64 encoding; its default is 10485760 bytes (10 MiB).
-Invalid or oversized inline content and unsupported media/protocol combinations follow `ai_function_on_error` as row-level failures.
-Reference FILE inputs explicitly fail with `NotSupported`, including with `on_error=ignore`, until an authorized FILE reader is available.
-NULL FILE inputs return NULL without a provider request. Upgrade all FE and BE nodes before using FILE overloads.
-For compatibility, `ai_complete(model, prompt, NULL)` still selects the text overload with NULL options (treated as an empty MAP), not a NULL FILE. A FILE-typed column selects the FILE overload; its NULL values return NULL without a request.
-
-FILE content is sent to the configured model endpoint, subject to the same data-egress warning as the prompt.
+`ai_function_max_input_file_bytes` limits raw bytes before copying and Base64 encoding; its default is 10485760 bytes (10 MiB). Invalid or oversized inline data follows `ai_function_on_error`. Reference FILE inputs fail with `NotSupported`, including with `on_error=ignore`. Runtime NULL FILE values return NULL without a request.
 
 ## Return value
 
-Returns a nullable VARCHAR containing `choices[0].message.content` from a successful OpenAI-compatible response.
-
-- If `prompt` is NULL, the function returns NULL without submitting a provider request.
-- For an overload with an explicit `model`, the function also returns NULL without submitting a request if `model` is
-  NULL.
-- The BE configuration
-  [`ai_function_on_error`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)
-  controls row-level failures. Its default, `ignore`, returns NULL for the failed row and continues the query. `fail`
-  aborts the query instead.
-- `ignore` does not suppress analysis or configuration errors, query cancellation, deadlines, or BE shutdown.
-
-The function is non-deterministic. The same arguments can return different text or fail differently as provider state,
-model behavior, and runtime conditions change.
-
-For AI query optimization, see [Reducing AI input rows](ai_functions.mdx#reducing-ai-input-rows).
+Returns nullable VARCHAR from `choices[0].message.content`. Results are non-deterministic. `ai_function_on_error` controls row-level failures: `ignore` returns NULL (the default), and `fail` aborts the query. Analysis/configuration errors, cancellation, and deadlines are not ignored.
 
 ## Configuration
 
-### FE SYSTEM model configuration
+Create a Provider with `protocol = "openai"`. Both HTTP and HTTPS endpoints are supported, with or without an API key. A nonempty key produces an `Authorization: Bearer ...` header. URL format, control-character, DNS, and address validation still apply. Use a trusted endpoint and data approved for transmission.
 
-An administrator configures the SYSTEM model with these mutable FE parameters. The endpoint and provider are required
-for every call. The default model is required for every overload without an explicit model, including FILE overloads.
-
-| Parameter | Default | Requirement |
-|-----------|---------|-------------|
-| [`ai_default_chat_endpoint`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_endpoint) | Empty string | Required. A complete HTTPS POST URL for the chat-completions endpoint. |
-| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | Empty string | Required without an explicit model, including FILE overloads; optional when every call supplies a model. |
-| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | Empty string | Required. `openai_compatible` or `qwen_compatible`. |
-
-Each query plan captures a snapshot of these values. Dynamic updates apply only to queries analyzed and planned after
-the update; plans that have already been constructed retain their captured snapshot.
-
-### BE-local credential
-
-Set `AI_FUNCTION_MODEL_API_KEY` in the local process environment of every BE that can execute AI queries. The BE reads
-this value locally and sends it as the Bearer credential. It is not an FE configuration item and is not included in the
-query plan. Also set `AI_FUNCTION_MODEL_ENDPOINT` on each BE to exactly the same complete HTTPS URL as
-`ai_default_chat_endpoint`. A BE rejects a plan whose endpoint does not match this local binding. It validates every DNS
-address, blocks link-local addresses, and pins the validated DNS snapshot for the request. An exact local binding can
-intentionally authorize a private-network model endpoint. Changing either BE-local environment variable requires
-restarting that BE. Do not put the credential in SQL text or the options MAP.
+Set a default with `SET <provider_name> AS DEFAULT AI PROVIDER`. If the corresponding default is absent, FE rejects implicit Provider calls, including `EXPLAIN`. Each execution plan captures its selected Provider configuration. ALTER and default changes affect newly planned queries; each prepared `EXECUTE` replans against current metadata.
 
 ### Runtime limits and retries
 
@@ -157,46 +95,17 @@ restarting that BE. Do not put the credential in SQL text or the options MAP.
 
 ## Examples
 
-The following examples use `EXPLAIN`, which analyzes and plans the statement without executing the function or sending
-an HTTP request. Valid SYSTEM configuration is still required during analysis.
-
 ```sql
-EXPLAIN SELECT ai_complete('Summarize this local test prompt.');
+CREATE AI PROVIDER support_chat TYPE chat
+PROPERTIES ("endpoint" = "http://localhost:8000/v1/chat/completions",
+            "model" = "chat-model", "protocol" = "openai");
+SET support_chat AS DEFAULT AI PROVIDER;
 
-EXPLAIN SELECT ai_complete(
-    'Classify this local test prompt.',
-    map{'temperature': 0.0}
-);
-
-EXPLAIN SELECT ai_complete(
-    'local-test-model',
-    'Summarize this local test prompt.'
-);
-
-EXPLAIN SELECT ai_complete(
-    'local-test-model',
-    'Return a JSON object for this local test prompt.',
-    map{'response_format': map{'type': 'json_object'}}
-);
+EXPLAIN SELECT ai_complete('Summarize this text.');
+EXPLAIN SELECT ai_complete('another-model', 'Summarize this text.');
+EXPLAIN SELECT ai_complete('support_chat', 'another-model', 'Summarize this text.', map{});
+EXPLAIN SELECT ai_complete('support_chat', 'vision-model', 'Describe this image.', image_file)
+FROM media_inputs;
+EXPLAIN SELECT ai_complete('support_chat', 'another-model', CAST(NULL AS VARCHAR));
+EXPLAIN SELECT ai_complete('another-model', 'text', CAST(NULL AS MAP<VARCHAR, JSON>));
 ```
-
-For an existing table `media_inputs` whose `image_file` column has type FILE and contains inline images, use a model
-that supports image input:
-
-```sql
-EXPLAIN SELECT ai_complete('Describe this image.', image_file) FROM media_inputs;
-```
-
-A NULL prompt does not submit a provider request:
-
-```sql
-SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
-```
-
-## Related functions
-
-See [AI text functions](ai_text_functions.md) for task-specific chat helpers, [ai_embed](ai_embed.md) for text or image embeddings, and [AI provider functions](ai_custom_functions.md) for calls through a registered provider. The four existing text-only `ai_complete` forms and their SYSTEM chat routing are unchanged. Setting a default AI provider does not reroute `ai_complete`; its explicit `model` argument still selects a remote model name.
-
-## Keywords
-
-AI_COMPLETE, AI, LLM

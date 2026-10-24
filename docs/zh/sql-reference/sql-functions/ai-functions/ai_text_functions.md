@@ -1,51 +1,58 @@
 ---
 displayed_sidebar: docs
-description: "使用 SYSTEM 聊天模型对文本进行分类、提取、翻译、摘要和转换。"
+description: "通过 AI Provider 对文本进行分类、提取、翻译、摘要和转换。"
 sidebar_position: 21
 ---
 
 # AI 文本函数
 
-函数和 Provider 的授权要求见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+文本辅助函数通过使用 `openai` 协议的 `chat` Provider 构造特定任务的提示词。每个函数支持默认模型、显式模型或显式 Provider 加模型三种形式，不接受 options MAP。
 
-这些函数使用 [ai_complete](ai_complete.md#配置) 的 SYSTEM 聊天端点和凭证，构造特定任务的提示词并返回相应类型的结果。使用这些新函数前，请先升级所有 FE 和 BE 节点。
-
-:::warning
-输入文本会发送给模型提供商，且可能产生费用。请仅使用已批准的端点和数据。特别是，`ai_redact` 会将原始、未脱敏的文本发送给提供商，并非本地隐私过滤器。
-:::
+调用同时需要 `USAGE ON AI FUNCTION <function_name>` 和所选 Provider 的 `USAGE ON AI PROVIDER <provider_name>`，包括默认 Provider。参见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
 
 ## 语法
-
-每个函数仅有两种形式：使用默认聊天模型，或者将显式模型作为第一个参数。这些辅助函数不接受 options MAP。
 
 ```sql
 ai_sentiment(text)
 ai_sentiment(model, text)
+ai_sentiment(provider, model, text)
 ai_classify(text, categories)
 ai_classify(model, text, categories)
+ai_classify(provider, model, text, categories)
 ai_extract(text, keys)
 ai_extract(model, text, keys)
+ai_extract(provider, model, text, keys)
 ai_fix_grammar(text)
 ai_fix_grammar(model, text)
+ai_fix_grammar(provider, model, text)
 ai_redact(text, categories)
 ai_redact(model, text, categories)
+ai_redact(provider, model, text, categories)
 ai_translate(text, source_language, target_language)
 ai_translate(model, text, source_language, target_language)
+ai_translate(provider, model, text, source_language, target_language)
 ai_similarity(text1, text2)
 ai_similarity(model, text1, text2)
+ai_similarity(provider, model, text1, text2)
 ai_summarize(text)
 ai_summarize(model, text)
+ai_summarize(provider, model, text)
 ai_filter(text, condition)
 ai_filter(model, text, condition)
+ai_filter(provider, model, text, condition)
 ```
 
-文本、模型、条件和语言参数均为 VARCHAR 表达式。显式模型可逐行变化；常量显式模型不能为空白。未显式指定模型时，必须配置 `ai_default_chat_model`。
+## 参数
 
-`categories` 和 `keys` 必须为非空常量 `ARRAY<VARCHAR>`，且不能包含 NULL 或空白元素。包含 URL 的 VARCHAR 仍作为文本处理，StarRocks 不会读取 URL 内容。不支持 FILE、图像或多模态输入。
+省略 `provider` 时，使用对应类型的集群默认 Provider：补全和文本辅助函数使用 `chat`，向量函数使用 `embedding`。省略 `model` 时，使用 Provider 必填的默认模型。显式模型优先，并可逐行变化。`provider` 必须是非空白常量字符串，常量显式模型也不能为空白。显式指定 Provider 的调用不要求设置集群默认值。
+
+文本、模型、条件和语言参数均为 VARCHAR 表达式。`categories` 和 `keys` 必须是非空常量 `ARRAY<VARCHAR>`，元素不能为 NULL 或空白。不支持 FILE 输入。`ai_redact` 会把原始文本发送给模型，并非本地隐私过滤器。
+
+文本、显式 model 或 FILE 输入为 NULL 时返回 NULL，不发送模型请求；常量和运行时列值遵循相同规则。NULL options MAP 表示不传选项，NULL 翻译源语言表示自动识别。Provider 名和辅助函数数组仍需满足各自的参数校验。options 内部嵌套 NULL 保持原有 JSON 兼容语义。若裸 NULL 在多个重载中匹配不同参数类型，须用 `CAST` 指定类型，例如 `CAST(NULL AS VARCHAR)` 或 `CAST(NULL AS MAP<VARCHAR, JSON>)`。
+
+源语言和目标语言使用 `en`、`zh`、`fr` 等语言代码。源语言为 NULL 或空字符串（`''`）时自动识别。目标语言为 NULL 时返回 NULL，不发送请求；目标语言为空或仅含 ASCII 空白字符时也返回 NULL，不发送请求。不提供固定语言白名单或 `return_error_details` 参数。
 
 ## 返回值
-
-所有结果都可为 NULL，且具有非确定性。
 
 | 函数 | 类型 | 含义 |
 |------|------|------|
@@ -54,29 +61,19 @@ ai_filter(model, text, condition)
 | `ai_extract` | JSON | 请求返回 `{"response":{"key":"value"}}` 形式的对象，缺失值使用 NULL。 |
 | `ai_fix_grammar` | VARCHAR | 纠正语法和拼写后的文本。 |
 | `ai_redact` | VARCHAR | 将检测到的值替换为 `[EMAIL]` 等类别标记的文本。 |
-| `ai_translate` | VARCHAR | 翻译后的文本。源语言为 NULL 或空字符串时请求自动识别；目标语言为 NULL、空字符串或仅含 ASCII 空白字符时直接返回 NULL，不发送请求。 |
+| `ai_translate` | VARCHAR | 翻译后的文本，语言和 NULL 规则见下文。 |
 | `ai_similarity` | FLOAT | 模型生成的 0 到 1 之间的语义相似度评分，并非向量距离计算。 |
 | `ai_summarize` | VARCHAR | 文本摘要。 |
 | `ai_filter` | BOOLEAN | 模型是否认为文本符合指定条件。 |
 
-分类和提取的响应必须是有效的 JSON 对象。StarRocks 不强制校验所请求的对象结构，也不验证模型输出的事实准确性。
-
-文本为 NULL 或显式模型为 NULL 时，直接返回 NULL，不发送提供商请求。翻译的 NULL 源语言是上述例外。格式不正确的类型化响应及其他行级失败遵循 [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)：`ignore` 返回 NULL，`fail` 中止查询。配置错误、取消和截止时间到期不会转换为 NULL。
-
-[ai_complete 的 SQL 使用位置限制、预处理语句重新规划及运行时限制](ai_complete.md#限制和安全)同样适用。
+分类和提取结果必须是 JSON 对象，但不会验证所请求的对象结构或事实准确性。所有结果均可为 NULL，且具有非确定性。行级错误遵循 `ai_function_on_error`，[SQL 限制和运行时控制](ai_complete.md#限制和安全)同样适用。
 
 ## 示例
-
-以下示例仅规划查询。`EXPLAIN` 仍需有效的 SYSTEM 聊天配置，但不会发送提供商请求。
 
 ```sql
 EXPLAIN SELECT ai_sentiment('The delivery was excellent.');
 EXPLAIN SELECT ai_classify('Please reset my password.', ['support', 'sales']);
-EXPLAIN SELECT ai_extract('Order 42 ships Friday.', ['order', 'ship_date']);
-EXPLAIN SELECT ai_translate('Hello', NULL, 'Chinese');
-EXPLAIN SELECT ai_similarity('A quick reply', 'A fast response');
-EXPLAIN SELECT ai_filter('The package arrived damaged.', 'describes a damaged item');
-EXPLAIN SELECT ai_summarize('approved-chat-model', 'A local test paragraph.');
+EXPLAIN SELECT ai_translate('Hello', '', 'zh');
+EXPLAIN SELECT ai_translate('support_chat', 'chat-model', 'Bonjour', 'fr', 'en');
+EXPLAIN SELECT ai_summarize('chat-model', 'A local test paragraph.');
 ```
-
-文本向量化参见 [ai_embed](ai_embed.md)；通过已注册的 AI provider 调用聊天或向量服务参见 [AI provider 函数](ai_custom_functions.md)。设置默认 AI provider 不改变这些辅助函数的 SYSTEM 路由；显式 `model` 参数仍选择远端模型名。
