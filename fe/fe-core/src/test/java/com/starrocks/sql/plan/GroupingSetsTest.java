@@ -22,6 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -38,7 +39,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.Type;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -914,6 +917,43 @@ public class GroupingSetsTest extends PlanTestBase {
             assertContains(belowRepeat(plan), "probe runtime filters");
         } finally {
             connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(old);
+        }
+    }
+
+    private static String[] planAndOptimizerTrace(String sql) throws Exception {
+        Pair<ExecPlan, String> planAndTrace =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, "Optimizer").second;
+        return new String[] {planAndTrace.first.getExplainString(TExplainLevel.NORMAL), planAndTrace.second};
+    }
+
+    @Test
+    public void testThreeGroupingSetsKeepPlanWithoutEstimate() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // no column statistics on t0: a two-key rollup keeps the plan main builds, and says why
+            String[] planAndTrace = planAndOptimizerTrace("select v1, v2, count(*) from t0 group by rollup(v1, v2)");
+            assertNotContains(planAndTrace[0], "MultiCastDataSinks");
+            assertContains(planAndTrace[0], "repeat: repeat 2 lines");
+            Assertions.assertTrue(planAndTrace[1].contains("a grouping key has unknown statistics"), planAndTrace[1]);
+
+            // A list-partitioned table is estimated over every partition before partition pruning (and its partition
+            // predicate is dropped from the estimate), so the estimate is skipped rather than trusted.
+            starRocksAssert.withTable("CREATE TABLE gs_list_part (k1 int, region varchar(20), v bigint) " +
+                    "DUPLICATE KEY(k1) PARTITION BY LIST(region) " +
+                    "(PARTITION p1 VALUES IN ('a'), PARTITION p2 VALUES IN ('b')) " +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+            planAndTrace = planAndOptimizerTrace(
+                    "select k1, v, count(*) from gs_list_part where region = 'a' group by rollup(k1, v)");
+            assertNotContains(planAndTrace[0], "MultiCastDataSinks");
+            Assertions.assertTrue(planAndTrace[1].contains("scans a partitioned table before partition pruning"),
+                    planAndTrace[1]);
+
+            // 3 sets whose finest one adds no key to the others: nothing to peel off, so the rule does not apply
+            String plan = getFragmentPlan("select v1, count(*) from t0 group by grouping sets ((), (v1), (v1))");
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
 }
