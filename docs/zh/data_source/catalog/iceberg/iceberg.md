@@ -34,6 +34,8 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 :::
 
+如果 Iceberg 列的列表、映射或结构体中嵌套了 geography，则整个列显示为 `UNKNOWN_TYPE`，无法查询，包括其中的非地理空间子字段。其他受支持的列和标量 geography 仍可读取。
+
 ## 使用注意事项
 
 使用 StarRocks 查询 Iceberg 数据时，请注意以下几点：
