@@ -123,6 +123,10 @@ public class ResultSink extends DataSink {
         return sinkType == TResultSinkType.STATISTIC;
     }
 
+    public boolean isArrowFlightSink() {
+        return sinkType == TResultSinkType.ARROW_FLIGHT_PROTOCAL;
+    }
+
     public boolean needBroker() {
         return fileSinkOptions.isSetUse_broker() && fileSinkOptions.use_broker;
     }

@@ -66,6 +66,7 @@ import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -1130,7 +1131,17 @@ public class DefaultCoordinator extends Coordinator {
             // if this query is a block query do not cancel.
             long numLimitRows = executionDAG.getRootFragment().getPlanFragment().getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1) {
+            // For Arrow Flight multi-endpoint, the client reads each instance's result buffer
+            // directly from the CNs, so the FE must NOT reap the fragment instances on its own
+            // EOS -- doing so cancels result shards the client has not drained yet (they fail with
+            // "Cancelled: QueryFinished"). The BE's timed cleanup (result_buffer_cancelled_interval_time)
+            // reclaims these buffers after the client has fetched them.
+            DataSink rootSink = executionDAG.getRootFragment().getPlanFragment().getSink();
+            boolean arrowFlightMultiEndpoint = rootSink instanceof ResultSink
+                    && ((ResultSink) rootSink).isArrowFlightSink()
+                    && connectContext != null
+                    && connectContext.getSessionVariable().isEnableArrowFlightMultiEndpoint();
+            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1 && !arrowFlightMultiEndpoint) {
                 if (hasLimit && numReceivedRows >= numLimitRows) {
                     LOG.debug("no block query, return num >= limit rows, need cancel");
                     cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
