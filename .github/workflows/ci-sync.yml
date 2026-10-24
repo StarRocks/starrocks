@@ -81,14 +81,14 @@ jobs:
       # CelerData enforces SAML SSO, so the CelerData repo-sync dispatch uses a CelerData
       # GitHub App token, scoped to that one repo and to Actions: write. Unset or a failed
       # mint: run-repo-sync.sh falls back to GH_TOKEN.
-      - name: CelerData App token
+      - name: phx-sync-dispatch-bot token
         id: cd-token
-        if: steps.commit_sha.outputs.skip_cd != 'true' && vars.PHX_CI_BOT_APP_ID != ''
+        if: steps.commit_sha.outputs.skip_cd != 'true' && vars.PHX_SYNC_DISPATCH_BOT_APP_ID != ''
         continue-on-error: true
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.PHX_CI_BOT_APP_ID }}
-          private-key: ${{ secrets.PHX_CI_BOT_PRIVATE_KEY }}
+          app-id: ${{ vars.PHX_SYNC_DISPATCH_BOT_APP_ID }}
+          private-key: ${{ secrets.PHX_SYNC_DISPATCH_BOT_PRIVATE_KEY }}
           owner: CelerData
           repositories: celerdata-enterprise
           permission-actions: write
