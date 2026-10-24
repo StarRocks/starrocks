@@ -31,11 +31,28 @@ ARG distro=ubuntu
 ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
+# Use a verified, immutable dependency seed by default. Set to full for an
+# entirely source-built image, without pulling any prebuilt dev-env image.
+ARG thirdparty_source=prebuilt
+ARG toolchain_tag=main-20260707
 
-FROM starrocks/toolchains-${distro}:main-20260707 as base
+FROM starrocks/toolchains-${distro}:${toolchain_tag} as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /
+
+# These multi-platform images were published from d78fb065ca1. Reuse is
+# conditional on the build-input fingerprint in thirdparty/prebuilt-baseline.json.
+FROM starrocks/dev-env-ubuntu@sha256:5b918a26c21f46038f82c17db7d9879a9a8a7bbecb6aee920da86313c66df3ee as prebuilt-ubuntu
+FROM starrocks/dev-env-rocky9@sha256:c05f0e7be2fcfeadbd70137ff03781675925add2931af68fa806f77d24a57645 as prebuilt-rocky9
+# There is no verified seed for the legacy platform; retain its full build.
+FROM base as prebuilt-centos7
+RUN mkdir -p $STARROCKS_THIRDPARTY/installed
+FROM prebuilt-${distro} as thirdparty-source-prebuilt
+
+FROM base as thirdparty-source-full
+RUN mkdir -p $STARROCKS_THIRDPARTY/installed
+FROM thirdparty-source-${thirdparty_source} as thirdparty-seed
 
 FROM base as builder_stage1
 # stage1: build thirdparty
@@ -44,21 +61,78 @@ ARG predownload_thirdparty
 ARG thirdparty_url
 ARG GITHUB_TOKEN
 ARG BUILD_ROOT
+ARG distro
+ARG toolchain_tag
+ARG thirdparty_source
 
+COPY --from=thirdparty-seed /var/local/thirdparty/installed $STARROCKS_THIRDPARTY/installed
 COPY . $BUILD_ROOT
-RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
-        wget --progress=dot:mega --tries=3 --read-timeout=60 --connect-timeout=15 --no-check-certificate ${thirdparty_url} -O thirdparty.tar ; \
-        mkdir -p ${BUILD_ROOT}/thirdparty/src && tar -xf thirdparty.tar -C ${BUILD_ROOT}/thirdparty/src ; \
-    fi
-RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd ${BUILD_ROOT}/thirdparty && \
-     PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+RUN if python3 ${BUILD_ROOT}/thirdparty/reuse-prebuilt.py \
+        --root ${BUILD_ROOT} --prefix $STARROCKS_THIRDPARTY/installed \
+        --distro "$distro" --toolchain-tag "$toolchain_tag" --source "$thirdparty_source" ; then \
+        echo "Reusing verified prebuilt thirdparty libraries; refreshing pprof separately." && \
+        cd ${BUILD_ROOT}/thirdparty && \
+        if [ ! -d installed ]; then \
+            ln -s $STARROCKS_THIRDPARTY/installed installed ; \
+        fi && \
+        ./build-thirdparty.sh -j2 pprof ; \
+    else \
+        echo "Building thirdparty dependencies from source." && \
+        rm -rf $STARROCKS_THIRDPARTY/installed ${BUILD_ROOT}/thirdparty/installed && \
+        mkdir -p $STARROCKS_THIRDPARTY/installed && \
+        if test "x$predownload_thirdparty" = "xtrue" ; then \
+            wget --progress=dot:mega --tries=3 --read-timeout=60 --connect-timeout=15 --no-check-certificate ${thirdparty_url} -O thirdparty.tar && \
+            mkdir -p ${BUILD_ROOT}/thirdparty/src && tar -xf thirdparty.tar -C ${BUILD_ROOT}/thirdparty/src ; \
+        fi && \
+        cd ${BUILD_ROOT}/thirdparty && \
+        PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && \
+        cp -r installed $STARROCKS_THIRDPARTY/ ; \
+    fi && \
+    rm -rf $STARROCKS_THIRDPARTY/installed/lance $STARROCKS_THIRDPARTY/installed/starlet
 # create empty maven directories
 RUN mkdir -p /root/.m2 /root/.mvn
+
+
+# Reuse the official preinstalled Rust toolchain instead of downloading rustup
+# during every image build. This digest pins Rust 1.96.1 for amd64 and arm64.
+FROM rust:1.96.1-slim-bookworm@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 as rust-toolchain
+
+# Reuse the validated dependency installation, including protoc and its includes.
+# Do not download or rebuild zlib/protobuf/gtest just to compile Lance.
+FROM builder_stage1 as lance-builder
+ARG BUILD_ROOT
+ARG distro
+
+# Copy only the official Rust distribution, not Debian's system libraries.
+# Compile in the target StarRocks toolchain environment to retain its ABI.
+# The final dev-env image receives only the installed Lance package.
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+ENV PATH=/opt/cargo/bin:$PATH
+COPY --from=rust-toolchain /usr/local/rustup/ /opt/rustup/
+COPY --from=rust-toolchain /usr/local/cargo/ /opt/cargo/
+# The official toolchain requires glibc >= 2.28; CentOS7 keeps skipping Lance.
+RUN if [ "$distro" != "centos7" ]; then rustc --version && cargo --version; fi
+
+RUN mkdir -p $STARROCKS_THIRDPARTY/installed/lance && \
+    if [ "$distro" != "centos7" ]; then \
+        cd ${BUILD_ROOT}/thirdparty && \
+        if [ ! -d installed ]; then \
+            ln -s $STARROCKS_THIRDPARTY/installed installed ; \
+        fi && \
+        ./build-thirdparty.sh -j2 lance && \
+        if [ ! installed/lance -ef $STARROCKS_THIRDPARTY/installed/lance ]; then \
+            cp -r installed/lance $STARROCKS_THIRDPARTY/installed/ ; \
+        fi ; \
+    fi
 
 
 FROM builder_stage1 as build_prebuild_mvn_true
 ARG BUILD_ROOT
 # set the maven settings and download the dependency jars
+RUN if [ ! -d ${BUILD_ROOT}/thirdparty/installed ]; then \
+        ln -s $STARROCKS_THIRDPARTY/installed ${BUILD_ROOT}/thirdparty/installed ; \
+    fi
 RUN cp -a ${BUILD_ROOT}/docker/dockerfiles/dev-env/mvn/* /root/.mvn/ ; \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd ${BUILD_ROOT} ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true
@@ -99,6 +173,7 @@ ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
 
 # Copy third-party dependencies
 COPY --from=build_stage2 $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
+COPY --from=lance-builder $STARROCKS_THIRDPARTY/installed/lance $STARROCKS_THIRDPARTY/installed/lance
 # Copy maven dependencies
 COPY --from=build_stage2 /root/.m2 /root/.m2/
 COPY --from=build_stage2 /root/.mvn /root/.mvn/

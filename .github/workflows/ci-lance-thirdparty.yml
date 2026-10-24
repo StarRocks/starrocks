@@ -1,0 +1,26 @@
+name: Lance thirdparty packaging tests
+on:
+  pull_request:
+    paths:
+      - 'thirdparty/lance/**'
+      - 'thirdparty/build-lance.sh'
+      - 'thirdparty/build-thirdparty.sh'
+      - 'thirdparty/package-manifest.sh'
+      - 'thirdparty/reuse-prebuilt.py'
+      - 'thirdparty/test_reuse_prebuilt.py'
+      - 'thirdparty/prebuilt-baseline.json'
+      - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+      - '.github/workflows/ci-lance-thirdparty.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate the optional builder without a Rust toolchain
+        run: |
+          bash -n thirdparty/build-lance.sh
+          python3 -m unittest discover -s thirdparty/lance -p 'test_*.py'
+          python3 -m unittest discover -s thirdparty -p 'test_reuse_prebuilt.py'

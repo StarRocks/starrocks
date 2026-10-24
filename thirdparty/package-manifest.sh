@@ -211,6 +211,12 @@ starrocks_package_archives() {
     fi
 
     for package in "$@"; do
+        # Lance is an in-tree Rust crate, with its own locked Cargo downloads.
+        # Its only archive prerequisite is the already-built protobuf/protoc.
+        if [[ "${package}" == "lance" ]]; then
+            keys="${keys} PROTOBUF"
+            continue
+        fi
         resolved=""
         _starrocks_scanned_functions=""
         for key in $(_starrocks_scan_build_function "${package}" | sort -u); do
