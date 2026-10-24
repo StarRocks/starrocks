@@ -23,13 +23,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
-=======
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
->>>>>>> b5a51863c51... [Enhancement] Push down a two-key ROLLUP only when statistics show an overwhelming win (#63873)
 public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @BeforeAll
@@ -663,21 +658,9 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
         assertNotContains(plan, "MultiCastDataSinks");
         assertContains(plan, "repeat: repeat 2 lines");
 
-        // 4 or more grouping sets keep exactly the static depth (one level per set above 3), whatever the
-        // estimate: Q14-1 and Q18 build 2 levels, Q22 too.
+        // 4 or more grouping sets are pushed down whatever the estimate, as before.
         for (String sql : List.of(Q14_1, Q18, Q22)) {
-            assertContains(getGroupingSetPushDownPlan(sql), "repeat: repeat 2 lines");
-        }
-
-        // A cascade level of 1 is the rollback to the historical single split, which never touched 3 sets.
-        int previousLevel = connectContext.getSessionVariable().getCboPushDownGroupingSetCascadeLevel();
-        connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(1);
-        try {
-            plan = getGroupingSetPushDownPlan(Q70);
-            assertNotContains(plan, "MultiCastDataSinks");
-            assertContains(plan, "repeat: repeat 2 lines");
-        } finally {
-            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(previousLevel);
+            assertContains(getGroupingSetPushDownPlan(sql), "MultiCastDataSinks");
         }
     }
 
@@ -692,7 +675,7 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "repeat: repeat 1 lines");
 
-        // a set listed twice gets its own grouping id (QueryTransformer), which the cascade carries, so duplicated
+        // a set listed twice gets its own grouping id (QueryTransformer), which the push down carries, so duplicated
         // sets come out as duplicated rows with the rule on and off alike
         for (String sets : new String[] {
                 "((ws_web_site_sk), (ws_web_site_sk), (ws_web_site_sk, ws_ship_mode_sk))",

@@ -105,22 +105,8 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.inputAt(0).getOp();
-<<<<<<< HEAD
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 3
+        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 2
                 || repeatOperator.hasPushDown()) {
-=======
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 2) {
-            return false;
-        }
-
-        // Each application peels the finest grouping set off the repeat and re-aggregates the rest from
-        // it, and the plan it produces matches this rule's own pattern again - so applying the rule
-        // repeatedly builds a cascade g_n -> g_n-1 -> ... instead of expanding every level from g_n.
-        // Three things terminate it independently: the grouping-set count drops by one per application
-        // and the static floor below stops it at 3 sets; the level counter on the repeat is capped here;
-        // and a cascade level that would peel no key is refused below.
-        if (repeatOperator.getPushDownLevel() >= cascadeLevelLimit(context)) {
->>>>>>> b5a51863c51... [Enhancement] Push down a two-key ROLLUP only when statistics show an overwhelming win (#63873)
             return false;
         }
 
@@ -161,16 +147,13 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             return false;
         }
 
-        // The static floor: a cascade stops once the repeat is down to 3 grouping sets.
+        // The static floor: more than 3 grouping sets are always pushed down.
         if (repeatOperator.getRepeatColumnRef().size() > 3) {
             return true;
         }
-        // A repeat that starts at 3 grouping sets is pushed down only on an overwhelming estimate. A cascade
-        // level of 1 or less is the rollback to the historical single split, which never touched 3 sets.
+        // A repeat of 3 grouping sets is pushed down only on an overwhelming estimate.
         // Checked last, since it estimates statistics over the whole input subtree.
-        return repeatOperator.getPushDownLevel() == 0 &&
-                context.getSessionVariable().getCboPushDownGroupingSetCascadeLevel() > 1 &&
-                isOverwhelmingWinForThreeSets(input, context);
+        return isOverwhelmingWinForThreeSets(input, context);
     }
 
     /**
