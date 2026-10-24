@@ -29,6 +29,9 @@ CONF_mInt64(ai_function_connect_timeout_ms, "10000");
 
 CONF_mInt64(ai_function_max_response_bytes, "8388608");
 
+// Maximum raw inline FILE bytes before copying into the AI payload or encoding. Must be positive.
+CONF_mInt64(ai_function_max_input_file_bytes, "10485760");
+
 CONF_mInt32(ai_function_worker_thread_num, "16");
 
 CONF_mInt32(ai_function_sub_chunk_size, "64");

@@ -49,6 +49,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +77,17 @@ public class BatchRollupJobTest {
     public void before() throws Exception {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         alterJobs.clear();
+    }
+
+    // The rollup scheduler runs every 10 ms and the jobs finish quickly, so a job can finish
+    // before CANCEL reaches it. Keep the scheduler from running jobs for the rest of the test.
+    // Must be called before the rollup jobs are created.
+    private static void pauseRollupScheduler() {
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            protected void runAfterLeaseValid() {
+            }
+        };
     }
 
     @Test
@@ -126,6 +139,7 @@ public class BatchRollupJobTest {
 
     @Test
     public void testCancelBatchRollup() throws Exception {
+        pauseRollupScheduler();
         starRocksAssert.withTable("create table db1.tbl2(k1 int, k2 int, k3 int) " +
                 "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
@@ -147,6 +161,75 @@ public class BatchRollupJobTest {
 
         // cancel rollup jobs
         stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
+        CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
+
+        for (AlterJobV2 alterJob : alterJobs.values()) {
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, alterJob.getJobState());
+        }
+        Assertions.assertEquals(OlapTableState.NORMAL, tbl.getState());
+        for (Partition partition : tbl.getPartitions()) {
+            Assertions.assertEquals(1,
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
+        }
+    }
+
+    @Test
+    public void testCancelRollupWithRepeatedJobIds() throws Exception {
+        pauseRollupScheduler();
+        starRocksAssert.withTable("create table db1.tbl4(k1 int, k2 int, k3 int) " +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        String stmtStr = "alter table db1.tbl4 add rollup r1(k1) " +
+                "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
+
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        Assertions.assertEquals(3, alterJobs.size());
+        List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assertions.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl4");
+        Assertions.assertNotNull(tbl);
+        Assertions.assertEquals(OlapTableState.ROLLUP, tbl.getState());
+
+        // a job id given twice is cancelled once; the repeat must not be reported as a refused cancel
+        List<Long> repeatedJobIds = Lists.newArrayList(jobIds);
+        repeatedJobIds.addAll(jobIds);
+        stmtStr = "cancel alter table rollup from db1.tbl4 (" + Joiner.on(",").join(repeatedJobIds) + ")";
+        CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
+
+        for (AlterJobV2 alterJob : alterJobs.values()) {
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, alterJob.getJobState());
+        }
+        Assertions.assertEquals(OlapTableState.NORMAL, tbl.getState());
+    }
+
+    @Test
+    public void testCancelRollupWithoutJobIds() throws Exception {
+        pauseRollupScheduler();
+        starRocksAssert.withTable("create table db1.tbl3(k1 int, k2 int, k3 int) " +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        String stmtStr = "alter table db1.tbl3 add rollup r1(k1) " +
+                "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
+
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        Assertions.assertEquals(3, alterJobs.size());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assertions.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl3");
+        Assertions.assertNotNull(tbl);
+        Assertions.assertEquals(OlapTableState.ROLLUP, tbl.getState());
+
+        // cancel all rollup jobs of the table without naming them
+        stmtStr = "cancel alter table rollup from db1.tbl3";
         CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
 

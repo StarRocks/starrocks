@@ -34,14 +34,20 @@
 
 #include "geo/geo_types.h"
 
+#include <s2/mutable_s2shape_index.h>
 #include <s2/s1chord_angle.h>
 #include <s2/s2cap.h>
 #include <s2/s2cell.h>
 #include <s2/s2earth.h>
+#include <s2/s2edge_crosser.h>
 #include <s2/s2edge_distances.h>
+#include <s2/s2error.h>
 #include <s2/s2latlng.h>
+#include <s2/s2lax_loop_shape.h>
+#include <s2/s2pointutil.h>
 #include <s2/s2polygon.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_visit_crossing_edge_pairs.h>
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
 
@@ -61,13 +67,9 @@ void print_s2point(std::ostream& os, const S2Point& point) {
     os << std::setprecision(12) << coord.lng().degrees() << " " << coord.lat().degrees();
 }
 
-static inline bool is_valid_lng_lat(double lng, double lat) {
-    return std::abs(lng) <= 180 && std::abs(lat) <= 90;
-}
-
 // Return GEO_PARSE_OK, if and only if this can be converted to a valid S2Point
 static inline GeoParseStatus to_s2point(double lng, double lat, S2Point* point) {
-    if (!is_valid_lng_lat(lng, lat)) {
+    if (!is_valid_crs84_coordinate(lng, lat)) {
         return GEO_PARSE_COORD_INVALID;
     }
     S2LatLng ll = S2LatLng::FromDegrees(lat, lng);
@@ -105,7 +107,7 @@ static void remove_duplicate_points(std::vector<S2Point>* points) {
     points->resize(lhs + 1);
 }
 
-static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+static GeoParseStatus to_s2loop_points(const GeoCoordinateList& coords, std::vector<S2Point>* output) {
     // 1. covnert all coordinates to points
     std::vector<S2Point> points(coords.list.size());
     for (int i = 0; i < coords.list.size(); ++i) {
@@ -126,6 +128,14 @@ static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr
     if (points.size() < 3) {
         return GEO_PARSE_LOOP_LACK_VERTICES;
     }
+    *output = std::move(points);
+    return GEO_PARSE_OK;
+}
+
+static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+    std::vector<S2Point> points;
+    const auto status = to_s2loop_points(coords, &points);
+    if (status != GEO_PARSE_OK) return status;
     *loop = std::make_unique<S2Loop>(points);
     if (!(*loop)->IsValid()) {
         return GEO_PARSE_LOOP_INVALID;
@@ -368,6 +378,56 @@ bool GeoLine::decode(const void* data, size_t size) {
 
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
+
+bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
+    std::vector<S2Point> points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+
+    // Match S2Loop::FindValidationErrorNoIndex before using its robust crossing
+    // validator. The original loop construction normalizes only after validity
+    // succeeds; this predicate does not construct or normalize a polygon.
+    for (const auto& point : points) {
+        if (!S2::IsUnitLength(point)) return false;
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        const auto& next = points[(i + 1) % points.size()];
+        if (points[i] == next || points[i] == -next) return false;
+    }
+    MutableS2ShapeIndex index;
+    index.Add(std::make_unique<S2LaxLoopShape>(points));
+    S2Error error;
+    return !s2shapeutil::FindSelfIntersection(index, &error);
+}
+
+bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
+    // A paired sweep over 4..512 vertices favored direct checks at every tested size.
+    constexpr size_t kMaxDirectVertices = 512;
+    // Raw size bounds the converted size; retain the old path without converting twice.
+    if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
+
+    std::vector<S2Point> points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+    // Preserve the existing non-index checks without changing the H3 validity path.
+    for (const auto& point : points) {
+        if (!S2::IsUnitLength(point)) return false;
+    }
+    const size_t n = points.size();
+    for (size_t i = 0; i < n; ++i) {
+        const auto& next = points[(i + 1) % n];
+        if (points[i] == next || points[i] == -next) return false;
+    }
+    // FindCrossingError for one chain rejects interior crossings and repeated end vertices.
+    // Adjacent edges share an endpoint, so their CrossingSign is zero; their ends differ.
+    for (size_t i = 0; i + 2 < n; ++i) {
+        S2EdgeCrosser crosser(&points[i], &points[i + 1], &points[i + 2]);
+        const size_t end = i == 0 ? n - 1 : n;
+        for (size_t j = i + 2; j < end; ++j) {
+            const auto& next = points[j + 1 == n ? 0 : j + 1];
+            if (points[i + 1] == next || crosser.CrossingSign(&next) > 0) return false;
+        }
+    }
+    return true;
+}
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
     return to_s2polygon(list, &_polygon);

@@ -347,6 +347,48 @@ public class OperatorFunctionChecker {
                         OperatorFunctionChecker::isOrderPreservingCast), null);
     }
 
+    /**
+     * Whether distinct values of the column the expression reads always give distinct results, so that
+     * f(a) = f(c) implies a = c. Monotonicity does not answer this: date_trunc() preserves the order
+     * and still sends a whole day onto one value. A rewrite that must select exactly the rows a
+     * predicate selects -- not merely all of them -- can map an equality through the expression only
+     * when this holds.
+     * <p>
+     * The list is kept short on purpose, because a wrong yes loses data: str2date() sends '2024-1-2'
+     * and '2024-01-02' to the same day, from_unixtime() repeats a local time across a clock rollback,
+     * and a multiplication by an even constant collides once it overflows. Adding or subtracting a
+     * constant is a bijection on fixed-width integers even when it wraps.
+     */
+    public static boolean isOneToOne(ScalarOperator operator) {
+        if (operator.isColumnRef()) {
+            return true;
+        }
+        if (operator instanceof CastOperator cast) {
+            Type from = cast.fromType();
+            Type to = cast.getType();
+            int fromRank = integerRank(from);
+            int toRank = integerRank(to);
+            boolean widens = from.equals(to) || (fromRank > 0 && toRank >= fromRank)
+                    || (from.isDate() && to.isDatetime());
+            return widens && isOneToOne(cast.getChild(0));
+        }
+        if (operator instanceof CallOperator call && call.getChildren().size() == 2
+                && integerRank(call.getType()) > 0) {
+            String fnName = call.getFnName().toLowerCase();
+            if (!FunctionSet.ADD.equals(fnName) && !FunctionSet.SUBTRACT.equals(fnName)) {
+                return false;
+            }
+            ScalarOperator left = call.getChild(0);
+            ScalarOperator right = call.getChild(1);
+            if (left.isConstant() == right.isConstant()) {
+                return false;
+            }
+            ScalarOperator variable = left.isConstant() ? right : left;
+            return integerRank(variable.getType()) > 0 && isOneToOne(variable);
+        }
+        return false;
+    }
+
     public static Pair<Boolean, String> onlyContainFEConstantFunctions(ScalarOperator scalarOperator) {
         return onlyContainPredicates(scalarOperator, call -> ScalarOperatorEvaluator.INSTANCE.isFEConstantFunction(call));
     }

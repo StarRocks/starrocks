@@ -85,6 +85,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -599,6 +600,35 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testPredicateOnColumnPinnedToSingleValue() {
+        // `d_year = 2000` narrows the range to one value but keeps its NDV; the same filter applied again, e.g. on a
+        // CTE consumer, must keep every row instead of dividing by that NDV a second time
+        Statistics input = Statistics.builder().setOutputRowCount(1000).build();
+        ColumnStatistic pinned = new ColumnStatistic(2000, 2000, 0, 4, 202);
+        Assertions.assertEquals(1000, BinaryPredicateStatisticCalculator.estimatePredicateRange(Optional.empty(),
+                pinned, new StatisticRangeValues(2000, 2000, 1), input).getOutputRowCount(), 1e-6);
+        // `col < 2000` / `col > 2000` are encoded as ranges including 2000 (with NaN NDV, as the LT / GT estimators
+        // build them); they must not keep the pinned rows
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(Double.NEGATIVE_INFINITY, 2000, Double.NaN), input)
+                .getOutputRowCount(), 1e-6);
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(2000, Double.POSITIVE_INFINITY, Double.NaN), input)
+                .getOutputRowCount(), 1e-6);
+        // outside the pinned value: nothing is kept (the row count is floored at 1)
+        Assertions.assertTrue(BinaryPredicateStatisticCalculator.estimatePredicateRange(Optional.empty(),
+                pinned, new StatisticRangeValues(2001, 2001, 1), input).getOutputRowCount() <= 1);
+        // a string constant has no finite bounds, and a string column's min = max is only a placeholder
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                        1), input).getOutputRowCount(), 1e-6);
+        // a real range still keeps 1 / NDV of its rows for a single value
+        ColumnStatistic spread = new ColumnStatistic(1900, 2100, 0, 4, 202);
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), spread, new StatisticRangeValues(2000, 2000, 1), input).getOutputRowCount(), 1e-6);
+    }
+
+    @Test
     public void testJoinEstimateWithMultiColumns() {
         // child 1 output column
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
@@ -659,6 +689,18 @@ public class StatisticsCalculatorTest {
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
         statisticsCalculator.estimatorStats();
         Assertions.assertEquals(1800000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+
+        // on predicate : t0.v2 = t1.v4 and t0.v1 = t1.v3, the same predicates in the other order: middle ground
+        // applies the larger selectivity first whatever the order, so the estimate must not change
+        GroupExpression swappedExpression = new GroupExpression(
+                new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND, eqOnPredicate2, eqOnPredicate1)),
+                Lists.newArrayList(childGroup1, childGroup2));
+        swappedExpression.setGroup(new Group(2));
+        ExpressionContext swappedContext = new ExpressionContext(swappedExpression);
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        new StatisticsCalculator(swappedContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(400000.0, swappedContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 2);

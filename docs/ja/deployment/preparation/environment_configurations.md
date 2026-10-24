@@ -342,8 +342,8 @@ cat >> /etc/security/limits.conf << EOF
 * hard nproc 65535
 * soft nofile 655350
 * hard nofile 655350
-* soft stack unlimited
-* hard stack unlimited
+* soft stack 8192
+* hard stack 8192
 * hard memlock unlimited
 * soft memlock unlimited
 EOF
@@ -353,6 +353,12 @@ cat >> /etc/security/limits.d/20-nproc.conf << EOF
 root       soft    nproc     65535
 EOF
 ```
+
+:::note
+
+スタックのソフトリミットとハードリミットを両方とも `8192` KiB（8 MiB）に設定してください。glibc/NPTL では、スレッドのスタックサイズを明示的に指定しない限り、プロセス起動時のスタックのソフトリミットが新しいスレッドのデフォルトスタックサイズを決定します。ソフトリミットを `unlimited` にすると、代わりにアーキテクチャ固有のデフォルト値（x86-64 では 2 MiB）が使用され、スタックオーバーフローのリスクが高まる可能性があります。詳細は [pthread_create(3)](https://man7.org/linux/man-pages/man3/pthread_create.3.html) を参照してください。
+
+:::
 
 ## ファイルシステム設定
 

@@ -1,0 +1,69 @@
+name: PR RECORD
+
+# Records each PR's state into CI Metrics (pull_requests / pr_links) for the backport
+# blacklist, release seal checks and sync dashboards. Design: StarRocks/ci-tool
+# ci-api/DESIGN-pr-data.md. Logic: ci-tool lib/pr_record.py, which reads the PR live from
+# GitHub (the event only says WHICH PR changed) and never fails anyone's CI.
+#
+# Only the events that change a field some consumer reads trigger a job (the `if:` below).
+# Everything else, bot comments and bot labels included, leaves a skipped run that takes
+# no runner. Runs on the dedicated `pr-record` pool, which mounts its own read-only
+# ci-tool; it never checks out or executes PR code, so pull_request_target is safe here.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_run:  # ERROR is set/cleared by this pipeline with GITHUB_TOKEN, which emits no labeled event
+    workflows: ["CD SYNC CI PIPELINE"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  record:
+    # Job-level, not workflow-level: a workflow-level group would let a filtered bot
+    # comment cancel a real recording run and then skip itself.
+    concurrency:
+      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
+      cancel-in-progress: true  # every run reads the live state, so the newest run suffices
+    # PRs someone watches while open: branch PRs, and sync / reverse-sync PRs. A retarget
+    # (edited with changes.base, e.g. main -> branch-4.1 or back) is recorded on any PR.
+    # No comments inside the expression below: in a folded scalar a '#' line is part of it.
+    if: >-
+      (github.event_name == 'pull_request_target' && (
+        github.event.action == 'closed' ||
+        (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
+          endsWith(github.event.label.name, '-merged')) ||
+        (github.event.action == 'edited' && github.event.changes.base != null) ||
+        ((github.event.pull_request.base.ref != 'main' ||
+          contains(github.event.pull_request.head.ref, '-sync-pr-') ||
+          contains(github.event.pull_request.head.ref, '-cd-contributed-pr-')) && (
+          contains(fromJSON('["opened","reopened"]'), github.event.action) ||
+          (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
+            contains(fromJSON('["ERROR","conflict","conflicts","pending","SKIP MERGE"]'), github.event.label.name)) ||
+          (github.event.action == 'edited' && github.event.changes.title != null) ||
+          (contains(fromJSON('["ready_for_review","converted_to_draft"]'), github.event.action) &&
+            github.event.pull_request.base.ref != 'main'))))) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0] != null) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.type == 'User' &&
+        !contains(fromJSON('["CelerData-Reviewer","wanpengfei-git","CLAassistant","starrocks-robot","robot-sync"]'),
+                  github.event.comment.user.login) &&
+        (contains(github.event.comment.body, 'ignore backport check') ||
+         contains(github.event.changes.body.from, 'ignore backport check')))
+    runs-on: [self-hosted, pr-record]
+    continue-on-error: true
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    steps:
+      - name: record the PR
+        run: python3 /var/lib/ci-tool/lib/pr_record.py --event "${GITHUB_EVENT_NAME}"

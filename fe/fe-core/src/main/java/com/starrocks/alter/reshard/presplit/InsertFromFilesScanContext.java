@@ -34,6 +34,7 @@ import java.util.Objects;
  * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
  * query globals use). The meta-tier readers use it to reproduce the BE's
  * offset for a UTC-adjusted timestamp; a non-fixed / null zone -> data tier.
+ * The data-tier query uses the same zone through a {@code SET_VAR} hint.
  *
  * <p>{@code targetToSourceColumnNames} maps each directly projected target column to the FILES
  * column that backs it, so a statement that names, reorders, or renames its columns is sampled
@@ -45,9 +46,17 @@ import java.util.Objects;
  * projects the literal itself, and the meta tier -- which reads only file footers -- declines a sort
  * key that contains one, so the pipeline falls back to the data tier.
  *
+ * <p>{@code targetToExpressionSql} maps each target column the SELECT feeds with an admitted
+ * computed expression over FILES columns (lower-cased target name) to the expression's SQL. The data
+ * tier evaluates it over the same FILES rows the load reads; the meta tier declines a sort key that
+ * contains one, because a footer's min/max describes a file column, not a value computed from it.
+ *
  * <p>{@code wherePredicateSql} is the statement's WHERE clause rendered back to SQL, or
  * {@code null}. The data tier copies it into its sampling sub-query; the meta tier cannot apply a
  * predicate to a footer at all and declines the request when one is present.
+ *
+ * <p>{@code sessionSemantics} are the INSERT session's variables that decide how the predicate and the
+ * projections evaluate and how a timestamp decodes; the data tier sets them on its own session.
  */
 public record InsertFromFilesScanContext(
         TableFunctionTable sourceTable,
@@ -55,13 +64,35 @@ public record InsertFromFilesScanContext(
         String loadTimeZone,
         Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> FILES column name
         String wherePredicateSql,                        // nullable
-        Map<String, String> targetToConstantSql) implements ScanContext {
+        Map<String, String> targetToConstantSql,
+        Map<String, String> targetToExpressionSql,
+        SampleSessionSemantics sessionSemantics) implements ScanContext {
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(computeResource, "computeResource");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+        Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+        Objects.requireNonNull(sessionSemantics, "sessionSemantics");
+    }
+
+    /** The sample session keeps its own variables. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone,
+            Map<String, String> targetToSourceColumnNames, String wherePredicateSql,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql) {
+        this(sourceTable, computeResource, loadTimeZone, targetToSourceColumnNames, wherePredicateSql,
+                targetToConstantSql, targetToExpressionSql, SampleSessionSemantics.NONE);
+    }
+
+    /** No key column is computed from FILES columns. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone,
+            Map<String, String> targetToSourceColumnNames, String wherePredicateSql,
+            Map<String, String> targetToConstantSql) {
+        this(sourceTable, computeResource, loadTimeZone, targetToSourceColumnNames, wherePredicateSql,
+                targetToConstantSql, Map.of());
     }
 
     /** Every key column is backed by a FILES column. */

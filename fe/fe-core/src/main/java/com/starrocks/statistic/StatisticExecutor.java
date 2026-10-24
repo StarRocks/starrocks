@@ -596,6 +596,8 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
+            analyzeStatus.setCancelled(GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .isAnalyzeCancelled(analyzeStatus.getId()));
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             MetricRepo.COUNTER_FAILED_STATS_COLLECT_JOB.getMetric(statsJob.getName()).increase(1L);
             return analyzeStatus;
@@ -919,7 +921,8 @@ public class StatisticExecutor {
 
     private static boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
-        try {
+        // Nested analysis and error reporting must use the internal session, not the caller's catalog or state.
+        try (var guard = context.bindScope()) {
             Stopwatch watch = Stopwatch.createStarted();
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);

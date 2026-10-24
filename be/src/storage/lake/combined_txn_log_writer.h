@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <google/protobuf/repeated_field.h>
+
 #include <cstdint>
 #include <map>
 #include <set>
+#include <string>
 
 #include "common/status.h"
 
@@ -31,5 +34,9 @@ using ExpectedTabletsByPartition = std::map<int64_t, std::set<int64_t>>;
 Status write_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids = {});
 Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map,
                                        const ExpectedTabletsByPartition& expected_by_partition = {});
+
+// Keeps the shard infos tablet owners returned with their txn logs (LakeTabletData.shard_infos), so
+// that a combined txn log of a partition this node owns no tablet of is written without a starmgr RPC.
+void borrow_shard_infos(const ::google::protobuf::RepeatedPtrField<std::string>& shard_infos);
 
 } // namespace starrocks

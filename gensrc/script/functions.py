@@ -1003,6 +1003,7 @@ vectorized_functions = [
      "VariantFunctions::get_variant_time",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
+    [110209, "is_variant_null", False, False, "BOOLEAN", ["VARIANT"], "VariantFunctions::is_variant_null"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
@@ -1032,6 +1033,7 @@ vectorized_functions = [
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
     [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+    [120163, "encode_fingerprint_sha256_v2", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256_v2"],
 
 
     # geo function
@@ -1090,6 +1092,8 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_as_wkb"],
     [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_x"],
+    # Historical GEOGRAPHY IDs 120081/120082/120083 are handled in function_call_expr.cpp.
+    # Do not allocate 120082 or 120083 again. 120081 is disambiguated by native argument type.
     [120081, "ST_X", False, False, "DOUBLE", ["GEOMETRY"],
      "GeoFunctions::st_geometry_x"],
     [120090, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
@@ -1172,6 +1176,61 @@ vectorized_functions = [
     [120291, "ST_IsValid", False, False, "BOOLEAN", ["GEOMETRY"],
      "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
      "GeoFunctions::native_geo_unary_close"],
+
+    [120300, "ST_SRID", False, False, "INT", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_srid"],
+    # reserve 120301-120304 for future ST_SRID overloads
+    [120305, "ST_SetSRID", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_set_srid", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+    # reserve 120306-120309 for future ST_SetSRID overloads
+    [120310, "ST_Transform", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_transform", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+
+    # reserve 120311-120314 for future ST_Transform overloads
+    # Contract 5.3 polygon overlays: base slot reserved for future GEOGRAPHY overloads.
+    # Reserved 120340: ST_Intersection(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120341, "ST_Intersection", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersection", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120350: ST_Union(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120351, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120360: ST_Difference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120361, "ST_Difference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120370: ST_SymDifference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120371, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+
+    # Contract 5.4 scalar ID reservations; comments do not register overloads.
+    # Reserved 120400: ST_Buffer / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120401, "ST_Buffer", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_buffer", "GeoFunctions::native_geo_buffer_prepare", "GeoFunctions::native_geo_buffer_close"],
+    # Reserved 120410: ST_SimplifyPreserveTopology / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120411, "ST_SimplifyPreserveTopology", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_simplify_preserve_topology", "GeoFunctions::native_geo_simplify_prepare",
+     "GeoFunctions::native_geo_simplify_close"],
+    # Window ST_CoverageSimplify reservations belong to FunctionSet's analytic section.
+
+
+    # Contract 5.6: H3 cells are signed SQL BIGINT values.
+    # Start H3 IDs at 120500 to leave room for future ST_ functions.
+    [120500, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_from_geo"],
+    [120501, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_grid_disk"],
+    [120502, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_parent"],
+    [120503, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_children"],
+    [120504, "H3_Resolution", False, False, "INT", ["BIGINT"],
+     "GeoFunctions::h3_resolution"],
+    [120505, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
+     "GeoFunctions::h3_to_boundary"],
+    [120506, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_polygon_to_cells_prepare",
+     "GeoFunctions::h3_polygon_to_cells_close"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
@@ -1709,7 +1768,7 @@ vectorized_functions = [
 # dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
 # BE builtin descriptor table.
 def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=()):
+                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1):
     # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
     return {
         'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
@@ -1719,6 +1778,7 @@ def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_arg
         'input_arguments': list(input_arguments),
         'model_argument': model_argument,
         'provider_argument': provider_argument,
+        'file_argument': file_argument,
         'null_as_empty_arguments': list(null_as_empty_arguments),
         'blank_as_null_arguments': list(blank_as_null_arguments),
     }
@@ -1733,6 +1793,14 @@ ai_vectorized_functions = [
      ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
     [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
+    [200104, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200105, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200106, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
+    [200107, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE', 'ANY_MAP'],
+     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
     [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
      'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
     [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
@@ -1779,6 +1847,14 @@ ai_vectorized_functions = [
      ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
     [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
+    [200134, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200135, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200136, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
+    [200137, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
     [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
      'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
     [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],

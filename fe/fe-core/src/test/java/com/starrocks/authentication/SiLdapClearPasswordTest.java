@@ -19,6 +19,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.http.BaseAction;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.NoOpEditLog;
@@ -48,7 +49,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Those channels build a fresh {@link ConnectContext} whose {@code authPlugin} is unset, while the
  * security integration chain filters candidates by that field: every integration used to be skipped, so
  * an LDAP user defined by a security integration could log in over MySQL but got a 401 everywhere else.
- * {@code AuthenticationHandler.authenticateWithClearPassword} declares the credential shape instead.
+ * the credential itself declares its shape ({@code AuthCredentials.ofPassword}).
  *
  * <p>The LDAP bind is stubbed, so these tests need no directory server.
  */
@@ -153,15 +154,17 @@ public class SiLdapClearPasswordTest {
         // The condition that used to break every non-MySQL channel: nobody declared a plugin.
         Assertions.assertNull(context.getAuthPlugin());
 
-        UserIdentity user = AuthenticationHandler.authenticateWithClearPassword(
-                context, "alice", "10.1.2.3", "ldap_password");
+        UserIdentity user = AuthenticationHandler.authenticate(context,
+                AuthCredentials.ofPassword("alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3"));
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
         Assertions.assertTrue(user.isEphemeral());
         Assertions.assertEquals(1, ldapBindCount.get());
-        // The declared plugin is the same one the MySQL protocol switches an LDAP user to.
-        Assertions.assertEquals(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), context.getAuthPlugin());
+        // No plugin is declared any more: the credential itself carries PLAIN_PASSWORD and the
+        // chain dispatches on that, so borrowing mysql_clear_password to say "this is a password"
+        // is gone.
+        Assertions.assertNull(context.getAuthPlugin());
         // Identity and the security integration that authenticated it land on the passed context, which is
         // what callers that authorize afterwards rely on.
         Assertions.assertEquals(user, context.getCurrentUserIdentity());
@@ -175,8 +178,8 @@ public class SiLdapClearPasswordTest {
         Config.authentication_chain = new String[] {"native", LDAP_SI};
 
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticateWithClearPassword(
-                        new ConnectContext(), "alice", "10.1.2.3", "wrong_password"));
+                AuthenticationHandler.authenticate(new ConnectContext(),
+                        AuthCredentials.ofPassword("alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
         Assertions.assertEquals(1, ldapBindCount.get());
     }
 
@@ -189,8 +192,8 @@ public class SiLdapClearPasswordTest {
         // the credential unconditionally, turning this into an ArrayIndexOutOfBoundsException (HTTP 500)
         // instead of an authentication failure.
         Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticateWithClearPassword(
-                        new ConnectContext(), "alice", "10.1.2.3", ""));
+                AuthenticationHandler.authenticate(new ConnectContext(),
+                        AuthCredentials.ofPassword("alice", "", AuthChannel.HTTP, "10.1.2.3")));
     }
 
     @Test
@@ -202,8 +205,8 @@ public class SiLdapClearPasswordTest {
 
         // A password must not be handed to a JWT integration for signature verification; the chain has to
         // skip it and go on to the integration that does consume passwords.
-        UserIdentity user = AuthenticationHandler.authenticateWithClearPassword(
-                new ConnectContext(), "alice", "10.1.2.3", "ldap_password");
+        UserIdentity user = AuthenticationHandler.authenticate(new ConnectContext(),
+                AuthCredentials.ofPassword("alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3"));
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
@@ -217,9 +220,11 @@ public class SiLdapClearPasswordTest {
     private AtomicInteger stubJwtCountingAttempts() {
         AtomicInteger attempts = new AtomicInteger();
         new MockUp<JWTAuthenticationProvider>() {
+            // The kind-aware entry, which is the one the chain calls. Stubbing the legacy byte[]
+            // overload would count nothing and leave the assertion below vacuously true.
             @Mock
-            public void authenticate(AccessControlContext context, UserIdentity userIdentity, byte[] authResponse)
-                    throws AuthenticationException {
+            public UserIdentity authenticate(AccessControlContext context, UserIdentity userIdentity,
+                                             AuthCredentials cred) throws AuthenticationException {
                 attempts.incrementAndGet();
                 throw new AuthenticationException("JWT provider cannot verify a password");
             }
@@ -238,8 +243,8 @@ public class SiLdapClearPasswordTest {
         authenticationMgr.createUser(createUser);
 
         ConnectContext context = new ConnectContext();
-        UserIdentity user = AuthenticationHandler.authenticateWithClearPassword(
-                context, "native_user", "10.1.2.3", "");
+        UserIdentity user = AuthenticationHandler.authenticate(context,
+                AuthCredentials.ofPassword("native_user", "", AuthChannel.HTTP, "10.1.2.3"));
 
         Assertions.assertNotNull(user);
         Assertions.assertFalse(user.isEphemeral());
@@ -248,17 +253,19 @@ public class SiLdapClearPasswordTest {
     }
 
     @Test
-    public void testIntegrationTypeWithoutClientPluginIsSkipped() throws Exception {
-        // Whether an integration can serve a request is decided by mapping its type to a client-side plugin.
-        // A type with no such mapping simply cannot match, so the chain must skip it -- the mapping used to be
-        // wrapped in Objects.requireNonNull, which turned "cannot match" into an NPE out of the auth path.
-        // Nothing registers such a type today (the factory rejects unknown ones); adding one, e.g. a future
-        // non-password integration, is what would walk into this branch.
+    public void testAnIntegrationTypeWithNoClientPluginIsStillTried() throws Exception {
+        // TC-L2-45-09: an integration type that maps to no MySQL client plugin used to be skipped,
+        // and before that the mapping was wrapped in Objects.requireNonNull, which turned "cannot
+        // match" into an NPE. Both are gone: whether an integration is offered the credential is
+        // decided by supportsCredentialKind alone, so this one IS tried and simply fails on the
+        // password. Nothing registers such a type today; a future non-password integration would.
+        AtomicInteger attempts = new AtomicInteger();
         SecurityIntegration unmappableIntegration =
                 new SecurityIntegration("future_si", Map.of(
                         SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_from_the_future")) {
                     @Override
                     public AuthenticationProvider getAuthenticationProvider() {
+                        attempts.incrementAndGet();
                         return new PlainPasswordAuthenticationProvider(new byte[0]);
                     }
                 };
@@ -271,9 +278,13 @@ public class SiLdapClearPasswordTest {
         Config.authentication_chain = new String[] {"native", "future_si"};
 
         AuthenticationException e = Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticateWithClearPassword(
-                        new ConnectContext(), "alice", "10.1.2.3", "any_password"));
+                AuthenticationHandler.authenticate(new ConnectContext(),
+                        AuthCredentials.ofPassword("alice", "any_password", AuthChannel.HTTP, "10.1.2.3")));
         Assertions.assertNotNull(e.getMessage());
+        Assertions.assertEquals(1, attempts.get(),
+                "the integration was asked for its provider, i.e. it was tried and not skipped");
+        Assertions.assertEquals(ErrorCode.ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN, e.getErrorCode(),
+                "the failure comes from inside the chain, which is only reachable by being tried");
     }
 
     @Test
@@ -284,12 +295,10 @@ public class SiLdapClearPasswordTest {
         // The HTTP Basic entry point itself, not just the handler underneath it: this is the line the
         // coverage bot flags, and reverting it (as a backport merge conflict easily could) silently brings
         // the 401 back for every action that authenticates through BaseAction.
-        BaseAction.ActionAuthorizationInfo authInfo = new BaseAction.ActionAuthorizationInfo();
-        authInfo.fullUserName = "alice";
-        authInfo.remoteIp = "10.1.2.3";
-        authInfo.password = "ldap_password";
-
-        UserIdentity user = BaseAction.checkPassword(authInfo);
+        ConnectContext ctx = new ConnectContext();
+        BaseAction.checkCredential(ctx, AuthCredentials.ofPassword(
+                "alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3"));
+        UserIdentity user = ctx.getCurrentUserIdentity();
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
@@ -302,14 +311,10 @@ public class SiLdapClearPasswordTest {
         stubLdapBindRejectingEverything();
         Config.authentication_chain = new String[] {"native", LDAP_SI};
 
-        BaseAction.ActionAuthorizationInfo authInfo = new BaseAction.ActionAuthorizationInfo();
-        authInfo.fullUserName = "alice";
-        authInfo.remoteIp = "10.1.2.3";
-        authInfo.password = "wrong_password";
-
         // AccessDeniedException is what the HTTP layer turns into a 401
         Assertions.assertThrows(AccessDeniedException.class, () ->
-                BaseAction.checkPassword(authInfo));
+                BaseAction.checkCredential(new ConnectContext(), AuthCredentials.ofPassword(
+                        "alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
         Assertions.assertEquals(1, ldapBindCount.get());
     }
 
@@ -325,15 +330,19 @@ public class SiLdapClearPasswordTest {
                 rootCtx);
         authenticationMgr.createUser(createUser);
 
-        // OAuth2AuthenticationProvider.authenticate() returns *successfully* without checking anything when the
-        // client did not declare the OAuth2 plugin -- it expects the protocol to finish the handshake later. On
-        // the MySQL channel ConnectProcessor closes that hole on the first command; these channels serve the
-        // request immediately, so authenticateWithClearPassword has to run the same check itself. Without it,
-        // any password would get an OAuth2 user through Stream Load, the load RPCs and Arrow Flight.
-        AuthenticationException e = Assertions.assertThrows(AuthenticationException.class, () ->
-                AuthenticationHandler.authenticateWithClearPassword(
-                        new ConnectContext(), "oauth_user", "10.1.2.3", "any_password_at_all"));
-        Assertions.assertEquals(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, e.getErrorCode());
+        // OAuth2AuthenticationProvider.authenticate() returns *successfully* without checking
+        // anything when the client did not declare the OAuth2 plugin -- it expects the protocol to
+        // finish the handshake later. On the MySQL channel ConnectProcessor closes that hole on the
+        // first command; these channels serve the request immediately, so
+        // the kind-aware entry has to run the same check itself. Without it, any password
+        // would get an OAuth2 user through Stream Load, the load RPCs and Arrow Flight. Carrier
+        // dispatch now refuses this one step earlier than the checkLoginSuccess guard did: the
+        // OAuth2 provider declares it does not consume a plaintext password, so the attempt dies
+        // before any "success" can be returned. The guard is still in place for providers that do
+        // accept a password.
+        Assertions.assertThrows(AuthenticationException.class, () ->
+                AuthenticationHandler.authenticate(new ConnectContext(),
+                        AuthCredentials.ofPassword("oauth_user", "any_password_at_all", AuthChannel.HTTP, "10.1.2.3")));
     }
 
     @Test
@@ -349,60 +358,10 @@ public class SiLdapClearPasswordTest {
             // locking the account out.
             for (int attempt = 0; attempt < 5; attempt++) {
                 Assertions.assertThrows(AuthenticationException.class, () ->
-                        AuthenticationHandler.authenticateWithClearPassword(
-                                new ConnectContext(), "alice", "10.1.2.3", "wrong_password"));
+                        AuthenticationHandler.authenticate(new ConnectContext(),
+                                AuthCredentials.ofPassword("alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
             }
             Assertions.assertEquals(1, ldapBindCount.get(), "only the first attempt may reach the directory");
-        } finally {
-            Config.authentication_failure_cache_ttl_second = savedTtl;
-        }
-    }
-
-    @Test
-    public void testRejectionCacheIgnoresUsernameCase() {
-        // The LDAP paths lowercase the username before binding, so Alice / ALICE / alice are one account.
-        // The cache must use the same canonical form, or varying the case walks straight past it and keeps
-        // pushing that account's badPwdCount up.
-        stubLdapBindRejectingEverything();
-        Config.authentication_chain = new String[] {"native", LDAP_SI};
-        int savedTtl = Config.authentication_failure_cache_ttl_second;
-        Config.authentication_failure_cache_ttl_second = 60;
-
-        try {
-            for (String spelling : new String[] {"alice", "ALICE", "Alice", "aLiCe"}) {
-                Assertions.assertThrows(AuthenticationException.class, () ->
-                        AuthenticationHandler.authenticateWithClearPassword(
-                                new ConnectContext(), spelling, "10.1.2.3", "wrong_password"));
-            }
-            Assertions.assertEquals(1, ldapBindCount.get(), "case variants must share one cache entry");
-        } finally {
-            Config.authentication_failure_cache_ttl_second = savedTtl;
-        }
-    }
-
-    @Test
-    public void testUnreachableDirectoryIsNotRemembered() {
-        // The directory being down is not a credential rejection: the provider reports it as transient, so the
-        // next attempt must reach the directory again instead of being answered from the cache. Otherwise a
-        // brief LDAP outage would keep rejecting the *correct* password for the whole TTL.
-        new MockUp<LDAPAuthProvider>() {
-            @Mock
-            public void checkPassword(String dn, String password) throws Exception {
-                ldapBindCount.incrementAndGet();
-                throw new javax.naming.CommunicationException("localhost:389 connection refused");
-            }
-        };
-        Config.authentication_chain = new String[] {"native", LDAP_SI};
-        int savedTtl = Config.authentication_failure_cache_ttl_second;
-        Config.authentication_failure_cache_ttl_second = 60;
-
-        try {
-            for (int attempt = 0; attempt < 3; attempt++) {
-                Assertions.assertThrows(AuthenticationException.class, () ->
-                        AuthenticationHandler.authenticateWithClearPassword(
-                                new ConnectContext(), "alice", "10.1.2.3", "ldap_password"));
-            }
-            Assertions.assertEquals(3, ldapBindCount.get(), "a transient failure must not be cached");
         } finally {
             Config.authentication_failure_cache_ttl_second = savedTtl;
         }
@@ -426,13 +385,13 @@ public class SiLdapClearPasswordTest {
 
         try {
             Assertions.assertThrows(AuthenticationException.class, () ->
-                    AuthenticationHandler.authenticateWithClearPassword(
-                            new ConnectContext(), "alice", "10.1.2.3", "wrong_password"));
+                    AuthenticationHandler.authenticate(new ConnectContext(),
+                            AuthCredentials.ofPassword("alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
 
             // The cache key includes a hash of the credential, so the corrected password is a different key and
             // must not be held back by the rejection that was just cached. No TTL to wait out.
-            UserIdentity user = AuthenticationHandler.authenticateWithClearPassword(
-                    new ConnectContext(), "alice", "10.1.2.3", "ldap_password");
+            UserIdentity user = AuthenticationHandler.authenticate(new ConnectContext(),
+                    AuthCredentials.ofPassword("alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3"));
 
             Assertions.assertNotNull(user);
             Assertions.assertEquals(2, ldapBindCount.get());
@@ -451,8 +410,8 @@ public class SiLdapClearPasswordTest {
         try {
             for (int attempt = 0; attempt < 3; attempt++) {
                 Assertions.assertThrows(AuthenticationException.class, () ->
-                        AuthenticationHandler.authenticateWithClearPassword(
-                                new ConnectContext(), "alice", "10.1.2.3", "wrong_password"));
+                        AuthenticationHandler.authenticate(new ConnectContext(),
+                                AuthCredentials.ofPassword("alice", "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
             }
             Assertions.assertEquals(3, ldapBindCount.get(), "ttl=0 must disable the cache entirely");
         } finally {
@@ -471,7 +430,9 @@ public class SiLdapClearPasswordTest {
         context.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
         byte[] mysqlClearPasswordFrame = "ldap_password\0".getBytes(StandardCharsets.UTF_8);
 
-        UserIdentity user = AuthenticationHandler.authenticate(context, "alice", "10.1.2.3", mysqlClearPasswordFrame);
+        UserIdentity user = AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials("alice", mysqlClearPasswordFrame,
+                        AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "10.1.2.3"));
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
@@ -480,5 +441,67 @@ public class SiLdapClearPasswordTest {
         // is not enough -- drop the trailing-NUL trim and the bind still succeeds with a stray \0 appended,
         // which every real directory would reject.
         Assertions.assertEquals("ldap_password", lastBoundPassword.get());
+    }
+
+    @Test
+    public void testLdapProviderBindsWithThePasswordExactlyAsGiven() throws Exception {
+        // TC-L1-42-11 / INV-13: the entry point owns the one NUL that belongs to the MySQL frame. The
+        // provider must not trim anything itself, or a password that really ends in NUL - possible on
+        // HTTP Basic, where nothing frames it - would be silently altered before the bind.
+        stubLdapBind();
+        Config.authentication_chain = new String[] {"native", LDAP_SI};
+        UserIdentity user = AuthenticationHandler.authenticate(new ConnectContext(),
+                AuthCredentials.ofPassword("alice", "pw\0", AuthChannel.HTTP, "10.1.2.3"));
+        Assertions.assertEquals("alice", user.getUser());
+        Assertions.assertEquals("pw\0", lastBoundPassword.get(), "the directory receives the password verbatim");
+    }
+
+    @Test
+    public void testRejectionCacheIgnoresUsernameCase() {
+        // The LDAP paths lowercase the username before binding, so Alice / ALICE / alice are one
+        // account. The cache must use the same canonical form, or varying the case walks straight
+        // past it and keeps pushing that account's badPwdCount up.
+        stubLdapBindRejectingEverything();
+        Config.authentication_chain = new String[] {"native", LDAP_SI};
+        int savedTtl = Config.authentication_failure_cache_ttl_second;
+        Config.authentication_failure_cache_ttl_second = 60;
+        try {
+            for (String spelling : new String[] {"alice", "ALICE", "Alice", "aLiCe"}) {
+                Assertions.assertThrows(AuthenticationException.class, () ->
+                        AuthenticationHandler.authenticate(new ConnectContext(),
+                                AuthCredentials.ofPassword(spelling, "wrong_password", AuthChannel.HTTP, "10.1.2.3")));
+            }
+            Assertions.assertEquals(1, ldapBindCount.get(), "case variants must share one cache entry");
+        } finally {
+            Config.authentication_failure_cache_ttl_second = savedTtl;
+        }
+    }
+
+    @Test
+    public void testUnreachableDirectoryIsNotRemembered() {
+        // The directory being down is not a credential rejection: the provider reports it as
+        // transient, so the next attempt must reach the directory again instead of being answered
+        // from the cache. Otherwise a brief LDAP outage would keep rejecting the *correct* password
+        // for the whole TTL.
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            public void checkPassword(String dn, String password) throws Exception {
+                ldapBindCount.incrementAndGet();
+                throw new javax.naming.CommunicationException("localhost:389 connection refused");
+            }
+        };
+        Config.authentication_chain = new String[] {"native", LDAP_SI};
+        int savedTtl = Config.authentication_failure_cache_ttl_second;
+        Config.authentication_failure_cache_ttl_second = 60;
+        try {
+            for (int attempt = 0; attempt < 3; attempt++) {
+                Assertions.assertThrows(AuthenticationException.class, () ->
+                        AuthenticationHandler.authenticate(new ConnectContext(),
+                                AuthCredentials.ofPassword("alice", "ldap_password", AuthChannel.HTTP, "10.1.2.3")));
+            }
+            Assertions.assertEquals(3, ldapBindCount.get(), "a transient failure must not be cached");
+        } finally {
+            Config.authentication_failure_cache_ttl_second = savedTtl;
+        }
     }
 }

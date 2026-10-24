@@ -56,6 +56,7 @@ public:
     Status update_request_timeout_ms(int64_t value);
     Status update_connect_timeout_ms(int64_t value);
     Status update_max_response_bytes(int64_t value);
+    Status update_max_input_file_bytes(int64_t value);
     Status update_worker_thread_num(int32_t value);
     Status update_sub_chunk_size(int32_t value);
     Status update_max_retries(int32_t value);
@@ -75,6 +76,7 @@ private:
         REQUEST_TIMEOUT_MS,
         CONNECT_TIMEOUT_MS,
         MAX_RESPONSE_BYTES,
+        MAX_INPUT_FILE_BYTES,
         WORKER_THREAD_NUM,
         SUB_CHUNK_SIZE,
         MAX_RETRIES,

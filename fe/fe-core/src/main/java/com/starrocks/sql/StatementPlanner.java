@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -40,12 +41,15 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
+import com.starrocks.sql.analyzer.InsertSourceRefresher;
+import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -62,6 +66,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -210,8 +215,7 @@ public class StatementPlanner {
             // consume (a view behind a branch that was never reached, a body the "still current" check
             // rejected) must not be offered to the next one. Same for a write target the analyzer did not
             // come to collect -- a statement that failed before it reached its target, say.
-            session.getPreResolvedViewBodies().clear();
-            session.getPreResolvedWriteTargets().clear();
+            session.getPreResolvedState().clear();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
@@ -247,6 +251,9 @@ public class StatementPlanner {
                                               PlannerMetaLocker locker) {
         boolean deferredLock = false;
         Runnable takeLock = () -> {
+            // By now the pre-pass below has resolved the external tables, outside the lock; what their policies
+            // read can join the lock set before it is taken.
+            locker.addTablesReadByExternalTablePolicies(session, statement);
             try (Timer lockerTime = Tracers.watchScope("Lock")) {
                 lock(locker);
             }
@@ -293,22 +300,19 @@ public class StatementPlanner {
                 }
             }
 
-            // CTAS is not an INSERT at plan time: its target table does not exist until execution, so it
-            // cannot use the deferred-lock path above. Its SELECT still needs the same treatment as an
-            // INSERT-SELECT though -- files() schema inference does an object-store LIST plus a BE
-            // get_file_schema RPC, and running that inside the PlannerMetaLock critical section stalls
-            // every db-level DDL behind the database intention lock. Pre-resolve it here; resolveTableRef
-            // reuses the already-built TableFunctionTable once the lock is held.
-            // Unwrap SUBMIT TASK as well: it carries either an INSERT (handled above) or a CTAS.
-            CreateTableAsSelectStmt ctasStmt = null;
-            if (statement instanceof CreateTableAsSelectStmt ctas) {
-                ctasStmt = ctas;
-            } else if (statement instanceof SubmitTaskStmt submitTaskStmt) {
-                ctasStmt = submitTaskStmt.getCreateTableAsSelectStmt();
-            }
-            if (ctasStmt != null && locker != null && !locker.isEmpty()
-                    && !AnalyzerUtils.collectFileTableFunctionRelation(ctasStmt.getQueryStatement()).isEmpty()) {
-                new QueryAnalyzer(session).analyzeFilesOnly(ctasStmt.getQueryStatement());
+            // Statements other than INSERT cannot use the deferred-lock path above, but their files() still
+            // needs the same treatment as an INSERT-SELECT -- files() schema inference does an object-store
+            // LIST plus a BE get_file_schema RPC, and running that inside the PlannerMetaLock critical
+            // section stalls every db-level DDL behind the database intention lock. Pre-resolve it here;
+            // resolveTableRef reuses the already-built TableFunctionTable once the lock is held.
+            QueryStatement filesQuery = queryWithFilesToPreResolve(statement);
+            if (filesQuery != null && locker != null && !locker.isEmpty()
+                    && !AnalyzerUtils.collectFileTableFunctionRelation(filesQuery).isEmpty()) {
+                if (statement instanceof CreatePipeStmt createPipeStmt) {
+                    // Keep the original error order: PipeAnalyzer rejects bad properties before the INSERT.
+                    PipeAnalyzer.analyzeBeforeInsert(createPipeStmt);
+                }
+                new QueryAnalyzer(session).analyzeFilesOnly(filesQuery);
             }
 
             if (deferredLock) {
@@ -316,24 +320,68 @@ public class StatementPlanner {
                     InsertAnalyzer.analyzeWithDeferredLock(insertStmt, session, takeLock);
                     Analyzer.AnalyzerVisitor.analyzeSubmitTaskOnly(insertStmt, (SubmitTaskStmt) statement, session);
                 } else {
-                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                    // The SELECT does not need the lock: refresh its remaining sources before taking it.
+                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock,
+                            () -> refreshRemainingInsertSources(statement, session));
                 }
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
                 // Only pre-resolve external tables when there are internal tables to lock.
                 // This avoids holding meta lock while fetching external metadata.
-                // Check config first (cheapest), then locker state.
+                // Check config first (cheapest), then locker state. A policy on an external table may read
+                // internal tables, which only resolving it tells; those have to be locked too.
                 if (insertStmt == null && Config.enable_experimental_external_table_preparse
-                        && locker != null && !locker.isEmpty()) {
+                        && locker != null && (!locker.isEmpty() || locker.mayReachExternalTablePolicy())) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
+                // An INSERT analyzed before planning (the one a CTAS carries, a replanned statement) has every
+                // relation bound already, so the pre-pass skipped its sources: refresh and reload them here, not
+                // under the lock. The refresh after analysis below then only rebinds them.
+                refreshRemainingInsertSources(statement, session);
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
         }
+    }
+
+    /**
+     * The pre-pass above refreshes the sources of an INSERT it reaches; this refreshes the rest and rebinds them,
+     * now that analysis has expanded every view and subquery. Outside the lock on the deferred path, under it on
+     * the locked one -- where the sources of an already analyzed INSERT were refreshed before the lock, so it only
+     * reaches the connector for a source the analysis under the lock newly bound. Only for an INSERT about to be
+     * planned: a SUBMIT TASK plans its INSERT when the task runs, and refreshes then.
+     */
+    private static void refreshRemainingInsertSources(StatementBase statement, ConnectContext session) {
+        if (statement instanceof InsertStmt insertStmt && InsertSourceRefresher.isEnabled(session)) {
+            InsertSourceRefresher.refreshRemaining(insertStmt.getQueryStatement(), session);
+        }
+    }
+
+    /**
+     * The SELECT whose files() the pre-pass in {@link #analyzeStatement} resolves before the lock, for a
+     * statement the INSERT branch there does not cover. A CTAS target does not exist until execution, and
+     * CREATE PIPE analyzes its INSERT from inside PipeAnalyzer, after the lock of the outer statement is
+     * already held -- so neither reaches the deferred-lock path. SUBMIT TASK carries either an INSERT
+     * (handled by that branch) or a CTAS.
+     */
+    private static QueryStatement queryWithFilesToPreResolve(StatementBase statement) {
+        if (statement instanceof QueryStatement queryStatement) {
+            return queryStatement;
+        }
+        if (statement instanceof CreateTableAsSelectStmt ctas) {
+            return ctas.getQueryStatement();
+        }
+        if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getCreateTableAsSelectStmt() != null) {
+            return submitTaskStmt.getCreateTableAsSelectStmt().getQueryStatement();
+        }
+        if (statement instanceof CreatePipeStmt createPipeStmt && createPipeStmt.getInsertStmt() != null) {
+            return createPipeStmt.getInsertStmt().getQueryStatement();
+        }
+        return null;
     }
 
     /**
@@ -356,9 +404,10 @@ public class StatementPlanner {
      *
      * <p>Two things move earlier because of this. The snapshot itself used to be taken by
      * {@link #collectOriginalOlapTables}, i.e. after the lock had been dropped and by taking it again; taking
-     * it here, while the lock is still held, is the same snapshot without the second acquisition. And the
-     * unlock now happens before the authorization check rather than after it, which is the point: see the
-     * caller.
+     * it here, while the lock is still held, saves that second acquisition whenever the lock already covers
+     * every table analysis left in the statement -- see {@link #copyOlapTablesAndUnlock} for when it does not.
+     * And the unlock now happens before the authorization check rather than after it, which is the point: see
+     * the caller.
      */
     private static PlanningSnapshot takePlanningSnapshotAndUnlock(StatementBase stmt, ConnectContext session,
                                                                   PlannerMetaLocker plannerMetaLocker) {
@@ -379,11 +428,78 @@ public class StatementPlanner {
         long planStartTime = OptimisticVersion.generate();
         // Captured before the copy, because copying replaces it on the statement.
         Table originalWriteTarget = writeTargetOf(stmt);
-        Set<OlapTable> originalOlapTables = Sets.newHashSet();
-        // The lock is still held, which is what makes the copy safe against a concurrent modification.
-        AnalyzerUtils.copyOlapTable(stmt, originalOlapTables);
-        unLock(plannerMetaLocker);
+        Set<OlapTable> originalOlapTables = copyOlapTablesAndUnlock(stmt, session, plannerMetaLocker);
         return new PlanningSnapshot(originalOlapTables, planStartTime, originalWriteTarget);
+    }
+
+    /**
+     * Copy every olap table of an analyzed statement under its read lock, then release {@code locker}.
+     *
+     * <p>{@code locker} was collected from the statement as parsed. It covers the tables behind a view, but not
+     * what only analysis brings in -- the tables a row access or column masking policy reads, or those of a view
+     * redefined since. Copying those without their lock races whatever modifies them -- INSERT OVERWRITE swapping
+     * partitions, on the leader or on a follower's replayer -- and fails the statement with a
+     * ConcurrentModificationException out of {@link OlapTable#copyOnlyForQuery}.
+     *
+     * <p>They are not locked on top of what {@code locker} holds: waiting for more while holding some takes locks
+     * out of the order everyone else takes them in, and LockManager queues a reader behind a waiting writer, so two
+     * such statements could wait on one another for good. Instead everything {@code locker} holds is dropped --
+     * every acquisition, as re-analysis is reached with the lock taken twice ({@code InsertPlanner#planWithRetry},
+     * {@link #planDmlOffSnapshots}) -- and the whole set taken in one ordered pass. A table the statement was
+     * bound to may have been dropped or replaced in between, and planning off its copy would read metadata no
+     * longer published, which no later check catches. That fails the statement, to be retried.
+     *
+     * <p>{@code SPMPlanBuilder} plans a baseline off the copies this takes too, for the same reason.
+     */
+    public static Set<OlapTable> copyOlapTablesAndUnlock(StatementBase stmt, ConnectContext session,
+                                                         PlannerMetaLocker locker) {
+        Set<OlapTable> copies = Sets.newHashSet();
+        if (locker.forTablesNotLockedOf(session, stmt).isEmpty()) {
+            try {
+                AnalyzerUtils.copyOlapTable(stmt, copies);
+            } catch (Throwable t) {
+                locker.close();
+                throw t;
+            }
+            unLock(locker);
+            return copies;
+        }
+        locker.close();
+        try (PlannerMetaLocker all = locker.forAllTablesOf(session, stmt)) {
+            try (Timer ignored = Tracers.watchScope("Lock")) {
+                lock(all);
+            }
+            // The names were resolved before the lock was taken, so a table dropped or swapped in between left a stale
+            // id in it. Resolve them again: under the database intention lock now held, no name can move.
+            PlannerMetaLocker current = locker.forAllTablesOf(session, stmt);
+            if (!all.locksAll(current) || !current.locksAll(AnalyzerUtils.collectOlapTablesToCopy(stmt))) {
+                throw new StarRocksPlannerException("A table the statement reads was dropped or replaced while it "
+                        + "was being planned, please retry", ErrorType.INTERNAL_ERROR);
+            }
+            AnalyzerUtils.copyOlapTable(stmt, copies);
+            resetAllTargetPartitionIds(stmt);
+        }
+        return copies;
+    }
+
+    /**
+     * An INSERT into every partition of an olap table took their ids at analysis, under the lock {@link
+     * #copyOlapTablesAndUnlock} dropped before taking the whole set again. A partition dropped or replaced in between
+     * would fail the sink with an unknown partition, so take them again, under the lock now held. Partitions the
+     * statement names are left alone: one gone since is an error.
+     */
+    private static void resetAllTargetPartitionIds(StatementBase stmt) {
+        if (!(stmt instanceof InsertStmt insertStmt) || !(insertStmt.getTargetTable() instanceof OlapTable target)
+                || insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()
+                || insertStmt.isDynamicOverwrite()) {
+            return;
+        }
+        List<Long> targetPartitionIds = target.getPartitions().stream().map(Partition::getId).toList();
+        if (targetPartitionIds.isEmpty()) {
+            throw new SemanticException("data cannot be inserted into table with empty partition." +
+                    "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ", target.getName());
+        }
+        insertStmt.setTargetPartitionIds(Lists.newArrayList(targetPartitionIds));
     }
 
     /** The table a writing statement writes into, or null for anything else. */
@@ -529,6 +645,9 @@ public class StatementPlanner {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setMvTransformerContext(mvTransformerContext);
             optimizerContext.setStatement(stmt);
+            // As createQueryPlanWithReTry and InsertPlanner do: whether a query is planned under the lock must
+            // not decide whether disable_table_stats_from_metadata_for_single_table applies to it.
+            optimizerContext.setSourceTablesCount(collectSourceTablesCount(session, queryStmt));
             if (isShortCircuit) {
                 optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
             }
@@ -588,7 +707,7 @@ public class StatementPlanner {
         // the original olapTable in queryStmt had been replaced with the copied olapTable
         Set<OlapTable> olapTables = originalOlapTables != null
                 ? originalOlapTables
-                : collectOriginalOlapTables(session, queryStmt);
+                : collectOriginalOlapTables(session, queryStmt, plannerMetaLocker);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             if (!isSchemaValid) {
                 planStartTime = OptimisticVersion.generate();
@@ -669,16 +788,24 @@ public class StatementPlanner {
         return olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
     }
 
-    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {
+    /**
+     * Copy every olap table of an analyzed statement, for a caller that still holds {@code heldLocker}. Only what
+     * that lock does not cover -- what analysis brought in -- is locked on top of it, and within the wait the caller
+     * set on it ({@link PlannerMetaLocker#setAcquireTimeoutMs}), which an MV refresh bounds: a locker of its own
+     * would wait for good, and building one from the statement would also look the policies up again and reset
+     * the session's statement databases.
+     */
+    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt,
+                                                           PlannerMetaLocker heldLocker) {
         Set<OlapTable> olapTables = Sets.newHashSet();
-        PlannerMetaLocker locker = new PlannerMetaLocker(session, queryStmt);
-        try {
-            // Need lock to avoid olap table metas ConcurrentModificationException
-            lock(locker);
+        try (PlannerMetaLocker missing = heldLocker.forTablesNotLockedOf(session, queryStmt)) {
+            // Need lock to avoid olap table metas ConcurrentModificationException. Usually the held lock covers every
+            // table already, and then there is nothing to acquire.
+            if (!missing.isEmpty()) {
+                lock(missing);
+            }
             AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
             return olapTables;
-        } finally {
-            unLock(locker);
         }
     }
 
@@ -689,22 +816,21 @@ public class StatementPlanner {
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {
+        lock(locker);
         try {
-            lock(locker);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
-            // only copy the latest olap table
-            Set<OlapTable> copiedTables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
-            return copiedTables;
-        } finally {
+        } catch (Throwable t) {
             unLock(locker);
+            throw t;
         }
+        // only copy the latest olap table
+        return copyOlapTablesAndUnlock(queryStmt, session, locker);
     }
 
     // Lock all database before analyze
     public static void lock(PlannerMetaLocker locker) {
-        locker.lock();
+        locker.lockForPlanning();
     }
 
     // unLock all database after analyze
@@ -732,6 +858,46 @@ public class StatementPlanner {
         resultSink.setOutfileInfo(queryStmt.getOutFileClause(), columnOutputNames);
     }
 
+    /**
+     * An EXPLAIN begins no transaction, but it plans the INSERT all the same, and an external OLAP target has to be
+     * synced from its cluster for that: the published table carries no partitions, tablets or backends of its own.
+     * So the target is swapped for a synced private copy here, before the meta lock is taken, exactly as
+     * {@link #beginTransaction} does for an INSERT that runs -- the planner never sees the published object.
+     * Only an internal-catalog target can be one, so nothing else is resolved early; anything not found is left
+     * for the analyzer to report.
+     */
+    private static void syncExternalOlapTargetForExplain(DmlStmt stmt, ConnectContext session) {
+        if (!(stmt instanceof InsertStmt)) {
+            return;
+        }
+        InsertStmt insertStmt = (InsertStmt) stmt;
+        // An OVERWRITE is refused for an external OLAP table by the analyzer anyway, so it is not worth a sync.
+        if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()
+                || insertStmt.getTableRef() == null || insertStmt.isOverwrite()) {
+            return;
+        }
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (!CatalogMgr.isInternalCatalog(tableRef.getCatalogName())) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableRef.getDbName());
+        if (db == null) {
+            return;
+        }
+        if (!(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                tableRef.getTableName()) instanceof ExternalOlapTable)) {
+            return;
+        }
+        // Resolved again the way the INSERT is, so that a temporary table of the same name still shadows it.
+        Table table = MetaUtils.getSessionAwareTable(session, db, TableName.fromTableRef(tableRef));
+        if (table instanceof ExternalOlapTable) {
+            // Written back as beginTransaction does: with the target set, InsertAnalyzer skips the resolution that
+            // would normalize it, and the privilege check needs the database of an unqualified name.
+            insertStmt.setTableRef(tableRef);
+            insertStmt.setTargetTable(MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) table));
+        }
+    }
+
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
@@ -747,6 +913,7 @@ public class StatementPlanner {
         // 4. insert overwrite (first plan, before handleInsertOverwrite)
         // 5. txnId already set (e.g., by InsertOverwriteJobRunner for dynamic overwrite re-plan)
         if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
+            syncExternalOlapTargetForExplain(stmt, session);
             return;
         }
         if (stmt instanceof InsertStmt) {

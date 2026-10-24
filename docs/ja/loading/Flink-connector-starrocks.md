@@ -219,6 +219,12 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **デフォルト値**: true
 - **説明**: バージョン 1.2.8 以降でサポートされています。Primary Key テーブルにデータをロードする際に、Flink からの `UPDATE_BEFORE` レコードを無視するかどうかを指定します。このパラメータを false に設定すると、レコードは StarRocks テーブルに対する削除操作として扱われます。
 
+#### sink.json.columns-from-flink-schema
+
+- **必須**: いいえ
+- **デフォルト値**: false
+- **説明**: 1.2.16 以降でサポートされています。形式が `json` の場合に、Stream Load の `columns` ヘッダーを Flink テーブルスキーマから生成するかどうかを指定します。デフォルトでは `json` の場合にヘッダーは送信されないため、サーバーはすべてのテーブル列をロード対象として宣言します。ペイロードに含まれていない列は、`DEFAULT` が定義されている場合でも `NULL` として格納されます。`true` に設定すると、Flink テーブルの列がヘッダーとして送信されるため、Flink スキーマで定義されていない列はヘッダーから除外され、サーバーによってその `DEFAULT` 値が適用されます。Flink スキーマと `sink.properties.format=json` が必要であり、`sink.properties.columns` または `sink.properties.jsonpaths` と併用することはできません。
+
 #### sink.parallelism
 
 - **必須**: いいえ
@@ -437,6 +443,22 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
   - `sink.merge-commit.chunk.size` は、個々の Stream Load リクエスト (チャンクごと) あたりの最大データサイズを制御します。チャンク内のデータがこのサイズに達すると、すぐにフラッシュされます。
   - `sink.buffer-flush.max-bytes` は、すべてのテーブルにわたるキャッシュされたデータすべての合計メモリ制限を制御します。キャッシュされたデータの合計がこの制限を超えると、コネクタはメモリを解放するためにチャンクを早期に削除します。
   - したがって、少なくとも 1 つの完全なチャンクを累積できるように、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも大きく設定する必要があります。一般に、特に複数のテーブルがある場合や並行処理が高い場合は、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも数倍大きくする必要があります。
+
+### JSON 形式でサーバー側の DEFAULT 値を適用する
+
+`json` 形式では、コネクタはデフォルトで `columns` ヘッダーを送信しません。そのため、サーバーはすべてのテーブル列をロード対象に含めます。JSON ペイロードに列が含まれていない場合、サーバーはその列を明示的な `NULL` として扱い、その列に定義された `DEFAULT` 値を上書きします。たとえば、テーブルに `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP` が含まれている場合、すべての行で `ingest_ts` に値が指定されていなければ、その列は `NULL` としてロードされます。
+
+サーバー側の `DEFAULT` 値を適用するには、`sink.json.columns-from-flink-schema=true` を設定します。コネクタは Flink テーブルスキーマを使用して `columns` ヘッダーを生成します。これは、Flink スキーマと StarRocks スキーマが異なる場合に `csv` 形式で行われる処理と同様です。
+
+Flink テーブルスキーマに定義されていない StarRocks 列は `columns` ヘッダーから除外されるため、サーバーはその列の `DEFAULT` 値を適用できます。したがって、ロード対象に含める列は Flink テーブル定義によって決まります。
+
+- **Flink スキーマから列を省略した場合:** コネクタはその列を送信しないため、StarRocks はその列の `DEFAULT` 値を適用します。
+
+- **Flink スキーマで列を定義した場合:** コネクタは行からその列の値を送信します。値が null の場合は `NULL` も送信されます。
+
+このオプションを使用するには Flink テーブルスキーマが必要であるため、Flink SQL およびスキーマを指定して作成したシンクに適用されます。`sink.version=V1` の場合は、`sink.properties.strip_outer_array=true` も設定する必要があります。V1 シンクは各バッチを JSON 配列として送信し、このプロパティを自動的には設定しません。V2 では自動的に設定されます。
+
+raw `String` DataStream シンクにはスキーマがないため、`sink.json.columns-from-flink-schema=true` を設定すると、起動時にこの設定が拒否されます。このシンクでは、代わりに `sink.properties.columns` を明示的に設定してください。
 
 ### データロードのメトリクスのモニタリング
 

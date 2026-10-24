@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "如何查看和解读 StarRocks 物化视图刷新 Task Run 的详细信息，以了解刷新行为、排查刷新失败并监控刷新性能。"
+---
+
 # 理解物化视图Task Run
 
 物化视图刷新 Task Run 的信息可以帮助理解物化视图刷新行为、排查问题以及监控性能。
@@ -33,7 +38,7 @@
 
 - **类型**: Set of Strings
 - **描述**: 在Task Run中计划刷新的物化视图分区列表。此项帮助您跟踪哪些物化视图分区将被更新。
-- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：100），以防止元数据存储过多。
+- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：8，v4.0 为 16），以防止元数据存储过多。
 - **示例**: `["p20240101", "p20240102", "p20240103"]`
 - **注意**: 这表示物化视图自身的分区，而不是基表分区。
 
@@ -43,7 +48,7 @@
 - **描述**: 参考基表与其应刷新的分区集合之间的映射。
 - **用法**: 该值在物化视图计划调度阶段设置。可用于跟踪需要扫描的基表分区。
 - **格式**: `{tableName -> Set<partitionName>}`
-- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：100），以防止元数据存储过多。
+- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：8，v4.0 为 16），以防止元数据存储过多。
 - **示例**:
 
   ```json
@@ -61,7 +66,7 @@
 - **描述**: 参考基表与在执行期间刷新的分区集合之间的映射。
 - **用法**: 该值在物化视图版本映射提交后设置。它反映了优化器使用的实际分区。
 - **格式**: `{tableName -> Set<partitionName>}`
-- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：100），以防止元数据存储过多。
+- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：8，v4.0 为 16），以防止元数据存储过多。
 - **示例**: 
 
   ```json
@@ -97,7 +102,8 @@
 
 - **类型**: String
 - **描述**: 下次刷新操作的序列化分区值（用于 list 分区或复杂分区方案）。当简单的起始/结束范围不足时，存储特定的分区值。
-- **示例**: `"('US', 'ACTIVE'), ('UK', 'ACTIVE')"` 用于多列 list 分区。
+- **示例**: `{"data":[{"partitionItems":[["US","ACTIVE"]]},{"partitionItems":[["UK","ACTIVE"]]}]}` 用于多列 list 分区。
+- **已归档的 Task Run**: 已结束的 Task Run 归档到 Task Run 历史时，该字段以及 Task Run 的 `PARTITION_VALUES` 属性只保留前 `max_mv_task_run_meta_message_values_length` 个分区值，并用 `total` 字段记录原有的分区值个数，例如 `{"data":[...],"total":998}`。归档后的值仅用于展示，刷新的下一个 Task Run 使用完整的分区值列表创建。
 
 #### `processStartTime`
 
@@ -124,7 +130,7 @@
 
 - **类型**: Map of String to String
 - **描述**: 查询计划构建器的诊断消息和元数据。包含有关查询计划、优化决策和潜在问题的信息。
-- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：100），以防止元数据存储过多。
+- **大小限制**: 如果实际数量超过该值，系统将自动将分区数量截断为 `max_mv_task_run_meta_message_values_length`（默认值：8，v4.0 为 16），以防止元数据存储过多。
 
 #### `refreshMode`
 
@@ -213,9 +219,9 @@ ORDER BY CREATE_TIME DESC;
 ### max_mv_task_run_meta_message_values_length
 
 - **类型**: Integer
-- **默认值**: 100
+- **默认值**: 8（v4.0 为 16）
 - **范围**: FE 配置
-- **描述**: 限制集合或 MAP 字段中存储的项目数量，以防止元数据过度增长。限制 `mvPartitionsToRefresh`、`refBasePartitionsToRefreshMap`、`basePartitionsToRefreshMap` 和 `planBuilderMessage` 的大小。
+- **描述**: 限制集合或 MAP 字段中存储的项目数量，以防止元数据过度增长。限制 `mvPartitionsToRefresh`、`refBasePartitionsToRefreshMap`、`basePartitionsToRefreshMap` 和 `planBuilderMessage` 的大小。对于已归档的 Task Run，还会限制 `nextPartitionValues` 和 `PARTITION_VALUES` 属性中保留的 list 分区值个数。
 
 ## 最佳实践
 

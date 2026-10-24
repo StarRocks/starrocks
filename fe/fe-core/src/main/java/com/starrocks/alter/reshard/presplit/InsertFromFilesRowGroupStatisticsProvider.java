@@ -36,7 +36,8 @@ import java.util.Map;
  * <p>Two shapes the data tier serves are declined here so the pipeline falls back to it: a WHERE
  * clause, because a footer describes every row in the file and no footer statistic can be narrowed
  * to the rows a predicate keeps; and a sort-key column no file column backs -- one the projection
- * leaves unmapped, or one the SELECT feeds with a literal, which lives in no footer.
+ * leaves unmapped, one the SELECT feeds with a literal, which lives in no footer, or one it computes
+ * from file columns, whose values a footer's min/max for those columns does not describe in general.
  */
 final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
 
@@ -52,6 +53,15 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         TableFunctionTable sourceTable = context.sourceTable();
         // FILES() reports one format for the whole table, so resolve the reader once.
         MetaTierFormat format = MetaTierFormat.fromTableFunctionFormat(sourceTable.getFormat());
+        // Checked before the name mapping: a key made only of computed columns leaves that mapping
+        // empty, which sourceNamedSortKey reads as name-identity.
+        for (Column column : request.getSortKey()) {
+            if (context.targetToExpressionSql().containsKey(column.getName().toLowerCase())) {
+                throw new MetaTierUnavailableException(
+                        "a sort-key column is computed from FILES columns; footer min/max statistics describe "
+                                + "the file columns, not the computed value the load writes");
+            }
+        }
         List<Column> sortKeyColumns =
                 sourceNamedSortKey(request.getSortKey(), context.targetToSourceColumnNames());
 

@@ -18,10 +18,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
@@ -325,6 +328,58 @@ public class AnalyzeMgrTest {
     }
 
     @Test
+    public void testUpdateLoadRowsWithZeroRowCommits() throws Exception {
+        final String dbName = "db_zero_row_commits";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1')");
+        Database db = starRocksAssert.getDb(dbName);
+        OlapTable table = (OlapTable) starRocksAssert.getTable(dbName, "t1");
+        // Simulate a TabletStatMgr pass that saw 1000 rows
+        for (Partition partition : table.getPartitions()) {
+            partition.getDefaultPhysicalPartition().getQueryableBaseIndex().setRowCount(1000);
+        }
+        Assertions.assertEquals(1000, table.getRowCount());
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(), Lists.newArrayList("c1"),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), new HashMap<>(), 1000);
+        analyzeMgr.addBasicStatsMeta(basicStatsMeta);
+
+        // INSERT ... SELECT that writes no rows, committed four times: the row count must stay the same
+        for (int i = 0; i < 4; i++) {
+            analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                    TransactionState.LoadJobSourceType.FRONTEND, 0));
+        }
+        Assertions.assertEquals(1000, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(0, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        // A non-empty insert still adds its loaded rows
+        analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                TransactionState.LoadJobSourceType.FRONTEND, 5));
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(5, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        // A push-delete doesn't report its row count: count the table as changed, but don't grow the total
+        analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                TransactionState.LoadJobSourceType.DELETE, 0));
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        starRocksAssert.dropDatabase(dbName);
+    }
+
+    private static TransactionState newTransactionState(long dbId, long tableId,
+                                                        TransactionState.LoadJobSourceType sourceType,
+                                                        long loadedRows) {
+        TUniqueId requestId = UUIDUtil.genTUniqueId();
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, sourceType, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(loadedRows));
+        return transactionState;
+    }
+
+    @Test
     public void testQuery() throws Exception {
         final String dbName = "db_analyze_status";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -351,4 +406,70 @@ public class AnalyzeMgrTest {
         AnalyzeStatusSystemTable.query(request);
     }
 
+    @Test
+    public void testClearStalePartitionStatsWithoutPartitionIds() throws Exception {
+        final String dbName = "db_clear_stale_partition_stats";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("create table t_empty (k1 date, v1 int) partition by range(k1) () " +
+                        "distributed by hash(v1) buckets 1 properties('replication_num'='1')");
+        Database db = starRocksAssert.getDb(dbName);
+        Table table = starRocksAssert.getTable(dbName, "t_empty");
+        // a range partitioned table created without any partition
+        Assertions.assertTrue(table.getPartitions().isEmpty());
+
+        List<String> executedSQLs = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
+                                                               List<Long> pids) {
+                // build the sql as the real method does, it checks the ids are not empty
+                executedSQLs.add(StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids));
+                return true;
+            }
+        };
+
+        AnalyzeMgr analyzeMgr = new AnalyzeMgr();
+        LocalDateTime lastCleanTime = LocalDateTime.now().minusDays(1);
+
+        // case 1: no table needs to be cleaned
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertTrue(executedSQLs.isEmpty());
+        Assertions.assertTrue(((LocalDateTime) Deencapsulation.getField(analyzeMgr, "lastCleanTime"))
+                .isAfter(lastCleanTime));
+
+        // case 2: the analyzed table has no partition, so there is no partition id to keep
+        NativeAnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(100, db.getId(), table.getId(),
+                ImmutableList.of("k1", "v1"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus.setEndTime(LocalDateTime.now());
+        analyzeMgr.getAnalyzeStatusMap().put(analyzeStatus.getId(), analyzeStatus);
+
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertTrue(executedSQLs.isEmpty());
+        Assertions.assertTrue(((LocalDateTime) Deencapsulation.getField(analyzeMgr, "lastCleanTime"))
+                .isAfter(lastCleanTime));
+
+        // case 3: the analyzed table has partitions, the stale partition stats are cleaned
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1')");
+        Table table1 = starRocksAssert.getTable(dbName, "t1");
+        NativeAnalyzeStatus analyzeStatus1 = new NativeAnalyzeStatus(101, db.getId(), table1.getId(),
+                ImmutableList.of("c1", "c2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus1.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus1.setEndTime(LocalDateTime.now());
+        analyzeMgr.getAnalyzeStatusMap().remove(analyzeStatus.getId());
+        analyzeMgr.getAnalyzeStatusMap().put(analyzeStatus1.getId(), analyzeStatus1);
+
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertEquals(1, executedSQLs.size());
+        Assertions.assertTrue(executedSQLs.get(0).contains("TABLE_ID IN (" + table1.getId() + ")"),
+                executedSQLs.get(0));
+
+        starRocksAssert.dropDatabase(dbName);
+    }
 }

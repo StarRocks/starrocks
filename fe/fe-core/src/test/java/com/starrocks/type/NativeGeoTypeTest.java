@@ -476,6 +476,24 @@ public class NativeGeoTypeTest {
     }
 
     @Test
+    public void testGeometrySridUsesBackendIntegerSyntax() {
+        for (String crs : List.of("EPSG:4326", "EPSG:004326", "OGC:CRS84")) {
+            assertEquals(Integer.valueOf(4326), GeoTypeDescriptor.geometry(crs).srid());
+        }
+        assertEquals(Integer.valueOf(-4326), GeoTypeDescriptor.geometry("EPSG:-4326").srid());
+        assertEquals(Integer.valueOf(0), GeoTypeDescriptor.geometry("EPSG:-0").srid());
+        assertEquals(Integer.valueOf(Integer.MIN_VALUE), GeoTypeDescriptor.geometry("EPSG:-2147483648").srid());
+        assertEquals(Integer.valueOf(Integer.MAX_VALUE), GeoTypeDescriptor.geometry("EPSG:2147483647").srid());
+        for (String crs : List.of("EPSG:+4326", "EPSG:４３２６", "EPSG: 4326", "EPSG:4326 ",
+                "EPSG:", "EPSG:-", "EPSG:2147483648", "EPSG:-2147483649", "custom:local")) {
+            GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs);
+            assertNull(descriptor.srid(), crs);
+            assertEquals(crs, descriptor.crs());
+            descriptor.validate(PrimitiveType.GEOMETRY);
+        }
+    }
+
+    @Test
     public void testUnsupportedGeoCommonTypes() {
         List<ScalarType> ordinary = List.of(BooleanType.BOOLEAN, IntegerType.INT, IntegerType.BIGINT,
                 FloatType.DOUBLE, DateType.DATE, DateType.DATETIME, VarcharType.VARCHAR,

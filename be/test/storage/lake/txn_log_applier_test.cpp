@@ -120,12 +120,12 @@ bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
     meta->mutable_schema()->set_id(1);
     meta->mutable_schema()->set_keys_type(DUP_KEYS);
     (void)mgr->put_tablet_metadata(meta);
-    *out_tablet = Tablet(mgr, tablet_id); // 修改参数顺序
+    *out_tablet = Tablet(mgr, tablet_id);
     return true;
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001);
     auto meta = build_non_pk_metadata(10001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -355,7 +355,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002);
     auto meta = build_non_pk_metadata(10002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -366,7 +366,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003);
     auto meta = build_non_pk_metadata(10003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -392,7 +392,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001);
     auto meta = build_pk_metadata(20001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -410,7 +410,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002);
     auto meta = build_pk_metadata(20002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 

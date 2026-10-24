@@ -40,6 +40,8 @@ public final class AIModelConfigs {
     public static final String SYSTEM_CHAT_CONFIG_ID = "__system_chat__";
     public static final String SYSTEM_EMBEDDING_CONFIG_ID = "__system_embedding__";
     public static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
+    public static final String QWEN_COMPATIBLE_PROVIDER = "qwen_compatible";
+    public static final String DASHSCOPE_MULTIMODAL_PROVIDER = "dashscope_multimodal";
 
     private AIModelConfigs() {
     }
@@ -164,9 +166,10 @@ public final class AIModelConfigs {
         validateEndpoint(endpoint, prefix + "endpoint");
 
         String provider = requireNonBlank(config.provider(), prefix + "provider", functionName);
-        if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider)) {
+        String multimodalProvider = embedding ? DASHSCOPE_MULTIMODAL_PROVIDER : QWEN_COMPATIBLE_PROVIDER;
+        if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider) && !multimodalProvider.equals(provider)) {
             throw invalidConfig(prefix + "provider",
-                    "must be '" + OPENAI_COMPATIBLE_PROVIDER + "'");
+                    "must be '" + OPENAI_COMPATIBLE_PROVIDER + "' or '" + multimodalProvider + "'");
         }
 
         String model = config.model();
@@ -175,7 +178,7 @@ public final class AIModelConfigs {
         }
         if (defaultModelRequirement == DefaultModelRequirement.REQUIRED && model.trim().isEmpty()) {
             throw invalidConfig(prefix + "model",
-                    "must be set for " + (embedding ? "text-only " : "prompt-only ") + functionName + " calls");
+                    "must be set for " + functionName + " calls without an explicit model");
         }
     }
 

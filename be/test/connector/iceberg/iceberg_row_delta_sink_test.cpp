@@ -419,4 +419,23 @@ TEST_F(IcebergRowDeltaSinkTest, callback_on_commit_is_noop) {
     SUCCEED();
 }
 
+// Test 12: status() surfaces an async error from either sub-sink.
+TEST_F(IcebergRowDeltaSinkTest, status_surfaces_sub_sink_error) {
+    {
+        auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+        ASSERT_OK(sink->status());
+        delete_mock->set_status(Status::IOError("delete writer close failed"));
+        auto st = sink->status();
+        ASSERT_TRUE(st.is_io_error()) << st;
+        ASSERT_THAT(std::string(st.message()), testing::HasSubstr("delete writer close failed"));
+    }
+    {
+        auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+        data_mock->set_status(Status::IOError("data writer close failed"));
+        auto st = sink->status();
+        ASSERT_TRUE(st.is_io_error()) << st;
+        ASSERT_THAT(std::string(st.message()), testing::HasSubstr("data writer close failed"));
+    }
+}
+
 } // namespace starrocks::connector

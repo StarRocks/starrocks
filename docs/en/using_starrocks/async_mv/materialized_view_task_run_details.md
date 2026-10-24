@@ -38,7 +38,7 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 
 - **Type**: Set of Strings
 - **Description**: The list of materialized view partitions that are scheduled to be refreshed in the task run. This item helps you track which materialized view partitions will be updated.
-- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 100) to prevent excessive metadata storage if the actual number exceeds the value.
+- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 8, or 16 in v4.0) to prevent excessive metadata storage if the actual number exceeds the value.
 - **Example**: `["p20240101", "p20240102", "p20240103"]`
 - **Note**: This represents the materialized view's own partitions, not the base table partitions.
 
@@ -48,7 +48,7 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 - **Description**: The mapping between reference base tables to the set of their partitions that should be refreshed.
 - **Usage**: The value is set during the materialized view plan scheduler stage. It can be used to track which base table partitions need to be scanned.
 - **Format**: `{tableName -> Set<partitionName>}`
-- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 100) to prevent excessive metadata storage if the actual number exceeds the value.
+- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 8, or 16 in v4.0) to prevent excessive metadata storage if the actual number exceeds the value.
 - **Example**:
 
   ```json
@@ -66,7 +66,7 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 - **Description**: The mapping between reference base tables to the set of their partitions that were refreshed during execution.
 - **Usage**: The value is set after the materialized view version map is committed. It reflects the real partitions used by the optimizer.
 - **Format**: `{tableName -> Set<partitionName>}`
-- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 100) to prevent excessive metadata storage if the actual number exceeds the value.
+- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 8, or 16 in v4.0) to prevent excessive metadata storage if the actual number exceeds the value.
 - **Example**: 
 
   ```json
@@ -102,7 +102,8 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 
 - **Type**: String
 - **Description**: Serialized partition values for the next refresh (used for list partitioning or complex partition schemes). It stores specific partition values when simple start/end ranges are insufficient.
-- **Example**: `"('US', 'ACTIVE'), ('UK', 'ACTIVE')"` for multi-column list partitions.
+- **Example**: `{"data":[{"partitionItems":[["US","ACTIVE"]]},{"partitionItems":[["UK","ACTIVE"]]}]}` for multi-column list partitions.
+- **Archived task runs**: When a finished task run is archived to the task run history, this field and the `PARTITION_VALUES` property of the task run keep only the first `max_mv_task_run_meta_message_values_length` partition values. A `total` field records how many values there were, for example `{"data":[...],"total":998}`. The archived value is for display only. The next task run of the refresh is created with the full list.
 
 #### `processStartTime`
 
@@ -129,7 +130,7 @@ This section describes the fields provided in `MVTaskRunExtraMessage`.
 
 - **Type**: Map of String to String
 - **Description**: Diagnostic messages and metadata from the query plan builder. It contains information about query planning, optimization decisions, and potential issues.
-- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 100) to prevent excessive metadata storage if the actual number exceeds the value.
+- **Size Limit**: The system will automatically truncated the number of partitions to `max_mv_task_run_meta_message_values_length` (Default: 8, or 16 in v4.0) to prevent excessive metadata storage if the actual number exceeds the value.
 
 #### `refreshMode`
 
@@ -218,9 +219,9 @@ ORDER BY CREATE_TIME DESC;
 ### max_mv_task_run_meta_message_values_length
 
 - **Type**: Integer
-- **Default**: 100
+- **Default**: 8 (16 in v4.0)
 - **Scope**: FE configuration
-- **Description**: Maximum number of items to store in the set or the MAP fields to prevent excessive metadata growth. It limits the size of `mvPartitionsToRefresh`, `refBasePartitionsToRefreshMap`, `basePartitionsToRefreshMap`, and `planBuilderMessage`.
+- **Description**: Maximum number of items to store in the set or the MAP fields to prevent excessive metadata growth. It limits the size of `mvPartitionsToRefresh`, `refBasePartitionsToRefreshMap`, `basePartitionsToRefreshMap`, and `planBuilderMessage`. For archived task runs, it also limits the list partition values kept in `nextPartitionValues` and in the `PARTITION_VALUES` property.
 
 ## Best Practices
 

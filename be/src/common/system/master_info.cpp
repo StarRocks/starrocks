@@ -14,6 +14,8 @@
 
 #include "common/system/master_info.h"
 
+#include "gen_cpp/HeartbeatService_constants.h"
+
 namespace starrocks {
 
 static butil::DoublyBufferedData<TMasterInfo>* get_or_create_data() {
@@ -81,6 +83,12 @@ std::optional<TRunMode::type> get_master_run_mode() {
         return ptr->run_mode;
     }
     return {};
+}
+
+bool master_matches_alter_finish_by_job_id() {
+    MasterInfoPtr ptr;
+    return get_master_info(&ptr) && ptr->__isset.heartbeat_flags &&
+           (ptr->heartbeat_flags & g_HeartbeatService_constants.IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT) != 0;
 }
 
 } // namespace starrocks

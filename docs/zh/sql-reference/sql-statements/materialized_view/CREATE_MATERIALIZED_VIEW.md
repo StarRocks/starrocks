@@ -98,6 +98,37 @@ SELECT select_expr[, select_expr ...]
     - 如果物化视图是聚合类型，则所有的分组列自动补充为排序列。
     - 如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
 
+### 在存算分离 Range 分布表上创建
+
+对于满足条件的存算分离 [Range 分布表](../../../table_design/data_distribution/Data_distribution.md)，可以使用普通的 `CREATE MATERIALIZED VIEW ... AS SELECT` 语句。创建 Range 分布基表时，不指定 `DISTRIBUTED BY`。下例中，基表按 `id` 排序，物化视图按 `store_id` 分组；过滤条件使用的列无需出现在视图的输出中。
+
+```sql
+SET enable_range_distribution = true;
+
+CREATE TABLE range_sales (
+    id BIGINT NOT NULL,
+    store_id INT NOT NULL,
+    amount BIGINT,
+    is_valid INT
+)
+DUPLICATE KEY(id)
+ORDER BY(id);
+
+CREATE MATERIALIZED VIEW range_store_amount AS
+SELECT store_id, SUM(amount)
+FROM range_sales
+WHERE is_valid > 0
+GROUP BY store_id;
+```
+
+物化视图拥有独立的 Range Tablet 布局和排序键。对于聚合视图，所有分组键都作为排序键，无需与基表的 `ORDER BY` 相同。历史数据在线构建，后续 INSERT 和导入操作同步维护视图。基表和视图的 Tablet 均支持通过 `ALTER TABLE ... SPLIT TABLETS` 和 `ALTER TABLE ... MERGE TABLETS` 进行分裂与合并；如需操作视图的布局，请指定其 Tablet ID。合并仍要求源 Tablet 不包含共享文件，Compaction 可以清除分裂产生的共享文件。当前创建任务达到 `FINISHED` 后，才能继续创建同一基表的其他同步物化视图或 Rollup。
+
+现有的单表、表达式和基表模型限制仍然适用。Range 同步物化视图不支持存算一体集群、主键基表、Colocate 基表或包含 `AUTO_INCREMENT` 的基表。创建时，每个逻辑分区必须恰好对应一个物理分区，支持多个逻辑分区。创建前，请完成所有 FE 的协调升级：旧版本 FE 无法安全地恢复此类 Range 视图的元数据。对此类视图执行 tablet 切分或合并前，还需升级所有 CN。
+
+Range 同步物化视图不支持表达式生成的 MV 列名与真实基表列重名。例如，基表已包含 `mv_sum_v` 时，不能使用 `SUM(v)`。请重命名冲突的基表列，或在支持别名的表达式中使用其他别名。直接选择名称以 `mv_` 开头的真实基表列仍受支持。
+
+如果 schema 变更或列重命名会使仍保留的 MV 表达式或 `WHERE` 子句无法解析，或改变已存储的聚合状态签名，则会拒绝该操作，包括删除被引用的 Struct 字段。添加字段和删除未引用字段仍受支持。请先删除受影响的视图。仅从指定视图中删除列不会删除其基表源列。
+
 ### 查询同步物化视图
 
 因为同步物化视图本质上是基表的索引而不是物理表，所以您只能使用 Hint `[_SYNC_MV_]` 查询同步物化视图：
@@ -339,7 +370,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
-- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。
+- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。取值为 `force` 时每次刷新都会刷新全部分区；对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效，这类视图按定义就是依据基表变更增量维护的。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
 - `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
@@ -350,7 +381,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `excluded_refresh_tables` 控制的是是否参与刷新。上述例子中，如 A 表同时存在于 `excluded_trigger_table` 和 `excluded_refresh_tables` 中时，当 B 表更新触发了物化视图刷新时，只会刷新分区[3]。
   :::
 
-- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
+- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。该属性不支持 `refresh_mode` 为 `INCREMENTAL` 的物化视图，因为增量维护要求基线完整。如需将此类物化视图的首次全量刷新分批，请改用 `partition_refresh_number`；此后的刷新只处理基表的变更数据，不受这两个属性影响。
 - `mv_rewrite_staleness_second`：只要**基表最新修改时间**与该物化视图最近一次被确认的**完整**刷新之间的差值不超过此属性指定的时间间隔，则此物化视图可直接用于查询改写，无论基表数据是否更新。由于比较的对象是基表最新修改时间（而非当前时钟时间），因此自上次完整刷新以来基表未发生变更的物化视图会一直可用于查询改写，无论经过多长时间。否则，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。请注意，仅覆盖部分分区的刷新操作（例如手动执行的 `REFRESH ... PARTITION START ... END`，或受 `auto_refresh_partitions_limit` 限制的刷新）不会更新该新鲜度基线。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
@@ -490,7 +521,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 | Select                          | 支持                                                                                                              |
 | From `<Table>`                  | 仅支持 Iceberg 表，不支持其他类型表                                                                              |
 | Filter                          | 支持                                                                                                              |
-| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li></ul>     |
+| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li><li>暂不支持以复杂类型（ARRAY、MAP、STRUCT）的列作为 GROUP BY 或 SELECT DISTINCT 的键，此类键在 CREATE 时即被拒绝。</li></ul>     |
 | Inner Join                      | 支持                                                                                                              |
 | Union All                       | 支持                                                                                                              |
 | Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
