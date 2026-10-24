@@ -110,7 +110,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
-    public void testPlannerFailureRestoresInternalAuthorizationBypass() throws Exception {
+    public void testIvmRefreshIsPlannedWithoutAuthorizationBypass() throws Exception {
         String ddl = "CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES ('refresh_mode' = 'incremental')\n" +
@@ -134,9 +134,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         try {
             TaskRun taskRun = buildMVTaskRun(mv, "test");
             Assertions.assertThrows(RuntimeException.class, () -> getMVRefreshExecPlan(taskRun));
-            Assertions.assertTrue(bypassDuringPlanning.get());
+            Assertions.assertFalse(bypassDuringPlanning.get());
             Assertions.assertSame(taskRun.getRunCtx(), plannerContext.get());
-            Assertions.assertFalse(plannerContext.get().isBypassAuthorizerCheck());
         } finally {
             starRocksAssert.dropMaterializedView("test_mv1");
         }
