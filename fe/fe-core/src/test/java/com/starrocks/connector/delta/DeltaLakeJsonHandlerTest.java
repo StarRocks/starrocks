@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.checkpoints.CheckpointMetaData;
 import io.delta.kernel.internal.replay.LogReplay;
@@ -61,14 +62,14 @@ public class DeltaLakeJsonHandlerTest {
                 @NotNull
                 @Override
                 public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
-                    return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
+                    return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), new HadoopFileIO(hdfsConfiguration));
                 }
             });
 
     @Test
     public void testReadLastCheckPoint() {
         String path = deltaLakePath + "/_last_checkpoint";
-        DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(hdfsConfiguration, jsonCache);
+        DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(new HadoopFileIO(hdfsConfiguration), jsonCache);
 
         StructType readSchema = CheckpointMetaData.READ_SCHEMA;
         FileStatus fileStatus = FileStatus.of(path, 0, 0);
@@ -88,7 +89,7 @@ public class DeltaLakeJsonHandlerTest {
     @Test
     public void testReadJsonMetadata() {
         String path = deltaLakePath + "/00000000000000000031.json";
-        DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(hdfsConfiguration, jsonCache);
+        DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(new HadoopFileIO(hdfsConfiguration), jsonCache);
 
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
         FileStatus fileStatus = FileStatus.of(path, 123, 123);
