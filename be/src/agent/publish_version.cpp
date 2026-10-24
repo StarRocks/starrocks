@@ -16,6 +16,8 @@
 
 #include <bvar/bvar.h>
 
+#include <shared_mutex>
+
 #include "agent/agent_metrics.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/time/time.h"
@@ -32,6 +34,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 
 namespace starrocks {
@@ -54,6 +57,35 @@ struct TabletPublishVersionTask {
     bool is_double_write{false};
     bool is_shadow{false};
 };
+
+// The tablet's row count at exactly `version`, or -1 if it cannot be proven to describe that version. The FE
+// trusts a count only for the version it was computed at, so a count that might include a later or an
+// unapplied version is not reported at all.
+static int64_t tablet_row_count_at_version(Tablet& tablet, int64_t version) {
+    // A tablet being created by a schema change or rollup only holds the loads written to both tablets so far.
+    if (tablet.tablet_state() != TabletState::TABLET_RUNNING) {
+        return -1;
+    }
+    if (tablet.updates() != nullptr) {
+        // Primary key: live rows, and only once every committed version is applied.
+        auto [live_rows, live_version] = tablet.updates()->num_live_rows_and_version();
+        return live_version == version ? live_rows : -1;
+    }
+    // Other key types: the rowsets' row count. Only duplicate-key tablets need no merging, so only they report,
+    // and only without delete predicates: rows a DELETE removed stay counted until compaction drops them.
+    if (tablet.keys_type() != KeysType::DUP_KEYS || tablet.max_continuous_version() != version) {
+        return -1;
+    }
+    // Read the rowset metas under the header lock, which publish and compaction take to change them, so the
+    // delete predicates, the max version and the rows all describe the same rowsets. With versions continuous up
+    // to `version` (checked above, and they only grow) and none above it, the rows are exactly those of `version`.
+    std::shared_lock rdlock(tablet.get_header_lock());
+    const auto& tablet_meta = tablet.tablet_meta();
+    if (!tablet_meta->delete_predicates().empty() || tablet_meta->max_version().second != version) {
+        return -1;
+    }
+    return static_cast<int64_t>(tablet_meta->num_rows());
+}
 
 void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionRequest& publish_version_req,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs,
@@ -285,6 +317,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
                     pair.__set_version(max_continuous_version);
+                    int64_t row_count = tablet_row_count_at_version(*tablet, max_continuous_version);
+                    if (row_count >= 0) {
+                        pair.__set_row_count(row_count);
+                    }
                     if (is_replication_txn) {
                         pair.__set_min_readable_version(tablet->min_readable_version());
                     }

@@ -401,4 +401,41 @@ public class MaterializedIndexTest {
         Assertions.assertEquals(originalRange3.getLowerBound(), range3.getLowerBound());
         Assertions.assertEquals(originalRange3.getUpperBound(), range3.getUpperBound());
     }
+
+    @Test
+    public void testRowCountAtVersion() {
+        MaterializedIndex index = new MaterializedIndex(10);
+        index.setRowCount(100L);
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(5L));
+
+        index.setRowCount(120L, 5L);
+        Assertions.assertEquals(120L, index.getRowCountAtVersion(5L));
+        // exact version only: neither an older nor a newer visible version is answered
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(4L));
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(6L));
+
+        // a count of unknown version drops the proof
+        index.setRowCount(130L);
+        Assertions.assertEquals(130L, index.getRowCount());
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(5L));
+    }
+
+    @Test
+    public void testTabletStatRoundKeepsCountProvenAtVisibleVersion() {
+        MaterializedIndex index = new MaterializedIndex(10);
+        index.setRowCount(120L, 5L);
+
+        // a tablet stat round while version 5 is visible, from BE snapshots that may predate its publish
+        Assertions.assertFalse(index.setRowCountUnlessProven(90L, 5L));
+        Assertions.assertEquals(120L, index.getRowCountAtVersion(5L));
+
+        // a round that read version 4 as visible before replay made version 5 visible and proved its count
+        Assertions.assertFalse(index.setRowCountUnlessProven(80L, 4L));
+        Assertions.assertEquals(120L, index.getRowCountAtVersion(5L));
+
+        // version 6 became visible without a proven count: the round's count is taken, unproven
+        Assertions.assertTrue(index.setRowCountUnlessProven(130L, 6L));
+        Assertions.assertEquals(130L, index.getRowCount());
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(6L));
+    }
 }

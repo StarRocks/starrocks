@@ -90,6 +90,14 @@ public class PublishVersionTask extends AgentTask {
     // and used to throw ConcurrentModificationException out of the daemon (issue #77595).
     private Map<Long, Map<Long, TabletStatPB>> firstLoadTabletStats = Collections.emptyMap();
 
+    /** A row count the BE proved at exactly {@code version} when it published that version. */
+    public record PublishedRowCount(long version, long rowCount) {
+    }
+
+    // Row counts this BE reported with the tablet versions in its publish response, by tablet id. Guarded by the
+    // task monitor like firstLoadTabletStats, and only read by the thread finishing the transaction.
+    private Map<Long, PublishedRowCount> publishedTabletRowCounts = Collections.emptyMap();
+
     public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
@@ -202,6 +210,33 @@ public class PublishVersionTask extends AgentTask {
 
     public synchronized Map<Long, Map<Long, TabletStatPB>> getFirstLoadTabletStats() {
         return firstLoadTabletStats;
+    }
+
+    /**
+     * Record the row counts this BE reported with the published tablet versions. Called from the thrift
+     * finishTask handler thread; like {@link #collectFirstLoadTabletStats}, it only writes this task's own state.
+     */
+    public void collectPublishedTabletRowCounts(List<TTabletVersionPair> tabletVersions) {
+        if (tabletVersions == null || tabletVersions.isEmpty()) {
+            return;
+        }
+        Map<Long, PublishedRowCount> counts = new HashMap<>();
+        for (TTabletVersionPair tabletVersion : tabletVersions) {
+            if (tabletVersion.isSetRow_count() && tabletVersion.isSetVersion()) {
+                counts.put(tabletVersion.getTablet_id(),
+                        new PublishedRowCount(tabletVersion.getVersion(), tabletVersion.getRow_count()));
+            }
+        }
+        setPublishedTabletRowCounts(counts);
+    }
+
+    private synchronized void setPublishedTabletRowCounts(Map<Long, PublishedRowCount> counts) {
+        this.publishedTabletRowCounts = counts;
+    }
+
+    // The counts this BE reported, by tablet id. Never modified after the report, so the caller may keep it.
+    public synchronized Map<Long, PublishedRowCount> getPublishedTabletRowCounts() {
+        return publishedTabletRowCounts;
     }
 
     public synchronized void setErrorTablets(List<Long> errorTablets) {

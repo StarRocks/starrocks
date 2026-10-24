@@ -73,6 +73,10 @@ struct TTabletVersionPair {
     1: optional Types.TTabletId tablet_id
     2: optional Types.TVersion version
     3: optional Types.TVersion min_readable_version
+    // Row count of the tablet at exactly `version`. Set only when the BE can prove the count
+    // describes that version; unset by older BEs. For primary-key tablets it excludes replaced
+    // and deleted rows.
+    4: optional Types.TCount row_count
 }
 
 struct TFinishTaskRequest {

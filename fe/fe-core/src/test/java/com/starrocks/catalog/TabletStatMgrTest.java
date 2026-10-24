@@ -1260,4 +1260,20 @@ public class TabletStatMgrTest {
 
         Assertions.assertEquals(baseTabletCount + rollupTabletCount, tablets.size());
     }
+
+    @Test
+    public void testUpdateIndexRowCountKeepsProvenCountInTheTotal() {
+        MaterializedIndex index = new MaterializedIndex(1L);
+        // an overwrite shrank the index to 1M rows, proven when its version 5 was published
+        index.setRowCount(1_000_000L, 5L);
+
+        // a round whose BE snapshots predate that publish still says 10M: the proven count is kept, and it is what
+        // the round adds to BasicStatsMeta.totalRows
+        Assertions.assertEquals(1_000_000L, TabletStatMgr.updateIndexRowCount(index, 10_000_000L, 5L));
+        Assertions.assertEquals(1_000_000L, index.getRowCountAtVersion(5L));
+
+        // version 6 became visible without a proven count: the round's count is taken
+        Assertions.assertEquals(900_000L, TabletStatMgr.updateIndexRowCount(index, 900_000L, 6L));
+        Assertions.assertEquals(-1L, index.getRowCountAtVersion(6L));
+    }
 }

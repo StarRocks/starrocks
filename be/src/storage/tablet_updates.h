@@ -17,6 +17,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -133,6 +134,23 @@ public:
 
     // get number of rows and total size of latest version's rowset files together
     std::pair<int64_t, int64_t> num_rows_and_data_size() const;
+
+    // Number of live rows (rows minus deleted rows) and the version they describe, or -1 for both when
+    // the tablet is not fully applied: num_dels of a rowset is only known once it is applied, so an
+    // unapplied version would be counted without the rows it replaces.
+    std::pair<int64_t, int64_t> num_live_rows_and_version() const;
+
+#ifdef BE_TEST
+    // Pretend the last apply has moved the apply index but not yet counted the rows it replaced.
+    void TEST_set_stats_version(const EditVersion& version) {
+        std::lock_guard lg(_rowset_stats_lock);
+        _stats_version = version;
+    }
+    bool TEST_stats_inconsistent() const {
+        std::lock_guard lg(_rowset_stats_lock);
+        return _stats_inconsistent;
+    }
+#endif
 
     // get latest version's number of rowsets
     size_t num_rowsets() const;
@@ -463,8 +481,9 @@ private:
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
 
-    // This method will NOT acquire any lock.
-    size_t _get_rowset_num_deletes(const Rowset& rowset);
+    // This method will NOT acquire any lock. Clears |*complete|, if given, when a delete vector can't be read: the
+    // result then misses its deletes.
+    size_t _get_rowset_num_deletes(const Rowset& rowset, bool* complete = nullptr);
 
     std::string _debug_string(bool lock, bool abbr = false) const;
 
@@ -500,7 +519,13 @@ private:
 
     void _clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
-    void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
+    // |version| is the edit version whose apply has now fully updated the rowset stats, or nullopt if it failed to
+    // count some replaced or deleted rows, which keeps the tablet from proving a count until the stats are rebuilt.
+    void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after,
+                             const std::optional<EditVersion>& version);
+    // _update_total_stats for rowset stats just rebuilt from the stored delete vectors, e.g. on load. |version| is
+    // nullopt if some delete vector couldn't be read: the rebuilt stats miss its deletes, so nothing is proven.
+    void _reset_total_stats(const std::vector<uint32_t>& rowsets, const std::optional<EditVersion>& version);
 
     Status _convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
                                      const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
@@ -585,6 +610,14 @@ private:
     // currently just for debug/logging purpose
     size_t _cur_total_rows = 0;
     size_t _cur_total_dels = 0;
+    // The edit version the totals above and the rowset stats were completed for, i.e. its apply has also counted
+    // the rows it replaced. The full edit version, not only its major number: a compaction keeps the major number.
+    // Unset until the first apply finishes. Protected by |_rowset_stats_lock|.
+    std::optional<EditVersion> _stats_version;
+    // Set once an apply failed to count some replaced or deleted rows into num_dels. Those rows stay counted as
+    // live in every later version, so no count is proven again until the tablet's stats are rebuilt on load.
+    // Protected by |_rowset_stats_lock|.
+    bool _stats_inconsistent = false;
 
     // state used in compaction process
     std::unique_ptr<CompactionState> _compaction_state;

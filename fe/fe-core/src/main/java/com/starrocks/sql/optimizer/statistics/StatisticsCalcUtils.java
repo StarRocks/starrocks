@@ -18,8 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -234,6 +236,7 @@ public class StatisticsCalcUtils {
         // when statistics are up-to-date.
         Long deltaRows = null;
 
+        boolean baseIndexOnly = isBaseIndexOnly(table);
         Map<Long, Long> result = Maps.newHashMap();
         for (Partition partition : selectedPartitions) {
             long partitionRowCount;
@@ -242,14 +245,28 @@ public class StatisticsCalcUtils {
             LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
             boolean needDelta;
-            if (tableStatistic.isEmpty()) {
-                partitionRowCount = partition.getRowCount();
+            // Only looked up for a partition that changed since it was analyzed.
+            long provenRowCount = tableStatistic.isPresent() && updateDatetime.isAfter(statsUpdateTime)
+                    ? provenBaseRowCount(partition) : -1L;
+            if (provenRowCount >= 0) {
+                // The base index count was proven at the partition's visible version (see provenBaseRowCount). Use it
+                // instead of the analyzed count plus an estimate of the change: both count the base index only.
+                partitionRowCount = provenRowCount;
+                needDelta = false;
+            } else if (tableStatistic.isEmpty()) {
+                // For a table with nothing but its base index, Partition#getRowCount is the base index count, so a
+                // proven count is the same number. Read it once, so that the count and whether it is proven come from
+                // the same moment: a publish landing in between must not mark an older count as proven.
+                long unanalyzedProvenRowCount = baseIndexOnly ? provenBaseRowCount(partition) : -1L;
+                partitionRowCount = unanalyzedProvenRowCount >= 0 ? unanalyzedProvenRowCount : partition.getRowCount();
                 // tablet stats collection is async on both FE and BE.  Each BE and leader FE synchronize every 5 minutes by default.
                 // That is, BE collects all tablet information in the BE node's cache every 5 minutes, and then FE accesses
                 // all BE nodes every 5 minutes to obtain tablet information. There is a situation where FE sends a tablet stats
                 // retrieval request before BE has collected tablet stats for its local node, resulting in tablet row count of 0.
                 // To prevent the occasional occurrence of cardinality being 0 in tables after overwrite, an adaptation has been made here.
-                needDelta = updateDatetime.isAfter(lastWorkTimestamp) || partitionRowCount == 0;
+                // A count proven at the visible version leaves no change to estimate.
+                needDelta = unanalyzedProvenRowCount < 0 &&
+                        (updateDatetime.isAfter(lastWorkTimestamp) || partitionRowCount == 0);
             } else {
                 partitionRowCount = tableStatistic.get();
                 needDelta = updateDatetime.isAfter(statsUpdateTime);
@@ -291,14 +308,24 @@ public class StatisticsCalcUtils {
                 return Math.max(rowCount, 1);
             }
 
+            // For a table with nothing but its base index, Partition#getRowCount, like BasicStatsMeta.totalRows, is the
+            // base index count, so a proven count is the same number. Each partition is read once, so the sum and
+            // whether all were proven come from the same moment: a publish landing in between must not mark an older
+            // sum as proven.
+            boolean allProven = isBaseIndexOnly(olapTable);
             for (Partition partition : selectedPartitions) {
-                rowCount += partition.getRowCount();
-                updateQueryDumpInfo(optimizerContext, table, partition.getName(), partition.getRowCount());
+                long provenRowCount = allProven ? provenBaseRowCount(partition) : -1L;
+                allProven = allProven && provenRowCount >= 0;
+                long partitionRowCount = provenRowCount >= 0 ? provenRowCount : partition.getRowCount();
+                rowCount += partitionRowCount;
+                updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
             }
 
-            // attempt use updateRows from basicStatsMeta to adjust estimated row counts
+            // attempt use updateRows from basicStatsMeta to adjust estimated row counts, unless every selected
+            // partition's count is proven at its visible version: updateRows counts rows written, not rows in the
+            // table
             if (StatsConstants.AnalyzeType.SAMPLE == analyzeType &&
-                    (basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp) || rowCount == 0)) {
+                    (basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp) || rowCount == 0) && !allProven) {
                 long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
@@ -315,6 +342,33 @@ public class StatisticsCalcUtils {
         }
 
         return 1;
+    }
+
+    /**
+     * The partition's row count if the queryable base index (the one scans and the COUNT(*) meta-scan rewrite read)
+     * of every physical partition has a count proven at exactly its visible version, e.g. from the counts the BEs
+     * reported when that version was published; -1 otherwise.
+     */
+    static long provenBaseRowCount(Partition partition) {
+        long rowCount = 0L;
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            MaterializedIndex baseIndex = physicalPartition.getQueryableBaseIndex();
+            // Read without the table lock, while a publish can make version V+1 visible before it installs V+1's
+            // proven count: a count proven at V is only current if V is still visible after reading it.
+            long visibleVersion = physicalPartition.getVisibleVersion();
+            long count = baseIndex == null ? -1L : baseIndex.getRowCountAtVersion(visibleVersion);
+            if (count < 0 || physicalPartition.getVisibleVersion() != visibleVersion) {
+                return -1L;
+            }
+            rowCount += count;
+        }
+        return rowCount;
+    }
+
+    // A table without rollups or synchronous materialized views, so that Partition#getRowCount counts its rows once.
+    // Visible indexes only: the shadow index of a running schema change or rollup isn't counted by getRowCount.
+    static boolean isBaseIndexOnly(Table table) {
+        return table instanceof OlapTable && ((OlapTable) table).getVisibleIndexMetas().size() == 1;
     }
 
     private static @Nullable List<Partition> getSelectedPartitions(Operator node, OlapTable olapTable) {
