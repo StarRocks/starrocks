@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+import re
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from sqlalchemy import Column, Table, event
 from sqlalchemy.schema import MetaData
-from sqlalchemy.sql.selectable import Selectable
 from sqlalchemy.sql.expression import ClauseElement
+from sqlalchemy.sql.selectable import Selectable
+from sqlalchemy.sql.util import find_tables
 
 from starrocks.common.params import DialectName, TableInfoKey, TableInfoKeyWithPrefix, TableKind, TableObjectInfoKey
 from starrocks.datatype import STRING
@@ -71,8 +73,157 @@ def extract_view_columns(table: Table) -> Union[List[Dict[str, Any]], None]:
     ]
 
 
+TableReference = Tuple[Optional[str], str]
+
+_SQL_TOKEN = re.compile(
+    r"'(?:[^'\\]|\\.|'')*'|\"(?:[^\"\\]|\\.)*\"|/\*.*?\*/|(?:--|#)[^\n]*|\[[^\]]*\]"
+    r"|`((?:[^`]|``)+)`"
+    r"|((?:[A-Za-z_$\u0080-\uffff]|[0-9]+[A-Za-z_$\u0080-\uffff])[A-Za-z0-9_$\u0080-\uffff]*)"
+    r"|([(),.])",
+    re.DOTALL,
+)
+"""A query token: a backquoted name, a word or punctuation; literals, comments and join hints match uncaptured.
+
+A word is a name as StarRocks' lexer reads one: letters, digits, ``_`` and ``$``, any character from U+0080 up
+counting as a letter, starting with a digit only when a letter follows the digits, as in ``2024_sales``.
+"""
+_TABLE_REFERENCE_KEYWORDS = frozenset({"FROM", "JOIN"})
+_FUNCTIONS_TAKING_FROM = frozenset({"EXTRACT", "TRIM"})
+_QUERY_KEYWORDS = frozenset({"SELECT", "WITH", "VALUES"})
+_JOIN_CONDITION_KEYWORDS = frozenset({"ON", "USING"})
+_FROM_LIST_END_KEYWORDS = frozenset(
+    {"WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "UNION", "EXCEPT", "INTERSECT", "WINDOW", "QUALIFY"}
+)
+_QueryToken = Tuple[Optional[str], Optional[str], Optional[str]]
+
+
+def tables_read_by_query(sql: str) -> Set[TableReference]:
+    """Return the ``(schema, name)`` of each table a query reads, lower-cased, with None for an unqualified name.
+
+    A table reference is a name after FROM or JOIN, or after a comma of a FROM list, in subqueries and
+    parenthesised joins too; a comma after a join's ON or USING condition continues the list.
+    ``catalog.db.table`` gives ``db`` as the schema. Columns, column aliases, the FROM of ``EXTRACT(... FROM d)``
+    and ``TRIM(... FROM s)``, table functions, names a WITH clause defines, comments, string literals and join
+    hints such as ``[shuffle]`` are not table references.
+    """
+    tokens = _query_tokens(sql)
+    common_table_expressions = _common_table_expression_names(tokens)
+    return {
+        (schema, name)
+        for schema, name in _from_clause_references(tokens)
+        if schema is not None or name not in common_table_expressions
+    }
+
+
+def _query_tokens(sql: str) -> List[_QueryToken]:
+    """Split a query into (backquoted name, word, punctuation) tokens, leaving out literals, comments and hints."""
+    return [match.groups() for match in _SQL_TOKEN.finditer(sql) if any(match.groups())]
+
+
+def _token_name(token: _QueryToken) -> Optional[str]:
+    """Return a name token's name, with a backquoted name's doubled backquotes undone, or None for punctuation."""
+    quoted, word, _ = token
+    if quoted is not None:
+        return quoted.replace("``", "`")
+    return word
+
+
+def _from_clause_references(tokens: List[_QueryToken]) -> Set[TableReference]:
+    """Return the ``(schema, name)`` of every name in table position, CTE names included.
+
+    A parenthesis opened where a table is expected holds a parenthesised join, whose first name is a table, or a
+    subquery, which starts with a query keyword and has a FROM list of its own. A parenthesis opened by EXTRACT
+    or TRIM holds a FROM that reads a column.
+    """
+    references: Set[TableReference] = set()
+    from_list_depths: List[int] = []
+    function_from_depths: Set[int] = set()
+    depth = 0
+    expect_table = False
+    index = 0
+    while index < len(tokens):
+        _, word, punctuation = tokens[index]
+        previous_word = tokens[index - 1][1] if index > 0 else None
+        index += 1
+        keyword = word.upper() if word else None
+        if punctuation == "(":
+            depth += 1
+            if expect_table:
+                from_list_depths.append(depth)
+            if previous_word is not None and previous_word.upper() in _FUNCTIONS_TAKING_FROM:
+                function_from_depths.add(depth)
+        elif punctuation == ")":
+            function_from_depths.discard(depth)
+            depth -= 1
+            while from_list_depths and from_list_depths[-1] > depth:
+                from_list_depths.pop()
+        elif punctuation == ",":
+            expect_table = bool(from_list_depths) and from_list_depths[-1] == depth
+        elif punctuation == ".":
+            continue
+        elif keyword == "FROM" and depth in function_from_depths:
+            continue
+        elif keyword in _TABLE_REFERENCE_KEYWORDS:
+            expect_table = True
+            if not from_list_depths or from_list_depths[-1] != depth:
+                from_list_depths.append(depth)
+        elif keyword in _JOIN_CONDITION_KEYWORDS:
+            expect_table = False
+        elif keyword in _FROM_LIST_END_KEYWORDS:
+            if from_list_depths and from_list_depths[-1] == depth:
+                from_list_depths.pop()
+            expect_table = False
+        elif keyword == "LATERAL" and expect_table:
+            continue
+        elif keyword in _QUERY_KEYWORDS and expect_table:
+            if tokens[index - 2][2] == "(" and from_list_depths and from_list_depths[-1] == depth:
+                from_list_depths.pop()
+            expect_table = False
+        elif expect_table:
+            parts = [_token_name(tokens[index - 1])]
+            while index + 1 < len(tokens) and tokens[index][2] == "." and not tokens[index + 1][2]:
+                parts.append(_token_name(tokens[index + 1]))
+                index += 2
+            is_table_function = index < len(tokens) and tokens[index][2] == "("
+            if not is_table_function:
+                references.add((parts[-2].lower() if len(parts) > 1 else None, parts[-1].lower()))
+            expect_table = False
+    return references
+
+
+def _common_table_expression_names(tokens: List[_QueryToken]) -> Set[str]:
+    """Return the lower-cased names the query's WITH clauses define, in subqueries too."""
+    names: Set[str] = set()
+    for start, (_, word, _) in enumerate(tokens):
+        if word is None or word.upper() != "WITH":
+            continue
+        expect_name = True
+        depth = 0
+        for token in tokens[start + 1:]:
+            _, word, punctuation = token
+            if expect_name:
+                if word is not None and word.upper() == "RECURSIVE":
+                    continue
+                name = _token_name(token)
+                if name is None:
+                    break
+                names.add(name.lower())
+                expect_name = False
+            elif punctuation == "(":
+                depth += 1
+            elif punctuation == ")":
+                depth -= 1
+            elif depth == 0 and punctuation == ",":
+                expect_name = True
+            elif depth == 0 and word is not None and word.upper() != "AS":
+                break
+    return names
+
+
 class View(Table):
     """Represents a View object."""
+
+    _explicit_dependencies: Set[Table]
 
     def __init__(
         self,
@@ -239,9 +390,10 @@ class View(Table):
             # Compile Selectable to SQL string
             from sqlalchemy.sql import ClauseElement
 
+            from starrocks.dialect import stored_sql_text
+
             if isinstance(definition, ClauseElement):
-                compiled = definition.compile(compile_kwargs={"literal_binds": True})
-                view_info[TableObjectInfoKey.DEFINITION] = str(compiled)
+                view_info[TableObjectInfoKey.DEFINITION] = stored_sql_text(definition)
                 view_info[TableObjectInfoKey.SELECTABLE] = definition
             else:
                 # raise TypeError(f"definition must be str or Selectable, got {type(definition)}")
@@ -292,6 +444,67 @@ class View(Table):
                 # )
                 # It must not raise error in View constructor, because it will cause RecursionError.
         return result
+
+    @property
+    def _extra_dependencies(self) -> Set[Table]:
+        """The tables to create before this view: those added with ``add_is_dependent_on()`` and those it reads.
+
+        ``MetaData.create_all()`` creates unrelated tables in the order they were defined, and
+        ``MetaData.sorted_tables`` sorts them by name, so without these a view defined, or named, before its base
+        table would come first, and fail to create. A Selectable definition names the tables it reads; a string
+        definition reads the tables :func:`tables_read_by_query` finds in it, matched as :meth:`_reads_table`
+        describes.
+        """
+        return self._explicit_dependencies | self._tables_read_by_definition()
+
+    @_extra_dependencies.setter
+    def _extra_dependencies(self, tables: Set[Table]) -> None:
+        self._explicit_dependencies = tables
+
+    def add_is_dependent_on(self, table: Table) -> None:
+        """Create this view after ``table``, as ``Table.add_is_dependent_on`` does."""
+        self._explicit_dependencies.add(table)
+
+    def _tables_read_by_definition(self) -> Set[Table]:
+        """Return the other tables of this view's MetaData that its definition reads.
+
+        A Selectable names the tables it reads. A ``text()`` definition names none to SQLAlchemy, nor does a
+        Selectable that reads only ``text()`` or ``table()`` FROMs, so its compiled SQL is read as a string
+        definition is.
+        """
+        if self.selectable is not None:
+            tables = {table for table in find_tables(self.selectable) if isinstance(table, Table) and table is not self}
+            if tables:
+                return tables
+        if not isinstance(self.definition, str):
+            return set()
+        references = tables_read_by_query(self.definition)
+        tables = [table for table in self.metadata.tables.values() if table is not self]
+        return {table for table in tables if self._reads_table(table, references, tables)}
+
+    def _reads_table(self, table: Table, references: Set[TableReference], tables: List[Table]) -> bool:
+        """Return whether the definition's references name ``table``.
+
+        An unqualified name is a table of this view's schema or of the default one. A qualified ``db.name`` is the
+        table in schema ``db``, or the default schema's table of that name when the MetaData has no ``db.name``,
+        since the default schema may be ``db``.
+        """
+        name = table.name.lower()
+        schema = table.schema.lower() if table.schema else None
+        own_schema = self.schema.lower() if self.schema else None
+        for reference_schema, reference_name in references:
+            if reference_name != name:
+                continue
+            if reference_schema is None and schema in (None, own_schema):
+                return True
+            if reference_schema is not None and schema == reference_schema:
+                return True
+            if reference_schema is not None and schema is None and not any(
+                other.name.lower() == name and other.schema and other.schema.lower() == reference_schema
+                for other in tables
+            ):
+                return True
+        return False
 
     @property
     def definition(self) -> str:
@@ -357,12 +570,14 @@ class MaterializedView(View):
                 - starrocks_order_by: Order by columns (e.g., 'user_id, created_at')
                 - starrocks_refresh: Refresh mode (e.g., 'ASYNC', 'MANUAL', 'IMMEDIATE ASYNC')
                     Format: [IMMEDIATE|DEFERRED] [ASYNC|MANUAL]
+                    With neither it nor starrocks_distributed_by, StarRocks builds a synchronous materialized
+                    view, which reflection and autogenerate can't see, and the dialect warns.
                 - starrocks_properties: Additional properties dict (e.g., {'replication_num': '3'})
                 - Other dialect-specific parameters with starrocks_ prefix
 
         Examples:
-            # Basic materialized view
-            MaterializedView('mv1', metadata, definition='SELECT * FROM users')
+            # Basic materialized view, refreshed when its base tables change
+            MaterializedView('mv1', metadata, definition='SELECT * FROM users', starrocks_refresh='ASYNC')
 
             # With partition and refresh
             MaterializedView('user_stats_mv', metadata,

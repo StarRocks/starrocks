@@ -18,10 +18,12 @@ The dialect puts the column list, each view clause and ``AS`` on lines of their 
 line breaks, so each expected string literal below is one line of the generated DDL.
 """
 
-from sqlalchemy import Column, MetaData, Table, select, testing
-from sqlalchemy.testing import eq_, fixtures
+from sqlalchemy import Column, MetaData, Table, exc, func, literal, select, testing
+from sqlalchemy.schema import CreateTable, DropTable
+from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
+from starrocks.common.types import ViewSecurityType
 from starrocks.datatype import INTEGER, VARCHAR
 from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterView, CreateView, DropView
@@ -46,6 +48,20 @@ class CreateViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         self.assert_compile(
             CreateView(view),
             "CREATE VIEW active_users" "AS" "SELECT users.id, users.name FROM users WHERE users.id > 100",
+        )
+
+    def test_selectable_definition_is_compiled_for_starrocks(self):
+        """Names are backquoted as StarRocks reads them, not double-quoted, and a ``%`` is single in the definition."""
+        orders = Table("orders", MetaData(), Column("Id", INTEGER), Column("select", VARCHAR(10)), Column("d", VARCHAR(10)))
+        view = View(
+            "v_orders",
+            MetaData(),
+            definition=select(orders.c.Id, orders.c.select, func.date_format(orders.c.d, literal("%Y")).label("y")),
+        )
+        eq_(view.definition, "SELECT orders.`Id`, orders.`select`, date_format(orders.d, '%Y') AS y \nFROM orders")
+        self.assert_compile(
+            CreateView(view),
+            "CREATE VIEW v_orders" "AS" "SELECT orders.`Id`, orders.`select`, date_format(orders.d, '%%Y') AS y FROM orders",
         )
 
     @testing.combinations(
@@ -161,13 +177,68 @@ class DropViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         self.assert_compile(DropView(view, if_exists=True), "DROP VIEW IF EXISTS my_view")
 
 
+class ViewCommentCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """A view comment is rendered as an escaped string literal, as table and column comments are."""
+
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
+
+    @testing.combinations(
+        ("single_quote", "it's a view", "COMMENT 'it''s a view'"),
+        ("backslash", r"C:\temp", r"COMMENT 'C:\\temp'"),
+        argnames="comment, rendered",
+        id_="iaa",
+    )
+    def test_view_comment_escaping(self, comment, rendered):
+        view = View("my_view", MetaData(), definition="SELECT 1 AS one", comment=comment)
+        self.assert_compile(CreateView(view), "CREATE VIEW my_view" f"{rendered}" "AS" "SELECT 1 AS one")
+
+
+class ViewSecurityCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """StarRocks views have ``SECURITY NONE`` or ``SECURITY INVOKER``; anything else raises before the server."""
+
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
+
+    @testing.combinations(("NONE", "NONE"), ("invoker", "INVOKER"), argnames="security, keyword")
+    def test_security(self, security, keyword):
+        view = View("my_view", MetaData(), definition="SELECT 1 AS one", starrocks_security=security)
+        self.assert_compile(CreateView(view), "CREATE VIEW my_view" f"SECURITY {keyword}" "AS" "SELECT 1 AS one")
+
+    @testing.combinations(
+        ("text", "DEFINER"), ("deprecated_name", ViewSecurityType.DEFINER), argnames="security", id_="ia"
+    )
+    def test_definer_raises(self, security):
+        """``ViewSecurityType.DEFINER`` still imports, and is refused as the text is; StarRocks has no DEFINER."""
+        view = View("my_view", MetaData(), definition="SELECT 1 AS one", starrocks_security=security)
+        with expect_raises_message(exc.CompileError, "StarRocks views have SECURITY NONE or INVOKER, not 'DEFINER'"):
+            CreateView(view).compile(dialect=self.__dialect__)
+        assert security not in ViewSecurityType.ALLOWED_ITEMS
+
+
+class ViewInMetaDataCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """``MetaData.create_all()`` and ``drop_all()`` emit ``CreateTable`` and ``DropTable`` for a View."""
+
+    __dialect__ = StarRocksDialect()
+    __requires__ = ("sqlalchemy_2",)
+
+    def test_create_table_of_view(self):
+        view = View("my_view", MetaData(), definition="SELECT * FROM my_table", comment="c")
+        self.assert_compile(CreateTable(view), "CREATE VIEW my_view" "COMMENT 'c'" "AS" "SELECT * FROM my_table")
+
+    @testing.combinations((False, "DROP VIEW my_view"), (True, "DROP VIEW IF EXISTS my_view"), argnames="if_exists, expected")
+    def test_drop_table_of_view(self, if_exists, expected):
+        view = View("my_view", MetaData(), definition="SELECT * FROM my_table")
+        self.assert_compile(DropTable(view, if_exists=if_exists), expected)
+
+
 class AlterViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
     __dialect__ = StarRocksDialect()
     __requires__ = ("sqlalchemy_2",)
 
     def test_alter_view_ignores_comment_and_security(self):
         """StarRocks cannot change a view's COMMENT or SECURITY with ALTER VIEW, so only the definition is rendered."""
-        view = View("my_view", MetaData(), definition="SELECT 2", comment="New Comment", starrocks_security="DEFINER")
+        view = View("my_view", MetaData(), definition="SELECT 2", comment="New Comment", starrocks_security="INVOKER")
         self.assert_compile(AlterView(view), "ALTER VIEW my_view" "AS" "SELECT 2")
 
     def test_alter_view_with_schema(self):

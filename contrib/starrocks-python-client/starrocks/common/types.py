@@ -121,22 +121,25 @@ class ColumnAggType:
 
 
 class ViewSecurityType:
-    """Supported StarRocks view security types.
+    """StarRocks view security types, as ``View(..., starrocks_security=ViewSecurityType.INVOKER)``.
 
-    Use these constants in View.info["security"].
+    StarRocks has ``SECURITY NONE`` and ``SECURITY INVOKER`` only; ``DEFINER`` is kept as a deprecated name.
     """
 
     EMPTY = ""
     NONE = "NONE"
     INVOKER = "INVOKER"
     DEFINER = "DEFINER"
+    """Deprecated: StarRocks has no ``SECURITY DEFINER``, so the dialect refuses it with a CompileError.
+
+    It is kept so that code naming it still imports, and it is not in :attr:`ALLOWED_ITEMS`.
+    """
 
     # Allowed set for validation
     ALLOWED_ITEMS = {
         EMPTY,
         NONE,
         INVOKER,
-        DEFINER,
     }
 
 

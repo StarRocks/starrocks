@@ -48,6 +48,8 @@ from starrocks.datatype import (
     VARCHAR,
 )
 from starrocks.dialect import StarRocksDialect
+from starrocks.sql.ddl import CreateMaterializedView, CreateView, DropMaterializedView, DropView
+from starrocks.sql.schema import MaterializedView, View
 from test.util import JSON_TO_MAP_CAST_NEEDS_3_4_3
 
 
@@ -133,6 +135,7 @@ class DataTypeCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         (STRUCT(("a b", INTEGER), ("Caps", VARCHAR(5))), "STRUCT<`a b` INTEGER, `Caps` VARCHAR(5)>"),
         (STRUCT(("1st", STRING)), "STRUCT<`1st` STRING>"),
         (STRUCT(("p%ct", INTEGER)), "STRUCT<`p%%ct` INTEGER>"),
+        (STRUCT(key=INTEGER, select=STRING, files=INTEGER), "STRUCT<`key` INTEGER, `select` STRING, `files` INTEGER>"),
         (
             STRUCT(id=INTEGER, name=VARCHAR(100), active=BOOLEAN),
             "STRUCT<id INTEGER, name VARCHAR(100), active BOOLEAN>",
@@ -962,6 +965,69 @@ class LeftOutCastPositionExecutionTest(fixtures.TestBase):
         with testing.expect_warnings("The CAST to ARRAY<INTEGER> is left out"):
             rows = connection.execution_options(compiled_cache=None).execute(statement()).scalars().all()
         eq_(rows, computed_on_the_text)
+
+
+class LeftOutCastInDefinitionCompileTest(fixtures.TestBase):
+    """A view's or materialized view's definition compiles with no server version, and each CAST it leaves out
+    warns, even as a column of the definition, since StarRocks computes on the operand's own type there."""
+
+    __requires__ = ("sqlalchemy_2",)
+
+    @testing.combinations((View,), (MaterializedView,), argnames="kind")
+    def test_a_left_out_cast_in_a_definition_warns(self, kind):
+        with testing.expect_warnings(
+            r"The CAST to ARRAY<INTEGER> is left out, .*\. In a view, materialized view or other stored definition, "
+            r"which compiles with no server version, StarRocks computes on the operand's own type"
+        ):
+            kind("v", MetaData(), definition=sa.select(_labelled_cast_of_text()))
+
+    def test_a_definition_keeps_only_the_json_casts_every_supported_version_has(self):
+        """Every supported StarRocks casts JSON to an ARRAY of integers, and only 3.4.3 and later to a MAP."""
+        json_column = sa.column("j", JSON())
+        definition = sa.select(
+            sa.cast(json_column, _INTEGERS).label("a"), sa.cast(json_column, MAP(VARCHAR(5), INTEGER())).label("m")
+        )
+        with testing.expect_warnings(r"The CAST to MAP<VARCHAR\(5\), INTEGER> is left out, since no server version"):
+            view = View("v", MetaData(), definition=definition)
+        eq_(view.definition, "SELECT CAST(j AS ARRAY<INTEGER>) AS a, j AS m")
+
+
+class LeftOutCastInDefinitionExecutionTest(fixtures.TestBase):
+    """StarRocks gives the column of a view or materialized view the operand's own type where its CAST is left
+    out."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+    __requires__ = ("sqlalchemy_2",)
+
+    @testing.combinations(
+        ("view", View, CreateView, DropView, {}),
+        (
+            "materialized_view",
+            MaterializedView,
+            CreateMaterializedView,
+            DropMaterializedView,
+            {"starrocks_refresh": "DEFERRED MANUAL"},
+        ),
+        argnames="kind, create, drop, options",
+        id_="iaaaa",
+    )
+    def test_the_column_of_a_left_out_cast_has_the_operands_type(self, connection, metadata, kind, create, drop, options):
+        source = Table("cast_source", metadata, Column("id", INTEGER), Column("s", VARCHAR(20)), starrocks_duplicate_key="id")
+        source.create(connection)
+        with testing.expect_warnings("The CAST to ARRAY<INTEGER> is left out"):
+            stored = kind("cast_definition", MetaData(), definition=sa.select(sa.cast(source.c.s, _INTEGERS).label("a")), **options)
+        connection.execute(create(stored))
+        try:
+            column_type = connection.scalar(
+                sa.text(
+                    "SELECT COLUMN_TYPE FROM information_schema.columns WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'cast_definition' AND COLUMN_NAME = 'a'"
+                )
+            )
+        finally:
+            connection.execute(drop(stored))
+        assert column_type.startswith("varchar"), column_type
 
 
 class GenericArrayTest(fixtures.TablesTest):

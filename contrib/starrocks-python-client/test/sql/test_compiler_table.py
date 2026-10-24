@@ -18,16 +18,40 @@ The dialect puts each column on its own indented line and each table clause on i
 drops the line breaks, so each expected string literal below is one line of the generated DDL.
 """
 
+import re
+import warnings
 
-from sqlalchemy import BigInteger, Column, Computed, Date, DateTime, Integer, MetaData, String, Table, exc, testing
-from sqlalchemy.schema import CreateTable
-from sqlalchemy.testing import expect_raises_message, fixtures
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    Computed,
+    Date,
+    DateTime,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    exc,
+    func,
+    testing,
+)
+from sqlalchemy.schema import CreateIndex, CreateTable, DropIndex
+from sqlalchemy.testing import expect_raises_message, expect_warnings, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks.common.params import ColumnAggInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
 from starrocks.datatype import DOUBLE
-from starrocks.dialect import StarRocksDialect
+from starrocks.dialect import StarRocksDialect, warn_once_of_doubled_percents
+from starrocks.sql.ddl import (
+    AlterMaterializedView,
+    AlterTableDistribution,
+    AlterTableOrder,
+    CreateMaterializedView,
+    CreateView,
+)
+from starrocks.sql.schema import MaterializedView, View
 
 
 class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
@@ -185,6 +209,54 @@ class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         with expect_raises_message(exc.CompileError, "only valid for AGGREGATE KEY tables"):
             CreateTable(tbl).compile(dialect=self.__dialect__)
 
+    @testing.combinations(
+        ("string", "event_date, user_id"),
+        ("parenthesised_string", "(event_date, user_id)"),
+        ("list", ["event_date", "user_id"]),
+        ("tuple", ("event_date", "user_id")),
+        argnames="order_by",
+        id_="ia",
+    )
+    def test_order_by_forms(self, order_by):
+        """``starrocks_order_by`` takes a column list string, or a list of columns as ALTER TABLE ORDER BY does."""
+        tbl = Table(
+            "ordered_tbl",
+            MetaData(),
+            Column("user_id", Integer),
+            Column("event_date", Date),
+            starrocks_duplicate_key="user_id",
+            starrocks_order_by=order_by,
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE ordered_tbl ("
+            "    user_id INTEGER, "
+            "    event_date DATE"
+            ")"
+            "DUPLICATE KEY (user_id)"
+            "ORDER BY (event_date, user_id)",
+        )
+
+    def test_order_by_list_quotes_the_names_starrocks_needs_quoted(self):
+        """A list names columns, so a reserved or mixed-case name is backquoted; ``ORDER BY (text)`` is a syntax error."""
+        tbl = Table(
+            "ordered_tbl",
+            MetaData(),
+            Column("text", Integer),
+            Column("Id", Integer),
+            Column("k", Integer),
+            starrocks_order_by=["text", "Id", "`k`"],
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE ordered_tbl ("
+            "    `text` INTEGER, "
+            "    `Id` INTEGER, "
+            "    k INTEGER"
+            ")"
+            "ORDER BY (`text`, `Id`, `k`)",
+        )
+
     def test_column_default_value(self):
         tbl = Table(
             "default_val_tbl",
@@ -271,12 +343,28 @@ class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
         """The partition clause is passed through as given.
 
         Keep the ``date_trunc`` case: StarRocks recognises it as a RANGE partition, unlike other expressions.
+        The ``expression_multi`` case is a list of partition expressions, which only StarRocks 4.1 accepts; 3.3
+        refuses any list of them. These tests only compile the DDL, so the case runs whatever the server.
         """
         tbl = Table("p_tbl", MetaData(), *columns, starrocks_partition_by=partition_by)
         self.assert_compile(
             CreateTable(tbl),
-            f"CREATE TABLE p_tbl ({column_lines})PARTITION BY {partition_by}",
+            f"CREATE TABLE p_tbl ({column_lines})PARTITION BY {partition_by.replace('%', '%%')}",
         )
+
+    @testing.combinations(
+        ("bare", "k, s", "PARTITION BY (k, s)"),
+        ("backquoted", "`k`,`s`", "PARTITION BY (`k`,`s`)"),
+        ("one_column", "k", "PARTITION BY (k)"),
+        ("one_backquoted_column", "`s`", "PARTITION BY (`s`)"),
+        ("expressions", "date_trunc('day', dt), k", "PARTITION BY date_trunc('day', dt), k"),
+        argnames="partition_by, clause",
+        id_="iaa",
+    )
+    def test_a_column_list_partition_is_parenthesized(self, partition_by, clause):
+        """StarRocks 3.3 takes a partition column, or a list of them, only in parentheses."""
+        tbl = Table("p_tbl", MetaData(), Column("k", Integer), Column("s", Integer), starrocks_partition_by=partition_by)
+        self.assert_compile(CreateTable(tbl), f"CREATE TABLE p_tbl (    k INTEGER,     s INTEGER){clause}")
 
     @testing.combinations(
         ("hash", Column("user_id", Integer), "HASH(user_id) BUCKETS 10", "    user_id INTEGER"),
@@ -377,5 +465,216 @@ class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
             '    "dynamic_partition.time_unit"="MONTH",'
             '    "dynamic_partition.end"="3",'
             '    "dynamic_partition.prefix"="p"'
+            ")",
+        )
+
+
+class CreateIndexCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """``CREATE INDEX`` follows StarRocks' grammar: plain columns, and the index type as an unquoted keyword."""
+
+    __dialect__ = StarRocksDialect()
+
+    @staticmethod
+    def _table():
+        return Table("events", MetaData(), Column("id", Integer), Column("city", String(20)), Column("tags", String(50)))
+
+    @testing.combinations(
+        ("no_type", {}, "CREATE INDEX ix_city ON events (city)"),
+        ("bitmap", {"starrocks_using": "BITMAP"}, "CREATE INDEX ix_city ON events (city) USING BITMAP"),
+        ("lower_case_type", {"starrocks_using": "ngrambf"}, "CREATE INDEX ix_city ON events (city) USING NGRAMBF"),
+        ("gin", {"starrocks_using": "GIN"}, "CREATE INDEX ix_city ON events (city) USING GIN"),
+        argnames="kwargs, expected",
+        id_="iaa",
+    )
+    def test_index_type(self, kwargs, expected):
+        table = self._table()
+        self.assert_compile(CreateIndex(Index("ix_city", table.c.city, **kwargs)), expected)
+
+    @testing.combinations(
+        (
+            "properties",
+            {"starrocks_using": "NGRAMBF", "starrocks_properties": {"gram_num": "4", "bloom_filter_fpp": "0.05"}},
+            'CREATE INDEX ix_city ON events (city) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")',
+        ),
+        (
+            "comment",
+            {"starrocks_using": "BITMAP", "starrocks_comment": "city's index"},
+            "CREATE INDEX ix_city ON events (city) USING BITMAP COMMENT 'city''s index'",
+        ),
+        (
+            "comment_without_type",
+            {"starrocks_comment": "plain"},
+            "CREATE INDEX ix_city ON events (city) COMMENT 'plain'",
+        ),
+        argnames="kwargs, expected",
+        id_="iaa",
+    )
+    def test_properties_and_comment(self, kwargs, expected):
+        table = self._table()
+        self.assert_compile(CreateIndex(Index("ix_city", table.c.city, **kwargs)), expected)
+
+    def test_properties_without_type_raise(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "has starrocks_properties but no starrocks_using"):
+            CreateIndex(Index("ix_city", table.c.city, starrocks_properties={"gram_num": "4"})).compile(
+                dialect=self.__dialect__
+            )
+
+    def test_several_columns_are_refused(self):
+        """StarRocks answers "index can only apply to a single column"."""
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "covers one column"):
+            CreateIndex(Index("ix_city_tags", table.c.city, table.c.tags)).compile(dialect=self.__dialect__)
+
+    def test_drop_index(self):
+        table = self._table()
+        self.assert_compile(DropIndex(Index("ix_city", table.c.city)), "DROP INDEX ix_city ON events")
+
+    def test_drop_index_if_exists_is_refused(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "no DROP INDEX IF EXISTS"):
+            DropIndex(Index("ix_city", table.c.city), if_exists=True).compile(dialect=self.__dialect__)
+
+    def test_unknown_index_type_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "Unknown StarRocks index type 'BTREE'"):
+            CreateIndex(Index("ix_city", table.c.city, starrocks_using="BTREE")).compile(dialect=self.__dialect__)
+
+    def test_unique_index_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks has no unique indexes"):
+            CreateIndex(Index("ix_city", table.c.city, unique=True)).compile(dialect=self.__dialect__)
+
+    def test_if_not_exists_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks has no CREATE INDEX IF NOT EXISTS"):
+            CreateIndex(Index("ix_city", table.c.city), if_not_exists=True).compile(dialect=self.__dialect__)
+
+    def test_expression_index_raises(self):
+        table = self._table()
+        with expect_raises_message(exc.CompileError, "StarRocks indexes plain columns only"):
+            CreateIndex(Index("ix_lower_city", func.lower(table.c.city))).compile(dialect=self.__dialect__)
+
+    @testing.combinations(
+        ("length", {"starrocks_using": "BITMAP", "starrocks_length": 5}, "starrocks_length"),
+        ("length_per_column", {"starrocks_length": {"city": 5}}, "starrocks_length"),
+        ("prefix", {"starrocks_prefix": "FULLTEXT"}, "starrocks_prefix"),
+        ("with_parser", {"starrocks_using": "GIN", "starrocks_with_parser": "english"}, "starrocks_with_parser"),
+        ("mysql_using", {"mysql_using": "NGRAMBF"}, "mysql_using"),
+        argnames="kwargs, option",
+        id_="iaa",
+    )
+    def test_mysql_index_options_raise(self, kwargs, option):
+        """StarRocks has no ``city(5)``, ``CREATE FULLTEXT INDEX`` or ``WITH PARSER``: each is a syntax error."""
+        table = self._table()
+        with expect_raises_message(exc.CompileError, f"StarRocks' CREATE INDEX has no {option} \\(index 'ix_city'\\)"):
+            CreateIndex(Index("ix_city", table.c.city, **kwargs)).compile(dialect=self.__dialect__)
+
+
+class DoubledPercentSignWarningTest(fixtures.TestBase):
+    """DDL text holding ``%%``, which the dialect needed before it escaped ``%`` itself, warns once per text.
+
+    The ``%%`` now reaches StarRocks as ``%%``, so a ``date_format`` pattern written for the old rule changes
+    meaning without an error. A single ``%`` is what StarRocks should get, and gives no warning.
+    """
+
+    @testing.combinations(
+        (
+            "partition",
+            lambda pattern: CreateTable(
+                Table(
+                    "t",
+                    MetaData(),
+                    Column("s", String(10)),
+                    starrocks_partition_by=f"RANGE(str2date(s, '{pattern}')) (START ('2026') END ('2028') EVERY (1))",
+                )
+            ),
+        ),
+        ("distribution", lambda pattern: AlterTableDistribution("t", f"HASH(`p{pattern}ct`)")),
+        ("order_by", lambda pattern: AlterTableOrder("t", f"`p{pattern}ct`")),
+        ("mv_refresh", lambda pattern: AlterMaterializedView("mv", refresh=f"ASYNC START('{pattern}')")),
+        argnames="build_ddl",
+        id_="ia",
+    )
+    def test_table_text(self, build_ddl):
+        self._assert_doubled_percents_warn_once(build_ddl)
+
+    @testing.requires.sqlalchemy_2
+    @testing.combinations(
+        ("view", lambda pattern: CreateView(View("v", MetaData(), definition=f"SELECT date_format(d, '{pattern}')"))),
+        (
+            "materialized_view",
+            lambda pattern: CreateMaterializedView(
+                MaterializedView(
+                    "mv", MetaData(), definition=f"SELECT date_format(d, '{pattern}')", starrocks_refresh="MANUAL"
+                )
+            ),
+        ),
+        argnames="build_ddl",
+        id_="ia",
+    )
+    def test_view_text(self, build_ddl):
+        self._assert_doubled_percents_warn_once(build_ddl)
+
+    @staticmethod
+    def _assert_doubled_percents_warn_once(build_ddl):
+        warn_once_of_doubled_percents.cache_clear()
+        dialect = StarRocksDialect()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            build_ddl("%Y").compile(dialect=dialect)
+        doubled = build_ddl("%%Y")
+        with expect_warnings(r"DDL text .*%%Y.* holds '%%'\. The StarRocks dialect now escapes '%'"):
+            doubled.compile(dialect=dialect)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            doubled.compile(dialect=dialect)
+            build_ddl("%%Y").compile(dialect=dialect)
+
+    def test_the_warning_names_the_filter_that_keeps_a_doubled_percent_that_is_meant(self):
+        """A '%%' in a string literal reaches StarRocks as written, which may be what the model means."""
+        meant = CreateTable(
+            Table("pct_meant", MetaData(), Column("dt", Date), starrocks_partition_by="date_trunc('%%', dt)")
+        )
+        warn_once_of_doubled_percents.cache_clear()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            meant.compile(dialect=StarRocksDialect())
+        filter_call = re.search(r"warnings\.filterwarnings\((.*)\)$", str(caught[0].message)).group(1)
+        warn_once_of_doubled_percents.cache_clear()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eval(f"warnings.filterwarnings({filter_call})", {"warnings": warnings})
+            meant.compile(dialect=StarRocksDialect())
+
+
+class CreateTablePropertyQuotingTest(fixtures.TestBase, AssertsCompiledSQL):
+    """PROPERTIES values are quoted so that StarRocks, which unescapes them once, stores them unchanged."""
+
+    __dialect__ = StarRocksDialect()
+
+    @testing.combinations(
+        ("double_quote", 'grp"1', r'"grp\"1"'),
+        ("backslash", r"C:\temp", r'"C:\\temp"'),
+        ("escaped_quote", r"a\"b", r'"a\\\"b"'),
+        argnames="value, rendered_value",
+        id_="iaa",
+    )
+    def test_property_value_quoting(self, value, rendered_value):
+        tbl = Table(
+            "quoted_props",
+            MetaData(),
+            Column("id", Integer),
+            starrocks_duplicate_key="id",
+            starrocks_properties={"colocate_with": value},
+        )
+        self.assert_compile(
+            CreateTable(tbl),
+            "CREATE TABLE quoted_props ("
+            "    id INTEGER"
+            ")"
+            "DUPLICATE KEY (id)"
+            "PROPERTIES("
+            f'    "colocate_with"={rendered_value}'
             ")",
         )

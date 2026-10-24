@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sqlalchemy import Column, Integer, String, Table, inspect
+from sqlalchemy import Column, Integer, String, Table, inspect, testing
 from sqlalchemy.testing import fixtures
 
 from starrocks.common.params import TableInfoKeyWithPrefix
 from starrocks.common.types import SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
+from starrocks.sql.ddl import AlterTableProperties
 from test.util import normalize_sql
 
 
@@ -66,3 +67,38 @@ class ReflectionTableOptionsTest(fixtures.TestBase):
         else:
             assert properties["storage_medium"] == "SSD"
         assert table_options[TableInfoKeyWithPrefix.COMMENT] == "Test table with all StarRocks options"
+
+
+class PropertyValueRoundTripTest(fixtures.TestBase):
+    """A PROPERTIES value with backslashes and double quotes is stored, and reflected, exactly as given."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    @staticmethod
+    def _reflected_colocate_with(connection, table_name):
+        options = inspect(connection).get_table_options(table_name)
+        return options[TableInfoKeyWithPrefix.PROPERTIES]["colocate_with"]
+
+    @testing.combinations(
+        ("backslash_letter", r"grp\d+"),
+        ("double_quote", 'grp"1'),
+        ("escaped_quote", r'grp\"1'),
+        argnames="value",
+        id_="ia",
+    )
+    def test_create_and_alter(self, connection, metadata, value):
+        Table(
+            "prop_round_trip",
+            metadata,
+            Column("id", Integer),
+            starrocks_duplicate_key="id",
+            starrocks_distributed_by="HASH(id) BUCKETS 1",
+            starrocks_properties={"colocate_with": value},
+        )
+        metadata.create_all(connection)
+        assert self._reflected_colocate_with(connection, "prop_round_trip") == value
+
+        altered = value + "_2"
+        connection.execute(AlterTableProperties("prop_round_trip", {"colocate_with": altered}))
+        assert self._reflected_colocate_with(connection, "prop_round_trip") == altered

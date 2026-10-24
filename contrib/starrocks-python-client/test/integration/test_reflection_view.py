@@ -14,13 +14,15 @@
 
 import logging
 
-from sqlalchemy import MetaData, Table, inspect, text
+from sqlalchemy import MetaData, Table, inspect, testing, text
 from sqlalchemy.testing import config, expect_raises, fixtures
 
 from starrocks.common.params import TableInfoKey
 from starrocks.common.utils import TableAttributeNormalizer, get_dialect_option
 from starrocks.datatype import BOOLEAN, DATE, DECIMAL, INTEGER, VARCHAR
 from starrocks.engine.interfaces import ReflectedViewState
+from starrocks.sql.ddl import CreateView, DropView
+from starrocks.sql.schema import View
 from test.util import VIEW_SECURITY_NEEDS_3_4_1
 
 
@@ -749,3 +751,20 @@ class ReflectionViewsTest(fixtures.TestBase):
 
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
+
+
+class ViewCommentRoundTripTest(fixtures.TestBase):
+    """A view comment with quotes and backslashes is stored, and reflected, exactly as given."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    @testing.requires.sqlalchemy_2
+    def test_comment_with_quotes_and_backslashes(self, connection):
+        comment = r"it's a view of C:\temp, with \n in it"
+        view = View("view_comment_round_trip", MetaData(), definition="SELECT 1 AS one", comment=comment)
+        connection.execute(CreateView(view))
+        try:
+            assert inspect(connection).get_table_comment("view_comment_round_trip")["text"] == comment
+        finally:
+            connection.execute(DropView(view))
