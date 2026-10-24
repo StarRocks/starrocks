@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.mv.MVMirrorRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
@@ -103,7 +104,7 @@ public class SyncPartitionUtils {
                 unique.add(entry);
             }
         }
-        return differ != null ? differ.diff(unique, mvRangeMap) :
+        return differ != null ? differ.diff(unique, mvRangeMap, false) :
                 RangePartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
@@ -122,13 +123,22 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         PCellSortedSet rollupRange = PCellSortedSet.of();
+        // A bounded refresh must replace a partition set atomically whenever the diff is a shape
+        // change. The mirror mapper re-shapes base partitions into a different granularity; the
+        // reverse migration (mirror disabled while the MV still holds coarse mirror partitions) is a
+        // shape change too, so it cannot be detected from the mapper selected for this run alone.
+        // The default mappings are granularity-preserving and keep the previous (range-only) behavior.
+        boolean applyAtomicReplacement = false;
         if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
+            rollupRange = mapper.toMappingRanges(baseRangeMap, granularity, partitionColumnType);
+            applyAtomicReplacement = mapper == MVMirrorRangePartitionMapper.INSTANCE
+                    || hasCoarseToFineReplacement(rollupRange, mvRangeMap);
         } else if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
-        return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
+        return getRangePartitionDiff(mvRangeMap, rollupRange, differ, applyAtomicReplacement);
     }
 
     public static PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
@@ -136,6 +146,39 @@ public class SyncPartitionUtils {
                                                  PrimitiveType partitionType) {
         MVRangePartitionMapper mapper = MVRangePartitionMapper.getInstance(granularity);
         return mapper.toMappingRanges(baseRangeMap, granularity, partitionType);
+    }
+
+    /**
+     * Whether the existing MV partitions still contain a coarse partition that the current mapping
+     * splits into two or more finer partitions, i.e. the coarse-to-fine half of a shape change.
+     * This happens when the mirror mapper is disabled after the MV has been refreshed with it.
+     */
+    private static boolean hasCoarseToFineReplacement(PCellSortedSet mappedRanges, PCellSortedSet mvRangeMap) {
+        List<PCellWithName> mapped = Lists.newArrayList(mappedRanges.getPartitions());
+        if (mapped.size() < 2) {
+            return false;
+        }
+        // Both sets are sorted and contain non-overlapping ranges, so one monotonic scan suffices.
+        int mappedIndex = 0;
+        for (PCellWithName mvEntry : mvRangeMap.getPartitions()) {
+            Range<PartitionKey> mvRange = ((PRangeCell) mvEntry.cell()).getRange();
+            while (mappedIndex < mapped.size()
+                    && ((PRangeCell) mapped.get(mappedIndex).cell()).getRange().upperEndpoint()
+                            .compareTo(mvRange.lowerEndpoint()) <= 0) {
+                mappedIndex++;
+            }
+            int contained = 0;
+            for (int i = mappedIndex; i < mapped.size(); i++) {
+                Range<PartitionKey> mappedRange = ((PRangeCell) mapped.get(i).cell()).getRange();
+                if (mappedRange.lowerEndpoint().compareTo(mvRange.upperEndpoint()) >= 0) {
+                    break;
+                }
+                if (mvRange.encloses(mappedRange) && ++contained >= 2) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static PCellSortedSet mappingRangeListForDate(PCellSortedSet baseRangeMap) {
@@ -155,9 +198,10 @@ public class SyncPartitionUtils {
     @NotNull
     private static PartitionDiff getRangePartitionDiff(PCellSortedSet mvRangeMap,
                                                        PCellSortedSet rollupRange,
-                                                       RangePartitionDiffer differ) {
+                                                       RangePartitionDiffer differ,
+                                                       boolean applyAtomicReplacement) {
         // TODO: Callers may use `List<PartitionRange>` directly.
-        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap, applyAtomicReplacement) :
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         return diff;
     }
