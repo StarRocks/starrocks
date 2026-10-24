@@ -46,6 +46,9 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -2337,6 +2340,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         analyzeStatus.setStartTime(startTime);
         Assertions.assertEquals(Config.statistic_collect_query_timeout - 10,
                 job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+    }
+
+    @Test
+    public void testToIcebergPartitionValuesWithSlashInValue() {
+        Schema schema = new Schema(
+                Types.NestedField.required(1, "host", Types.StringType.get()),
+                Types.NestedField.required(2, "ts", Types.TimestampType.withoutZone()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("host").day("ts", "timestamp_day").build();
+
+        Assertions.assertEquals(List.of("https://test-sample.mycorp.com", "2025-04-14"),
+                ExternalFullStatisticsCollectJob.toIcebergPartitionValues(
+                        "host=https://test-sample.mycorp.com/timestamp_day=2025-04-14", spec.fields()));
+        Assertions.assertEquals(List.of("a=b/c", "null"),
+                ExternalFullStatisticsCollectJob.toIcebergPartitionValues(
+                        "host=a=b/c/timestamp_day=null", spec.fields()));
+        Assertions.assertEquals(List.of("https://a.com"),
+                ExternalFullStatisticsCollectJob.toIcebergPartitionValues("host=https://a.com", spec.fields()));
     }
 
 }

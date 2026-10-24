@@ -782,7 +782,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         Schema schema = spec.schema();
         List<PartitionField> partitionFields = spec.fields();
-        List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+        List<String> partitionValues = toIcebergPartitionValues(partitionName, partitionFields);
         if (partitionValues.size() != partitionFields.size()) {
             throw new StarRocksConnectorException("Partition values size %s not match spec fields size %s in %s",
                     partitionValues.size(), partitionFields.size(), partitionName);
@@ -803,6 +803,30 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             }
         }
         return partitionPredicate;
+    }
+
+    // Iceberg partition names are built from unescaped human-readable values (e.g. host=https://a.com/dt=2024-01-01),
+    // so splitting on "/" is ambiguous. Use the spec field names as delimiters instead.
+    static List<String> toIcebergPartitionValues(String partitionName, List<PartitionField> partitionFields) {
+        List<String> partitionValues = Lists.newArrayList();
+        int start = 0;
+        for (int i = 0; i < partitionFields.size(); i++) {
+            String prefix = partitionFields.get(i).name() + "=";
+            if (!partitionName.startsWith(prefix, start)) {
+                break;
+            }
+            start += prefix.length();
+            int end = partitionName.length();
+            if (i + 1 < partitionFields.size()) {
+                end = partitionName.indexOf("/" + partitionFields.get(i + 1).name() + "=", start);
+                if (end == -1) {
+                    end = partitionName.length();
+                }
+            }
+            partitionValues.add(partitionName.substring(start, end));
+            start = end + 1;
+        }
+        return partitionValues;
     }
 
     // only iceberg table support partition transform
