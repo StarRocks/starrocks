@@ -172,7 +172,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
         topic_partitions.push_back(tp1);
         ss << "[" << entry.first << ": " << entry.second << "] ";
     }
-    _non_eof_partition_count = topic_partitions.size();
+    _assigned_partition_count = topic_partitions.size();
+    _eof_partitions.clear();
 
     LOG(INFO) << "consumer: " << _id << ", grp: " << _grp_id << " assign topic partitions: " << topic << ", "
               << ss.str();
@@ -204,6 +205,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
     int64_t received_rows = 0;
     int64_t put_rows = 0;
     Status st = Status::OK();
+    const char* finish_reason = "time limit";
     MonotonicStopWatch consumer_watch;
     MonotonicStopWatch watch;
     watch.start();
@@ -211,6 +213,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         {
             std::unique_lock<std::mutex> l(_lock);
             if (_cancelled) {
+                finish_reason = "cancelled";
                 break;
             }
         }
@@ -227,8 +230,10 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         consumer_watch.stop();
         switch (msg->err()) {
         case RdKafka::ERR_NO_ERROR:
+            _eof_partitions.erase(msg->partition());
             if (!queue->blocking_put(msg.get())) {
                 // queue is shutdown
+                finish_reason = "queue closed";
                 done = true;
             } else {
                 ++put_rows;
@@ -245,6 +250,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
+            finish_reason = "error";
             done = true;
             std::stringstream ss;
             ss << msg->errstr() << ", this is no data in partition: " << msg->partition()
@@ -258,7 +264,10 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         case RdKafka::ERR__PARTITION_EOF: {
-            _non_eof_partition_count--;
+            // The receiving thread can delete the message as soon as it is
+            // queued, so read its partition before handing over ownership.
+            _eof_partitions.insert(msg->partition());
+            const bool all_partitions_eof = _eof_partitions.size() == _assigned_partition_count;
             // For transaction producer, producer will append one control msg to the group of msgs,
             // but the control msg will not return to consumer,
             // so we use the offset of eof to compute the last offset.
@@ -267,9 +276,11 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             // The goal of put the EOF msg to queue is that:
             // we will calculate the last offset of the partition using offset of EOF msg
             if (!queue->blocking_put(msg.get())) {
+                finish_reason = "queue closed";
                 done = true;
-            } else if (_non_eof_partition_count <= 0) {
+            } else if (all_partitions_eof) {
                 msg.release();
+                finish_reason = "all partitions EOF";
                 done = true;
             } else {
                 msg.release();
@@ -277,6 +288,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         case RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED: {
+            finish_reason = "error";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
             done = true;
             st = Status::InternalError(fmt::format(
@@ -285,6 +297,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         case RdKafka::ERR_GROUP_AUTHORIZATION_FAILED: {
+            finish_reason = "error";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
             done = true;
             st = Status::InternalError(fmt::format(
@@ -295,6 +308,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         default:
+            finish_reason = "error";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
             done = true;
             st = Status::InternalError(fmt::format("kafka consume failed, err: {}", msg->errstr()));
@@ -310,7 +324,9 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
     LOG(INFO) << "kafka consume done: " << _id << ", grp: " << _grp_id << ". cancelled: " << _cancelled
               << ", left time(ms): " << left_time << ", total cost(ms): " << watch.elapsed_time() / 1000 / 1000
               << ", consume cost(ms): " << consumer_watch.elapsed_time() / 1000 / 1000
-              << ", received rows: " << received_rows << ", put rows: " << put_rows;
+              << ", received rows: " << received_rows << ", put rows: " << put_rows
+              << ", finish reason: " << finish_reason << ", EOF partitions: " << _eof_partitions.size() << "/"
+              << _assigned_partition_count;
 
     return st;
 }
@@ -439,7 +455,8 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
-    _non_eof_partition_count = 0;
+    _assigned_partition_count = 0;
+    _eof_partitions.clear();
     _k_event_cb.reset_error_msg();
     return Status::OK();
 }

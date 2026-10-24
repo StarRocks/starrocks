@@ -71,6 +71,10 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.KafkaProgress;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.KafkaTaskInfo;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -83,8 +87,13 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TPulsarRLTaskProgress;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import mockit.Invocation;
@@ -102,6 +111,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -788,6 +798,152 @@ public class DatabaseTransactionMgrTest {
             masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, shadowTxnId,
                     Lists.newArrayList(), Lists.newArrayList(), null);
             assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(shadowTxnId).getStatus());
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 10})
+    public void testEmptyKafkaRoutineLoadTxnCommitsAndBecomesVisible(long unselectedRows) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr =
+                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+            long jobId = 20000;
+            KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(jobId, "empty_kafka_job",
+                    GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, "broker:9092", "topic");
+            masterTransMgr.getCallbackFactory().addCallback(job);
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_kafka_label", null,
+                    transactionSource, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, jobId,
+                    Config.stream_load_default_timeout_second);
+            UUID taskId = UUID.randomUUID();
+            KafkaTaskInfo task = new KafkaTaskInfo(taskId, job, 10000, 0, Map.of(0, 100L), 60000);
+            Deencapsulation.setField(task, "txnId", txnId);
+            Deencapsulation.setField(job, "routineLoadTaskInfoList", Lists.newArrayList(task));
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(jobId, taskId, unselectedRows));
+
+            // Both WHERE-only filtering and a control-record-only batch must commit their consumed positions.
+            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                    Lists.newArrayList(), Lists.newArrayList(), attachment);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(txnId).getStatus());
+            assertEquals(110L, ((KafkaProgress) job.getProgress()).getOffsetByPartition(0));
+            masterDbTransMgr.finishTransaction(txnId, Sets.newHashSet(), 0);
+            assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    private static TRLTaskTxnCommitAttachment emptyKafkaRoutineLoadAttachment(long jobId, UUID taskId,
+                                                                              long unselectedRows) {
+        TKafkaRLTaskProgress progress = new TKafkaRLTaskProgress();
+        progress.setPartitionCmtOffset(Map.of(0, 109L));
+        progress.setPartitionCmtOffsetTimestamp(Map.of(0, 1000L));
+        TRLTaskTxnCommitAttachment attachment = new TRLTaskTxnCommitAttachment();
+        attachment.setJobId(jobId);
+        attachment.setId(new TUniqueId(taskId.getMostSignificantBits(), taskId.getLeastSignificantBits()));
+        attachment.setLoadSourceType(TLoadSourceType.KAFKA);
+        attachment.setKafkaRLTaskProgress(progress);
+        attachment.setUnselectedRows(unselectedRows);
+        return attachment;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"BACKEND_STREAMING", "BATCH_LOAD_JOB", "FRONTEND"})
+    public void testEmptyNonRoutineLoadTxnStillRejected(String sourceName) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_non_routine_label", transactionSource,
+                    TransactionState.LoadJobSourceType.valueOf(sourceName), Config.stream_load_default_timeout_second);
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(20000, UUID.randomUUID(), 0));
+            TransactionCommitFailedException exception = assertThrows(TransactionCommitFailedException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertThat(exception.getMessage(), containsString("No rows were imported from upstream"));
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing_attachment", "manual_attachment", "missing_progress", "pulsar",
+            "non_retryable", "loaded_rows"})
+    public void testEmptyRoutineLoadTxnRequiresSuccessfulKafkaProgress(String condition) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_routine_invalid_label", transactionSource,
+                    TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, Config.stream_load_default_timeout_second);
+            TRLTaskTxnCommitAttachment thriftAttachment = emptyKafkaRoutineLoadAttachment(20000, UUID.randomUUID(), 0);
+            TxnCommitAttachment attachment;
+            switch (condition) {
+                case "missing_attachment":
+                    attachment = null;
+                    break;
+                case "manual_attachment":
+                    attachment = new ManualLoadTxnCommitAttachment();
+                    break;
+                case "missing_progress":
+                    attachment = new RLTaskTxnCommitAttachment();
+                    break;
+                case "pulsar":
+                    thriftAttachment.setLoadSourceType(TLoadSourceType.PULSAR);
+                    thriftAttachment.setPulsarRLTaskProgress(new TPulsarRLTaskProgress());
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                case "non_retryable":
+                    thriftAttachment.setNonRetryable(true);
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                case "loaded_rows":
+                    thriftAttachment.setLoadedRows(1);
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                default:
+                    throw new AssertionError(condition);
+            }
+            TransactionCommitFailedException exception = assertThrows(TransactionCommitFailedException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertThat(exception.getMessage(), containsString("No rows were imported from upstream"));
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testEmptyKafkaRoutineLoadTxnStillRequiresActiveTask(boolean registerJob) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long jobId = 20000;
+            KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(jobId, "empty_kafka_inactive_job",
+                    GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, "broker:9092", "topic");
+            if (registerJob) {
+                masterTransMgr.getCallbackFactory().addCallback(job);
+            }
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_kafka_inactive_label", null,
+                    transactionSource, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, jobId,
+                    Config.stream_load_default_timeout_second);
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(jobId, UUID.randomUUID(), 0));
+            assertThrows(TransactionException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertEquals(TransactionStatus.PREPARED,
+                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1)
+                            .getTxnState(txnId).getStatus());
+            assertFalse(((KafkaProgress) job.getProgress()).hasPartition());
         } finally {
             Config.empty_load_as_error = savedEmptyLoadAsError;
         }
