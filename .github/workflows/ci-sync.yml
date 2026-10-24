@@ -78,11 +78,27 @@ jobs:
           echo "skip_cd=${skip_cd}" >> $GITHUB_OUTPUT
           echo "skip_ms=${skip_ms}" >> $GITHUB_OUTPUT
 
+      # CelerData enforces SAML SSO, so the CelerData repo-sync dispatch uses a CelerData
+      # GitHub App token, scoped to that one repo and to Actions: write. Unset or a failed
+      # mint: run-repo-sync.sh falls back to GH_TOKEN.
+      - name: CelerData App token
+        id: cd-token
+        if: steps.commit_sha.outputs.skip_cd != 'true' && vars.PHX_CI_BOT_APP_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.PHX_CI_BOT_APP_ID }}
+          private-key: ${{ secrets.PHX_CI_BOT_PRIVATE_KEY }}
+          owner: CelerData
+          repositories: celerdata-enterprise
+          permission-actions: write
+
       - name: sync
         # Run unless BOTH downstreams are anti-looped; run-repo-sync.sh gates each
         # dispatch on its own flag.
         if: steps.commit_sha.outputs.skip_cd != 'true' || steps.commit_sha.outputs.skip_ms != 'true'
         env:
+          GH_ORG_TOKEN_CELERDATA: ${{ steps.cd-token.outputs.token }}
           PR_ID: ${{ github.event.number }}
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}
           BRANCH: ${{ github.base_ref }}
