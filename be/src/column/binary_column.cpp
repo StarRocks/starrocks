@@ -15,9 +15,15 @@
 #include "column/binary_column.h"
 
 #include <cstring>
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include "base/container/raw_container.h"
 #include "base/hash/hash_util.hpp"
+#include "base/simd/simd.h"
 #include "column/bytes.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
@@ -924,56 +930,84 @@ size_t BinaryColumn::filter_range(const Filter& filter, size_t from, size_t to) 
     _offsets.visit_storage([&](auto& offsets_buf) {
         auto* offset_data = offsets_buf.data();
 
+        // By monotonicity of offset_data, offset_data[to] == offset_data[from] means every
+        // string in [from, to) has length 0 and offset_data[from .. to] already equals
+        // offset_data[from]. Short-circuiting here also guarantees offset_data[to] > 0 and
+        // data != nullptr in the loops below.
+        if (to == from || offset_data[to] == offset_data[from]) {
+            result_offset = from + (to > from ? SIMD::count_nonzero(filter.data() + from, to - from) : 0);
+            return;
+        }
+
 #ifdef __AVX2__
         const uint8_t* f_data = filter.data();
+        constexpr size_t kBatchSize = 256 / (8 * sizeof(uint8_t));
+        const __m256i all0 = _mm256_setzero_si256();
 
-        int simd_bits = 256;
-        int batch_nums = simd_bits / (8 * (int)sizeof(uint8_t));
-        __m256i all0 = _mm256_setzero_si256();
-
-        while (start_offset + batch_nums < to) {
+        while (start_offset + kBatchSize < to) {
             __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + start_offset));
-            uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
+            uint32_t mask = ~static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0)));
 
             if (mask == 0) {
                 // all no hit, pass
             } else if (mask == 0xffffffff) {
-                // all hit, copy all
-
-                // copy data
-                const size_t bytes_size = offset_data[start_offset + batch_nums] - offset_data[start_offset];
-                memmove(data + offset_data[result_offset], data + offset_data[start_offset], bytes_size);
-
-                // set offsets, try vectorized
-                for (int i = 0; i < batch_nums; ++i) {
-                    // TODO: performance, all sub one same offset ?
-                    offset_data[result_offset + i + 1] = offset_data[result_offset + i] +
-                                                         offset_data[start_offset + i + 1] -
-                                                         offset_data[start_offset + i];
+                if (result_offset != start_offset) {
+                    DCHECK_LE(offset_data[result_offset], offset_data[start_offset]);
+                    const size_t bytes_size = offset_data[start_offset + kBatchSize] - offset_data[start_offset];
+                    const auto delta = offset_data[start_offset] - offset_data[result_offset];
+                    memmove(data + offset_data[result_offset], data + offset_data[start_offset], bytes_size);
+                    for (size_t i = 0; i < kBatchSize; ++i) {
+                        offset_data[result_offset + i + 1] = offset_data[start_offset + i + 1] - delta;
+                    }
                 }
-
-                result_offset += batch_nums;
+                result_offset += kBatchSize;
             } else {
-                // skip not hit row, it's will reduce compare when filter layout is sparse,
-                // like "00010001...", but is ineffective when the filter layout is dense.
-
                 uint32_t zero_count = Bits::CountTrailingZerosNonZero32(mask);
                 uint32_t i = zero_count;
-                while (i < batch_nums) {
+                while (i < kBatchSize) {
                     mask = zero_count < 31 ? mask >> (zero_count + 1) : 0;
-
                     const size_t bytes_size = offset_data[start_offset + i + 1] - offset_data[start_offset + i];
-                    // copy date
                     memmove(data + offset_data[result_offset], data + offset_data[start_offset + i], bytes_size);
-
-                    // set offsets
                     offset_data[result_offset + 1] = offset_data[result_offset] + bytes_size;
                     zero_count = Bits::CountTrailingZeros32(mask);
                     result_offset += 1;
                     i += (zero_count + 1);
                 }
             }
-            start_offset += batch_nums;
+            start_offset += kBatchSize;
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        const uint8_t* f_data = filter.data();
+        constexpr size_t kBatchSize = 128 / (8 * sizeof(uint8_t));
+
+        while (start_offset + kBatchSize < to) {
+            uint8x16_t f = vld1q_u8(f_data + start_offset);
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));
+
+            if (nibble_mask == 0) {
+                // all no hit, pass
+            } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+                if (result_offset != start_offset) {
+                    DCHECK_LE(offset_data[result_offset], offset_data[start_offset]);
+                    const size_t bytes_size = offset_data[start_offset + kBatchSize] - offset_data[start_offset];
+                    const auto delta = offset_data[start_offset] - offset_data[result_offset];
+                    memmove(data + offset_data[result_offset], data + offset_data[start_offset], bytes_size);
+                    for (size_t i = 0; i < kBatchSize; ++i) {
+                        offset_data[result_offset + i + 1] = offset_data[start_offset + i + 1] - delta;
+                    }
+                }
+                result_offset += kBatchSize;
+            } else {
+                nibble_mask &= 0x8888'8888'8888'8888ull;
+                for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                    size_t i = __builtin_ctzll(nibble_mask) >> 2;
+                    const size_t bytes_size = offset_data[start_offset + i + 1] - offset_data[start_offset + i];
+                    memmove(data + offset_data[result_offset], data + offset_data[start_offset + i], bytes_size);
+                    offset_data[result_offset + 1] = offset_data[result_offset] + bytes_size;
+                    result_offset += 1;
+                }
+            }
+            start_offset += kBatchSize;
         }
 #endif
 
@@ -981,18 +1015,15 @@ size_t BinaryColumn::filter_range(const Filter& filter, size_t from, size_t to) 
             if (filter[i]) {
                 DCHECK_GE(offset_data[i + 1], offset_data[i]);
                 const size_t bytes_size = offset_data[i + 1] - offset_data[i];
-                // copy data
                 memmove(data + offset_data[result_offset], data + offset_data[i], bytes_size);
-
-                // set offsets
                 offset_data[result_offset + 1] = offset_data[result_offset] + bytes_size;
-
                 result_offset++;
             }
         }
     });
 
     this->resize(result_offset);
+    invalidate_slice_cache();
     return result_offset;
 }
 

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <random>
 
 #include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
@@ -302,32 +303,283 @@ PARALLEL_TEST(BinaryColumnTest, test_append_binary) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_filter_range) {
-    auto column = BinaryColumn::create();
+    {
+        auto column = BinaryColumn::create();
 
-    column->append(Slice("m"));
+        column->append(Slice("m"));
 
-    for (size_t i = 0; i < 63; i++) {
-        column->append(Slice("a"));
-    }
-    column->append(Slice("bbbbbfffff"));
-    column->append(Slice("c"));
+        for (size_t i = 0; i < 63; i++) {
+            column->append(Slice("a"));
+        }
+        column->append(Slice("bbbbbfffff"));
+        column->append(Slice("c"));
 
-    Buffer<uint8_t> filter;
-    filter.emplace_back(0);
-    for (size_t i = 0; i < 63; i++) {
+        Buffer<uint8_t> filter;
+        filter.emplace_back(0);
+        for (size_t i = 0; i < 63; i++) {
+            filter.emplace_back(1);
+        }
         filter.emplace_back(1);
-    }
-    filter.emplace_back(1);
-    filter.emplace_back(1);
+        filter.emplace_back(1);
 
-    column->filter_range(filter, 0, 66);
+        column->filter_range(filter, 0, 66);
 
-    auto data = column->immutable_data();
-    for (size_t i = 0; i < 63; i++) {
-        ASSERT_EQ(data[i], "a");
+        auto data = column->immutable_data();
+        for (size_t i = 0; i < 63; i++) {
+            ASSERT_EQ(data[i], "a");
+        }
+        ASSERT_EQ(data[63], "bbbbbfffff");
+        ASSERT_EQ(data[64], "c");
     }
-    ASSERT_EQ(data[63], "bbbbbfffff");
-    ASSERT_EQ(data[64], "c");
+
+    auto verify_against_oracle = [](const std::vector<std::string>& inputs, const Filter& filter, size_t from,
+                                    bool force_large_offsets, bool populate_german_strings, const std::string& ctx) {
+        const size_t n = inputs.size();
+        auto col = BinaryColumn::create();
+        for (const auto& s : inputs) {
+            col->append(Slice(s));
+        }
+        if (force_large_offsets) {
+            col->get_offset().ensure_width_for_value(static_cast<uint64_t>(UINT32_MAX) + 1);
+            ASSERT_TRUE(col->get_offset().is_large()) << ctx;
+        }
+        if (populate_german_strings) {
+            auto& gs = col->get_german_strings();
+            ASSERT_EQ(n, gs.size()) << ctx;
+        }
+
+        std::vector<std::string> expected;
+        expected.reserve(n);
+        for (size_t i = 0; i < from; ++i) {
+            expected.push_back(inputs[i]);
+        }
+        for (size_t i = from; i < n; ++i) {
+            if (filter[i] != 0) {
+                expected.push_back(inputs[i]);
+            }
+        }
+
+        size_t ret_sz = col->filter_range(filter, from, n);
+        ASSERT_EQ(expected.size(), ret_sz) << ctx;
+        ASSERT_EQ(expected.size(), col->size()) << ctx;
+        ASSERT_EQ(expected.size() + 1, col->get_offset().size()) << ctx;
+        ASSERT_EQ(0u, col->get_offset()[0]) << ctx;
+
+        for (size_t i = 0; i < expected.size(); ++i) {
+            Slice actual = col->get_slice(i);
+            ASSERT_EQ(expected[i], actual.to_string()) << ctx << " row=" << i;
+            uint64_t off0 = col->get_offset()[i];
+            uint64_t off1 = col->get_offset()[i + 1];
+            ASSERT_LE(off0, off1) << ctx << " row=" << i;
+            ASSERT_EQ(expected[i].size(), off1 - off0) << ctx << " row=" << i;
+        }
+        ASSERT_EQ(col->get_offset().back(), col->get_bytes().size()) << ctx;
+
+        if (populate_german_strings) {
+            const auto& gs_after = col->get_german_strings();
+            ASSERT_EQ(expected.size(), gs_after.size()) << ctx;
+            for (size_t i = 0; i < expected.size(); ++i) {
+                ASSERT_EQ(expected[i], gs_after[i].to_string()) << ctx << " german_string row=" << i;
+            }
+        }
+    };
+
+    // P0-1 regression test: 16 dropped empty strings ("") at rows 0..15 followed by
+    // 32 kept non-empty strings ("abc") at rows 16..47 (result_offset = 0 < start_offset = 16, delta == 0).
+    {
+        std::vector<std::string> inputs(48);
+        Filter filter(48, 0);
+        for (size_t i = 0; i < 16; ++i) {
+            inputs[i] = "";
+            filter[i] = 0;
+        }
+        for (size_t i = 16; i < 48; ++i) {
+            inputs[i] = "abc_" + std::to_string(i);
+            filter[i] = 1;
+        }
+        verify_against_oracle(inputs, filter, 0, false, true, "P0-1_empty_prefix_small");
+        verify_against_oracle(inputs, filter, 0, true, true, "P0-1_empty_prefix_large");
+    }
+
+    // P0-4 UBSAN regression test: BinaryColumn::create(64) (all empty strings,
+    // _bytes.data() == nullptr, bytes_size == 0) filtered with all-0, all-1, and mixed filters.
+    {
+        for (int pat = 0; pat < 3; ++pat) {
+            auto col = BinaryColumn::create(64);
+            ASSERT_EQ(nullptr, col->get_bytes().data());
+            ASSERT_EQ(0u, col->get_bytes().size());
+            Filter filter(64, 0);
+            size_t expected_rows = 0;
+            for (size_t i = 0; i < 64; ++i) {
+                if (pat == 1 || (pat == 2 && (i % 3 == 0))) {
+                    filter[i] = 1;
+                    expected_rows++;
+                }
+            }
+            size_t ret = col->filter_range(filter, 0, 64);
+            ASSERT_EQ(expected_rows, ret) << "P0-4 pat=" << pat;
+            ASSERT_EQ(expected_rows, col->size()) << "P0-4 pat=" << pat;
+            ASSERT_EQ(0u, col->get_bytes().size()) << "P0-4 pat=" << pat;
+            for (size_t i = 0; i < expected_rows; ++i) {
+                ASSERT_EQ("", col->get_slice(i).to_string());
+            }
+        }
+    }
+
+    // P1-1 regression test: non-empty prefix [0, from) (offset_data[from] > 0) followed by
+    // an all-empty sub-range [from, to) (offset_data[to] == offset_data[from] > 0) across
+    // all-0, all-1, mixed (i % 3 == 0), and non-canonical (0x80, 0xff) filter bytes on both
+    // 32-bit small offsets and 64-bit large offsets, plus empty range (from == to).
+    {
+        const size_t from = 5;
+        const size_t to = 69;
+        std::vector<std::string> inputs(to);
+        for (size_t i = 0; i < from; ++i) {
+            inputs[i] = "prefix_" + std::to_string(i);
+        }
+        for (size_t i = from; i < to; ++i) {
+            inputs[i] = "";
+        }
+        for (int pat = 0; pat < 4; ++pat) {
+            Filter filter(to, 0);
+            for (size_t i = from; i < to; ++i) {
+                if (pat == 1) {
+                    filter[i] = 1;
+                } else if (pat == 2 && (i % 3 == 0)) {
+                    filter[i] = 1;
+                } else if (pat == 3 && (i % 2 == 0)) {
+                    filter[i] = (i % 4 == 0) ? 0x80 : 0xff;
+                }
+            }
+            std::string ctx = "P1-1_nonempty_prefix_empty_subrange_pat=" + std::to_string(pat);
+            verify_against_oracle(inputs, filter, from, false, true, ctx + "_small");
+            verify_against_oracle(inputs, filter, from, true, true, ctx + "_large");
+        }
+
+        // Empty range (from == to == 0) with empty Filter{} on an empty BinaryColumn.
+        {
+            auto empty_col = BinaryColumn::create();
+            ASSERT_EQ(nullptr, empty_col->get_bytes().data());
+            Filter empty_filter;
+            ASSERT_EQ(0u, empty_col->filter_range(empty_filter, 0, 0));
+            ASSERT_EQ(0u, empty_col->size());
+        }
+
+        // Empty range (from == to == 5) on a non-empty BinaryColumn.
+        {
+            auto col = BinaryColumn::create();
+            for (size_t i = 0; i < from; ++i) {
+                col->append(Slice(inputs[i]));
+            }
+            Filter filter(from, 0);
+            ASSERT_EQ(from, col->filter_range(filter, from, from));
+            ASSERT_EQ(from, col->size());
+            for (size_t i = 0; i < from; ++i) {
+                ASSERT_EQ(inputs[i], col->get_slice(i).to_string());
+            }
+        }
+    }
+
+    // Geometry + filter pattern sweep (Spec §5.1):
+    // len in {0, 1, 15, 16, 17, 31, 32, 33, 47, 48, 64, 4096}, from in {0, 1, 17}.
+    const std::vector<size_t> lengths = {0, 1, 15, 16, 17, 31, 32, 33, 47, 48, 64, 4096};
+    const std::vector<size_t> froms = {0, 1, 17};
+    for (size_t from : froms) {
+        for (size_t len : lengths) {
+            const size_t n = from + len;
+            std::vector<std::string> inputs(n);
+            for (size_t i = 0; i < n; ++i) {
+                if (i % 7 == 0) {
+                    inputs[i] = ""; // Mix empty strings
+                } else if (i % 5 == 0) {
+                    inputs[i] = "long_german_string_payload_row_" + std::to_string(i); // > 12 bytes
+                } else {
+                    inputs[i] = "s" + std::to_string(i); // <= 12 bytes
+                }
+            }
+
+            // 1. All-0, All-1, Alternating 0101, 16-row clusters, 32-row clusters
+            for (int pat = 0; pat < 5; ++pat) {
+                Filter filter(n, 1);
+                for (size_t i = from; i < n; ++i) {
+                    size_t rel = i - from;
+                    if (pat == 0) {
+                        filter[i] = 0;
+                    } else if (pat == 1) {
+                        filter[i] = 1;
+                    } else if (pat == 2) {
+                        filter[i] = static_cast<uint8_t>(rel & 1);
+                    } else if (pat == 3) {
+                        filter[i] = static_cast<uint8_t>((rel / 16) & 1);
+                    } else {
+                        filter[i] = static_cast<uint8_t>((rel / 32) & 1);
+                    }
+                }
+                std::string ctx = "geom_from=" + std::to_string(from) + "_len=" + std::to_string(len) +
+                                  "_pat=" + std::to_string(pat);
+                verify_against_oracle(inputs, filter, from, false, (len <= 64), ctx);
+                if (len <= 64) {
+                    verify_against_oracle(inputs, filter, from, true, false, ctx + "_large");
+                }
+            }
+
+            // 2. Single set bit at every lane 0..31
+            size_t max_lane = std::min<size_t>(len, 32);
+            for (size_t lane = 0; lane < max_lane; ++lane) {
+                Filter filter(n, 0);
+                filter[from + lane] = 1;
+                std::string ctx = "single_lane_from=" + std::to_string(from) + "_len=" + std::to_string(len) +
+                                  "_lane=" + std::to_string(lane);
+                verify_against_oracle(inputs, filter, from, false, false, ctx);
+            }
+
+            // 3. Seeded random densities d in {1, 10, 50, 90, 99}%
+            for (int density : {1, 10, 50, 90, 99}) {
+                std::mt19937 rng(static_cast<uint32_t>(100003u * (from + 1) + 1009u * (len + 1) + density));
+                std::uniform_int_distribution<int> dist(0, 99);
+                Filter filter(n, 1);
+                for (size_t i = from; i < n; ++i) {
+                    filter[i] = (dist(rng) < density) ? 1 : 0;
+                }
+                std::string ctx = "rand_from=" + std::to_string(from) + "_len=" + std::to_string(len) +
+                                  "_d=" + std::to_string(density);
+                verify_against_oracle(inputs, filter, from, false, (len <= 64), ctx);
+            }
+        }
+    }
+}
+
+// Defensive non-canonical filter bytes test (Spec §5.1 / D4, BinaryColumn only):
+// Any non-zero filter byte (0x01, 0x02, 0x7f, 0x80, 0xff) must keep the row on every ISA.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_filter_range_noncanonical_bytes) {
+    const std::vector<uint8_t> non_zero_bytes = {0x01, 0x02, 0x7f, 0x80, 0xff};
+    for (size_t n : {size_t(16), size_t(32), size_t(48), size_t(65)}) {
+        std::vector<std::string> inputs(n);
+        Filter filter(n, 0);
+        std::vector<std::string> expected;
+        for (size_t i = 0; i < n; ++i) {
+            inputs[i] = "row_" + std::to_string(i);
+            if (i % 2 == 0) {
+                filter[i] = non_zero_bytes[(i / 2) % non_zero_bytes.size()];
+                expected.push_back(inputs[i]);
+            } else {
+                filter[i] = 0x00;
+            }
+        }
+
+        auto col = BinaryColumn::create();
+        for (const auto& s : inputs) {
+            col->append(Slice(s));
+        }
+        size_t ret = col->filter_range(filter, 0, n);
+        ASSERT_EQ(expected.size(), ret) << "n=" << n;
+        ASSERT_EQ(expected.size(), col->size()) << "n=" << n;
+        for (size_t i = 0; i < expected.size(); ++i) {
+            ASSERT_EQ(expected[i], col->get_slice(i).to_string()) << "n=" << n << " i=" << i;
+        }
+        ASSERT_EQ(col->get_offset().back(), col->get_bytes().size()) << "n=" << n;
+    }
 }
 
 // NOLINTNEXTLINE
