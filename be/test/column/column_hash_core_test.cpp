@@ -108,9 +108,6 @@ void verify_rebased_matches_absolute(const Column& column, uint32_t from, uint32
 
 } // namespace
 
-<<<<<<< HEAD
-TEST(ColumnHashCoreTest, BinaryColumns) {
-=======
 // The rebased selector carries its own origin because the nullable fast path narrows [from, to) to
 // a run of equal null values and recurses; anchoring the destination to the narrowed `from` would
 // misplace every hash after the first run. Sparse nulls are what force that recursion, so cover a
@@ -188,8 +185,7 @@ TEST(ColumnHashCoreTest, AdaptiveNullableColumnMatchesMaterializedNullable) {
     }
 }
 
-TEST(ColumnHashCoreTest, BinaryAndLargeBinaryColumns) {
->>>>>>> b538fc0aab6... [Enhancement] Hash array_distinct one block of rows at a time, size array_repeat's elements column from the counts (#61770)
+TEST(ColumnHashCoreTest, BinaryColumns) {
     auto binary = BinaryColumn::create();
     binary->append("alpha");
     binary->append("beta");
