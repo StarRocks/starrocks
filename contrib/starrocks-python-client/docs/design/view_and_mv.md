@@ -56,7 +56,7 @@ To unify the representation of View and MaterializedView using the `Table` class
 | **Ordering Key**         | `table.dialect_options['starrocks']['order_by']`       | TABLE, MV          | `starrocks_order_by='...'`            | Passed via kwargs                      |
 | **Refresh**              | `table.dialect_options['starrocks']['refresh']`        | MV                 | `starrocks_refresh='IMMEDIATE ASYNC'` | Passed via kwargs                      |
 | **Properties**           | `table.dialect_options['starrocks']['properties']`     | TABLE, MV          | `starrocks_properties={...}`          | Passed via kwargs                      |
-| **Security Type**        | `table.dialect_options['starrocks']['security']`       | VIEW               | `starrocks_security='DEFINER'`        | Passed via kwargs                      |
+| **Security Type**        | `table.dialect_options['starrocks']['security']`       | VIEW               | `starrocks_security='INVOKER'`        | Passed via kwargs                      |
 
 ### Why this Categorization?
 
@@ -1259,12 +1259,12 @@ Both ways users write work:
 
 ```python
 # Recommended way
-op.create_view('my_view', 'SELECT ...', starrocks_security='DEFINER')
+op.create_view('my_view', 'SELECT ...', starrocks_security='INVOKER')
 
 # Also works
 op.create_table('my_view',
                 info={'table_kind': 'VIEW', 'definition': 'SELECT ...'},
-                starrocks_security='DEFINER')
+                starrocks_security='INVOKER')
 ```
 
 ## 5. Detailed Design Points
@@ -1285,13 +1285,13 @@ op.create_table('my_view',
 my_view = View('v1', 'SELECT * FROM t1',
                metadata=metadata,
                comment='My view',
-               starrocks_security='DEFINER')
+               starrocks_security='INVOKER')
 
 # Equivalent to
 my_view = Table('v1', metadata,
                 info={'table_kind': 'VIEW', 'definition': 'SELECT * FROM t1'},
                 comment='My view',
-                starrocks_security='DEFINER')
+                starrocks_security='INVOKER')
 ```
 
 ### 5.2 Reflection Layer Key Points
@@ -1468,7 +1468,7 @@ Based on [StarRocks ALTER MATERIALIZED VIEW documentation](https://docs.starrock
    - Syntax: `ALTER MATERIALIZED VIEW mv_name SET ("key" = "value", ...)`
    - Can be detected in schema comparison and generate `AlterMaterializedViewOp`
 
-**❌ Not Supported (Changes Generate Warning Only)**:
+**❌ Not Supported by ALTER (Autogenerate Drops and Creates the MV Again, With a Warning)**:
 
 The following attributes cannot be altered via `ALTER MATERIALIZED VIEW`:
 
@@ -1488,14 +1488,14 @@ def _compare_mv(autogen_context, upgrade_ops, schema, mv_name, conn_mv, metadata
 
     Strategy:
         - Only refresh and properties changes → Generate AlterMaterializedViewOp
-        - Other attribute changes → Generate warning only (no operations)
+        - Other attribute changes → Drop and create the MV again, with a warning
     """
 
     # Check immutable attributes (cannot ALTER)
     if _compare_mv_definition(conn_mv, metadata_mv):
         warnings.warn(
             f"StarRocks does not support altering MV definition; "
-            f"definition changes detected for {mv_name} will be ignored.",
+            f"{mv_name} is dropped and created again.",
             UserWarning
         )
 
@@ -1690,7 +1690,7 @@ my_view = View(
     metadata=metadata,
     schema='test_sqla',
     comment='Active users',
-    starrocks_security='DEFINER'
+    starrocks_security='INVOKER'
 )
 
 # MV
@@ -1754,7 +1754,7 @@ my_view = Table(
         'definition': 'SELECT id, name FROM users'
     },
     comment='Active users',
-    starrocks_security='DEFINER'
+    starrocks_security='INVOKER'
 )
 ```
 
@@ -1774,7 +1774,7 @@ class UserView(Base):
             'table_kind': 'VIEW',
             'definition': 'SELECT id, name FROM users WHERE active = 1'
         },
-        'starrocks_security': 'DEFINER'
+        'starrocks_security': 'INVOKER'
     }
 
     # Define columns (optional, for type hints)
@@ -1788,7 +1788,7 @@ class UserStatsView(Base):
         'SELECT COUNT(*) as cnt FROM users',
         Base.metadata,
         comment='User statistics',
-        starrocks_security='DEFINER'
+        starrocks_security='INVOKER'
     )
 ```
 
@@ -1804,7 +1804,7 @@ metadata = MetaData()
 my_table = Table('my_view', metadata, autoload_with=engine, schema='test_sqla')
 print(my_table.info['table_kind'])  # 'VIEW'
 print(my_table.info['definition'])    # 'SELECT ...'
-print(my_table.dialect_options['starrocks']['security'])  # 'DEFINER'
+print(my_table.dialect_options['starrocks']['security'])  # 'INVOKER'
 ```
 
 ### 8.3 Autogenerate
@@ -1818,7 +1818,7 @@ def upgrade():
         'SELECT id, name FROM users WHERE active = 1',
         schema='test_sqla',
         comment='Active users',
-        starrocks_security='DEFINER'
+        starrocks_security='INVOKER'
     )
 
     op.create_materialized_view(

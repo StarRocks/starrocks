@@ -34,7 +34,7 @@ my_table = Table(
 
 Note: Usage mirrors standard SQLAlchemy patterns (e.g., MySQL dialect), but you should use types from `starrocks` and keep them uppercase.
 
-**Important**: If you specify a StarRocks table key via `starrocks_primary_key`, `starrocks_unique_key`, `starrocks_duplicate_key`, or `starrocks_aggregate_key`, all columns listed in that key **MUST** also be declared with `primary_key=True` on their `Column(...)` definitions. This ensures SQLAlchemy metadata and Alembic autogenerate behave correctly.
+**Important**: If you specify a Primary, Unique or Aggregate Key via `starrocks_primary_key`, `starrocks_unique_key` or `starrocks_aggregate_key`, also declare all the key's columns with `primary_key=True` on their `Column(...)` definitions. Reflection reports those keys as the table's primary key, so the model then matches the database, and the ORM can map the table. A Duplicate Key table (`starrocks_duplicate_key`) has no primary key: mark its key columns `primary_key=True` only if the ORM must map the table, and then mark all of them. The dialect refuses `primary_key=True` columns that are not exactly the named key's columns. For a table that names no key, see Table Type below.
 
 ## Defining Table Attributes
 
@@ -52,7 +52,7 @@ The prefix `starrocks_` should be **lower case**. The suffix is case-insensitive
 
 ##### 1. `starrocks_engine`
 
-Specifies the table engine. `OLAP` is the default and only supported engine.
+Specifies the table engine. `OLAP` is the default. Any other value is written as given in `ENGINE=...`, and a table of another engine, such as `mysql`, has no key, so `starrocks_infer_primary_key` gives it no key clause.
 
 - **Type**: `str`
 - **Default**: `"OLAP"`
@@ -69,7 +69,7 @@ Defines the table's type (key) and the columns that constitute the key. You must
 
 - **`starrocks_duplicate_key`**
 
-  - **Description**: Defines a Duplicate Key type table. This is the default type if no key is specified. It's suitable for storing raw, unchanged data.
+  - **Description**: Defines a Duplicate Key type table. This is the type StarRocks gives a table that names no key, unless `starrocks_infer_primary_key` makes it a Primary Key table (see below). It's suitable for storing raw, unchanged data.
   - **Type**: `str` (comma-separated column names)
   - **Example**: `starrocks_duplicate_key="request_id, timestamp"`
 
@@ -84,8 +84,36 @@ Defines the table's type (key) and the columns that constitute the key. You must
   - **Type**: `str` (comma-separated column names)
   - **Example**: `starrocks_unique_key="device_id"`
 
-> Although you **CAN'T only** specify the Primary Key type in Columns, such as `Column('id', Integer, primary_key=True)`, or by using `PrimaryKeyConstraint`, You still need to specify it as the SQLAlchemy's stardard primary key declaration, either via Columns or `PrimaryKeyConstraint`, to prevent errors.
+> **A primary key and no key model.** A table that names no `starrocks_*_key` but has primary key columns, from `Column('id', Integer, primary_key=True)` or a `PrimaryKeyConstraint`, gets no key clause, as in earlier versions of the dialect, so StarRocks makes its default Duplicate Key table. That table keeps every row loaded into it, rows with the same key or a NULL key included, and reflects no primary key.
+>
+> `create_engine(..., starrocks_infer_primary_key=True)` makes such a table a Primary Key table on its primary key columns, where StarRocks can hold one. The option also takes text, as `sqlalchemy.starrocks_infer_primary_key = true` in `alembic.ini` for `engine_from_config()`, and it can go in the URL's query string, as `starrocks://root@localhost:9030/mydatabase?starrocks_infer_primary_key=true`, where it takes the place of the keyword. Alembic's offline mode (`--sql`) and `create_mock_engine()` (for DDL dumps) make the dialect without reading the URL's query string, so give the option in `context.configure(dialect_opts=...)` for Alembic, and as a keyword, `create_mock_engine(url, dump, starrocks_infer_primary_key=True)`, for the mock engine. The Alembic form is `context.configure(dialect_opts={"paramstyle": "named", "starrocks_infer_primary_key": True})`. StarRocks holds the table as a Primary Key table when:
+>
+> - the key columns are the table's first columns, in key order. SQLAlchemy 2.0's declarative puts the columns of a mixin after the class's own, so an `id` from a mixin leads only with `mapped_column(primary_key=True, sort_order=-1)`; SQLAlchemy 1.4 puts a mixin's columns first;
+> - each key column is BOOLEAN, an integer type (LARGEINT included), DATE, DATETIME or VARCHAR, and none is a generated column. So CHAR, and with it `sa.Uuid()`, which is CHAR(32), DECIMAL, FLOAT, DOUBLE, BINARY, JSON and TIME keys are not taken;
+> - no key column is nullable, as `primary_key=True, nullable=True` or an ORM `Mapped[Optional[int]]` key makes it. StarRocks makes a Primary Key table's key columns NOT NULL and refuses each row whose key holds a NULL. An `autoincrement=True` column is NOT NULL anyway;
+> - the key's declared width fits the 128 bytes StarRocks loads in a row's primary key (the BE's `primary_key_limit_size`), so the table loads every row a Duplicate Key table would, except a row whose VARCHAR key holds zero bytes, where StarRocks counts one more byte for each zero byte, which can push the key past the limit. A `VARCHAR(n)` counts `n` bytes, and 2 more when another key column follows it; BOOLEAN and TINYINT count 1, SMALLINT 2, INT and DATE 4, BIGINT and DATETIME 8, and LARGEINT 16, and an `autoincrement=True` column is the BIGINT the dialect makes it. So `String(100)` with an `Integer` makes a Primary Key table and `String(255)` doesn't. A STRING key, which `Text` and a `String()` with no length are, never does;
+> - the table is an OLAP table, distributed by HASH of key columns or by default, not by RANDOM, and partitioned by key columns only;
+> - its `starrocks_order_by` columns are of those types, or STRING;
+> - it has none of the properties StarRocks refuses for a Primary Key table: `storage_cooldown_ttl`, `storage_cooldown_time`, `base_compaction_forbidden_time_ranges`, and `enable_persistent_index` set to false, which StarRocks refuses from 3.5. The dialect applies this rule on older servers too, so a model gives the same table on every version.
 > - it has no `bucket_size` property unless it names a `starrocks_distributed_by`: StarRocks 4.1 allows `bucket_size` only with RANDOM distribution, and a Primary Key table with no `DISTRIBUTED BY` is distributed by HASH.
+>
+> The dialect finds the columns of `starrocks_partition_by`, `starrocks_distributed_by` and `starrocks_order_by` by the table's column names, backquoted or bare, outside string literals; the unit of an interval, as `day` in `time_slice(dt, INTERVAL 1 day)`, is not a name. When it finds none in such a clause, it can't check the clause. When the table can't be a Primary Key table, the dialect warns, saying why, and sends no key clause, and StarRocks makes its default Duplicate Key table. The warning says what to change: to name the key with `starrocks_duplicate_key`, or, for key columns that don't lead, to put them first, since StarRocks takes no key whose columns don't lead the table. It also quotes the `warnings.filterwarnings()` call that silences it. A table of another engine, such as `ENGINE=mysql`, has no key, so it gets no key clause and no warning.
+>
+> With the option on, autogenerate compares such a model's key only with a Primary Key table, and leaves a table with any other key type as it is. With it off, it leaves the key of every such table as it is, a Primary Key table's included, since CREATE TABLE would give the model no key.
+>
+> A Primary Key table behaves differently from the Duplicate Key table the dialect makes with the option off:
+>
+> - a row whose key the table already holds replaces that row, where a Duplicate Key table keeps both;
+> - its key columns can't be altered as a Duplicate Key table's can. StarRocks takes a wider VARCHAR for one from 4.1.1, and a new comment from 4.1.3, and refuses every other change, such as `Integer` to `BigInteger`; before 4.1.1 it refuses any `MODIFY COLUMN` of one. So a migration that alters a key column runs on a table created with the option off and fails on one created with it on. Name `starrocks_duplicate_key` on a table whose key columns will change;
+> - StarRocks refuses a synchronous materialized view on it, and before 4.0 a GIN index. Those are separate statements the dialect can't see from the table, so name `starrocks_duplicate_key` on a table that needs them.
+>
+> Reflection reports a primary key for Primary, Unique and Aggregate Key tables, which hold one row per key, and none for Duplicate Key tables. When you name one of those three key types, also mark its columns `primary_key=True`, so that the model matches the reflected table and the ORM can map it.
+
+> **Upgrading from an earlier version of the dialect**
+>
+> - By default a table that names no `starrocks_*_key` still gets no key clause, so its `primary_key=True` columns make a Duplicate Key table, as before. With `starrocks_infer_primary_key=True`, a new database built from such a model, or from the same migration scripts, gets Primary Key tables where StarRocks can hold one, while the tables earlier versions created are Duplicate Key tables, which autogenerate leaves as they are. A Primary Key table replaces a row whose key it already holds, refuses NULL keys, and can't alter its key columns later, as described above, so one migration history can then run on an old database and fail on a new one.
+> - To keep a table a Duplicate Key table with the option on, name its key as `SHOW CREATE TABLE` reports it, for example `starrocks_duplicate_key="id, name"`. The columns marked `primary_key=True` must then be exactly the key's columns, or none of them; a column that loses `primary_key=True` keeps `nullable=False` if it had it.
+> - A Duplicate Key table no longer reflects a primary key, so `automap_base().prepare(autoload_with=engine)` skips it, and the ORM cannot map a reflected `Table` of it. Give the ORM the key yourself: reflect the table with an overriding `Column('id', INTEGER, primary_key=True)`, or set `__mapper_args__ = {"primary_key": [table.c.id]}` on the mapped class.
 
 ##### 3. `COMMENT`
 
@@ -109,7 +137,7 @@ Defines the partitioning strategy.
 Specifies the data distribution (including bucketing) strategy.
 
 - **Type**: `str`
-- **Default**: `RANDOM`
+- **Default**: `RANDOM` for a Duplicate Key table, and `HASH` of the key columns for a Primary Key table. StarRocks has no default distribution for a Unique or Aggregate Key table, so name one.
 - **Example**: `starrocks_distributed_by="HASH(user_id) BUCKETS 32"`
 
 > **Note on Buckets**: If you specify a distribution method (e.g., `HASH(user_id)`) but omit the `BUCKETS` clause, StarRocks will automatically assign a bucket count. Alembic's `autogenerate` feature is designed to handle this: if the distribution method in your metadata matches the one in the database and you haven't specified a bucket count, no changes will be detected. This prevents unnecessary `ALTER TABLE` statements when the bucket count is automatically managed by the system.
@@ -118,8 +146,10 @@ Specifies the data distribution (including bucketing) strategy.
 
 Specifies the sorting columns.
 
-- **Type**: `str` (comma-separated column names)
-- **Example**: `starrocks_order_by="event_timestamp, event_type"`
+- **Type**: `str` (comma-separated column names), or a list of column names
+- **Example**: `starrocks_order_by="event_timestamp, event_type"`, or `starrocks_order_by=["event_timestamp", "event_type"]`
+
+The string is sent as written. In a list, each bare column name is quoted as StarRocks needs, so a name it reserves, such as `text`, can be listed as it is. An item holding a space, a parenthesis or a backquote is sent as written, so a name with a space goes in backquotes, as in ``["`event type`", "event_id"]``.
 
 ##### 7. `starrocks_properties`
 
@@ -138,7 +168,31 @@ A dictionary of additional table attributes.
 
 > **Note on Future Partition Properties**: Certain properties, such as `replication_num` and `storage_medium`, can be modified to apply only to newly created partitions. When `alembic revision --autogenerate` detects changes to these specific properties, it will generate an `ALTER TABLE` statement that prefixes them with `default.` prefix (e.g., `SET ("default.replication_num" = "...")`). This ensures that the changes do not affect existing data.
 
+> **Note on `%` in SQL text**: write a single `%`, as StarRocks should read it, in the text of `starrocks_partition_by`, `starrocks_distributed_by`, `starrocks_order_by` and `starrocks_properties`, in a view's or materialized view's `definition` and `starrocks_refresh`, and in the `op.alter_table_*` and `op.alter_materialized_view` operations, for example `starrocks_partition_by="RANGE(str2date(s, '%Y-%m-%d')) (...)"`. The dialect escapes it for the driver.
+>
+> **Upgrading**: earlier versions of the dialect raised on a single `%` when connected, so models and migration scripts written for them hold `%%`. That `%%` now reaches StarRocks as `%%`, which changes what a `date_format` or `str2date` pattern means without an error. Replace it with `%`. The dialect warns, once for each such text, when it finds `%%`. It can't tell such a `%%` from one you mean, as in the string literal `'a%%b'`, which StarRocks stores as written. To keep a `%%` you mean without the warning, filter it: `warnings.filterwarnings("ignore", message="DDL text .* holds '%%'")`.
+
+### Secondary Indexes
+
+Declare StarRocks' BITMAP, NGRAMBF, GIN and VECTOR indexes with SQLAlchemy's `Index`. `starrocks_using` names the type, `starrocks_properties` its properties and `starrocks_comment` the comment:
+
+```python
+from sqlalchemy import Index
+
+Index("ix_city", events.c.city, starrocks_using="BITMAP")
+Index(
+    "ix_name",
+    events.c.name,
+    starrocks_using="NGRAMBF",
+    starrocks_properties={"gram_num": "4", "bloom_filter_fpp": "0.05"},
+    starrocks_comment="n-grams of the name",
+)
+```
+
+Each compiles to `CREATE INDEX ix_name ON events (name) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05") COMMENT '...'`. StarRocks builds the index in an asynchronous schema-change job, and lists it only once the job has ended. The dialect waits for the job after each `CREATE INDEX` and `DROP INDEX`, so `create_all` can create several indexes on one table, and an inspector or an autogenerate run straight after sees them. GIN indexes need the FE configuration `enable_experimental_gin`.
+
 Indexes are reflected with their type, comment and properties, including the ones StarRocks filled in, so autogenerate creates and drops them like any other index. Dropping a column drops its index as well, so in a migration, a `drop_index` for an index that a `drop_column` earlier in the same run took with it does nothing. Index names are matched without regard to case, as StarRocks matches them. `drop_index(..., if_exists=True)` drops the index only if it exists, and any other `drop_index` of a missing index fails with StarRocks' error.
+
 ### Column Attributes
 
 #### Column Data Types
@@ -181,7 +235,7 @@ Bind a Python list to an ARRAY column, and a dict to a MAP or STRUCT column. An 
 
 A `cast()` to ARRAY, MAP or STRUCT is left out for three kinds of operand: text, an expression with no type, and JSON where the connected StarRocks can't cast JSON to the type. StarRocks casts JSON to MAP from 3.4.3 and to STRUCT from 3.5.0, and never to an ARRAY element, MAP value or STRUCT field of a DATE, DATETIME, DECIMAL or binary type, or to an ARRAY of ARRAYs or MAPs. Every other operand keeps the CAST: an ARRAY, MAP or STRUCT and NULL, which StarRocks casts, and any other type, such as a number, which StarRocks may refuse.
 
-A left-out CAST changes nothing on the server, which computes on the operand's own type. Only where the dialect reads the value, in a column of the statement's result or a subquery column that the query selects as it is, is the operand's text read as the type. Each element is then converted as StarRocks' cast of JSON converts it, so a statement reads as it does where the server runs the CAST: a number or a JSON object in a VARCHAR element reads as its text, a BOOLEAN reads only from `1`, `0`, `true` or `false`, or their text, a STRUCT keeps only its declared fields, each by its exact name, and any other value that isn't of its element's type raises `ValueError`. Array text that StarRocks' cast reads but that isn't JSON, such as `[a,b]` or `[NULL,1]`, is returned as the text, as 1.3 returned it. Anywhere else, such as in a comparison, ORDER BY, GROUP BY, DISTINCT or a function's argument, the dialect warns that StarRocks computes on the operand's type. A `func` given no `type_` has no type, so give a function that returns a collection its type, as in `func.split(c, ",", type_=ARRAY(VARCHAR(10)))`. Its result is then read as a list, and a CAST of it reaches StarRocks.
+A left-out CAST changes nothing on the server, which computes on the operand's own type. Only where the dialect reads the value, in a column of the statement's result or a subquery column that the query selects as it is, is the operand's text read as the type. Each element is then converted as StarRocks' cast of JSON converts it, so a statement reads as it does where the server runs the CAST: a number or a JSON object in a VARCHAR element reads as its text, a BOOLEAN reads only from `1`, `0`, `true` or `false`, or their text, a STRUCT keeps only its declared fields, each by its exact name, and any other value that isn't of its element's type raises `ValueError`. Array text that StarRocks' cast reads but that isn't JSON, such as `[a,b]` or `[NULL,1]`, is returned as the text, as 1.3 returned it. Anywhere else, such as in a comparison, ORDER BY, GROUP BY, DISTINCT or a function's argument, the dialect warns that StarRocks computes on the operand's type. A view's or materialized view's definition compiles with no server version, so it leaves out, on every server, each JSON CAST that some supported StarRocks lacks, and each CAST it leaves out warns, since the definition's column then has the operand's type. A `func` given no `type_` has no type, so give a function that returns a collection its type, as in `func.split(c, ",", type_=ARRAY(VARCHAR(10)))`. Its result is then read as a list, and a CAST of it reaches StarRocks.
 
 **Note**: Syntax and usage are analogous to SQLAlchemy's style (e.g., MySQL types), but always import and use the StarRocks types in uppercase from `starrocks`.
 
@@ -193,7 +247,8 @@ For `AGGREGATE KEY` tables, you can specify attributes for each column by passin
 
 - **`starrocks_is_agg_key`**: A boolean that can be set to `True` to explicitly mark a column as a key in an `AGGREGATE KEY` table. This is optional but improves clarity.
 - **`starrocks_agg_type`**: A string specifying the aggregate type for a value column. Supported values are:
-  - `'SUM'`, `'REPLACE'`, `'REPLACE_IF_NOT_NULL'`, `'MAX'`, `'MIN'`, `'HLL_UNION'`, `'BITMAP_UNION'`
+  - `'SUM'`, `'REPLACE'`, `'REPLACE_IF_NOT_NULL'`, `'MAX'`, `'MIN'`, `'HLL_UNION'`, `'BITMAP_UNION'`, `'PERCENTILE_UNION'`
+  - An aggregate state function, written as StarRocks prints it, such as `'sum(BIGINT)'`
 
 ##### Notes on ALTER TABLE ADD/MODIFY COLUMN
 
@@ -457,37 +512,46 @@ This ensures that your model definitions correctly map to StarRocks's native dat
 
 ### Notes
 
-- Changes to **non-alterable attributes** like `ENGINE`, `table type`, or `partitioning` will be detected, but will raise an error to prevent generating an unsupported migration.
-- Changing a column’s **aggregation type** is not supported by StarRocks; autogenerate will detect differences and raise an error instead of producing DDL.
+- Changes to **non-alterable attributes** like `ENGINE`, `table type`, or `partitioning` are detected and reported as a warning. Autogenerate generates no operation for them, and still generates the rest of the revision; apply such a change by hand, usually by recreating the table.
+- Changing a column’s **aggregation type** is not supported by StarRocks; autogenerate warns about the difference and generates no operation for it.
 
 ### Limitations
 
-- **`AUTO_INCREMENT`**: Currently, the reflection process does not detect the `AUTO_INCREMENT` property on columns. This is because this information is not available in a structured way from `information_schema.columns` or `SHOW FULL COLUMNS`. While it is present in the output of `SHOW CREATE TABLE`, parsing this is not yet implemented. Therefore, Alembic's `autogenerate` will not be able to detect or generate migrations for `AUTO_INCREMENT` columns.
+- **`AUTO_INCREMENT`**: Reflection reads a column's `AUTO_INCREMENT` from `SHOW CREATE TABLE`, since `information_schema.columns` and `SHOW FULL COLUMNS` don't show it, and autogenerate compares it with the model's `autoincrement`. StarRocks can't add `AUTO_INCREMENT` to a column or take it away, so autogenerate warns about a difference, and `op.alter_column` refuses one; recreate the table to change it. A `MODIFY COLUMN` of an `AUTO_INCREMENT` column, which `op.alter_column` writes without the `AUTO_INCREMENT`, is refused by StarRocks before 4.1.3, and from 4.1.3 taken only when it changes nothing but the comment.
 
 ### Important Considerations for Autogenerate
 
 #### Handling Time-Consuming ALTER TABLE Operations
 
-StarRocks schema change operations (like `ALTER TABLE ... MODIFY COLUMN`) can be time-consuming. Because one table can have only one ongoing schema change operation at a time, StarRocks does not allow other schema change jobs to be submitted for the same table.
+StarRocks schema change operations (like `ALTER TABLE ... MODIFY COLUMN`, building a secondary index, or changing the distribution) run as asynchronous jobs and can be time-consuming. Because one table can have only one ongoing schema change operation at a time, StarRocks rejects any other change to the table, with "A schema change operation is in progress", until the job has ended.
 
-> Some other operations, such as rename, comment, partition, index and swap, are synchronous operations, a command return indicates that the execution is finished. Then, the next operation can be submitted.
+> Rename, comment, partition and swap operations are synchronous: when the statement returns, the change is done.
 
 Alembic's `autogenerate` feature may produce an `upgrade()` function that contains multiple consecutive `op.alter_column()` or other `ALTER TABLE` calls for a single table. For example:
 
 ```python
 def upgrade():
-    # Potentially problematic if schema changes are slow
     op.alter_column('my_table', 'col1', ...)
     op.alter_column('my_table', 'col2', ...)
 ```
 
-If the first `alter_column` operation takes a long time to complete, the second one will fail when Alembic tries to execute it immediately after the first.
+The dialect holds back each `ALTER TABLE`, `CREATE INDEX` and `DROP INDEX` that it compiles from a construct naming its table until the job running on that table has ended, so these run one after the other, and `metadata.create_all()` can create several indexes on one table. The constructs are SQLAlchemy's index and table-comment statements, as `create_all()`, `Index.create()` and `Index.drop()` send them, Alembic's operations, and the dialect's own `ALTER TABLE` constructs. A statement sent as text doesn't wait: through `exec_driver_sql()`, `text()` or `op.execute()`, or as SQLAlchemy's `DDL()`, such as a `DDL("ALTER TABLE ...")` listening for `after_create`. The wait covers the `COLUMN`, `OPTIMIZE` and `ROLLUP` jobs that `SHOW ALTER TABLE` lists. A `ROLLUP` job builds an `ALTER TABLE ... ADD ROLLUP` or a synchronous materialized view, and while it runs StarRocks refuses other changes to the table with "A materialized view or rollup index is being created on the table". StarRocks shows a `ROLLUP` job as `FINISHED` up to about 60 ms before it frees the table, so a statement it refuses that way after the wait saw a `ROLLUP` job end is sent again, after 50 ms and then after pauses that double up to a second, within the wait's `starrocks_schema_change_timeout`. After a `CREATE INDEX` or `DROP INDEX` it also waits for the index's own job. The `starrocks.dialect` logger shows each poll at INFO, and at WARNING after about five seconds of waiting and once a minute after that. Two `create_engine()` options control the wait:
+
+```python
+engine = create_engine(
+    "starrocks://root@localhost:9030/mydatabase",
+    starrocks_schema_change_timeout=300,    # seconds; None or 0 waits without a limit (default: 300)
+    starrocks_wait_for_schema_change=True,  # False sends each statement at once (default: True)
+)
+```
+
+When the timeout passes before a statement, the dialect raises `starrocks.dialect.SchemaChangeTimeoutError`, which names the job and its state, and doesn't send the statement. After a `CREATE INDEX` or `DROP INDEX` it gives a warning instead, since the statement has run and its job goes on. If StarRocks cancels the job of a `CREATE INDEX` or `DROP INDEX`, the dialect logs a warning naming the index, the table and the job, because the index was then not built, or not dropped. A job in `WAITING_TXN` waits for the transactions that write its table, which can include a `READ COMMITTED` transaction that your own program holds open on another connection. Without the timeout, that would wait for ever.
+
+Both options also take text from a configuration file, such as `sqlalchemy.starrocks_schema_change_timeout = 600` in `alembic.ini` for `engine_from_config()`, and they can go in the URL's query string, such as `starrocks://root@localhost:9030/mydatabase?starrocks_schema_change_timeout=600`, where they take the place of the keywords. They apply to the whole engine: `execution_options()` doesn't take them. They are separate from the Alembic options of the same names in `context.configure()`, which make a migration wait for the job of each of its schema-change statements.
 
 **Recommendation:**
 
-For potentially slow `ALTER TABLE` operations, it is recommended to modify only **one column or one table property at a time**. After `autogenerate` creates a migration script, review it. If you see multiple `ALTER` operations for the same table that you suspect might be slow, you should split them into separate migration scripts.
-
-However, operations that are typically fast, such as adding or dropping multiple columns, can often be executed together without issue.
+Each slow schema change rewrites the table's data, so on a large table prefer one statement over several where StarRocks allows it: the `combine_column_alters` rewriter in the [Alembic guide](alembic.md#44-coalescing-column-changes-into-a-single-alter-table) folds a table's added and dropped columns into one `ALTER TABLE`.
 
 #### Limitations on Modifying Complex Type Columns
 

@@ -16,6 +16,30 @@ pip install starrocks
 
 Python >= 3.10, <= 3.14
 
+#### Supported StarRocks Versions
+
+StarRocks 3.3.3 or later; the dialect is tested on 3.3.22, 3.5.21 and 4.1.6. A few features need a later version, and on an older server the dialect refuses them:
+
+| Feature | Needs | Refused with |
+|---|---|---|
+| View `starrocks_security` | 3.4.1 | `CompileError` |
+| `VARIANT` columns | 4.1 | `CompileError` |
+| `isolation_level="READ COMMITTED"` (StarRocks transactions) | 3.5, and the session variable `enable_sql_transaction` on where StarRocks has it, from 4.0.7 and 4.1.0 | `InvalidRequestError`, when a connection is made or switched to it |
+| `BEGIN` or `START TRANSACTION` sent as text | 3.5, and the session variable `enable_sql_transaction` on where StarRocks has it, from 4.0.7 and 4.1.0 | `InvalidRequestError` |
+
+Older versions also differ in ways the dialect handles for you:
+
+- Before 4.0.7, StarRocks stores a view's SQL in its own canonical form, and before 4.0.2 it shows a materialized view's in that form; autogenerate canonicalizes the model's SQL the same way before comparing.
+- `@@run_mode` exists from 4.0.7. Older servers report the run mode only through `ADMIN SHOW FRONTEND CONFIG`, which needs the OPERATE privilege; without it the dialect assumes shared-nothing.
+- StarRocks casts JSON to MAP from 3.4.3 and to STRUCT from 3.5.0. On an older server the dialect leaves such a `cast()` out: a column of the result reads the JSON text as the type, and anywhere else the dialect warns, since StarRocks computes on the JSON. A view's or materialized view's definition compiles with no server version, so it leaves these casts out on every server, and warns.
+- `time_slice(..., ceil)` in a PARTITION BY needs 3.4.1, and StarRocks refuses it before.
+- Before 3.4, StarRocks puts a generated column in the DUPLICATE KEY it picks for a table that names no key, and then refuses it, so name the key with `starrocks_duplicate_key`.
+- Some table properties are newer than 3.3: `compaction_strategy` and the `flat_json.*` properties (4.0), `enable_statistic_collect_on_first_load` (3.5.10 and 4.0.2), and `bucket_size` defaults to 4 GiB before 4.0 and 1 GiB from 4.0. Declare only the properties your servers know.
+
+Some column features are newer than 3.3 in StarRocks itself, and the dialect sends them as they are: a DECIMAL precision above 38 needs 4.0, and a STRUCT field name holding a space reflects back only from 4.1.1, which quotes field names.
+
+Views, materialized views and the `starrocks+asyncmy` driver need SQLAlchemy 2.0. On SQLAlchemy 1.4 the dialect covers tables, types, queries and reflection, and Alembic autogenerate compares tables and leaves the database's views and materialized views alone, with a warning that names them.
+
 #### Using a Virtual Environment (Recommended)
 
 It is highly recommended to install `starrocks` in a virtual environment to avoid conflicts with system-wide packages.
@@ -61,6 +85,8 @@ starrocks+asyncmy://<User>:<Password>@<Host>:<Port>/[<Catalog>.]<Database>
 > Note: The `Catalog` can be omitted and is managed by StarRocks.
 > The default is `default_catalog`.
 
+Connections autocommit by default, as StarRocks does. Pass `isolation_level="READ COMMITTED"` to `create_engine` to run INSERT, UPDATE and DELETE in StarRocks transactions; see [Transactions](./docs/usage_guide/sqlalchemy.md#transactions).
+
 ### Example: Basic Operations
 
 Connect to your database and do a query.
@@ -86,8 +112,8 @@ engine = create_async_engine('starrocks+asyncmy://root@localhost:9030/mydatabase
 async def async_query():
     async with engine.connect() as connection:
         print("Connection successful!")
-        rows = await connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
-        print(rows)
+        result = await connection.execute(text("SELECT * FROM mytable LIMIT 2"))
+        print(result.fetchall())
 
     await engine.dispose()
 
@@ -149,6 +175,8 @@ my_core_table = Table(
 metadata.create_all(engine)
 ```
 
+A table that names no `starrocks_*_key` gets no key clause from its `primary_key=True` columns, so StarRocks makes a Duplicate Key table, as in earlier versions. `create_engine(..., starrocks_infer_primary_key=True)` makes it a Primary Key table where StarRocks can hold one; the [Table Definition Reference](./docs/usage_guide/tables.md#2-table-type-starrocks_key) has the rules.
+
 For a complete guide on defining tables (Core and ORM), executing queries, and using advanced features, please see the **[SQLAlchemy Usage Guide](./docs/usage_guide/sqlalchemy.md)**.
 
 For a detailed reference on all StarRocks-specific table attributes and data types, please see the **[Table Definition Reference](./docs/usage_guide/tables.md)**.
@@ -208,7 +236,7 @@ Refer to [generating models](./docs/usage_guide/alembic.md#Generating-models-fro
 #### 1. Install and Initialize Alembic
 
 ```bash
-pip install "alembic>=1.16"
+pip install "alembic>=1.14"
 alembic init alembic
 ```
 
@@ -310,6 +338,8 @@ The connection URL is taken from, in order of precedence:
 3. a `[db]` section with a `default` URL in a git-ignored `test.cfg` next to `setup.cfg`;
 4. `setup.cfg`'s `[db] default`, which is `starrocks://root@localhost:9030/test_sqla`.
 
+The test URL turns `starrocks_infer_primary_key` on, since SQLAlchemy's and Alembic's suites make tables from `primary_key=True` columns, reflect their primary keys and UPDATE their rows, which StarRocks allows only on Primary Key tables. A `--dburi` that gives the option keeps its value.
+
 #### Running the Tests
 
 Run `pytest` from this directory:
@@ -354,7 +384,7 @@ pytest test/integration/test_reflection_table.py -k ReflectionTableOptionsTest
 
 | Path | What it covers |
 | --- | --- |
-| `test/sql` | Compiling DDL and DML with `assert_compile`, without executing it |
+| `test/sql` | Compiling DDL and DML with `assert_compile`; a few classes also run what they compile against the server |
 | `test/unit` | Parsing, reflection helpers, the defaults tables, and Alembic comparison and rendering, without executing SQL |
 | `test/integration` | Reflection, result processing and Alembic autogenerate comparison, against tables the tests create |
 | `test/system` | Alembic revisions end to end (autogenerate, upgrade and downgrade), each test in a fresh database |
@@ -381,7 +411,7 @@ Use `AssertsCompiledSQL` and `__dialect__` for compile tests, the `connection` a
 
 SQLAlchemy's plugin adds its own options, which `pytest --help` lists. Besides `--dburi`, these are the useful ones:
 
-- `--dropfirst` drops the views and tables earlier runs left in the configured database and the two extra schemas, for example after an interrupted `-n0` run.
+- `--dropfirst` drops the materialized views, views and tables earlier runs left in the configured database and the two extra schemas, for example after an interrupted `-n0` run.
 - `--dbdriver asyncmy` runs each class that runs against the database over asyncmy too, besides the URL's driver, in one session; asyncmy needs SQLAlchemy 2.0. The asyncmy-only tests, in `test/integration/test_asyncmy_binary.py`, run only then or under a `starrocks+asyncmy://` URL. Otherwise SQLAlchemy 2.0 leaves them out without a word, and 1.4 reports them as skipped.
 - `--log-info=sqlalchemy.engine` logs each statement the tests execute, and `--log-debug=sqlalchemy.engine` adds the rows. `pyproject.toml` turns on pytest's live log at INFO, so they show as the tests run.
 

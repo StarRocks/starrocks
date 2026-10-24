@@ -9,7 +9,7 @@ Alembic is a database migration tool for SQLAlchemy that allows you to manage ch
 First, ensure you have Alembic installed. If not, you can install it via pip:
 
 ```bash
-pip install "alembic>=1.16"
+pip install "alembic>=1.14"
 ```
 
 For more detailed installation instructions, refer to the [Alembic Installation Guide](https://alembic.sqlalchemy.org/en/latest/front.html#installation).
@@ -142,9 +142,9 @@ def run_migrations_online() -> None:
 
 ### Advanced: Choosing the canonicalization schema for view/MV comparison
 
-On StarRocks versions before 4.0.6 a view/MV definition is stored in the engine's own
-canonical form, which could differ textually from the SQL in the model (dropped
-`col AS col` aliases, added parentheses, etc.) but the same semantically. To avoid
+On StarRocks versions before 4.0.7 a view definition is stored, and before 4.0.2 an MV definition
+is shown, in the engine's own canonical form, which could differ textually from the SQL in the
+model (dropped `col AS col` aliases, added parentheses, etc.) but the same semantically. To avoid
 reporting a phantom change on every autogenerate, the dialect canonicalizes your model's
 definition by round-tripping it through a **temporary view** and comparing the engine's
 stored form of both sides.
@@ -171,9 +171,24 @@ GRANT SELECT, DROP ON ALL VIEWS IN DATABASE __alembic_canon__ TO '<user>';
 ```
 
 When `starrocks_temp_view_schema` is unset the previous behaviour is unchanged (the temp
-view is created in the compared object's own schema). If the temporary view cannot be
-created (missing privilege, or a referenced object that does not exist yet), the comparison
-logs a DEBUG message and falls back to in-process AST/regex normalization.
+view is created in the compared object's own schema). A view or MV that states its columns
+is compared through a temporary view that states them too, so a definition whose SELECT list
+repeats a name, as `SELECT t.id, t2.id` does, compares as well. If the temporary view cannot
+be created (missing privilege, or a referenced object that does not exist yet), the comparison
+falls back to in-process AST/regex normalization. StarRocks keeps
+a view's definition as written from 4.0.7, and shows an MV's as written from 4.0.2; from
+then on a definition that differs is altered (a view) or recreated (an MV) as usual. Before
+those versions the stored definition has table-qualified columns that the normalization
+keeps, so a difference only it finds is reported as a warning, and the definition is left as
+the database has it, unless the change is certain: the database's definition goes through
+the temporary view and only the model's fails, as when it reads a column the revision adds;
+the model's definition reads a table, view or materialized view that the same revision
+creates; or the database's reads a table, view or materialized view that the revision drops without
+creating it again, or a column it drops or renames. The warning quotes the error StarRocks gave the temporary view, and advises the
+grants above only for an error they cure: access denied, an unknown database, or a temporary
+view the user cannot see. A view created before the
+server reached 4.0.7 keeps its rewritten definition until it is altered, so without the
+temporary view it gets one `alter_view`.
 
 ### Advanced: Custom Object Filtering
 
@@ -340,9 +355,11 @@ class MyTable(Base):
     }
 ```
 
-**Note**: All columns that appear in a StarRocks key (`starrocks_primary_key`, `starrocks_unique_key`, `starrocks_duplicate_key`, or `starrocks_aggregate_key`) must also be marked with `primary_key=True` in their `Column(...)` declarations.
+**Note**: All columns that appear in a Primary, Unique or Aggregate Key (`starrocks_primary_key`, `starrocks_unique_key` or `starrocks_aggregate_key`) must also be marked with `primary_key=True` in their `Column(...)` declarations, since reflection reports those keys as the primary key. A Duplicate Key table has no primary key: mark all of its key columns `primary_key=True` only if the ORM must map the table, or none of them.
 
 > In the above example, it the `id` column.
+
+**Note**: A table that names no `starrocks_*_key` gets no key clause from its `primary_key=True` columns, as in earlier versions of the dialect, so StarRocks makes a Duplicate Key table. With `starrocks_infer_primary_key` on, it is created as a Primary Key table on those columns when StarRocks can hold it as one: they are its first columns, in key order, not nullable, of types StarRocks takes in a key, their declared widths fit the 128 bytes StarRocks loads in a row's key, and its partition and HASH distribution columns are among them (the [table guide](tables.md) lists every rule). Otherwise the dialect warns, and StarRocks makes a Duplicate Key table. Set the option where `env.py` makes its engine, as `sqlalchemy.starrocks_infer_primary_key = true` in `alembic.ini` or `?starrocks_infer_primary_key=true` in `sqlalchemy.url`, and in `run_migrations_offline()`'s `dialect_opts`, since offline Alembic reads neither. A Primary Key table replaces a row whose key it holds, and can't alter its key columns later, where a Duplicate Key table can; autogenerate leaves the Duplicate Key tables earlier versions made alone. The Table Type section of the [table guide](tables.md) has the details, and how to map a reflected Duplicate Key table with the ORM.
 
 **Note**: Usage mirrors SQLAlchemy’s patterns (e.g., MySQL), but always import and use uppercase types from `starrocks`.
 
@@ -382,7 +399,6 @@ simple_view = View(
     definition="SELECT id, name FROM my_table",
     columns=['user_id', 'user_name'],
     schema='my_schema',
-    properties={'replication_num': '1'},
 )
 
 # Define a Materialized View
@@ -441,9 +457,11 @@ def downgrade():
 - **Autogenerate will detect:**
   - New views/MVs in metadata: emits `op.create_view(...)` or `op.create_materialized_view(...)`.
   - Dropped views/MVs from metadata: emits `op.drop_view(...)` or `op.drop_materialized_view(...)`.
-  - Definition changes: emits `op.alter_view(...)` or `op.alter_materialized_view(...)`.
-- **StarRocks Limitation:** `ALTER VIEW` only supports redefining the `AS SELECT` clause. It does not support changing `COMMENT` or `SECURITY` directly. If only `COMMENT`/`SECURITY` change, no operation is emitted; if the definition also changes, those attributes are ignored and only `ALTER VIEW` is generated.
-- **Definition Comparison:** View/MV definition comparison uses normalization: remove identifier backticks, strip comments, collapse whitespace, and compare case-insensitively. But, it's still recommended to give the definition with a good and unified SQL style.
+  - Definition changes: a view gets `op.alter_view(...)`. A materialized view, whose definition ALTER cannot change, is dropped and created again (`op.drop_materialized_view(...)` and `op.create_materialized_view(...)`), with a warning that StarRocks refills it.
+  - Changes to a materialized view's refresh scheme (ASYNC, MANUAL or the schedule) and properties: emits `op.alter_materialized_view(...)`. A change of the refresh moment (IMMEDIATE or DEFERRED) drops the materialized view and creates it again.
+- **Views over what the revision removes:** the downgrade could not alter a view back to a definition that reads a table, view or materialized view the revision drops or renames, or a column it drops or renames, before that is restored. So autogenerate drops such a view before the table operations and creates it again after them (`op.drop_view(...)` and `op.create_view(...)`, in both directions), and warns. StarRocks drops a view's grants with the view, where `ALTER VIEW` keeps them, so grant them again after the upgrade and after the downgrade. A view that reads none of it, such as one over a table that only loses a column the view does not read, is altered after the table operations and keeps its grants.
+- **View comment and security:** `ALTER VIEW ... AS` drops the view's comment and StarRocks has no ALTER for it, so `op.alter_view` applies a definition, column or comment change as `CREATE OR REPLACE VIEW` with the full definition, columns and comment. A security change is applied with `ALTER VIEW ... SET SECURITY`. Autogenerate emits an `op.alter_view` that carries all of this.
+- **Definition Comparison:** View/MV definition comparison uses normalization: remove identifier backticks, strip comments, collapse whitespace, and compare case-insensitively outside string literals, since StarRocks compares strings by case. But, it's still recommended to give the definition with a good and unified SQL style.
 
 #### Caveats: SQL rewriting and quoted strings
 
@@ -533,6 +551,16 @@ alembic upgrade <current_rev>:<target_rev> --sql
 
 Setting `<target_rev>` to be `head`, you can see the SQL for changes to the newest version.
 
+> **Offline SQL needs the `named` paramstyle**: Alembic's `env.py` template passes `dialect_opts={"paramstyle": "named"}` to `context.configure()` in `run_migrations_offline()`; keep it there. Without it, the dialect writes the SQL for a driver that formats parameters with `%`, so each `%` in DDL text comes out doubled: `date_format(d, '%Y')` in a view's definition is written `date_format(d, '%%Y')`, and a column comment `50%` is written `'50%%'`. A mysql client running the script then stores `%%`. Earlier versions of the dialect doubled the `%` of a comment already, but not of a definition or another clause.
+
+> **The PRIMARY KEY inference offline**: Alembic makes the offline dialect from `dialect_opts` alone, without the URL's query string or `env.py`'s engine options, so with `starrocks_infer_primary_key` on give it there too: `dialect_opts={"paramstyle": "named", "starrocks_infer_primary_key": True}`. Without it, the script creates Duplicate Key tables where the online run creates Primary Key tables. A DDL dump from `create_mock_engine()` reads the URL's query string no more than offline Alembic does; pass the option as a keyword there, `create_mock_engine(url, dump, starrocks_infer_primary_key=True)`.
+
+> **Offline limits of `op.alter_column`**: with no database to read, the SQL written for `--sql` can differ from what the dialect sends when connected.
+>
+> - StarRocks wants a key column's `KEY`, or a value column's aggregate type, repeated in `MODIFY COLUMN` for a key column of a DUPLICATE KEY or UNIQUE KEY table and a value column of an AGGREGATE KEY table. Connected, the dialect reads it from the table; offline it can't, so the script's statement leaves it out and fails, with "Can not change aggregation type". Add it after the type before you run the script, as in `ALTER TABLE t MODIFY COLUMN k2 VARCHAR(20) KEY NULL` or `ALTER TABLE t MODIFY COLUMN v BIGINT SUM NULL`.
+> - `autoincrement=True` needs `existing_autoincrement`: the dialect can't tell whether it would add AUTO_INCREMENT, which StarRocks can't do. `autoincrement=False`, which autogenerate writes for a `primary_key=True, autoincrement=False` column, leaves AUTO_INCREMENT out.
+> - StarRocks can't change a column's default, and wants a type change to restate it. Connected, a `server_default` given without `existing_server_default` is compared with the default the dialect reads from the table, as StarRocks keeps both: `DEFAULT NULL` is no default, so `sa.null()` or `sa.text("NULL")` restates a column without one, and from 3.5.11, 4.0.4 and 4.1.0 a BOOLEAN column's `'true'` and `'false'`, in any case, are `'1'` and `'0'`. A changed one raises CompileError. Offline the dialect can't read it, so the statement keeps the `server_default` as given, and StarRocks refuses a changed one with "Can not change default value".
+
 ### 4.3 Applying This Migration to Your Database
 
 ```bash
@@ -541,17 +569,17 @@ alembic upgrade head
 
 > **Important Note on Schema Changes:** > **No Transactional DDL:** StarRocks does not support multiple-DDL statements transactional operations. This means that if a migration script fails midway, the changes that were successfully executed will _not_ be automatically rolled back. This can leave your database schema in a partially migrated state, which may require manual intervention to fix.
 >
-> **Time-Consuming Operations:** StarRocks schema change operations (like `ALTER TABLE ... MODIFY COLUMN`) can be time-consuming. Because one table can have only one ongoing schema change operation at a time, StarRocks does not allow other schema change jobs to be submitted for the same table.
+> **Time-Consuming Operations:** StarRocks schema change operations (like `ALTER TABLE ... MODIFY COLUMN`) can be time-consuming. Because one table can have only one ongoing schema change operation at a time, StarRocks does not allow other schema change jobs to be submitted for the same table. The dialect therefore holds back each `ALTER TABLE` that an Alembic operation compiles until the table's running job has ended; see [Waiting for schema changes](#waiting-for-schema-changes-to-reach-a-terminal-state-opt-in).
 >
-> **Adding/dropping several columns at once:** Because each `ALTER TABLE ... ADD/DROP COLUMN` submits an *asynchronous* schema-change job and only one job may run per table at a time, emitting one statement per column fails as soon as the second statement is submitted while the first job is still running. Enable [coalescing of column changes](#44-coalescing-column-changes-into-a-single-alter-table) so all `ADD`/`DROP COLUMN` for a table are combined into a **single** `ALTER TABLE` (a single job), and optionally have Alembic [wait for each schema change to finish](#44-coalescing-column-changes-into-a-single-alter-table) so the migration stays in lock-step with the cluster.
+> **Adding/dropping several columns at once:** Each `ALTER TABLE ... ADD/DROP COLUMN` submits an *asynchronous* schema-change job, and only one job may run per table at a time. The dialect waits for the job of the statement before, so one statement per column runs, each after the previous job, and each job rewrites the table's data. With the wait turned off (`starrocks_wait_for_schema_change=False` on the engine), or for SQL sent through `op.execute()`, the second statement is refused while the first job is still running. Enable [coalescing of column changes](#44-coalescing-column-changes-into-a-single-alter-table) so all `ADD`/`DROP COLUMN` for a table are combined into a **single** `ALTER TABLE` (a single job), and optionally have Alembic [wait for each schema change to finish](#waiting-for-schema-changes-to-reach-a-terminal-state-opt-in) so the migration stays in lock-step with the cluster.
 >
-> **Recommendation:** For potentially slow `ALTER TABLE` operations that are *not* automatically coalesced (e.g. `MODIFY COLUMN`, or property/distribution changes), it is still recommended to modify only **one column or one table property at a time**. After `autogenerate` creates a migration script, review it. If you see multiple such `ALTER` operations for the same table, either enable the wait option below or split them into separate migration scripts.
+> **Recommendation:** For potentially slow `ALTER TABLE` operations that are *not* automatically coalesced (e.g. `MODIFY COLUMN`, or property/distribution changes), it is still best to modify only **one column or one table property at a time**. After `autogenerate` creates a migration script, review it. Several such `ALTER` operations for the same table run one after the other, each waiting for the job before it, so the migration takes as long as all their jobs together; split them into separate migration scripts if you want to apply them apart.
 >
-> For more detailed information on StarRocks table attributes and modification limitations, please refer to the [Tables Usage Guide](docs/usage_guide/tables.md).
+> For more detailed information on StarRocks table attributes and modification limitations, please refer to the [Tables Usage Guide](tables.md).
 
 ### 4.4 Coalescing column changes into a single ALTER TABLE
 
-StarRocks runs each `ALTER TABLE ... ADD/DROP COLUMN` as an **asynchronous** schema-change job and allows only **one in-flight job per table**. A migration that emits one statement per column therefore fails as soon as the second statement is submitted while the first job is still running:
+StarRocks runs each `ALTER TABLE ... ADD/DROP COLUMN` as an **asynchronous** schema-change job and allows only **one in-flight job per table**. Statements sent without a wait, as with `starrocks_wait_for_schema_change=False` or through `op.execute()`, therefore fail as soon as the second statement is submitted while the first job is still running. The dialect's wait, on by default, makes the statements that Alembic's operations compile run one after another instead, as one job per column. Without the wait, they would run like this:
 
 ```sql
 ALTER TABLE t ADD COLUMN a INT;    -- submits job #1 (async, returns immediately)
@@ -605,7 +633,8 @@ def downgrade():
 
 **Notes and limitations:**
 
-- Only `ADD COLUMN` and `DROP COLUMN` are coalesced. `MODIFY COLUMN` (type/nullability changes) and property/distribution changes remain separate statements. If a table has both a combined add/drop *and* a modify in the same revision, they are still two schema-change jobs — enable the wait option below, or split them into separate revisions.
+- When the table's sort key (`ORDER BY`) or properties change in the same revision, or its distribution changes to or from one that names an added or dropped column, the adds are combined before that change and the drops after it, so the table gets two statements: the new sort key, distribution or `bloom_filter_columns` may name an added column, StarRocks refuses to drop a column the distribution still names, and it refuses a SET that takes out a column it has already dropped (`Bloom filter index has no change`).
+- Only `ADD COLUMN` and `DROP COLUMN` are coalesced. `MODIFY COLUMN` (type/nullability changes) and property/distribution changes remain separate statements. If a table has both a combined add/drop *and* a modify in the same revision, they are still two schema-change jobs, which run one after the other (see below).
 - The combined operation compiles to a single `ALTER TABLE`, so its column ordering within one statement does not matter to StarRocks.
 - **Known gap — RANGE-distributed tables (StarRocks 4.2 / CelerData 26.2, private preview).** In shared-data mode with the FE config `enable_range_distribution = true`, a table declared with an explicit key type or `ORDER BY` and no `DISTRIBUTED BY` clause is distributed by range. On such a table, StarRocks routes a change that shifts the range sort key — adding a key column, or dropping a sort-key column — to a dedicated rewrite job that it refuses to run alongside any other clause:
 
@@ -614,12 +643,12 @@ def downgrade():
   table can not be combined with other alter operations
   ```
 
-  The rewriter coalesces those changes like any other, so a revision that mixes one of them with a second column change produces a statement the FE rejects — even though the same changes succeed as separate statements. Until this is fixed, on a range-distributed table either keep such a revision to a single column change, or skip the rewriter for it and apply the changes as individual `op.add_column`/`op.drop_column` calls with the wait option below enabled (the routed job is a real data rewrite, so the next statement is only accepted once it has finished). Earlier versions are unaffected: range distribution does not exist before 4.1, and on 4.1 these column changes are rejected outright whether or not they are combined.
+  The rewriter coalesces those changes like any other, so a revision that mixes one of them with a second column change produces a statement the FE rejects — even though the same changes succeed as separate statements. Until this is fixed, on a range-distributed table either keep such a revision to a single column change, or skip the rewriter for it and apply the changes as individual `op.add_column`/`op.drop_column` calls, which the dialect's default wait runs one after another (the routed job is a real data rewrite, so the next statement is only accepted once it has finished). Earlier versions are unaffected: range distribution does not exist before 4.1, and on 4.1 these column changes are rejected outright whether or not they are combined.
 - Already-generated migration scripts are not rewritten retroactively; the rewriter only affects new `--autogenerate` runs. You can also call `op.alter_table_columns(...)` by hand.
 
 #### Waiting for schema changes to reach a terminal state (opt-in)
 
-Even with coalescing, `ALTER TABLE` returns *before* the async job finishes, so a later operation on the same table (in the same `alembic upgrade` run) can still collide. To make your migration pipeline stay 100% in sync with the cluster, opt in to blocking until each column schema change reaches a terminal state (`FINISHED`/`CANCELLED`):
+Even with coalescing, `ALTER TABLE` returns *before* the async job finishes, and StarRocks rejects any other change to the table until it has. The dialect therefore holds back a later `ALTER TABLE`, `CREATE INDEX` or `DROP INDEX` that an Alembic operation compiles on the same table until the table's running `COLUMN`, `OPTIMIZE` or `ROLLUP` job has ended, so the operations of one `alembic upgrade` run do not collide. SQL that `op.execute()` sends, as text or as SQLAlchemy's `DDL()`, doesn't wait, so StarRocks refuses it with "A schema change operation is in progress" while the job of an operation before it runs. That wait does not look at how the job ended, and it is bounded by the engine's `starrocks_schema_change_timeout`, 300 seconds by default: see [Handling Time-Consuming ALTER TABLE Operations](tables.md#handling-time-consuming-alter-table-operations). To make your migration pipeline stay 100% in sync with the cluster, opt in to blocking until each column schema change reaches a terminal state (`FINISHED`/`CANCELLED`), and stopping when one is cancelled:
 
 ```python
 context.configure(
@@ -631,7 +660,9 @@ context.configure(
 )
 ```
 
-When enabled, after each column-altering statement the dialect polls `SHOW ALTER TABLE COLUMN` until the job finishes. A `CANCELLED` job or an elapsed timeout raises an error so the migration stops instead of silently drifting from the cluster state. This only applies to online mode (`alembic upgrade`); it is a no-op in offline `--sql` mode.
+When enabled, after each column-altering, sort key (`ORDER BY`) or property-setting statement the dialect polls `SHOW ALTER TABLE COLUMN` until the job it started finishes, and after a distribution change it polls `SHOW ALTER TABLE OPTIMIZE`. A statement that starts no job, such as most property changes, does not wait. A `CANCELLED` job or an elapsed timeout raises an error so the migration stops instead of silently drifting from the cluster state. This only applies to online mode (`alembic upgrade`); it is a no-op in offline `--sql` mode.
+
+`op.alter_table_properties` sends one `ALTER TABLE ... SET` per property, because StarRocks accepts one property at a time (the `dynamic_partition.*` properties, and the `binlog_*` ones, may share a statement) and a property such as `bloom_filter_columns` starts a schema-change job. The dialect holds back each statement until the job of the one before it has ended; with the option on, each statement also waits for its own job and stops the migration if it is cancelled.
 
 ### 4.5 Verifying No Further Changes (optional)
 
