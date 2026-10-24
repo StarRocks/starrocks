@@ -43,6 +43,8 @@
 
 #include "base/simd/simd.h"
 #include "base/simd/simd_utils.h"
+#include "column/binary_column.h"
+#include "column/simd_mulselector.h"
 
 namespace starrocks {
 
@@ -367,6 +369,152 @@ BENCHMARK_TEMPLATE(do_FillDefault, int64_t, fill_default_hoist<int64_t>)
         ->Arg(10)
         ->Arg(50)
         ->Arg(90);
+
+// =====================================================================
+// binary_column.cpp :: BinaryColumn::filter_range
+// =====================================================================
+// Args: {cluster_len (0 = random, 16 = 16-row clusters, 32 = 32-row clusters), selectivity_pct}
+
+static void fill_clustered_mask(uint8_t* data, size_t n, size_t cluster_len, int one_ratio_percent, uint64_t seed) {
+    if (cluster_len <= 1) {
+        fill_byte_mask(data, n, one_ratio_percent, seed);
+        return;
+    }
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; i += cluster_len) {
+        uint8_t val = (d(rng) < one_ratio_percent) ? 1 : 0;
+        size_t end = std::min(n, i + cluster_len);
+        std::memset(data + i, val, end - i);
+    }
+}
+
+static void BM_BinaryColumn_filter_range(benchmark::State& state) {
+    const size_t cluster_len = static_cast<size_t>(state.range(0));
+    const int sel_pct = static_cast<int>(state.range(1));
+
+    std::mt19937_64 rng(0x12345678ULL);
+    std::uniform_int_distribution<int> len_dist(16, 32);
+    BinaryColumn::MutablePtr template_col = BinaryColumn::create();
+    std::string buf(32, 'x');
+    for (size_t i = 0; i < kChunk; ++i) {
+        int len = len_dist(rng);
+        for (int k = 0; k < len; ++k) {
+            buf[k] = static_cast<char>('a' + ((i + k) % 26));
+        }
+        template_col->append(Slice(buf.data(), len));
+    }
+    const auto& src_bytes = template_col->get_bytes();
+    const auto& src_offsets = template_col->get_offset().small_storage();
+
+    Filter filter(kChunk);
+    fill_clustered_mask(filter.data(), kChunk, cluster_len, sel_pct, 0xABCD0000ULL + sel_pct);
+
+    BinaryColumn::MutablePtr work_col = BinaryColumn::create();
+    work_col->get_bytes().reserve(src_bytes.size());
+    work_col->get_offset().small_storage().reserve(src_offsets.size());
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto& wb = work_col->get_bytes();
+        auto& wo = work_col->get_offset().small_storage();
+        wb.resize(src_bytes.size());
+        wo.resize(src_offsets.size());
+        std::memcpy(wb.data(), src_bytes.data(), src_bytes.size());
+        std::memcpy(wo.data(), src_offsets.data(), src_offsets.size() * sizeof(src_offsets[0]));
+        state.ResumeTiming();
+
+        size_t kept = work_col->filter_range(filter, 0, kChunk);
+        benchmark::DoNotOptimize(kept);
+        benchmark::DoNotOptimize(work_col->get_bytes().data());
+    }
+}
+
+static void BinaryFilterRangeArgs(benchmark::Benchmark* b) {
+    for (int pct : {0, 1, 10, 50, 90, 99, 100}) {
+        b->Args({0, pct});
+    }
+    for (int cluster : {16, 32}) {
+        for (int pct : {10, 50, 90}) {
+            b->Args({cluster, pct});
+        }
+    }
+}
+
+BENCHMARK(BM_BinaryColumn_filter_range)->Apply(BinaryFilterRangeArgs);
+
+// =====================================================================
+// simd_mulselector.h :: SIMD_muti_selector::multi_select_if
+// =====================================================================
+// Scenarios:
+//   0 = Var Random 50%
+//   1 = Const Random 50%
+//   2 = Var First-WHEN 100% True
+//   3 = Var All-WHEN False (ELSE)
+//   4 = Var Clustered16 50%
+
+enum MulSelectorScenario {
+    kVarRandom50 = 0,
+    kConstRandom50 = 1,
+    kVarFirstTrue100 = 2,
+    kVarAllFalse = 3,
+    kVarClustered16 = 4,
+};
+
+template <LogicalType LT>
+static void do_SIMD_mulselector(benchmark::State& state) {
+    using CppType = RunTimeCppType<LT>;
+    using Container = typename RunTimeColumnType<LT>::Container;
+
+    const int arity = static_cast<int>(state.range(0));
+    const int scenario = static_cast<int>(state.range(1));
+    const int list_size = arity + 1;
+
+    std::vector<Filter> filters(arity, Filter(kChunk, 0));
+    std::vector<uint8_t*> select_vec(arity);
+    for (int i = 0; i < arity; ++i) {
+        if (scenario == kVarFirstTrue100) {
+            std::memset(filters[i].data(), (i == 0) ? 1 : 0, kChunk);
+        } else if (scenario == kVarAllFalse) {
+            std::memset(filters[i].data(), 0, kChunk);
+        } else if (scenario == kVarClustered16) {
+            fill_clustered_mask(filters[i].data(), kChunk, 16, 50, 0x7000ULL + i);
+        } else {
+            fill_byte_mask(filters[i].data(), kChunk, 50, 0x5000ULL + i);
+        }
+        select_vec[i] = filters[i].data();
+    }
+
+    const bool use_const = (scenario == kConstRandom50);
+    std::vector<Container> branches(list_size);
+    std::vector<const Container*> select_list(list_size);
+    std::vector<bool> is_const(list_size, use_const);
+    for (int i = 0; i < list_size; ++i) {
+        branches[i].resize(use_const ? 1 : kChunk);
+        for (size_t r = 0; r < branches[i].size(); ++r) {
+            branches[i][r] = static_cast<CppType>((i + 1) * 100000 + r);
+        }
+        select_list[i] = &branches[i];
+    }
+
+    Container dst(kChunk);
+    for (auto _ : state) {
+        SIMD_muti_selector<LT>::multi_select_if(select_vec.data(), arity, dst, select_list.data(), list_size, is_const,
+                                                static_cast<int>(kChunk));
+        benchmark::DoNotOptimize(dst.data());
+    }
+}
+
+static void MulSelectorArgs(benchmark::Benchmark* b) {
+    for (int arity : {2, 4, 8}) {
+        for (int scenario : {kVarRandom50, kConstRandom50, kVarFirstTrue100, kVarAllFalse, kVarClustered16}) {
+            b->Args({arity, scenario});
+        }
+    }
+}
+
+BENCHMARK_TEMPLATE(do_SIMD_mulselector, TYPE_BIGINT)->Name("BM_SIMD_mulselector_8byte")->Apply(MulSelectorArgs);
+BENCHMARK_TEMPLATE(do_SIMD_mulselector, TYPE_INT)->Name("BM_SIMD_mulselector_4byte")->Apply(MulSelectorArgs);
 
 } // namespace starrocks
 
