@@ -39,8 +39,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, *_scanner_ctx);
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-                RETURN_IF_ERROR(
-                        iceberg_delete_builder->build_position_delete(*delete_file, THdfsFileFormat::PARQUET));
+                RETURN_IF_ERROR(iceberg_delete_builder->build_position_delete(*delete_file, THdfsFileFormat::PARQUET));
             } else {
                 const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                    delete_file->file_content);

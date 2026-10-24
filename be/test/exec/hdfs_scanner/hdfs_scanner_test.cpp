@@ -1015,8 +1015,7 @@ TEST_F(HdfsScannerTest, TestOrcIcebergRowPositionWithDictFilter) {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "gggggggggg");
         push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::VARCHAR, lit_node);
-        ctx->conjuncts.by_slot[tuple_desc->slots()[0]->id()].push_back(
-                create_expr_context(&_pool, nodes));
+        ctx->conjuncts.by_slot[tuple_desc->slots()[0]->id()].push_back(create_expr_context(&_pool, nodes));
     }
     for (auto& it : ctx->conjuncts.by_slot) {
         ASSERT_OK(Expr::prepare(it.second, _runtime_state));
