@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_registry.h"
 
 namespace starrocks {
 
@@ -70,6 +71,28 @@ TEST_F(AzBlobFileSystemTest, test_new_random_access_file) {
         ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(uri));
         EXPECT_TRUE(dynamic_cast<RandomAccessFile*>(file.get()) != nullptr);
     }
+}
+
+TEST_F(AzBlobFileSystemTest, test_adls2_opt_in_routing_and_credentials) {
+    const std::string uri = "abfss://container@account.dfs.core.windows.net/table/file.parquet";
+    const auto provider = fs::new_azblob_file_system_provider();
+    TCloudConfiguration configuration;
+    configuration.__set_cloud_type(TCloudType::AZURE);
+    configuration.__set_cloud_properties({{"fs.azure.account.auth.type.account.dfs.core.windows.net", "SAS"},
+                                          {"fs.azure.sas.fixed.token.account.dfs.core.windows.net", "sig=test"}});
+    FSOptions options(&configuration);
+    EXPECT_FALSE(provider.match_unique(uri, options));
+    configuration.__set_azure_use_native_sdk(true);
+    EXPECT_TRUE(provider.match_unique(uri, options));
+    ASSIGN_OR_ABORT(auto fs, provider.create_unique(uri, options));
+    EXPECT_EQ(FileSystem::AZBLOB, fs->type());
+    ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(uri));
+    EXPECT_NE(nullptr, file.get());
+    EXPECT_TRUE(fs->new_writable_file(uri).status().is_not_supported());
+    // Never silently fall back to the process's default Azure credential for another account.
+    EXPECT_FALSE(fs->new_random_access_file("abfss://container@other.dfs.core.windows.net/file").ok());
+    configuration.__set_azure_use_native_sdk(false);
+    EXPECT_FALSE(provider.match_unique(uri, options));
 }
 
 } // namespace starrocks
