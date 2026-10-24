@@ -15,20 +15,29 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.Status;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.VarcharType;
 import mockit.Mock;
@@ -278,12 +287,18 @@ public class MetaFunctionsTest extends MVTestBase {
         Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         Set<String> currentGroups = connectContext.getGroups();
         String currentRemoteIP = connectContext.getRemoteIP();
+        SessionVariable currentVariables = connectContext.getSessionVariable();
         UserIdentity[] innerUser = new UserIdentity[1];
         Set<String>[] innerGroups = new Set[1];
         String[] innerRemoteIP = new String[1];
         new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                Assertions.assertSame(connectContext, context.getParent());
+                Assertions.assertNotSame(connectContext.getSessionVariable(), context.getSessionVariable());
+                Assertions.assertEquals("lookup_group", context.getSessionVariable().getResourceGroup());
+                Assertions.assertEquals(123456789L, context.getSessionVariable().toThrift().getQuery_mem_limit());
+                Assertions.assertEquals(7, context.getSessionVariable().getSqlSelectLimit());
                 innerUser[0] = context.getCurrentUserIdentity();
                 innerGroups[0] = context.getGroups();
                 innerRemoteIP[0] = context.getRemoteIP();
@@ -293,6 +308,11 @@ public class MetaFunctionsTest extends MVTestBase {
         Set<String> callerGroups = Set.of("g_ranger");
         String callerRemoteIP = "10.1.2.3";
         try {
+            connectContext.setSessionVariable((SessionVariable) currentVariables.clone());
+            connectContext.getSessionVariable().setResourceGroup("lookup_group");
+            connectContext.getSessionVariable().setSqlSelectLimit(7);
+            GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(connectContext.getSessionVariable(),
+                    new SystemVariable(SessionVariable.QUERY_MEM_LIMIT, new IntLiteral(123456789L)), false);
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setGroups(callerGroups);
@@ -313,7 +333,39 @@ public class MetaFunctionsTest extends MVTestBase {
             connectContext.setCurrentRoleIds(currentRoleIds);
             connectContext.setGroups(currentGroups);
             connectContext.setRemoteIP(currentRemoteIP);
+            connectContext.setSessionVariable(currentVariables);
             starRocksAssert.dropTable("t_lookup_caller");
+        }
+    }
+
+    @Test
+    public void testLookupStringKeepsQualifiedCatalog() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_catalog(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        String originalCatalog = connectContext.getCurrentCatalog();
+        Table expectedTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, new TableName("default_catalog", "test", "t_lookup_catalog")).orElseThrow();
+        int[] executions = {0};
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
+                Assertions.assertEquals("lookup_external", context.getCurrentCatalog());
+                Assertions.assertEquals(1, plan.getScanNodes().size());
+                Assertions.assertEquals(expectedTable.getId(), plan.getScanNodes().get(0).getDesc().getTable().getId());
+                executions[0]++;
+                return Pair.create(List.of(), Status.OK);
+            }
+        };
+        try {
+            connectContext.setCurrentCatalog("lookup_external");
+            connectContext.setThreadLocalInfo();
+            Assertions.assertNull(lookupString("default_catalog.test.t_lookup_catalog", "k", "v"));
+            Assertions.assertEquals(1, executions[0]);
+            Assertions.assertEquals("lookup_external", connectContext.getCurrentCatalog());
+            Assertions.assertSame(connectContext, ConnectContext.get());
+        } finally {
+            connectContext.setCurrentCatalog(originalCatalog);
+            starRocksAssert.dropTable("t_lookup_catalog");
         }
     }
 
