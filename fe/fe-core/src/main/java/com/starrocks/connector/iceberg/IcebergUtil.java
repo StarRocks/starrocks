@@ -353,15 +353,23 @@ public final class IcebergUtil {
         return cloudConfiguration;
     }
 
-    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean uedForDelete) {
-        // Check file format for DELETE operations
-        // Only Parquet format is supported for Iceberg DELETE operations now
-        if (uedForDelete && fileScanTask.file().format() != FileFormat.PARQUET) {
-            throw new StarRocksConnectorException(
-                    String.format("Delete operations on Iceberg tables are only supported for " +
-                                    "Parquet format files. Found %s format file: %s",
-                            fileScanTask.file().format(), fileScanTask.file().location()));
-
+    // DELETE / UPDATE / MERGE read the target rows' _file and _pos, which the parquet and ORC scanners produce. The
+    // ORC scanner does not produce the v3 row lineage columns, so a scan that reads them needs parquet data files.
+    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean usedForDelete,
+                                                      boolean readsRowLineage) {
+        if (!usedForDelete) {
+            return;
         }
+        FileFormat format = fileScanTask.file().format();
+        if (format == FileFormat.PARQUET || (format == FileFormat.ORC && !readsRowLineage)) {
+            return;
+        }
+        String location = fileScanTask.file().location();
+        if (format == FileFormat.ORC) {
+            throw new StarRocksConnectorException(
+                    "Iceberg row lineage is not supported on ORC data files yet. Found ORC format file: " + location);
+        }
+        throw new StarRocksConnectorException(String.format("Delete operations on Iceberg tables are only supported " +
+                "for Parquet and ORC format files. Found %s format file: %s", format, location));
     }
 }

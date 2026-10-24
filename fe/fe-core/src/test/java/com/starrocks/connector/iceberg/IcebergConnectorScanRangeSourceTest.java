@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionIdGenerator;
@@ -29,6 +30,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -142,6 +144,36 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 Assertions.assertEquals(2, mappingId);
             }
         }
+    }
+
+    // A position delete file is sent with its own format, which may differ from its data file's.
+    @Test
+    public void testPositionDeleteFileFormat() {
+        DataFile orcFile = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-orc.orc")
+                .withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .build();
+        DeleteFile parquetDeletes = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
+                .withPath("/path/to/data-a-orc-deletes.parquet").withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10).withRecordCount(1).withPartitionPath("data_bucket=0").build();
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_orc_pos_delete", 2);
+        v2Table.newFastAppend().appendFile(orcFile).commit();
+        v2Table.newRowDelta().addDeletes(parquetDeletes).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+        IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+
+        THdfsScanRange range = source.getSourceOutputs(100).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(THdfsFileFormat.ORC, range.getFile_format());
+        Assertions.assertEquals(THdfsFileFormat.PARQUET, range.getDelete_files().get(0).getFile_format());
     }
 
     @Test
