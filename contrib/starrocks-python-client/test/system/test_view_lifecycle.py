@@ -852,6 +852,59 @@ class ViewOrderLifecycleTest(_AlembicLifecycleBase):
         is_true("v1" in inspector.get_view_names())
         is_true("mv1" in inspector.get_materialized_view_names())
 
+    def test_dropping_a_column_a_view_stops_reading_downgrades(self, alembic_env, sr_engine):
+        Base = declarative_base()
+        self._base_table(Base.metadata, Column("name", VARCHAR(20)))
+        View("v1", Base.metadata, definition="SELECT id, name FROM t1")
+        alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="create")
+        alembic_env.harness.upgrade("head")
+        Narrowed = declarative_base()
+        self._base_table(Narrowed.metadata)
+        View("v1", Narrowed.metadata, definition="SELECT id FROM t1")
+        alembic_env.harness.generate_autogen_revision(metadata=Narrowed.metadata, message="narrow")
+        upgrade_content = ScriptContentParser.extract_upgrade_content(
+            ScriptContentParser.check_script_content(alembic_env, 1, "narrow")
+        )
+        self._assert_in_order(upgrade_content, "op.drop_view('v1'", "op.drop_column('t1', 'name'", "op.create_view('v1'")
+        alembic_env.harness.upgrade("head")
+        alembic_env.harness.downgrade("-1")
+        inspector = inspect(sr_engine)
+        is_true("name" in [column["name"] for column in inspector.get_columns("t1")])
+        is_true("name" in inspector.get_view_definition("v1"))
+
+    def test_a_view_over_a_table_losing_a_column_it_does_not_read_is_altered_and_keeps_its_grants(
+        self, database, alembic_env, sr_engine
+    ):
+        """ALTER VIEW keeps a view's grants, which a drop and a create would lose, and the view never read the
+        column, so both directions alter it after the table operations."""
+        role = f"{database}_reader"
+        Base = declarative_base()
+        self._base_table(Base.metadata, Column("note", VARCHAR(20)))
+        View("v1", Base.metadata, definition="SELECT id FROM t1")
+        alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="create")
+        alembic_env.harness.upgrade("head")
+        with sr_engine.connect() as conn:
+            conn.exec_driver_sql(f"CREATE ROLE `{role}`")
+            conn.exec_driver_sql(f"GRANT SELECT ON VIEW `{database}`.v1 TO ROLE `{role}`")
+        try:
+            Changed = declarative_base()
+            self._base_table(Changed.metadata, Column("b", INTEGER))
+            View("v1", Changed.metadata, definition="SELECT id, b FROM t1")
+            alembic_env.harness.generate_autogen_revision(metadata=Changed.metadata, message="change")
+            upgrade_content = ScriptContentParser.extract_upgrade_content(
+                ScriptContentParser.check_script_content(alembic_env, 1, "change")
+            )
+            self._assert_in_order(upgrade_content, "op.drop_column('t1', 'note'", "op.alter_view(")
+            is_true("op.drop_view(" not in upgrade_content)
+            for direction in (lambda: alembic_env.harness.upgrade("head"), lambda: alembic_env.harness.downgrade("-1")):
+                direction()
+                with sr_engine.connect() as conn:
+                    grants = conn.exec_driver_sql(f"SHOW GRANTS FOR ROLE `{role}`").fetchall()
+                is_true(any("v1" in str(grant) for grant in grants), grants)
+        finally:
+            with sr_engine.connect() as conn:
+                conn.exec_driver_sql(f"DROP ROLE IF EXISTS `{role}`")
+
     def test_a_view_reading_a_column_the_revision_adds_is_altered(self, alembic_env, sr_engine):
         """The temporary view fails while the column is missing, but the database's definition goes through it, so
         the change is certain even before 4.0.7, where StarRocks keeps the view's SQL rewritten."""

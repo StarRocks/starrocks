@@ -149,6 +149,21 @@ class SecondaryIndexReflectionTest(fixtures.TestBase):
         assert script.upgrade_ops.is_empty()
 
     @testing.requires.sqlalchemy_2
+    def test_dropping_an_indexed_column_applies_and_reverses(self, connection, indexed_table):
+        """The upgrade drops the column and its index; the downgrade adds both back."""
+        context, script = self._migration(connection, self._model(["id", "keep"]))
+        kinds = {type(op).__name__ for outer in script.upgrade_ops.ops for op in getattr(outer, "ops", [outer])}
+        assert {"DropColumnOp", "DropIndexOp"} <= kinds
+
+        self._run(context, script.upgrade_ops)
+        assert self._state(connection) == (["id", "keep"], [])
+
+        self._run(context, script.downgrade_ops)
+        columns, indexes = self._state(connection)
+        assert sorted(columns) == ["id", "keep", "old"]
+        assert indexes == ["old_idx"]
+
+    @testing.requires.sqlalchemy_2
     @testing.combinations((False,), (True,), argnames="translated")
     def test_drop_index_after_its_column_was_dropped(self, connection, indexed_table, translated):
         """A hand-written migration may drop the column first; StarRocks has then dropped the index with it.
@@ -226,6 +241,29 @@ class SecondaryIndexCreateTest(fixtures.TestBase):
         metadata.create_all(connection)
 
         assert self._indexes_once_built(connection, "idx_create_t") == [("ix_city", "city", "BITMAP")]
+
+    def test_create_all_with_two_indexes_on_one_table(self, connection, metadata):
+        """The second CREATE INDEX waits for the first index's build, which StarRocks runs as a schema change."""
+        table = Table(
+            "idx_two_t",
+            metadata,
+            Column("id", INTEGER),
+            Column("city", String(20)),
+            Column("country", String(20)),
+            starrocks_duplicate_key="id",
+            starrocks_distributed_by="HASH(id) BUCKETS 1",
+        )
+        Index("ix_city", table.c.city, starrocks_using="BITMAP")
+        Index("ix_country", table.c.country, starrocks_using="BITMAP")
+        metadata.create_all(connection)
+
+        deadline = time.monotonic() + 60
+        while len(self._indexes_once_built(connection, "idx_two_t")) < 2 and time.monotonic() < deadline:
+            time.sleep(1)
+        assert sorted(self._indexes_once_built(connection, "idx_two_t")) == [
+            ("ix_city", "city", "BITMAP"),
+            ("ix_country", "country", "BITMAP"),
+        ]
 
     def test_create_ngrambf_index_with_properties_and_comment(self, connection, metadata):
         table = Table(

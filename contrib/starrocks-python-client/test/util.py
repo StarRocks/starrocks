@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import re
+from typing import Any, Coroutine
 
-from sqlalchemy import testing
+from sqlalchemy import testing, util
+from sqlalchemy.testing import config
 
 
 def normalize_sql(sql: str) -> str:
@@ -48,11 +51,23 @@ def normalize_py_call(s: str) -> str:
     return s
 
 
+def run_coroutine(coroutine: Coroutine[Any, Any, Any]) -> Any:
+    """Run a coroutine from a test, under any ``--dburi``.
+
+    Under an async driver the plugin already runs each test in a greenlet inside its event loop, where
+    ``asyncio.run()`` refuses to start another, so the coroutine is awaited on that loop instead.
+    """
+    if config.db.dialect.is_async:
+        return util.await_only(coroutine)
+    return asyncio.run(coroutine)
+
+
 def _server_version(config: object) -> tuple:
     return tuple(config.db.dialect.server_version_info or ())
 
 
 VIEW_SECURITY_NEEDS_3_4_1 = testing.skip_if("starrocks<3.4.1", "StarRocks has no view SECURITY before 3.4.1")
+TRANSACTIONS_NEED_3_5 = testing.skip_if("starrocks<3.5", "StarRocks has transactions from 3.5")
 MV_PARTITION_RETENTION_NEEDS_3_5 = testing.skip_if(
     "starrocks<3.5", "partition_retention_condition is a materialized view property from StarRocks 3.5"
 )
@@ -61,6 +76,11 @@ STATISTIC_COLLECT_PROPERTY_MISSING = testing.skip_if(
     "enable_statistic_collect_on_first_load is a table property from StarRocks 3.5.10 and 4.0.2",
 )
 FLAT_JSON_PROPERTIES_NEED_4_0 = testing.skip_if("starrocks<4.0", "flat_json.* are table properties from StarRocks 4.0")
+FLAT_JSON_NULL_AMONG_OBJECTS_READS_AS_EMPTY = testing.fails_if(
+    "starrocks>=4.0",
+    "Flat JSON, on by default from StarRocks 4.0, reads a JSON null stored with JSON objects back as {}: "
+    "StarRocks issue 81490",
+)
 DECIMAL256_NEEDS_4_0 = testing.skip_if("starrocks<4.0", "DECIMAL precision above 38 needs StarRocks 4.0")
 STRUCT_FIELD_NAMES_UNQUOTED = testing.skip_if(
     "starrocks<4.1.1",

@@ -244,6 +244,11 @@ class StarRocksImpl(MySQLImpl):
         table = index.table
         schema = self._schema_as_executed(table.schema)
         if_exists = kw.pop("if_exists", None)
+        dbapi_cursor = self.connection.connection.cursor()
+        try:
+            self.dialect.wait_while_schema_change_runs(dbapi_cursor, table.name, schema)
+        finally:
+            dbapi_cursor.close()
         if not self._index_exists(index.name, table.name, schema):
             if self._index_key(index.name, table.name, schema) in self._indexes_dropped_with_columns:
                 logger.info(

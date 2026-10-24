@@ -27,6 +27,7 @@ from sqlalchemy.schema import DropTable
 from sqlalchemy.testing import expect_raises_message, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
+import starrocks.alembic  # noqa: F401
 from starrocks.datatype import INTEGER, VARCHAR
 from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterMaterializedView, CreateMaterializedView, DropMaterializedView
@@ -259,6 +260,8 @@ class AlterMaterializedViewCompileTest(fixtures.TestBase, AssertsCompiledSQL):
             "ALTER MATERIALIZED VIEW test_db.my_mv REFRESH MANUAL;"
             'ALTER MATERIALIZED VIEW test_db.my_mv SET ("replication_num" = "3")',
         )
+
+
 class CreateMaterializedViewOperationTest(fixtures.TestBase):
     """``op.create_materialized_view`` without a refresh scheme builds a synchronous MV, as it always did, and warns."""
 
@@ -272,3 +275,21 @@ class CreateMaterializedViewOperationTest(fixtures.TestBase):
         assert_synchronous_mv_warning_logged(caplog, "mv")
 
 
+class AlterMaterializedViewOperationTest(fixtures.TestBase):
+    """``op.alter_materialized_view`` alters the refresh and the properties in statements of their own."""
+
+    __requires__ = ("sqlalchemy_2",)
+
+    def test_refresh_and_properties_are_separate_statements(self):
+        context = op_fixture("starrocks")
+        op.alter_materialized_view("mv", refresh="MANUAL", properties={"session.query_timeout": "900"})
+        context.assert_(
+            "ALTER MATERIALIZED VIEW mv REFRESH MANUAL",
+            'ALTER MATERIALIZED VIEW mv SET ("session.query_timeout" = "900")',
+        )
+
+    def test_a_property_with_no_value_stops_the_op_before_the_refresh_changes(self):
+        context = op_fixture("starrocks")
+        with expect_raises_message(exc.CompileError, "Property 'session.query_timeout' has no value"):
+            op.alter_materialized_view("mv", refresh="MANUAL", properties={"session.query_timeout": None})
+        context.assert_()

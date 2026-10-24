@@ -16,7 +16,21 @@
 
 import uuid
 
-from sqlalchemy import Column, Integer, MetaData, Table, delete, exc, insert, literal, select, testing, text, update
+from sqlalchemy import (
+    JSON,
+    Column,
+    Integer,
+    MetaData,
+    Table,
+    delete,
+    exc,
+    insert,
+    literal,
+    select,
+    testing,
+    text,
+    update,
+)
 from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
@@ -152,6 +166,13 @@ class InsertOverwriteAndLabelTest(fixtures.TablesTest):
     @classmethod
     def define_tables(cls, metadata):
         Table("overwrite_target", metadata, Column("id", Integer, primary_key=True, autoincrement=False))
+        Table(
+            "overwrite_documents",
+            metadata,
+            Column("id", Integer, primary_key=True, autoincrement=False),
+            Column("doc", JSON),
+        )
+
     @staticmethod
     def _loads_labelled(connection, label):
         return connection.execute(
@@ -188,6 +209,78 @@ class InsertOverwriteAndLabelTest(fixtures.TablesTest):
         eq_((self._loads_labelled(connection, f"{label}`q"), self._loads_labelled(connection, f"{label}q")), (0, 1))
         with expect_raises_message(exc.CompileError, "starrocks_label must be 1 to 128 ASCII letters"):
             connection.execute(insert(target).values(id=3).with_dialect_options(starrocks_label=f"{label}`r"))
+
+    def test_an_executemany_overwrite_stores_every_row(self, connection):
+        target = self.tables.overwrite_target
+        connection.execute(insert(target).values(id=1))
+        connection.execute(insert(target).with_dialect_options(starrocks_overwrite=True), [{"id": 7}, {"id": 8}])
+        eq_(sorted(connection.execute(select(target.c.id)).all()), [(7,), (8,)])
+
+    def test_an_executemany_overwrite_of_json_stores_every_row(self, connection):
+        """The driver would send these rows one statement each, as JSON's VALUES row holds a bind expression."""
+        documents = self.tables.overwrite_documents
+        connection.execute(insert(documents).values(id=1, doc={"old": True}))
+        rows = [{"id": 7, "doc": {"n": 7}}, {"id": 8, "doc": [8]}]
+        connection.execute(insert(documents).with_dialect_options(starrocks_overwrite=True), rows)
+        stored = connection.execute(select(documents.c.id, documents.c.doc).order_by(documents.c.id)).all()
+        eq_([tuple(row) for row in stored], [(7, {"n": 7}), (8, [8])])
+
+    def test_an_executemany_with_a_label_is_one_load(self, connection):
+        target = self.tables.overwrite_target
+        label = f"sqla_label_{uuid.uuid4().hex}"
+        connection.execute(insert(target).values(id=1))
+        connection.execute(insert(target).with_dialect_options(starrocks_label=label), [{"id": 7}, {"id": 8}])
+        eq_(sorted(connection.execute(select(target.c.id)).all()), [(1,), (7,), (8,)])
+        eq_(self._loads_labelled(connection, label), 1)
+
+    @testing.combinations(
+        ("commented_overwrite", "/* load */ INSERT OVERWRITE overwrite_target VALUES (:id)", [7, 8], [(7,), (8,)]),
+        ("overwrite_of_an_expression", "INSERT OVERWRITE overwrite_target VALUES (abs(:id))", [-7, 8], [(7,), (8,)]),
+        ("label", "INSERT INTO overwrite_target WITH LABEL {label} VALUES (:id)", [7, 8], [(1,), (7,), (8,)]),
+        id_="iaaa",
+        argnames="statement,ids,stored",
+    )
+    def test_an_executemany_of_text_stores_every_row(self, connection, statement, ids, stored):
+        target = self.tables.overwrite_target
+        label = f"sqla_label_{uuid.uuid4().hex}"
+        connection.execute(insert(target).values(id=1))
+        connection.execute(text(statement.format(label=label)), [{"id": id_} for id_ in ids])
+        eq_(sorted(connection.execute(select(target.c.id)).all()), stored)
+
+    def test_an_executemany_of_driver_text_stores_every_row(self, connection):
+        target = self.tables.overwrite_target
+        connection.execute(insert(target).values(id=1))
+        connection.exec_driver_sql("INSERT OVERWRITE overwrite_target VALUES (%s)", [(7,), (8,)])
+        eq_(sorted(connection.execute(select(target.c.id)).all()), [(7,), (8,)])
+
+    @testing.combinations(
+        ("overwrite", {"starrocks_overwrite": True}),
+        ("label", {"starrocks_label": "sqla_label_never_used"}),
+        id_="ia",
+        argnames="options",
+    )
+    def test_rows_that_need_two_statements_are_refused(self, connection, options):
+        target = self.tables.overwrite_target
+        connection.execute(insert(target).values(id=1))
+        with testing.mock.patch.object(StarRocksDialect, "_VALUES_ROWS_PER_STATEMENT", 1):
+            with expect_raises_message(exc.InvalidRequestError, "in one statement, but these rows need 2"):
+                connection.execute(insert(target).with_dialect_options(**options), [{"id": 7}, {"id": 8}])
+        eq_(connection.execute(select(target.c.id)).all(), [(1,)])
+
+    def test_text_the_driver_would_send_row_by_row_is_refused(self, connection):
+        target = self.tables.overwrite_target
+        connection.execute(insert(target).values(id=1))
+        with expect_raises_message(exc.InvalidRequestError, "the driver would send this executemany once per row"):
+            connection.execute(text("INSERT OVERWRITE overwrite_target SELECT :id"), [{"id": 7}, {"id": 8}])
+        eq_(connection.execute(select(target.c.id)).all(), [(1,)])
+
+    def test_overwrite_with_several_rows_in_one_statement(self, connection):
+        target = self.tables.overwrite_target
+        connection.execute(insert(target).values(id=1))
+        connection.execute(
+            insert(target).values([{"id": 7}, {"id": 8}]).with_dialect_options(starrocks_overwrite=True)
+        )
+        eq_(sorted(connection.execute(select(target.c.id)).all()), [(7,), (8,)])
 
     def test_reused_label_is_rejected_by_server(self, connection):
         target = self.tables.overwrite_target

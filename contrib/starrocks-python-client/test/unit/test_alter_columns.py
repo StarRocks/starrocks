@@ -150,6 +150,23 @@ class CombineColumnAltersTest(fixtures.TestBase):
 
         assert [type(o).__name__ for o in res.ops] == ["AlterTableColumnsOp", "AlterTableDistributionOp"]
 
+    def test_an_index_drop_goes_before_the_combined_column_changes(self):
+        """An index drop keeps its own statement, before the ALTER that drops its column, which works offline too."""
+        drop_index = ops.DropIndexOp("ix_old", table_name="t6")
+        mto = ops.ModifyTableOps(
+            "t6",
+            ops=[
+                ops.AddColumnOp("t6", Column("new", INTEGER)),
+                drop_index,
+                ops.DropColumnOp("t6", "old"),
+            ],
+        )
+        res = _combine_column_alters(None, None, mto)
+
+        assert [type(o).__name__ for o in res.ops] == ["DropIndexOp", "AlterTableColumnsOp"]
+        assert res.ops[0] is drop_index
+        assert ([c.name for c in res.ops[1].adds], [c.name for c in res.ops[1].drops]) == (["new"], ["old"])
+
     def test_only_drops_still_collapse(self):
         mto = ops.ModifyTableOps(
             "t4",

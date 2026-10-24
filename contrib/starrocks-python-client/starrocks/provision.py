@@ -14,12 +14,18 @@
 
 
 import time
-from typing import Any
+from typing import Any, Optional
 
-from sqlalchemy import MetaData, Table, inspect, text
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy import MetaData, Table, exc, inspect, text
+from sqlalchemy.engine import URL, Connection, Engine
 from sqlalchemy.schema import sort_tables_and_constraints
-from sqlalchemy.testing.provision import configure_follower, create_db, drop_db, temp_table_keyword_args
+from sqlalchemy.testing.provision import (
+    configure_follower,
+    create_db,
+    drop_db,
+    generate_driver_url,
+    temp_table_keyword_args,
+)
 
 from starrocks.dialect import StarRocksDialect
 
@@ -28,42 +34,6 @@ SCHEMA_CHANGE_TERMINAL_STATES = ("FINISHED", "CANCELLED")
 SCHEMA_CHANGE_WAIT_SECONDS = 300.0
 SCHEMA_CHANGE_POLL_SECONDS = 0.5
 
-# from sqlalchemy import exc
-# from sqlalchemy.testing.provision import generate_driver_url
-#
-#
-# @generate_driver_url.for_db("starrocks")
-# def generate_driver_url(url, driver, query_str):
-#     backend = url.get_backend_name()
-#
-#     # NOTE: at the moment, tests are running mariadbconnector
-#     # against both mariadb and mysql backends.   if we want this to be
-#     # limited, do the decision making here to reject a "mysql+mariadbconnector"
-#     # URL.  Optionally also re-enable the module level
-#     # MySQLDialect_mariadbconnector.is_mysql flag as well, which must include
-#     # a unit and/or functional test.
-#
-#     # all the Jenkins tests have been running mysqlclient Python library
-#     # built against mariadb client drivers for years against all MySQL /
-#     # MariaDB versions going back to MySQL 5.6, currently they can talk
-#     # to MySQL databases without problems.
-#
-#     if backend == "starrocks":
-#         dialect_cls = url.get_dialect()
-#         if dialect_cls._is_mariadb_from_url(url):
-#             backend = "mariadb"
-#
-#     new_url = url.set(
-#         drivername="%s+%s" % (backend, driver)
-#     ).update_query_string(query_str)
-#
-#     try:
-#         new_url.get_dialect()
-#     except exc.NoSuchModuleError:
-#         return None
-#     else:
-#         return new_url
-#
 
 def _worker_databases(eng: Engine, ident: str) -> list[str]:
     """The quoted names of a worker's database and its two extra schemas, which StarRocks keeps as databases."""
@@ -149,6 +119,29 @@ if delete_from_all_tables is not None:
         for table in _existing_tables_in_drop_order(connection, metadata):
             wait_for_schema_changes(connection, table.name, table.schema)
             connection.execute(table.delete())
+
+
+@generate_driver_url.for_db("starrocks")
+def _starrocks_generate_driver_url(url: URL, driver: str, query_str: Optional[str]) -> Optional[URL]:
+    """Return the test URL for a driver, as SQLAlchemy's own hook does, with the PRIMARY KEY inference on.
+
+    SQLAlchemy's and Alembic's suites need it on: their tables declare ``primary_key=True`` columns and no
+    ``starrocks_*_key``, and their tests expect such a table to hold one row per key and to reflect its primary
+    key, as a PRIMARY KEY table does. In the URL, it reaches every engine made from the test URL, among them those
+    SQLAlchemy 1.4's ``testing_engine(options=...)`` makes without the configured engine options, and Alembic's,
+    made from ``sqlalchemy.url``. A ``--dburi`` that gives ``starrocks_infer_primary_key`` keeps its value.
+    """
+    new_url = url.set(drivername=f"{url.get_backend_name()}+{driver}")
+    if query_str:
+        new_url = new_url.update_query_string(query_str)
+    if "starrocks_infer_primary_key" not in new_url.query:
+        new_url = new_url.update_query_dict({"starrocks_infer_primary_key": "true"})
+    try:
+        new_url.get_dialect()
+    except exc.NoSuchModuleError:
+        return None
+    return new_url
+
 
 # Uncomment to debug SQL Statements in tests
 # from sqlalchemy.testing.provision import update_db_opts

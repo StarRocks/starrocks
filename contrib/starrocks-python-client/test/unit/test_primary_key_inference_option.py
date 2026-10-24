@@ -42,6 +42,22 @@ class PrimaryKeyInferenceOptionTest(fixtures.TestBase):
         engine = create_engine("starrocks://root@localhost:9030/db", starrocks_infer_primary_key=value)
         eq_(engine.dialect.infer_primary_key, infers)
 
+    @testing.combinations(
+        ("on", "?starrocks_infer_primary_key=true", {}, True),
+        ("off", "?starrocks_infer_primary_key=false", {}, False),
+        ("with_a_driver_argument", "?charset=utf8mb4&starrocks_infer_primary_key=1", {}, True),
+        ("given_twice", "?starrocks_infer_primary_key=true&starrocks_infer_primary_key=false", {}, False),
+        ("over_the_keyword", "?starrocks_infer_primary_key=false", {"starrocks_infer_primary_key": True}, False),
+        argnames="query,arguments,infers",
+        id_="iaaa",
+    )
+    def test_a_url_passes_the_option_to_the_dialect_and_not_to_the_driver(self, query, arguments, infers):
+        """PyMySQL refuses a keyword argument it doesn't know, so the option must not reach it."""
+        engine = create_engine(f"starrocks://root@localhost:9030/db{query}", **arguments)
+        eq_(engine.dialect.infer_primary_key, infers)
+        _, connect_args = engine.dialect.create_connect_args(engine.url)
+        eq_([name for name in connect_args if name.startswith("starrocks_")], [])
+
     def test_engine_from_config_passes_the_option_as_text(self):
         configuration = {
             "sqlalchemy.url": "starrocks://root@localhost:9030/db",

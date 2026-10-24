@@ -142,18 +142,20 @@ def alter_materialized_view(operations: Operations, op: AlterMaterializedViewOp)
     Execute ALTER MATERIALIZED VIEW statement.
 
     Only supports altering mutable attributes: refresh, properties. The downgrade of a property change whose
-    previous values could not be determined has neither, and does nothing.
+    previous values could not be determined has neither, and does nothing. The refresh and the properties are
+    altered in statements of their own, so a failure of either stops the migration; both compile before either
+    runs.
     """
     logger.debug("implementation alter_materialized_view: %s", op.view_name)
     if op.refresh is None and not op.properties:
         logger.warning("Nothing to alter on materialized view %r: no refresh and no properties.", op.view_name)
         return
-    operations.execute(AlterMaterializedView(
-        mv_name=op.view_name,
-        schema=op.schema,
-        refresh=op.refresh,
-        properties=op.properties,
-    ))
+    statements: List[ClauseElement] = []
+    if op.refresh is not None:
+        statements.append(AlterMaterializedView(mv_name=op.view_name, schema=op.schema, refresh=op.refresh))
+    if op.properties:
+        statements.append(AlterMaterializedView(mv_name=op.view_name, schema=op.schema, properties=op.properties))
+    _execute_once_every_statement_compiles(operations, statements)
 
 
 @Operations.implementation_for(CreateMaterializedViewOp)

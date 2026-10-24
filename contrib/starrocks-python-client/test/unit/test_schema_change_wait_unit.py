@@ -55,9 +55,17 @@ class GenShowAlterTableStatementTest(fixtures.TestBase):
         stmt = StarRocksDialect.gen_show_alter_table_statement("t", "OPTIMIZE")
         assert stmt == "SHOW ALTER TABLE OPTIMIZE WHERE TableName='t' AND State='RUNNING'"
 
-    def test_schema_is_quoted(self):
-        stmt = StarRocksDialect.gen_show_alter_table_statement("t", "COLUMN", schema="my-db")
-        assert "FROM `my-db` " in stmt
+    @testing.combinations(
+        ("dash", "my-db", "FROM `my-db` "),
+        ("backquote", "a`b", "FROM `a``b` "),
+        ("percent", "a%b", "FROM `a%b` "),
+        argnames="schema,from_clause",
+        id_="iaa",
+    )
+    def test_schema_is_quoted(self, schema, from_clause):
+        """A ``%`` stays single: callers run the statement as ``text()``, or through a cursor without parameters."""
+        stmt = StarRocksDialect.gen_show_alter_table_statement("t", "COLUMN", schema=schema)
+        assert from_clause in stmt, stmt
 
     def test_poll_shape_used_by_the_wait_feature(self):
         stmt = StarRocksDialect.gen_show_alter_table_statement(

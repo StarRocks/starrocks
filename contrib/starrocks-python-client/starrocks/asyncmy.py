@@ -14,12 +14,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, Optional, Union
 
 from sqlalchemy import pool, util
 from sqlalchemy.connectors.asyncio import AsyncIODBAPIConnection
 from sqlalchemy.dialects.mysql.asyncmy import AsyncAdapt_asyncmy_dbapi, AsyncAdapt_asyncmy_ss_cursor
-from sqlalchemy.engine.interfaces import DBAPIConnection, DBAPICursor, DBAPIModule, PoolProxiedConnection
+from sqlalchemy.engine.interfaces import (
+    DBAPIConnection,
+    DBAPICursor,
+    DBAPIModule,
+    ExecutionContext,
+    PoolProxiedConnection,
+)
 from sqlalchemy.engine.url import URL
 
 from .dialect import StarRocksDialect
@@ -99,6 +106,31 @@ class StarRocksDialect_asyncmy(StarRocksDialect):
 
     def do_terminate(self, dbapi_connection: DBAPIConnection) -> None:
         dbapi_connection.terminate()
+
+    def _pause_between_polls(self, cursor: DBAPICursor, seconds: float) -> None:
+        """Wait between schema-change polls without blocking the event loop.
+
+        The cursor adapter's own awaiter is used: ``await_only``, or the ``await_fallback`` of a synchronous
+        engine with ``async_fallback=true``, where ``await_only`` raises MissingGreenlet.
+        """
+        cursor.await_(asyncio.sleep(seconds))
+
+    def _driver_cursor(self, cursor: DBAPICursor) -> Any:
+        """Return asyncmy's own cursor, which SQLAlchemy's async cursor adapter holds."""
+        return getattr(cursor, "_cursor", cursor)
+
+    @staticmethod
+    def _read_every_ddl_result(cursor: DBAPICursor, context: Optional[ExecutionContext]) -> None:
+        """Read the results of every statement a DDL construct compiled to, through asyncmy's own cursor.
+
+        SQLAlchemy's async cursor adapter returns None from ``nextset()`` even when it has moved to the next
+        result, so the loop of :meth:`StarRocksDialect._read_every_ddl_result` would stop after one, and the
+        error of a third statement would only be logged when the cursor closes. The adapter's own awaiter is
+        used, as in :meth:`_pause_between_polls`.
+        """
+        if context is not None and context.isddl:
+            while cursor.await_(cursor._cursor.nextset()):
+                pass
 
     def create_connect_args(self, url: URL) -> ConnectArgsType:  # type: ignore[override]  # noqa: E501
         return super().create_connect_args(

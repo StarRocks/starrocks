@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 
+import pymysql
 from sqlalchemy import testing
 from sqlalchemy.dialects.mysql.base import MySQLIdentifierPreparer
 from sqlalchemy.testing import fixtures
@@ -66,3 +67,25 @@ class ReservedWordsTest(fixtures.TestBase):
             timeout=120,
         )
         eq_((result.returncode, result.stdout.strip()), (0, "True"), result.stderr[-2000:])
+
+
+class _DialectWithoutGetDriverConnection(StarRocksDialect):
+    """The dialect as SQLAlchemy 1.4.0 to 1.4.23 builds it, which has no ``Dialect.get_driver_connection``."""
+
+    @property
+    def get_driver_connection(self):
+        raise AttributeError("get_driver_connection")
+
+
+class DriverConnectionTest(fixtures.TestBase):
+    @testing.combinations(
+        ("autocommit_on", True, "AUTOCOMMIT"),
+        ("autocommit_off", False, "READ COMMITTED"),
+        ("server_default", None, "AUTOCOMMIT"),
+        id_="iaa",
+        argnames="autocommit, level",
+    )
+    def test_the_isolation_level_is_read_where_sqlalchemy_has_no_get_driver_connection(self, autocommit, level):
+        """SQLAlchemy has ``Dialect.get_driver_connection`` only from 1.4.24, and the dialect needs 1.4."""
+        connection = pymysql.connections.Connection(defer_connect=True, autocommit=autocommit)
+        eq_(_DialectWithoutGetDriverConnection().get_isolation_level(connection), level)

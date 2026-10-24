@@ -41,10 +41,13 @@ from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
 from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
+    AutocommitIsolationTest as _AutocommitIsolationTest,
     ComponentReflectionTest as _ComponentReflectionTest,
     CompositeKeyReflectionTest as _CompositeKeyReflectionTest,
     CTETest as _CTETest,
     FetchLimitOffsetTest as _FetchLimitOffsetTest,
+    HasIndexTest as _HasIndexTest,
+    IsolationLevelTest as _IsolationLevelTest,
     JSONLegacyStringCastIndexTest as _JSONLegacyStringCastIndexTest,
     JSONTest as _JSONTest,
     LongNameBlowoutTest as _LongNameBlowoutTest,
@@ -55,14 +58,13 @@ from sqlalchemy.testing.suite import (
 
 from starrocks.datatype import INTEGER
 from starrocks.requirements import IS_SQLALCHEMY_2
-from test.util import normalize_sql
+from test.util import TRANSACTIONS_NEED_3_5, normalize_sql
 
 
 if IS_SQLALCHEMY_2:
     from sqlalchemy.testing.suite import TrueDivTest as _TrueDivTest
 else:
     from sqlalchemy.testing.suite import (
-        HasIndexTest,
         LikeFunctionsTest as _LikeFunctionsTest,
         QuotedNameArgumentTest as _QuotedNameArgumentTest,
     )
@@ -498,6 +500,76 @@ class JSONLegacyStringCastIndexTest(_JSONLegacyStringCastIndexTest):
         )
 
 
+class IsolationLevelTest(_IsolationLevelTest):
+    """Upstream's tests; before StarRocks 3.5 AUTOCOMMIT is the only level, so none can be switched to."""
+
+    if IS_SQLALCHEMY_2:
+        test_dialect_user_setting_is_restored = TRANSACTIONS_NEED_3_5(
+            _IsolationLevelTest.test_dialect_user_setting_is_restored
+        )
+
+
+class AutocommitIsolationTest(_AutocommitIsolationTest):
+    """Upstream's tests take the default isolation level to be a transactional one; StarRocks' is AUTOCOMMIT."""
+
+    def _test_conn_autocommits(self, conn, autocommit, ensure_table=False):
+        """Upstream's check, with the clean-up on an AUTOCOMMIT connection.
+
+        Upstream deletes the rows with a ``delete()`` without WHERE, which compiles to TRUNCATE TABLE, and the
+        dialect refuses that inside a transaction.
+        """
+        some_table = self.tables.some_table
+        trans = conn.begin()
+        conn.execute(some_table.insert(), {"id": 1, "data": "some data"})
+        trans.rollback()
+
+        eq_(conn.scalar(select(some_table.c.id)), 1 if autocommit else None)
+        if IS_SQLALCHEMY_2:
+            conn.rollback()
+
+        with config.db.begin() as cleanup:
+            cleanup.execute(some_table.delete())
+
+    def test_autocommit_on(self, connection_no_trans):
+        conn = connection_no_trans
+        c2 = conn.execution_options(isolation_level="AUTOCOMMIT")
+        self._test_conn_autocommits(c2, True)
+
+        c2.dialect.reset_isolation_level(c2.connection.dbapi_connection)
+
+        self._test_conn_autocommits(conn, True)
+
+    @TRANSACTIONS_NEED_3_5
+    def test_autocommit_off(self, connection_no_trans):
+        self._test_conn_autocommits(connection_no_trans.execution_options(isolation_level="READ COMMITTED"), False)
+
+    test_turn_autocommit_off_via_default_iso_level = testing.skip(
+        "starrocks", "The default isolation level is AUTOCOMMIT, so returning to it cannot turn autocommit off"
+    )(_AutocommitIsolationTest.test_turn_autocommit_off_via_default_iso_level)
+
+    if IS_SQLALCHEMY_2:
+
+        @TRANSACTIONS_NEED_3_5
+        @testing.requires.independent_readonly_connections
+        @testing.variation("use_dialect_setting", [True, False])
+        def test_dialect_autocommit_is_restored(self, testing_engine, use_dialect_setting):
+            """Upstream's test, which turns autocommit off with READ COMMITTED rather than with the default."""
+            if use_dialect_setting:
+                e = testing_engine(options={"isolation_level": "AUTOCOMMIT"})
+            else:
+                e = testing_engine().execution_options(isolation_level="AUTOCOMMIT")
+
+            with e.connect() as conn:
+                self._test_conn_autocommits(conn, True)
+
+            with e.connect() as conn:
+                conn.execution_options(isolation_level="READ COMMITTED")
+                self._test_conn_autocommits(conn, False)
+
+            with e.connect() as conn:
+                self._test_conn_autocommits(conn, True)
+
+
 FOR_UPDATE = testing.skip("starrocks", "StarRocks does not support SELECT ... FOR UPDATE")
 class CompositeKeyReflectionTest(_CompositeKeyReflectionTest):
     """Upstream's tables, with tb1's columns in its key's order.
@@ -644,8 +716,17 @@ class LongNameBlowoutTest(_LongNameBlowoutTest):
                 eq_(overlap, reflected_name)
 
 
+class HasIndexTest(_HasIndexTest):
+    """Upstream's tests, run because the dialect waits for each index's build job after CREATE INDEX.
+
+    SQLAlchemy 2.0 gates them on ``index_reflection``, which stays closed for other fixtures' unique and
+    multi-column indexes; 1.4 gates them on nothing.
+    """
+
+    __requires__ = ("has_index_waits_for_index_jobs",)
+
+
 if not IS_SQLALCHEMY_2:
-    HasIndexTest.__requires__ = ('index_reflection',)
 
     class LikeFunctionsTest(_LikeFunctionsTest):
         """SQLAlchemy 2.0 gates the escape tests on ``like_escapes``; 1.4 does not."""

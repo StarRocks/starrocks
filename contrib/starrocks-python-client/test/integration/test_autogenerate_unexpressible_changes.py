@@ -23,7 +23,7 @@ from alembic.operations import Operations
 import sqlalchemy
 from sqlalchemy import Column, Computed, Float, LargeBinary, MetaData, Numeric, Table, exc, testing
 from sqlalchemy.schema import CreateTable
-from sqlalchemy.testing import engines, expect_raises_message, expect_warnings, fixtures
+from sqlalchemy.testing import config, engines, expect_raises_message, expect_warnings, fixtures
 
 import starrocks.alembic  # noqa: F401
 from starrocks.datatype import BIGINT, CHAR, DATE, DATETIME, INTEGER, STRING, VARCHAR
@@ -231,7 +231,9 @@ class PrimaryKeyInferenceOffTest(fixtures.TestBase):
 
     @classmethod
     def setup_test_class(cls):
-        cls.bind = engines.testing_engine(options={"starrocks_infer_primary_key": False, "scope": "class"})
+        """The test URL turns the inference on, and a URL's value takes the place of ``create_engine``'s."""
+        url = config.db.url.update_query_dict({"starrocks_infer_primary_key": "false"})
+        cls.bind = engines.testing_engine(url=url, options={"scope": "class"})
 
     @testing.fixture
     def shape_table(self, connection):

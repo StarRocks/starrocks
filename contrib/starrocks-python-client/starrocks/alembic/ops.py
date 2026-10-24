@@ -1129,6 +1129,12 @@ def _combine_column_alters(
     dropped column out of ``bloom_filter_columns`` itself, and then refuses the SET that takes it out, with "Bloom
     filter index has no change".
 
+    Index operations stay separate. A ``DropIndexOp`` that comes after the first
+    column change moves to just before the combined op, so the index is dropped
+    while its column still exists: StarRocks drops a column's indexes with it,
+    and an offline (``--sql``) script, which the impl can't check for a missing
+    index, would otherwise fail at the ``DROP INDEX``. The dialect waits for the
+    index job before the combined ``ALTER TABLE``.
     """
     adds: List[Column] = []
     drops: List[Column] = []
@@ -1146,6 +1152,9 @@ def _combine_column_alters(
             if combined_pos == -1:
                 combined_pos = len(new_ops)
                 new_ops.append(None)
+        elif isinstance(inner, ops.DropIndexOp) and combined_pos != -1:
+            new_ops.insert(combined_pos, inner)
+            combined_pos += 1
         else:
             new_ops.append(inner)
 

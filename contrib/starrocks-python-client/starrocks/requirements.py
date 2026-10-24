@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any, Dict
+
 from alembic.testing.requirements import SuiteRequirements as AlembicSuiteRequirements
 import sqlalchemy
 from sqlalchemy.testing import exclusions
@@ -63,15 +65,23 @@ class Requirements(SuiteRequirements, AlembicSuiteRequirements):
     @property
     def index_reflection(self):
         """Closed: ComponentReflectionTest's fixture tables carry multi-column and unique indexes, which StarRocks
-        does not have, and HasIndexTest checks its indexes before StarRocks has built them.
-
-        HasIndexTest's indexes are single-column, but ``CREATE INDEX`` is an asynchronous schema change, so right after
-        ``create_all`` ``has_index`` is False, and True once the job finishes.
+        does not have. ``HasIndexTest``, whose indexes are single-column, is gated on
+        ``has_index_waits_for_index_jobs`` instead.
 
         StarRocks' single-column indexes are reflected from SHOW INDEX, and
         ``test/integration/test_reflection_indexes.py`` reflects BITMAP ones.
         """
         return exclusions.closed()
+
+    @property
+    def has_index_waits_for_index_jobs(self) -> exclusions.compound:
+        """Open: ``HasIndexTest`` creates single-column indexes, then asks ``has_index`` about them at once.
+
+        StarRocks lists an index only once the job that builds it has ended, and the dialect waits for that job
+        after each CREATE INDEX, so the index is there to find. ``HasIndexTest`` is gated on this rather than on
+        ``index_reflection``, which stays closed for the unique and multi-column indexes of other suite fixtures.
+        """
+        return exclusions.open()
 
     @property
     def primary_key_constraint_reflection(self):
@@ -283,6 +293,26 @@ class Requirements(SuiteRequirements, AlembicSuiteRequirements):
     @property
     def unicode_ddl(self):
         return exclusions.open()
+    @property
+    def isolation_level(self) -> exclusions.compound:
+        """``AUTOCOMMIT``, the default, and ``READ COMMITTED``, which runs DML in StarRocks transactions."""
+        return exclusions.open()
+
+    @property
+    def autocommit(self) -> exclusions.compound:
+        return exclusions.open()
+
+    def get_isolation_levels(self, config: Any) -> Dict[str, Any]:
+        """The default level, and the levels the server can run: ``READ COMMITTED`` needs StarRocks 3.5.
+
+        The levels are stated rather than read from the dialect, so the suite's default-level test checks that
+        connections start in ``AUTOCOMMIT``. The deprecated MySQL levels the dialect accepts run as ``AUTOCOMMIT``,
+        so they are not levels a connection can be switched to.
+        """
+        with config.db.connect() as conn:
+            supported = ["AUTOCOMMIT"] if conn.dialect.server_version_info < (3, 5) else ["AUTOCOMMIT", "READ COMMITTED"]
+            return {"default": "AUTOCOMMIT", "supported": supported}
+
     @property
     def nvarchar_types(self) -> exclusions.compound:
         """NCHAR and NVARCHAR, which compile to StarRocks' CHAR and VARCHAR, both UTF-8."""
