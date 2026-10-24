@@ -192,6 +192,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     _column_writers.reserve(_column_indexes.size());
     size_t num_columns = _tablet_schema->num_columns();
     std::map<uint32_t, uint32_t> sort_column_idx_by_column_index;
+    size_t json_columns = 0;
+    for (uint32_t column_index : _column_indexes) {
+        json_columns += column_index < num_columns && _tablet_schema->column(column_index).type() == TYPE_JSON;
+    }
     for (uint32_t i = 0; i < _column_indexes.size(); i++) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -332,6 +336,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+        opts.json_columns_in_segment = std::max<size_t>(1, json_columns);
 
         if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
             opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();

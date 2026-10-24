@@ -27,6 +27,16 @@ CONF_mBool(enable_json_flat, "true");
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
 
+// When some inputs of a compaction have a flat JSON column and others store it as whole JSON, read the whole-JSON
+// inputs into the flat inputs' layout with every path typed JSON, so the output is written as it is read instead
+// of being buffered whole to derive a layout.
+CONF_mBool(enable_compaction_flat_json_mixed_inputs, "true");
+
+// When the inputs of a flat JSON compaction do not all flatten a path, keep the path if enough rows hold it as a
+// sub-column (json_flat_sparsity_factor), reading the other inputs' values from their remain, rather than only the
+// paths every input flattens.
+CONF_mBool(enable_compaction_flat_json_partial_paths, "true");
+
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
