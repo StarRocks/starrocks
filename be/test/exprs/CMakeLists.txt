@@ -81,13 +81,6 @@ set(EXPR_TEST_FILES
     generate_series_core_test.cpp
     if_expr_test.cpp
     json_each_core_test.cpp
-<<<<<<< HEAD
-=======
-    table_function/multi_unnest_core_test.cpp
-    table_function/subdivide_bitmap_core_test.cpp
-    table_function/unnest_core_test.cpp
-    table_function/unnest_bitmap_core_test.cpp
->>>>>>> 5b9220e036a... [Enhancement] Bound the per-call expansion of subdivide_bitmap / json_each, and stop duplicating the whole element-level chunk in array_map / map_apply (#61694)
     like_test.cpp
     math_functions_test.cpp
     min_max_predicate_test.cpp
@@ -112,6 +105,7 @@ set(EXPR_TEST_FILES
     struct_functions_test.cpp
     subfield_expr_test.cpp
     table_function/multi_unnest_core_test.cpp
+    table_function/subdivide_bitmap_core_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
