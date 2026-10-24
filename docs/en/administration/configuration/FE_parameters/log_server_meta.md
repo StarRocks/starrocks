@@ -824,6 +824,51 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
 - Introduced in: v4.2
 
+### `arrow_flight_ssl_enable`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether the Arrow Flight SQL server of the FE serves TLS (`grpc+tls://`). The FE also uses TLS when it forwards Arrow Flight SQL requests to other FEs. Requires `arrow_flight_ssl_cert_file` and `arrow_flight_ssl_key_file`: the FE does not start if they are missing or unreadable. The connection to the Arrow Flight server of a BE is not covered and stays plaintext. All FEs of a cluster must use the same setting. Changes require FE restart.
+- Introduced in: v4.2
+
+### `arrow_flight_ssl_cert_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: PEM file with the certificate (chain) of the Arrow Flight SQL server. FEs reach each other by the host they advertise, so the certificate has to be valid for it. Changes require FE restart.
+- Introduced in: v4.2
+
+### `arrow_flight_ssl_key_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: PEM file with the private key of `arrow_flight_ssl_cert_file`, unencrypted and in PKCS#8 format (`-----BEGIN PRIVATE KEY-----`). Changes require FE restart.
+- Introduced in: v4.2
+
+### `arrow_flight_ssl_ca_cert_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: PEM file with the CA certificates to trust. An FE uses them to verify the FEs it connects to, and the server uses them to verify client certificates when `arrow_flight_ssl_require_client_auth` is `true`. If empty, the default trust store of the JVM is used to verify other FEs. Changes require FE restart.
+- Introduced in: v4.2
+
+### `arrow_flight_ssl_require_client_auth`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to require clients to present a certificate signed by one of the CAs in `arrow_flight_ssl_ca_cert_file` (mutual TLS). FEs present `arrow_flight_ssl_cert_file` as their own client certificate when they connect to other FEs, so it has to be valid for client authentication too. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000

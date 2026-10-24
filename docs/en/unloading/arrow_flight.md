@@ -185,6 +185,37 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::
 
+#### Enable TLS (Optional)
+
+By default, the FE serves Arrow Flight SQL over plaintext `grpc://`, so the credentials and the data sent between a client and the FE are not encrypted. To encrypt them, set the following items in **fe.conf** and restart the FE.
+
+| Configuration item | Default | Description |
+| --- | --- | --- |
+| `arrow_flight_ssl_enable` | `false` | Whether to serve Arrow Flight SQL over TLS (`grpc+tls://`). If it is `true`, the FE does not start when `arrow_flight_ssl_cert_file` or `arrow_flight_ssl_key_file` is missing or can't be read. |
+| `arrow_flight_ssl_cert_file` | Empty | The PEM file with the certificate (chain) of the server. |
+| `arrow_flight_ssl_key_file` | Empty | The PEM file with the private key of the certificate. The key must be unencrypted and in PKCS#8 format (`-----BEGIN PRIVATE KEY-----`). You can convert a key with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pkcs8.pem`. |
+| `arrow_flight_ssl_ca_cert_file` | Empty | The PEM file with the CA certificates to trust. An FE uses them to verify the FEs it forwards requests to. If it is empty, the default trust store of the JVM is used. |
+| `arrow_flight_ssl_require_client_auth` | `false` | Whether to require clients to present a certificate signed by one of the CAs in `arrow_flight_ssl_ca_cert_file` (mutual TLS). If it is `true`, `arrow_flight_ssl_ca_cert_file` must be set. |
+
+Example:
+
+```Properties
+// fe.conf
+arrow_flight_port = 9408
+arrow_flight_ssl_enable = true
+arrow_flight_ssl_cert_file = /path/to/server.crt
+arrow_flight_ssl_key_file = /path/to/server.key
+```
+
+:::note
+
+- These items are static. Restart the FE for a change to take effect.
+- All FEs of a cluster must use the same setting. An FE that forwards a request to another FE connects to it over TLS, by the host name or IP address that FE advertises, so the certificate of each FE must be valid for it. If `arrow_flight_ssl_require_client_auth` is `true`, the FE presents its own certificate to the other FEs, so the certificate must also be valid for client authentication.
+- If you set `arrow_flight_proxy`, prefix it with `grpcs://` so that clients connect to the proxy over TLS, for example `grpcs://your-proxy-hostname:Port`.
+- Only the Arrow Flight server of the FE is covered. The connection from an FE to the Arrow Flight server of a BE stays plaintext, and so does the one from a client to a BE when the proxy is disabled.
+
+:::
+
 #### Establish connection
 
 On the client side, create an Arrow Flight SQL client using the following information:
@@ -220,6 +251,8 @@ conn = flight_sql.connect(
 )
 cursor = conn.cursor()
 ```
+
+If TLS is enabled on the FE, use `grpc+tls://` instead of `grpc://` in the URI. The client has to trust the certificate of the FE. If it is not signed by a public CA, give the client the CA certificate, for example with the ADBC Flight SQL database option `adbc.flight.sql.client_option.tls_root_certs`.
 
 After the connection is established, you can interact with StarRocks by executing SQL statements through the returned Cursor.
 

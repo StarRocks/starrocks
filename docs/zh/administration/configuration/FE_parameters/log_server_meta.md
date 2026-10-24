@@ -823,6 +823,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
 - 引入版本: v4.2
 
+### `arrow_flight_ssl_enable`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: FE 的 Arrow Flight SQL 服务是否通过 TLS（`grpc+tls://`）提供服务。FE 将 Arrow Flight SQL 请求转发给其他 FE 时也使用 TLS。需要同时设置 `arrow_flight_ssl_cert_file` 和 `arrow_flight_ssl_key_file`：如果它们缺失或无法读取，FE 将无法启动。FE 到 BE 的 Arrow Flight 服务的连接不在覆盖范围内，保持明文。集群中所有 FE 必须使用相同的设置。修改后需要重启 FE。
+- 引入版本: v4.2
+
+### `arrow_flight_ssl_cert_file`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端证书（链）的 PEM 文件。FE 之间通过各自对外公布的主机名互相访问，因此证书必须对该主机名有效。修改后需要重启 FE。
+- 引入版本: v4.2
+
+### `arrow_flight_ssl_key_file`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: `arrow_flight_ssl_cert_file` 对应私钥的 PEM 文件，必须未加密且为 PKCS#8 格式（`-----BEGIN PRIVATE KEY-----`）。修改后需要重启 FE。
+- 引入版本: v4.2
+
+### `arrow_flight_ssl_ca_cert_file`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 受信任的 CA 证书的 PEM 文件。FE 使用这些证书验证其连接的其他 FE；当 `arrow_flight_ssl_require_client_auth` 为 `true` 时，服务端使用它们验证客户端证书。如果为空，则使用 JVM 默认的信任库验证其他 FE。修改后需要重启 FE。
+- 引入版本: v4.2
+
+### `arrow_flight_ssl_require_client_auth`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否要求客户端提供由 `arrow_flight_ssl_ca_cert_file` 中某个 CA 签发的证书（双向 TLS）。FE 连接其他 FE 时会出示 `arrow_flight_ssl_cert_file` 作为自己的客户端证书，因此该证书必须同时可用于客户端认证。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000

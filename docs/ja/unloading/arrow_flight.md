@@ -185,6 +185,37 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::
 
+#### TLS を有効にする（オプション）
+
+デフォルトでは、FE は平文の `grpc://` で Arrow Flight SQL を提供するため、クライアントと FE の間でやり取りされる認証情報とデータは暗号化されません。暗号化するには、**fe.conf** に次の設定項目を指定し、FE を再起動します。
+
+| 設定項目 | デフォルト | 説明 |
+| --- | --- | --- |
+| `arrow_flight_ssl_enable` | `false` | Arrow Flight SQL を TLS（`grpc+tls://`）で提供するかどうか。`true` の場合、`arrow_flight_ssl_cert_file` または `arrow_flight_ssl_key_file` が存在しない、または読み取れないと、FE は起動しません。 |
+| `arrow_flight_ssl_cert_file` | 空 | サーバーの証明書（チェーン）を含む PEM ファイル。 |
+| `arrow_flight_ssl_key_file` | 空 | 証明書の秘密鍵を含む PEM ファイル。秘密鍵は暗号化されておらず、PKCS#8 形式（`-----BEGIN PRIVATE KEY-----`）である必要があります。`openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pkcs8.pem` で変換できます。 |
+| `arrow_flight_ssl_ca_cert_file` | 空 | 信頼する CA 証明書を含む PEM ファイル。FE は、リクエストの転送先の FE を検証するためにこれらを使用します。空の場合は、JVM のデフォルトのトラストストアが使用されます。 |
+| `arrow_flight_ssl_require_client_auth` | `false` | クライアントに、`arrow_flight_ssl_ca_cert_file` 内のいずれかの CA によって署名された証明書の提示を要求するかどうか（相互 TLS）。`true` の場合は、`arrow_flight_ssl_ca_cert_file` を設定する必要があります。 |
+
+例:
+
+```Properties
+// fe.conf
+arrow_flight_port = 9408
+arrow_flight_ssl_enable = true
+arrow_flight_ssl_cert_file = /path/to/server.crt
+arrow_flight_ssl_key_file = /path/to/server.key
+```
+
+:::note
+
+- これらの項目は静的です。変更を反映するには FE を再起動します。
+- クラスターのすべての FE で同じ設定を使用する必要があります。FE が別の FE にリクエストを転送するときは、その FE が公開しているホスト名または IP アドレスを使用して TLS で接続するため、各 FE の証明書はそれに対して有効でなければなりません。`arrow_flight_ssl_require_client_auth` が `true` の場合、FE は他の FE に自身の証明書を提示するため、その証明書はクライアント認証にも有効である必要があります。
+- `arrow_flight_proxy` を設定する場合は、クライアントが TLS でプロキシに接続できるように `grpcs://` を前置してください。例: `grpcs://your-proxy-hostname:Port`
+- FE の Arrow Flight サーバーのみが対象です。FE から BE の Arrow Flight サーバーへの接続は平文のままで、プロキシが無効な場合のクライアントから BE への接続も同様です。
+
+:::
+
 #### 接続を確立する
 
 クライアント側で、以下の情報を使用してArrow Flight SQLクライアントを作成します:
