@@ -143,19 +143,13 @@ class Requirements(SuiteRequirements, AlembicSuiteRequirements):
         return exclusions.closed()
 
     @property
-    def offset(self):
-        """target database can render OFFSET, or an equivalent, in a
-        SELECT.
-        """
-        # ToDo - enable if Starrocks supports offset without limit (has order by)
+    def offset(self) -> exclusions.compound:
+        """OFFSET renders after a LIMIT, which the dialect adds when the query has none."""
         return exclusions.open()
 
     @property
-    def bound_limit_offset(self):
-        """target database can render LIMIT and/or OFFSET using a bound
-        parameter
-        """
-        # ToDo - see offset above
+    def bound_limit_offset(self) -> exclusions.compound:
+        """LIMIT and OFFSET take bound parameters."""
         return exclusions.open()
 
     @property
@@ -223,7 +217,18 @@ class Requirements(SuiteRequirements, AlembicSuiteRequirements):
 
     @property
     def legacy_unconditional_json_extract(self):
-        return exclusions.closed()
+        """``json_query`` returns valid JSON in all cases, as the legacy ``JSON_EXTRACT`` does."""
+        return exclusions.open()
+
+    @property
+    def update_from(self):
+        """Target must support UPDATE..FROM syntax"""
+        return exclusions.open()
+
+    @property
+    def delete_from(self):
+        """Target must support DELETE FROM..FROM or DELETE..USING syntax"""
+        return exclusions.open()
 
     @property
     def empty_inserts(self):
@@ -270,3 +275,8 @@ class Requirements(SuiteRequirements, AlembicSuiteRequirements):
     @property
     def unicode_ddl(self):
         return exclusions.open()
+    @property
+    def nvarchar_types(self) -> exclusions.compound:
+        """NCHAR and NVARCHAR, which compile to StarRocks' CHAR and VARCHAR, both UTF-8."""
+        return exclusions.open()
+

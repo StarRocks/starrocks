@@ -50,6 +50,7 @@ class DataTypeTransformer(Transformer):
 
     @v_args(inline=True)
     def simple_type(self, type_name: str, args: List[int] = None, unsigned: Token = None) -> sqltypes.TypeEngine:
+        """Build a scalar type from its name and arguments."""
         type_name_lower = type_name.lower()
         # logger.debug(f"type_name_lower: {type_name_lower}, args: {args}, unsigned: {unsigned}")
         # There may be a bug of parsing the type and unsigned keyword together
@@ -86,6 +87,13 @@ class DataTypeTransformer(Transformer):
     def map_type(self, key_type: Any, value_type: Any) -> datatype.MAP:
         # logger.debug(f"key_type: {key_type}, value_type: {value_type}")
         return datatype.MAP(key_type, value_type)
+
+    @v_args(inline=True)
+    def field_name(self, name: str) -> str:
+        """Return a STRUCT field's name without the backquotes StarRocks 4.1 shows it in."""
+        if name.startswith("`"):
+            return name[1:-1].replace("``", "`")
+        return name
 
     @v_args(inline=True)
     def struct_field(self, name: Any, field_type: Any) -> Tuple[Any, Any]:

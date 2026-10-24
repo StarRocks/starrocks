@@ -17,7 +17,7 @@ from sqlalchemy.testing import fixtures
 
 from starrocks.common.params import ColumnAggInfoKey, DialectName
 from starrocks.common.types import ColumnAggType
-from starrocks.datatype import BITMAP, HLL
+from starrocks.datatype import BITMAP, HLL, PERCENTILE
 
 
 class ReflectionColumnsAggTest(fixtures.TestBase):
@@ -37,6 +37,7 @@ class ReflectionColumnsAggTest(fixtures.TestBase):
             Column("val_replace_if_not_null", Integer, starrocks_agg_type=ColumnAggType.REPLACE_IF_NOT_NULL),
             Column("val_hll", HLL, starrocks_agg_type=ColumnAggType.HLL_UNION),
             Column("val_bitmap", BITMAP, starrocks_agg_type=ColumnAggType.BITMAP_UNION),
+            Column("val_percentile", PERCENTILE, starrocks_agg_type=ColumnAggType.PERCENTILE_UNION),
             starrocks_engine="OLAP",
             starrocks_aggregate_key="id, key1",
             starrocks_distributed_by="HASH(id)",
@@ -60,6 +61,7 @@ class ReflectionColumnsAggTest(fixtures.TestBase):
             "val_replace_if_not_null": ColumnAggType.REPLACE_IF_NOT_NULL,
             "val_hll": ColumnAggType.HLL_UNION,
             "val_bitmap": ColumnAggType.BITMAP_UNION,
+            "val_percentile": ColumnAggType.PERCENTILE_UNION,
         }
 
 

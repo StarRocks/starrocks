@@ -382,6 +382,7 @@ Use `AssertsCompiledSQL` and `__dialect__` for compile tests, the `connection` a
 SQLAlchemy's plugin adds its own options, which `pytest --help` lists. Besides `--dburi`, these are the useful ones:
 
 - `--dropfirst` drops the views and tables earlier runs left in the configured database and the two extra schemas, for example after an interrupted `-n0` run.
+- `--dbdriver asyncmy` runs each class that runs against the database over asyncmy too, besides the URL's driver, in one session; asyncmy needs SQLAlchemy 2.0. The asyncmy-only tests, in `test/integration/test_asyncmy_binary.py`, run only then or under a `starrocks+asyncmy://` URL. Otherwise SQLAlchemy 2.0 leaves them out without a word, and 1.4 reports them as skipped.
 - `--log-info=sqlalchemy.engine` logs each statement the tests execute, and `--log-debug=sqlalchemy.engine` adds the rows. `pyproject.toml` turns on pytest's live log at INFO, so they show as the tests run.
 
 For the dialect's own debug messages too, add `--log-cli-level=DEBUG`.

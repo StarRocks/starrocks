@@ -23,8 +23,6 @@ import logging
 from sqlalchemy import MetaData, Table, testing
 from sqlalchemy.testing import config, fixtures
 
-from test.util import STRUCT_FIELDS_BACKTICKED
-
 
 logger = logging.getLogger(__name__)
 
@@ -191,20 +189,17 @@ class StructResultProcessorTest(fixtures.TestBase):
             t = Table(table_name, meta, autoload_with=conn)
             return {row.id: row for row in conn.execute(t.select().order_by(t.c.id))}
 
-    @STRUCT_FIELDS_BACKTICKED
     def test_struct_is_dict(self, table_name):
         rows = self._rows(table_name)
         assert isinstance(rows[1].info, dict)
         assert rows[1].info["name"] == "Alice"
         assert rows[1].info["age"] == 30
 
-    @STRUCT_FIELDS_BACKTICKED
     def test_nested_struct_with_array_field(self, table_name):
         rows = self._rows(table_name)
         assert isinstance(rows[1].nested, dict)
         assert rows[1].nested["tags"] == ["go", "python"]
 
-    @STRUCT_FIELDS_BACKTICKED
     def test_null_struct_is_none(self, table_name):
         rows = self._rows(table_name)
         assert rows[3].info is None
@@ -264,11 +259,10 @@ class ResultProcessorWithDateTypesTest(fixtures.TestBase):
 
 
 class ArrayJsonResultProcessorTest(fixtures.TestBase):
-    """ARRAY<JSON> is returned as a raw string.
+    """ARRAY<JSON> is read as a list of decoded JSON values.
 
-    StarRocks serializes ARRAY<JSON> wire values using single-quoted element
-    strings (e.g. ['{"a":1}','{"b":2}']), which is not valid JSON.  Rather
-    than add a special-case parser, we leave the raw string value intact.
+    StarRocks writes the elements as single-quoted strings, as in ['{"a":1}','{"b":2}'], which is not JSON; the
+    dialect's parser reads them, and decodes each element as JSON.
     """
 
     __backend__ = True
@@ -306,9 +300,10 @@ class ArrayJsonResultProcessorTest(fixtures.TestBase):
             t = Table(table_name, meta, autoload_with=conn)
             return {row.id: row for row in conn.execute(t.select().order_by(t.c.id))}
 
-    def test_array_of_json_is_raw_string(self, table_name):
+    def test_array_of_json_decodes_single_quoted_items(self, table_name):
         rows = self._rows(table_name)
-        assert isinstance(rows[1].obj_arr, str)
+        assert rows[1].obj_arr == [{"a": 1}, {"b": 2}]
+        assert rows[2].obj_arr == [{"x": [1, 2]}]
 
     def test_null_array_of_json_is_none(self, table_name):
         rows = self._rows(table_name)

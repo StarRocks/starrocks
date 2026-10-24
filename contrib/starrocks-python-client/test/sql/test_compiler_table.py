@@ -130,6 +130,36 @@ class CreateTableCompileTest(fixtures.TestBase, AssertsCompiledSQL):
             "AGGREGATE KEY (k1)",
         )
 
+    @testing.combinations(
+        ("percentile_union", "PERCENTILE_UNION", "v1 INTEGER PERCENTILE_UNION"),
+        ("state_function", "sum(BIGINT)", "v1 INTEGER sum(BIGINT)"),
+        argnames="agg_type, column_text",
+        id_="iaa",
+    )
+    def test_aggregate_type_forms(self, agg_type, column_text):
+        tbl = Table(
+            "agg_forms_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: agg_type}),
+            starrocks_aggregate_key="k1",
+        )
+        self.assert_compile(
+            CreateTable(tbl), "CREATE TABLE agg_forms_tbl (" "    k1 INTEGER, " f"    {column_text}" ")" "AGGREGATE KEY (k1)"
+        )
+
+    @testing.combinations(("count", "COUNT"), ("unknown", "AVERAGE"), argnames="agg_type", id_="ia")
+    def test_unknown_aggregate_type_raises(self, agg_type):
+        tbl = Table(
+            "agg_unknown_tbl",
+            MetaData(),
+            Column("k1", Integer),
+            Column("v1", Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: agg_type}),
+            starrocks_aggregate_key="k1",
+        )
+        with expect_raises_message(exc.CompileError, f"Unsupported aggregate type for column 'v1': {agg_type}"):
+            CreateTable(tbl).compile(dialect=self.__dialect__)
+
     def test_aggregate_key_column_cannot_be_aggregated(self):
         tbl = Table(
             "invalid_agg_tbl1",

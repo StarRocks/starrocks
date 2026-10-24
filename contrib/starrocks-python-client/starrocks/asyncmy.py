@@ -14,15 +14,64 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
+from sqlalchemy import pool, util
 from sqlalchemy.connectors.asyncio import AsyncIODBAPIConnection
 from sqlalchemy.dialects.mysql.asyncmy import AsyncAdapt_asyncmy_dbapi, AsyncAdapt_asyncmy_ss_cursor
 from sqlalchemy.engine.interfaces import DBAPIConnection, DBAPICursor, DBAPIModule, PoolProxiedConnection
 from sqlalchemy.engine.url import URL
-from sqlalchemy import pool, util
 
 from .dialect import StarRocksDialect
+
+
+class _HexLiteralBytes:
+    """Bytes bound through asyncmy, which the connection's encoder writes as the hex literal ``X'...'``."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: Union[bytes, bytearray, memoryview]) -> None:
+        self.value = bytes(value)
+
+    def __bytes__(self) -> bytes:
+        return self.value
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.value!r})"
+
+    def __str__(self) -> str:
+        """Refuse to become text, which asyncmy would bind as a string when its connection lacks the encoder."""
+        raise TypeError(
+            "this asyncmy connection has no encoder for binary values; a connection made by async_creator "
+            "must be given conv=starrocks.asyncmy.hex_literal_conversions(asyncmy.converters.conversions)"
+        )
+
+
+def _escape_hex_literal(value: _HexLiteralBytes, mapping: Optional[Dict[Any, Any]] = None) -> str:
+    return "X'%s'" % value.value.hex()
+
+
+def hex_literal_conversions(conversions: Dict[Any, Any]) -> Dict[Any, Any]:
+    """Return asyncmy ``conversions`` with the encoder that writes a bound binary value as ``X'...'``."""
+    return {**conversions, _HexLiteralBytes: _escape_hex_literal}
+
+
+class AsyncAdapt_starrocks_asyncmy_dbapi(AsyncAdapt_asyncmy_dbapi):
+    """asyncmy's DBAPI, binding bytes as the hex literal ``X'...'``, as PyMySQL does.
+
+    asyncmy writes a bytes parameter as ``_binary'...'``, which StarRocks refuses, so no LargeBinary, BINARY or
+    VARBINARY value could be bound. ``Binary``, which SQLAlchemy's binary types bind through, wraps the bytes,
+    and each connection is given an encoder for the wrapper.
+    """
+
+    def Binary(self, value: Union[bytes, bytearray, memoryview]) -> _HexLiteralBytes:
+        return _HexLiteralBytes(value)
+
+    def connect(self, *arg: Any, **kw: Any) -> Any:
+        """Connect with the hex encoder added to the connection's conversions; ``async_creator`` makes its own."""
+        if "async_creator_fn" not in kw:
+            kw["conv"] = hex_literal_conversions(kw.get("conv") or self.asyncmy.converters.conversions)
+        return super().connect(*arg, **kw)
 
 
 class StarRocksDialect_asyncmy(StarRocksDialect):
@@ -37,7 +86,7 @@ class StarRocksDialect_asyncmy(StarRocksDialect):
 
     @classmethod
     def import_dbapi(cls) -> DBAPIModule:
-        return AsyncAdapt_asyncmy_dbapi(__import__("asyncmy"))
+        return AsyncAdapt_starrocks_asyncmy_dbapi(__import__("asyncmy"))
 
     @classmethod
     def get_pool_class(cls, url: URL) -> type:

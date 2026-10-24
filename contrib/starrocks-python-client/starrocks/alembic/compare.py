@@ -82,13 +82,33 @@ def _is_integer_with_display_width(type_obj: sqltypes.TypeEngine) -> bool:
     return visit_name.upper() in INTEGER_VISIT_NAMES_WITH_DISPLAY_WIDTH
 
 
+_UNBOUNDED_TEXT_VISIT_NAMES = frozenset({"text", "unicode_text", "TEXT", "STRING"})
+
+
+def _is_unbounded_text(type_obj: sqltypes.TypeEngine) -> bool:
+    """STRING, Text and UnicodeText all compile to STRING, which the server reports as varchar(65533)."""
+    return getattr(type_obj, "__visit_name__", None) in _UNBOUNDED_TEXT_VISIT_NAMES
+
+
+def _binary_family_matches(metadata_type: Any, inspector_type: Any) -> bool:
+    """BINARY, VARBINARY and LargeBinary are one family: StarRocks stores them all as varbinary(n).
+
+    A declared type without a length matches any reflected length.
+    """
+    if not (isinstance(metadata_type, sqltypes._Binary) and isinstance(inspector_type, sqltypes._Binary)):
+        return False
+    declared_length = getattr(metadata_type, "length", None)
+    return declared_length is None or declared_length == getattr(inspector_type, "length", None)
+
+
 def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metadata_column: Column[Any]) -> bool:
     """
     Set StarRocks' specific simple type comparison logic for some special cases.
 
     For some special cases:
         - meta.BOOLEAN equals to conn.TINYINT(1)
-        - meta.STRING equals to conn.VARCHAR(65533)
+        - meta.STRING, Text and UnicodeText equal conn.VARCHAR(65533)
+        - meta.BINARY, VARBINARY and LargeBinary equal conn.VARBINARY(n), ignoring a length the model omits
 
     NOTE: StarRocks will ignore the length of Integer types, so we need to care about the
     comparison of Integer types: ignore the comparison of the display width of Integer types.
@@ -119,8 +139,8 @@ def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metada
         # logger.debug("compare_simple_type with TINYINT(1) vs BOOLEAN, treat them as the same.")
         return False
 
-    # Scenario 2.a: model defined STRING, database stored VARCHAR(65533)
-    if (isinstance(metadata_type, STRING) and
+    # Scenario 2.a: model defined STRING or Text, database stored VARCHAR(65533)
+    if (_is_unbounded_text(metadata_type) and
         isinstance(inspector_type, VARCHAR) and
         getattr(inspector_type, 'length', None) == 65533):
         logger.debug("compare_simple_type with STRING vs VARCHAR(65533), treat them as the same.")
@@ -131,6 +151,10 @@ def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metada
         getattr(metadata_type, 'length', None) == 65533 and
         isinstance(inspector_type, STRING)):
         logger.debug("compare_simple_type with VARCHAR(65533) vs STRING, treat them as the same.")
+        return False
+
+    # Scenario 2.c: BINARY, VARBINARY and LargeBinary are stored as varbinary(n)
+    if _binary_family_matches(metadata_type, inspector_type):
         return False
 
     # Scenario 3: ignore display_width when comparing integer types.

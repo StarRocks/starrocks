@@ -141,7 +141,7 @@ BASIC_RENDER_TEST_CASES = [
     (BIGINT(), "BIGINT()"),
     (LARGEINT(), "LARGEINT()"),
     (FLOAT(), "FLOAT()"),
-    (DOUBLE(), "DOUBLE(asdecimal=True)"),
+    (DOUBLE(), "DOUBLE()"),
     (CHAR(10), "CHAR(length=10)"),
     (STRING(), "STRING()"),
     (BINARY(10), "BINARY(length=10)"),
@@ -163,7 +163,7 @@ COMPLEX_RENDER_TEST_CASES = [
 
     # MAP types
     (MAP(STRING, INTEGER), "MAP(STRING(), INTEGER())"),
-    (MAP(VARCHAR(50), DOUBLE), "MAP(VARCHAR(length=50), DOUBLE(asdecimal=True))"),
+    (MAP(VARCHAR(50), DOUBLE), "MAP(VARCHAR(length=50), DOUBLE())"),
     (MAP(STRING, MAP(INTEGER, STRING)), "MAP(STRING(), MAP(INTEGER(), STRING()))"),
     (MAP(STRING, DECIMAL(8, 2)), "MAP(STRING(), DECIMAL(precision=8, scale=2))"),
 

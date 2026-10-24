@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sqlalchemy import Column, testing
+from sqlalchemy import REAL, TIMESTAMP, Column, LargeBinary, Text, UnicodeText, testing
 from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.starrocks import StarRocksImpl
 from starrocks.datatype import (
     ARRAY,
     BIGINT,
+    BINARY,
     BITMAP,
     BOOLEAN,
     CHAR,
@@ -32,10 +33,12 @@ from starrocks.datatype import (
     JSON,
     LARGEINT,
     MAP,
+    PERCENTILE,
     SMALLINT,
     STRING,
     STRUCT,
     TINYINT,
+    VARBINARY,
     VARCHAR,
 )
 from starrocks.dialect import StarRocksDialect
@@ -87,7 +90,7 @@ simple_type_params = [
     ("DATETIME vs DATETIME (same)", DATETIME(), DATETIME(), False),
     ("HLL vs HLL (same)", HLL(), HLL(), False),
     ("BITMAP vs BITMAP (same)", BITMAP(), BITMAP(), False),
-    # ("PERCENTILE vs PERCENTILE (same)", PERCENTILE(), PERCENTILE(), False),  # Not supported by compiler yet
+    ("PERCENTILE vs PERCENTILE (same)", PERCENTILE(), PERCENTILE(), False),
     ("JSON vs JSON (same)", JSON(), JSON(), False),
 
     # 1.2 Equivalent types (special rules)
@@ -103,6 +106,8 @@ simple_type_params = [
     ("INTEGER vs BIGINT (different)", INTEGER(), BIGINT(), True),
     ("TINYINT vs SMALLINT (different)", TINYINT(), SMALLINT(), True),
     ("FLOAT vs DOUBLE (different)", FLOAT(), DOUBLE(), True),
+    ("FLOAT vs REAL (same: StarRocks creates REAL as FLOAT)", FLOAT(), REAL(), False),
+    ("DOUBLE vs REAL (different)", DOUBLE(), REAL(), True),
     ("CHAR(10) vs VARCHAR(10) (different)", CHAR(10), VARCHAR(10), True),
     ("DATE vs DATETIME (different)", DATE(), DATETIME(), True),
     ("HLL vs BITMAP (different)", HLL(), BITMAP(), True),
@@ -140,6 +145,25 @@ simple_type_params = [
     ("BIGINT(1) vs BIGINT() (display_width ignored)", BIGINT(1), BIGINT(), False),
     ("BIGINT(5) vs BIGINT(10) (display_width ignored)", BIGINT(5), BIGINT(10), False),
     ("BIGINT(11) vs BIGINT(20) (display_width ignored)", BIGINT(11), BIGINT(20), False),
+
+    # 1.6 Binary family: StarRocks stores BINARY(n), VARBINARY(n) and LargeBinary as varbinary(n)
+    ("VARBINARY(10) vs BINARY(10) (same family)", VARBINARY(10), BINARY(10), False),
+    ("VARBINARY(1048576) vs BINARY() (declared length omitted)", VARBINARY(1048576), BINARY(), False),
+    ("VARBINARY(1048576) vs VARBINARY() (declared length omitted)", VARBINARY(1048576), VARBINARY(), False),
+    ("VARBINARY(1048576) vs LargeBinary (declared length omitted)", VARBINARY(1048576), LargeBinary(), False),
+    ("VARBINARY(10) vs BINARY(20) (length differs)", VARBINARY(10), BINARY(20), True),
+    ("VARBINARY(1048576) vs VARBINARY(100) (length differs)", VARBINARY(1048576), VARBINARY(100), True),
+    ("VARBINARY(10) vs STRING (different)", VARBINARY(10), STRING(), True),
+
+    # 1.7 Text and UnicodeText compile to STRING, reported as varchar(65533)
+    ("VARCHAR(65533) vs Text (equivalent)", VARCHAR(65533), Text(), False),
+    ("VARCHAR(65533) vs UnicodeText (equivalent)", VARCHAR(65533), UnicodeText(), False),
+    ("VARCHAR(65532) vs Text (different)", VARCHAR(65532), Text(), True),
+    ("INTEGER vs Text (different)", INTEGER(), Text(), True),
+
+    # 1.8 DATETIME precision and TIMESTAMP are not StarRocks syntax; both are stored as DATETIME
+    ("DATETIME vs DATETIME(fsp=6) (same)", DATETIME(), DATETIME(fsp=6), False),
+    ("DATETIME vs TIMESTAMP (same)", DATETIME(), TIMESTAMP(), False),
 ]
 
 # 2. Complex type vs Simple type

@@ -43,6 +43,10 @@ class DataTypeParserTest(fixtures.TestBase):
         ("bigint", datatype.BIGINT),
         ("largeint", datatype.LARGEINT),
         ("decimal(10, 2)", datatype.DECIMAL(10, 2)),
+        ("decimal256(76, 10)", datatype.DECIMAL(76, 10)),
+        ("decimalv2(27, 9)", datatype.DECIMAL(27, 9)),
+        ("numeric(10, 2)", datatype.DECIMAL(10, 2)),
+        ("text", datatype.STRING),
         ("double", datatype.DOUBLE),
         ("float", datatype.FLOAT),
         ("char(10)", datatype.CHAR(10)),
@@ -75,6 +79,8 @@ class DataTypeParserTest(fixtures.TestBase):
     @testing.combinations(
         ("array<int>", datatype.ARRAY(datatype.INTEGER)),
         ("array<varchar(20)>", datatype.ARRAY(datatype.VARCHAR(20))),
+        ("array<DECIMAL256(76,10)>", datatype.ARRAY(datatype.DECIMAL(76, 10))),
+        ("map<string, decimal256(76,10)>", datatype.MAP(datatype.STRING, datatype.DECIMAL(76, 10))),
         ("map<string, int>", datatype.MAP(datatype.STRING, datatype.INTEGER)),
         (
             "struct<name varchar(100), age int>",
@@ -178,6 +184,43 @@ class DataTypeParserTest(fixtures.TestBase):
             ),
         )
         assert repr(parse_data_type(type_str)) == repr(expected_type)
+
+    @testing.combinations(
+        ("plain", "struct<`a` int(11)>", ["a"]),
+        ("space", "struct<`a b` varchar(50), c int(11)>", ["a b", "c"]),
+        ("reserved", "struct<`key` map<boolean,double>, `Mixed` int(11)>", ["key", "Mixed"]),
+        ("non_ascii", "struct<`日本` int(11)>", ["日本"]),
+        ("doubled_backquote", "struct<`c``d` int(11)>", ["c`d"]),
+        ("nested", "array<struct<`x y` struct<`z` date>>>", None),
+        argnames="type_str, field_names",
+        id_="iaa",
+    )
+    def test_backquoted_struct_field_names(self, type_str, field_names):
+        """StarRocks 4.1 shows every STRUCT field name backquoted."""
+        parsed = parse_data_type(type_str)
+        if field_names is None:
+            outer = parsed.item_type
+            assert [name for name, _ in outer.field_tuples] == ["x y"]
+            assert [name for name, _ in outer.field_tuples[0][1].field_tuples] == ["z"]
+        else:
+            assert [name for name, _ in parsed.field_tuples] == field_names
+
+    @testing.combinations(
+        ("alone", "largeint(40)"),
+        ("map_value", "map<decimal(10, 2),largeint(40)>"),
+        argnames="type_str",
+        id_="ia",
+    )
+    def test_largeint_display_width_is_dropped(self, type_str):
+        """StarRocks shows a nested LARGEINT as ``largeint(40)``, a display width with no meaning."""
+        parsed = parse_data_type(type_str)
+        largeint = parsed.value_type if isinstance(parsed, datatype.MAP) else parsed
+        assert isinstance(largeint, datatype.LARGEINT)
+        assert largeint.compile(dialect=StarRocksDialect()) == "LARGEINT"
+
+    def test_reflected_double_reads_a_float(self):
+        double = parse_data_type("double")()
+        assert double.asdecimal is False
 
     @testing.combinations(
         "invalid_type",

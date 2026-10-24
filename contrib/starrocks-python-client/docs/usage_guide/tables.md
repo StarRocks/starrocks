@@ -175,6 +175,12 @@ Column(
 )
 ```
 
+Bind a Python list to an ARRAY column, and a dict to a MAP or STRUCT column. An ARRAY column also takes text, as StarRocks writes an array. JSON text such as `"[1, 2, 3]"` is read as JSON, and other text is cast by StarRocks, so `"[a,b]"` is stored as `["a", "b"]`, and text that isn't an array becomes NULL. An ARRAY of MAP or STRUCT values takes JSON text only, since StarRocks can't cast text to it.
+
+A `cast()` to ARRAY, MAP or STRUCT is left out for three kinds of operand: text, an expression with no type, and JSON where the connected StarRocks can't cast JSON to the type. StarRocks casts JSON to MAP from 3.4.3 and to STRUCT from 3.5.0, and never to an ARRAY element, MAP value or STRUCT field of a DATE, DATETIME, DECIMAL or binary type, or to an ARRAY of ARRAYs or MAPs. Every other operand keeps the CAST: an ARRAY, MAP or STRUCT and NULL, which StarRocks casts, and any other type, such as a number, which StarRocks may refuse.
+
+A left-out CAST changes nothing on the server, which computes on the operand's own type. Only where the dialect reads the value, in a column of the statement's result or a subquery column that the query selects as it is, is the operand's text read as the type. Each element is then converted as StarRocks' cast of JSON converts it, so a statement reads as it does where the server runs the CAST: a number or a JSON object in a VARCHAR element reads as its text, a BOOLEAN reads only from `1`, `0`, `true` or `false`, or their text, a STRUCT keeps only its declared fields, each by its exact name, and any other value that isn't of its element's type raises `ValueError`. Array text that StarRocks' cast reads but that isn't JSON, such as `[a,b]` or `[NULL,1]`, is returned as the text, as 1.3 returned it. Anywhere else, such as in a comparison, ORDER BY, GROUP BY, DISTINCT or a function's argument, the dialect warns that StarRocks computes on the operand's type. A `func` given no `type_` has no type, so give a function that returns a collection its type, as in `func.split(c, ",", type_=ARRAY(VARCHAR(10)))`. Its result is then read as a list, and a CAST of it reaches StarRocks.
+
 **Note**: Syntax and usage are analogous to SQLAlchemy's style (e.g., MySQL types), but always import and use the StarRocks types in uppercase from `starrocks`.
 
 #### Column-Level Attributes (`starrocks_*` Prefixes)
