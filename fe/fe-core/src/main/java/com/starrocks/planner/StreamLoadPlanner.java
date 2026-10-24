@@ -172,7 +172,8 @@ public class StreamLoadPlanner {
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
             slotDesc.setIsNullable(col.isAllowNull());
-            if (negative && !col.isKey() && col.getAggregationType() != AggregateType.SUM) {
+            if (negative && !col.isKey() && col.getAggregationType() != AggregateType.SUM
+                    && !(destTable.getKeysType() == KeysType.AGG_KEYS && col.isInternalGeneratedPartitionColumn())) {
                 throw new DdlException("Column is not SUM AggreateType. column:" + col.getName());
             }
 
