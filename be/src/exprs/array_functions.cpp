@@ -1445,15 +1445,9 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
             for (size_t j = 1; j < array_size; j++) {
                 auto elements_idx = offset + j;
                 // hash check
-<<<<<<< HEAD
                 if (!sets.contains(hash[elements_idx])) {
-                    result_elements->append(*elements, elements_idx, 1);
-                    sets.emplace(hash[elements_idx]);
-=======
-                if (!sets.contains(elements_hash)) {
                     kept.emplace_back(elements_idx);
-                    sets.emplace(elements_hash);
->>>>>>> 88bfa22c43f... [Enhancement] Cut the redundant map copies out of map_filter / map_apply (#62909)
+                    sets.emplace(hash[elements_idx]);
                     continue;
                 }
 

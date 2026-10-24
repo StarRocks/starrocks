@@ -265,8 +265,6 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     }
 }
 
-<<<<<<< HEAD
-=======
 // map_apply evaluates its lambda over the entry-level chunk - one row per map entry, so
 // sum(map sizes) rows - and only slices that chunk when it is more than 8x the input chunk. Both of
 // the cases above stay far under that threshold, so the slicing loop was never executed by a test;
@@ -371,7 +369,6 @@ TEST_F(MapApplyExprTest, test_map_with_payload_under_null_rows) {
     ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
->>>>>>> 88bfa22c43f... [Enhancement] Cut the redundant map copies out of map_filter / map_apply (#62909)
 // NOLINTNEXTLINE
 TEST_F(MapApplyExprTest, test_map_varchar_int) {
     TypeDescriptor type_map_varchar_int;

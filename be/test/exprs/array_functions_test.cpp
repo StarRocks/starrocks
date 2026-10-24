@@ -5354,104 +5354,6 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
 }
 
-<<<<<<< HEAD
-=======
-// array_distinct_any_type hashes the elements one block of rows at a time instead of materializing
-// a hash per element for the whole chunk, so the block bookkeeping has to hold up across a block
-// boundary, across a row longer than the whole budget, and across null/empty rows in between.
-// Compare every row against a plain first-occurrence dedup.
-TEST_F(ArrayFunctionsTest, array_distinct_any_type_across_hash_blocks) {
-    // 600 rows x 8 elements is well past the 4096-element block budget.
-    constexpr size_t kShortRows = 600;
-    // Longer than the whole budget, so this row must form a block of its own.
-    constexpr int32_t kLongRowDistinct = 4200;
-
-    // std::nullopt as a row marks a NULL array; std::nullopt as an element marks a NULL element.
-    using Row = std::vector<std::optional<int32_t>>;
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
-    std::vector<std::optional<Row>> rows;
-
-    auto add_row = [&](std::optional<Row> row) {
-        if (!row.has_value()) {
-            src_column->append_nulls(1);
-        } else {
-            DatumArray datums;
-            for (const auto& v : *row) {
-                datums.emplace_back(v.has_value() ? Datum(*v) : Datum());
-            }
-            src_column->append_datum(datums);
-        }
-        rows.emplace_back(std::move(row));
-    };
-
-    for (size_t i = 0; i < kShortRows; i++) {
-        if (i % 37 == 0) {
-            add_row(std::nullopt);
-        } else if (i % 53 == 0) {
-            add_row(Row{});
-        } else if (i % 71 == 0) {
-            add_row(Row{static_cast<int32_t>(i)});
-        } else {
-            // Duplicates within the row exercise the collision fallback, which rescans the row
-            // with absolute element indices — the part that breaks if a block is misaddressed.
-            add_row(Row{static_cast<int32_t>(i % 3), static_cast<int32_t>(i % 3), std::nullopt,
-                        static_cast<int32_t>(i % 5), 7, 7, std::nullopt, static_cast<int32_t>(i % 2)});
-        }
-    }
-
-    Row long_row;
-    long_row.reserve(kLongRowDistinct + 6);
-    for (int32_t j = 0; j < kLongRowDistinct; j++) {
-        long_row.emplace_back(j);
-    }
-    // A few duplicates so the fallback also runs inside the oversized block.
-    for (int32_t j : {0, 1, kLongRowDistinct - 1, kLongRowDistinct / 2, 0, 1}) {
-        long_row.emplace_back(j);
-    }
-    add_row(long_row);
-
-    // Short rows after the oversized one: the next block starts from a fresh offset.
-    add_row(Row{1, 1, 2});
-    add_row(std::nullopt);
-    add_row(Row{3, 4, 3, 4, 5, std::nullopt, std::nullopt});
-
-    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
-    ASSERT_EQ(rows.size(), dest_column->size());
-
-    for (size_t i = 0; i < rows.size(); i++) {
-        if (!rows[i].has_value()) {
-            ASSERT_TRUE(dest_column->is_null(i)) << "row " << i;
-            continue;
-        }
-        ASSERT_FALSE(dest_column->is_null(i)) << "row " << i;
-
-        Row expected;
-        for (const auto& v : *rows[i]) {
-            bool seen = false;
-            for (const auto& kept : expected) {
-                if (kept == v) {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) {
-                expected.emplace_back(v);
-            }
-        }
-
-        auto actual = dest_column->get(i).get_array();
-        ASSERT_EQ(expected.size(), actual.size()) << "row " << i;
-        for (size_t j = 0; j < expected.size(); j++) {
-            if (!expected[j].has_value()) {
-                ASSERT_TRUE(actual[j].is_null()) << "row " << i << " element " << j;
-            } else {
-                ASSERT_FALSE(actual[j].is_null()) << "row " << i << " element " << j;
-                ASSERT_EQ(*expected[j], actual[j].get_int32()) << "row " << i << " element " << j;
-            }
-        }
-    }
-}
-
 // array_distinct_any_type collects the surviving element indices for the whole chunk and copies them
 // with a single append_selective(), so the per-row offsets and the shared index buffer have to stay
 // in step across rows that keep everything, keep nothing, and are NULL.
@@ -5538,7 +5440,6 @@ TEST_F(ArrayFunctionsTest, array_top_n_only_null) {
     ASSERT_TRUE(dest_column->only_null());
 }
 
->>>>>>> 88bfa22c43f... [Enhancement] Cut the redundant map copies out of map_filter / map_apply (#62909)
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
