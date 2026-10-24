@@ -507,6 +507,10 @@ BENCHGEN_NAME=benchgen-26.03.11.tar.gz
 BENCHGEN_SOURCE=benchgen-26.03.11
 BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
 
+# Lance wrapper sources are tracked in thirdparty/lance, with Cargo.lock pinning
+# Rust dependencies. Only build intermediates live in the cleanable source tree.
+LANCE_SOURCE=lance-build
+
 # paimon-cpp
 # NOTE: all its third-party deps are BUNDLED and downloaded by its own cmake
 # at build time (network required when building this package)

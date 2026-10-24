@@ -100,6 +100,9 @@ Usage: $0 [options...] [packages...]
 
     # Clean and build only specific packages
     $0 --clean boost thrift
+
+    # Build the optional Lance Rust shared library (requires Rust and installed protobuf)
+    $0 -j2 lance
   "
     exit 1
 }
@@ -1883,6 +1886,15 @@ build_benchgen() {
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
     ${CMAKE_CMD} --install build
+}
+
+# Lance's Rust sources and Cargo.lock are in-tree. Like paimon-cpp, install a
+# self-contained shared library below its own thirdparty prefix. Keep this first
+# Rust dependency opt-in; the Ubuntu/Rocky9 dev-env image builds it explicitly.
+build_lance() {
+    "${TP_DIR}/build-lance.sh" --prefix "${TP_INSTALL_DIR}/lance" \
+        --target-dir "${TP_SOURCE_DIR}/${LANCE_SOURCE}" \
+        --protoc "${TP_INSTALL_DIR}/bin/protoc" -j "${PARALLEL}"
 }
 
 # paimon-cpp
