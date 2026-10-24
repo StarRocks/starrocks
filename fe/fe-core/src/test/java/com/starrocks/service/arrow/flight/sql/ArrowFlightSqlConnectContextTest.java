@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -41,6 +42,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 public class ArrowFlightSqlConnectContextTest {
+
+    // Non-ASCII text: Polish and Japanese
+    private static final String NON_ASCII = "zażółć 日本語";
 
     private ArrowFlightSqlConnectContext context;
     private final String token = "test-token";
@@ -94,6 +98,39 @@ public class ArrowFlightSqlConnectContextTest {
 
             assertNotNull(result);
             assertEquals(1, result.getRowCount());
+        }
+    }
+
+    // Arrow's Utf8 vectors hold UTF-8, but the bytes used to come from String.getBytes() in the JVM's default charset,
+    // which is ASCII in a container without a locale and turned non-ASCII text into '?'.
+    @Test
+    public void testAddShowResultEncodesValuesAsUtf8() {
+        Column column = new Column("col1", TypeFactory.createVarcharType(20));
+        ShowResultSetMetaData metaData = new ShowResultSetMetaData(Collections.singletonList(column));
+        ShowResultSet showResultSet = new ShowResultSet(metaData, List.of(Collections.singletonList(NON_ASCII)));
+
+        try (MockedStatic<ArrowUtil> mocked = mockStatic(ArrowUtil.class)) {
+            VarCharVector mockVector = mock(VarCharVector.class);
+            mocked.when(() -> ArrowUtil.createVarCharVector(anyString(), any(), anyInt()))
+                    .thenReturn(mockVector);
+
+            context.addShowResult("query-utf8-show", showResultSet);
+
+            verify(mockVector).setSafe(0, NON_ASCII.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
+    public void testAddExplainResultEncodesLinesAsUtf8() {
+        try (MockedStatic<ArrowUtil> mocked = mockStatic(ArrowUtil.class)) {
+            VarCharVector mockVector = mock(VarCharVector.class);
+            mocked.when(() -> ArrowUtil.createVarCharVector(anyString(), any(), anyInt()))
+                    .thenReturn(mockVector);
+
+            context.addExplainResult("query-utf8-explain", NON_ASCII + "\nPLAN FRAGMENT 0");
+
+            verify(mockVector).setSafe(0, NON_ASCII.getBytes(StandardCharsets.UTF_8));
+            verify(mockVector).setSafe(1, "PLAN FRAGMENT 0".getBytes(StandardCharsets.UTF_8));
         }
     }
 
