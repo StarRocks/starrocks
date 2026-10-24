@@ -260,6 +260,36 @@ public class MvUtils {
         return root.getInputs().stream().anyMatch(MvUtils::containsTimeTravelScan);
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean containsBookmarkScopedScan(OptExpression root) {
+        if (root.getOp() instanceof LogicalOlapScanOperator scan && scan.isBookmarkScoped()) {
+            return true;
+        }
+        return root.getInputs().stream().anyMatch(MvUtils::containsBookmarkScopedScan);
+    }
+
+    // Whether the plan computes an approx_* vector function, the functions an ANN search orders by.
+    public static boolean containsApproxVectorFunction(OptExpression root) {
+        Operator op = root.getOp();
+        List<ScalarOperator> exprs = new ArrayList<>();
+        if (op instanceof LogicalProjectOperator project) {
+            exprs.addAll(project.getColumnRefMap().values());
+        }
+        if (op.getProjection() != null) {
+            exprs.addAll(op.getProjection().getColumnRefMap().values());
+        }
+        return exprs.stream().anyMatch(MvUtils::isApproxVectorCall)
+                || root.getInputs().stream().anyMatch(MvUtils::containsApproxVectorFunction);
+    }
+
+    private static boolean isApproxVectorCall(ScalarOperator expr) {
+        return (expr instanceof CallOperator call
+                && FunctionSet.VECTOR_COMPUTE_FUNCTIONS.contains(call.getFnName().toLowerCase()))
+                || expr.getChildren().stream().anyMatch(MvUtils::isApproxVectorCall);
+    }
+
+>>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
     public static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {
         List<MaterializedView> mvs = new ArrayList<>();
         collectMaterializedViews(optExpression, mvs);

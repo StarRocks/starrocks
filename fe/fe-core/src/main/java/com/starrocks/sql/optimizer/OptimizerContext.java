@@ -89,6 +89,12 @@ public class OptimizerContext {
 
     // source tables count in the query
     private int sourceTablesCount = 0;
+<<<<<<< HEAD
+=======
+    private boolean materializedViewRefresh = false;
+    // see JoinKeyContainmentBound: column id -> upper bound on its distinct values, for join keys unknown on both sides
+    private Map<Integer, Double> joinKeyNdvBounds = Map.of();
+>>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
 
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
@@ -261,6 +267,14 @@ public class OptimizerContext {
 
     public void setSourceTablesCount(int count) {
         this.sourceTablesCount = count;
+    }
+
+    public boolean isMaterializedViewRefresh() {
+        return materializedViewRefresh;
+    }
+
+    public void setMaterializedViewRefresh(boolean materializedViewRefresh) {
+        this.materializedViewRefresh = materializedViewRefresh;
     }
 
     /**

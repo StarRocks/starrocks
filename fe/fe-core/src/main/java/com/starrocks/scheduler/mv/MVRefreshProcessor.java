@@ -451,6 +451,12 @@ public abstract class MVRefreshProcessor {
                 mvSessionVariable.setEnableMaterializedViewRewriteForInsert(Config.enable_mv_refresh_query_rewrite);
             }
         }
+        // Another MV holds the base tables as of its own refresh, not the snapshot this refresh is pinned to.
+        if (!refreshRuntimeState.getPinnedTvrMap().isEmpty()
+                && mvSessionVariable.isEnableMaterializedViewRewriteForInsert()) {
+            logger.info("Disable materialized view rewrite for the refresh reading pinned base table snapshots");
+            mvSessionVariable.setEnableMaterializedViewRewriteForInsert(false);
+        }
         // set nested_mv_rewrite_max_level by default, only rewrite one level
         if (!isMVPropertyContains(SessionVariable.NESTED_MV_REWRITE_MAX_LEVEL)) {
             mvSessionVariable.setNestedMvRewriteMaxLevel(1);
