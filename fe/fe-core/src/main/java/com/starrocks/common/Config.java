@@ -4762,6 +4762,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
 
+    @ConfField(mutable = true, comment = "How long, in seconds, the mv plan cache keeps a materialized view " +
+            "whose plan failed to build, e.g. because the optimizer timed out. Until then the mv is not used for " +
+            "query rewrite and its plan is not built again; a successful refresh of the mv drops the failure sooner. " +
+            "A plan that is built is kept until the mv changes.")
+    public static long mv_plan_cache_failure_expire_interval_sec = 600;
+
     @ConfField(mutable = true, comment = "Max materialized view rewrite cache size during one query's lifecycle " +
             "so can avoid repeating compute to reduce optimizer time in materialized view rewrite, " +
             "but may occupy some extra FE's memory. It's well-done when there are many relative " +

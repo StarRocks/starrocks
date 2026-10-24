@@ -1547,6 +1547,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
 - Introduced in: v3.2
 
+### `mv_plan_cache_failure_expire_interval_sec`
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long the materialized view plan cache keeps the result of a failed attempt to build the plan of a materialized view, for example when the optimizer times out on a busy FE. Until the result expires, the materialized view is not used for query rewrite on this FE and its plan is not built again. A successful refresh of the materialized view drops the failed result earlier. A plan that is built successfully does not expire.
+- Introduced in: v4.2
+
 ### `mv_plan_cache_thread_pool_size`
 
 - Default: 8

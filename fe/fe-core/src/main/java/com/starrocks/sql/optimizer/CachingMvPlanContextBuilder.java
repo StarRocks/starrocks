@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -91,10 +92,36 @@ public class CachingMvPlanContextBuilder {
                 }
             };
 
+    // A plan context is built for each plan of the mv, a valid one or one that records why the mv cannot be used, so
+    // an empty list means every build threw. That failure is kept, so that a mv that always fails to build is not
+    // planned again on every lookup, but only for mv_plan_cache_failure_expire_interval_sec: it may also be transient
+    // (e.g. the optimizer timed out on a busy FE), while a valid plan never expires. A successful refresh of the mv
+    // drops the failure sooner, see evictFailedPlanContext.
+    private static final Expiry<MaterializedView, List<MvPlanContext>> MV_PLAN_CONTEXT_EXPIRY = new Expiry<>() {
+        @Override
+        public long expireAfterCreate(@NonNull MaterializedView mv, @NonNull List<MvPlanContext> contexts,
+                                      long currentTime) {
+            return expireAfterLoad(contexts);
+        }
+
+        @Override
+        public long expireAfterUpdate(@NonNull MaterializedView mv, @NonNull List<MvPlanContext> contexts,
+                                      long currentTime, long currentDuration) {
+            return expireAfterLoad(contexts);
+        }
+
+        @Override
+        public long expireAfterRead(@NonNull MaterializedView mv, @NonNull List<MvPlanContext> contexts,
+                                    long currentTime, long currentDuration) {
+            return currentDuration;
+        }
+    };
+
     // After view-based mv rewrite, one mv may has views as based tables, It can return logical plans with or without inline
     // views. So here should return a List<MvPlanContext> for one mv.
     private static final AsyncLoadingCache<MaterializedView, List<MvPlanContext>> MV_PLAN_CONTEXT_CACHE = Caffeine.newBuilder()
             .maximumSize(Config.mv_plan_cache_max_size)
+            .expireAfter(MV_PLAN_CONTEXT_EXPIRY)
             .executor(MV_PLAN_CACHE_EXECUTOR)
             .recordStats()
             .buildAsync(MV_PLAN_CACHE_LOADER);
@@ -234,6 +261,31 @@ public class CachingMvPlanContextBuilder {
         } catch (Throwable e) {
             LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
             return Lists.newArrayList();
+        }
+    }
+
+    private static long expireAfterLoad(List<MvPlanContext> contexts) {
+        if (CollectionUtils.isEmpty(contexts)) {
+            return TimeUnit.SECONDS.toNanos(Math.max(0L, Config.mv_plan_cache_failure_expire_interval_sec));
+        }
+        return Long.MAX_VALUE;
+    }
+
+    /**
+     * Drop the cached plan context of the mv if building it failed, and build it again in the background. A successful
+     * refresh calls this: the refresh has just planned the mv's defining query, so a failure kept from before, such as
+     * an optimizer timeout on a busy FE, need not keep the mv out of query rewrite until it expires.
+     */
+    public void evictFailedPlanContext(MaterializedView mv) {
+        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
+        if (future == null || !future.isDone() || future.isCompletedExceptionally()
+                || CollectionUtils.isNotEmpty(future.getNow(null))) {
+            return;
+        }
+        // Remove only this entry: a plan loaded in the meantime must stay.
+        if (MV_PLAN_CONTEXT_CACHE.asMap().remove(mv, future)) {
+            LOG.info("evict failed mv plan context after refresh: {}", mv.getName());
+            triggerLoadMVPlanCacheAsync(mv);
         }
     }
 

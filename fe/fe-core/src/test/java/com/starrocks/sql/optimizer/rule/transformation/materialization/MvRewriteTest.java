@@ -29,11 +29,17 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -44,8 +50,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -57,6 +65,8 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -1880,6 +1890,88 @@ public class MvRewriteTest extends MVTestBase {
         for (int i = 0; i < testSize; i++) {
             String mvName = "plan_cache_mv_" + i;
             starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    /**
+     * Make every build of the mv's plan throw while {@code failBuild} is set, as it does when the optimizer times out
+     * on a busy FE.
+     */
+    private static void mockFailingMvPlanBuild(AtomicBoolean failBuild) {
+        new MockUp<MaterializedViewOptimizer>() {
+            @Mock
+            public MvPlanContext optimize(Invocation invocation, MaterializedView view, ConnectContext connectContext) {
+                if (failBuild.get()) {
+                    throw new StarRocksPlannerException("planner use long time in logical phase",
+                            ErrorType.INTERNAL_ERROR);
+                }
+                return invocation.proceed();
+            }
+        };
+    }
+
+    private static boolean hasValidPlanInCache(MaterializedView mv) {
+        List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextIfPresent(mv, 3000);
+        return planContexts != null && planContexts.size() == 1 && planContexts.get(0).isValidMvPlan();
+    }
+
+    @Test
+    public void testPlanCacheFailedBuildExpires() throws Exception {
+        long savedInterval = Config.mv_plan_cache_failure_expire_interval_sec;
+        starRocksAssert.withMaterializedView("create materialized view plan_cache_failed_expire_mv" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1, sum(t0.v2) as total_sum from t0 group by v1");
+        MaterializedView mv = getMv("test", "plan_cache_failed_expire_mv");
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
+        AtomicBoolean failBuild = new AtomicBoolean(true);
+        mockFailingMvPlanBuild(failBuild);
+        try {
+            Config.mv_plan_cache_failure_expire_interval_sec = 1;
+            instance.evictMaterializedViewCache(mv);
+
+            // The failed build is cached, so the mv is not planned again on every lookup ...
+            List<MvPlanContext> planContexts = getPlanContext(mv, true);
+            Assertions.assertEquals(Lists.newArrayList(), planContexts);
+            Assertions.assertTrue(instance.contains(mv));
+
+            // ... but only until mv_plan_cache_failure_expire_interval_sec, after which it is built again.
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).until(() -> !instance.contains(mv));
+            failBuild.set(false);
+            planContexts = getPlanContext(mv, true);
+            Assertions.assertEquals(1, planContexts.size());
+            Assertions.assertTrue(planContexts.get(0).isValidMvPlan());
+            Assertions.assertTrue(instance.contains(mv));
+        } finally {
+            Config.mv_plan_cache_failure_expire_interval_sec = savedInterval;
+            starRocksAssert.dropMaterializedView("plan_cache_failed_expire_mv");
+        }
+    }
+
+    @Test
+    public void testPlanCacheFailedBuildEvictedByRefresh() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view plan_cache_failed_refresh_mv" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1, sum(t0.v2) as total_sum from t0 group by v1");
+        MaterializedView mv = getMv("test", "plan_cache_failed_refresh_mv");
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
+        AtomicBoolean failBuild = new AtomicBoolean(true);
+        mockFailingMvPlanBuild(failBuild);
+        try {
+            instance.evictMaterializedViewCache(mv);
+            Assertions.assertEquals(Lists.newArrayList(), getPlanContext(mv, true));
+            Assertions.assertTrue(instance.contains(mv));
+
+            // A successful refresh drops the failed build before it expires, and builds the plan again.
+            failBuild.set(false);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                    .triggerTimelessInfoEvent(mv, MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).until(() -> hasValidPlanInCache(mv));
+
+            // A plan that was built is kept on the next refresh.
+            failBuild.set(true);
+            GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
+                    .triggerTimelessInfoEvent(mv, MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
+            Assertions.assertTrue(hasValidPlanInCache(mv));
+        } finally {
+            starRocksAssert.dropMaterializedView("plan_cache_failed_refresh_mv");
         }
     }
 
