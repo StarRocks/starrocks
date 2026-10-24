@@ -14,6 +14,7 @@
 
 from datetime import datetime, timedelta
 import logging
+import re
 import time
 
 from sqlalchemy import MetaData, exc, inspect, testing, text
@@ -363,10 +364,9 @@ class ReflectionMaterializedViewsTest(fixtures.TestBase):
 
             assert mv_definition is not None
 
-            # Verify aggregation functions are preserved.
-            # normalize_sql canonicalizes "left outer join" -> "left join".
+            # Verify aggregation functions are preserved. StarRocks before 4.0.2 spells it LEFT OUTER JOIN.
             definition = TableAttributeNormalizer.normalize_sql(mv_definition)
-            assert "left join" in definition
+            assert re.search(r"left (outer )?join", definition)
             assert "group by" in definition
             assert "count" in definition
             assert "sum" in definition
@@ -630,12 +630,10 @@ class ReflectionMaterializedViewsTest(fixtures.TestBase):
 
             assert mv_definition is not None
 
-            # Verify complex join elements are preserved.
-            # normalize_sql canonicalizes "inner join" -> "join" and
-            # "left outer join" -> "left join".
+            # Verify complex join elements are preserved. StarRocks before 4.0.2 spells it LEFT OUTER JOIN.
             definition = TableAttributeNormalizer.normalize_sql(mv_definition)
             assert "join" in definition
-            assert "left join" in definition
+            assert re.search(r"left (outer )?join", definition)
             assert "where" in definition
             assert "order by" in definition
 

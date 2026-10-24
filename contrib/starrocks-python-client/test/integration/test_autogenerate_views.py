@@ -28,7 +28,7 @@ from starrocks.alembic.ops import AlterViewOp, CreateViewOp, DropViewOp
 from starrocks.common.params import DialectName, TableInfoKey, TableInfoKeyWithPrefix
 from starrocks.datatype import INTEGER, STRING
 from starrocks.sql.schema import View
-from test.util import normalize_sql
+from test.util import VIEW_SECURITY_NEEDS_3_4_1, normalize_sql
 
 
 logger = logging.getLogger(__name__)
@@ -231,7 +231,8 @@ class CreateViewTest(_EmptyDatabaseAutogenerateBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
-    def test_with_security(self, connection) -> None:
+    @VIEW_SECURITY_NEEDS_3_4_1
+    def test_with_security(self, connection):
         """CREATE: View with security attribute."""
         view_name = "test_create_security"
         connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
@@ -317,7 +318,8 @@ class CreateViewTest(_EmptyDatabaseAutogenerateBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
-    def test_comprehensive(self, connection) -> None:
+    @VIEW_SECURITY_NEEDS_3_4_1
+    def test_comprehensive(self, connection):
         """CREATE: View with all attributes (definition + comment + security + columns)."""
         view_name = "test_create_comprehensive"
         connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
@@ -435,7 +437,8 @@ class DropViewTest(_EmptyDatabaseAutogenerateBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
-    def test_with_attributes(self, connection) -> None:
+    @VIEW_SECURITY_NEEDS_3_4_1
+    def test_with_attributes(self, connection):
         """DROP: View with attributes (ensure proper reflection for downgrade)."""
         view_name = "test_drop_attrs"
         # Create view with attributes
@@ -651,7 +654,8 @@ class AlterViewTest(_EmptyDatabaseAutogenerateBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
-    def test_security_change(self, connection) -> None:
+    @VIEW_SECURITY_NEEDS_3_4_1
+    def test_security_change(self, connection):
         """ALTER: Only security changed (should generate ALTER with warning)."""
         view_name = "test_alter_security"
         # Create initial view with security
@@ -688,7 +692,8 @@ class AlterViewTest(_EmptyDatabaseAutogenerateBase):
         finally:
             connection.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
 
-    def test_multiple_attributes(self, connection) -> None:
+    @VIEW_SECURITY_NEEDS_3_4_1
+    def test_multiple_attributes(self, connection):
         """ALTER: Multiple attributes changed simultaneously."""
         view_name = "test_alter_multiple"
         # Create initial view

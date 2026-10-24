@@ -32,7 +32,7 @@ from test.system.lifecycle import (
     ScriptContentParser,
     _AlembicLifecycleBase,
 )
-from test.util import normalize_py_call, normalize_sql
+from test.util import VIEW_TEXT_REWRITTEN_BEFORE_4_0_7, normalize_py_call, normalize_sql
 
 
 logger = logging.getLogger(__name__)
@@ -589,6 +589,7 @@ class ViewLifecycleTest(_AlembicLifecycleBase):
             conn.execute(text("DROP VIEW IF EXISTS tmp_view"))
             conn.commit()
 
+    @VIEW_TEXT_REWRITTEN_BEFORE_4_0_7
     def test_view_with_special_characters_in_definition(self, database, alembic_env, sr_engine):
         """Tests view definitions containing special characters.
 

@@ -68,3 +68,27 @@ def normalize_py_call(s: str) -> str:
     s = re.sub(r"\[ ", "[", s)
     s = re.sub(r" \]", "]", s)
     return s
+
+
+def _server_version(config: object) -> tuple:
+    return tuple(config.db.dialect.server_version_info or ())
+
+
+VIEW_SECURITY_NEEDS_3_4_1 = testing.skip_if("starrocks<3.4.1", "StarRocks has no view SECURITY before 3.4.1")
+STATISTIC_COLLECT_PROPERTY_MISSING = testing.skip_if(
+    lambda config: (version := _server_version(config)) < (3, 5, 10) or (4, 0, 0) <= version < (4, 0, 2),
+    "enable_statistic_collect_on_first_load is a table property from StarRocks 3.5.10 and 4.0.2",
+)
+FLAT_JSON_PROPERTIES_NEED_4_0 = testing.skip_if("starrocks<4.0", "flat_json.* are table properties from StarRocks 4.0")
+DECIMAL256_NEEDS_4_0 = testing.skip_if("starrocks<4.0", "DECIMAL precision above 38 needs StarRocks 4.0")
+STRUCT_FIELD_NAMES_UNQUOTED = testing.skip_if(
+    "starrocks<4.1.1",
+    "Before 4.1.1 StarRocks prints STRUCT field names unquoted, so a name with a space cannot be read back",
+)
+TIME_SLICE_CEIL_PARTITION_NEEDS_3_4_1 = testing.skip_if(
+    "starrocks<3.4.1", "StarRocks before 3.4.1 refuses time_slice(..., ceil) in PARTITION BY"
+)
+VIEW_TEXT_REWRITTEN_BEFORE_4_0_7 = testing.skip_if(
+    "starrocks<4.0.7",
+    "Before 4.0.7 StarRocks stores a view's SQL rewritten, and the backslash of an escape such as \\t is lost",
+)
