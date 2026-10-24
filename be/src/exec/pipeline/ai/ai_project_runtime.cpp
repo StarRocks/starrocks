@@ -418,9 +418,9 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
                 return invalid_projection();
             }
             const auto& model_config = _spec.model_configs().at(std::string(ai_expression->provider_id()));
-            ASSIGN_OR_RETURN(AIFunctionInputBatch batch,
-                             ai_expression->build_input_batch(context, input.get(), model_config.model,
-                                                              _max_input_file_bytes));
+            ASSIGN_OR_RETURN(
+                    AIFunctionInputBatch batch,
+                    ai_expression->build_input_batch(context, input.get(), model_config.model, _max_input_file_bytes));
             if (batch.rows.size() != rows) {
                 return Status::InternalError("AI project expression returned an invalid input batch");
             }
@@ -509,13 +509,13 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 contains_control_character(model_config.model)) {
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
-            if (model_config.capability != AICapability::CHAT &&
-                model_config.capability != AICapability::EMBEDDING) {
+            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
             ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
-            if (model_config.protocol != AIProviderProtocol::OPENAI || contains_only_ascii_whitespace(model_config.model) ||
+            if (model_config.protocol != AIProviderProtocol::OPENAI ||
+                contains_only_ascii_whitespace(model_config.model) ||
                 contains_control_character(model_config.api_key) ||
                 (model_config.timeout_ms.has_value() &&
                  (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||

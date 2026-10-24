@@ -178,12 +178,10 @@ TEST(DashScopeMultimodalProviderTest, RejectsInvalidEmbeddingShapeCardinalityInd
                                 R"([{"index":0,"embedding":[3.5e38]}])", R"([{"index":0,"embedding":[1e400]}])",
                                 R"([{"index":0,"embedding":[NaN]}])", R"([{"index":0,"embedding":[Infinity]}])"}) {
         const std::string body = std::string(R"({"output":{"embeddings":)") + entries + "}}";
-        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
-                provider.parse_response(body, AICapability::EMBEDDING)))
+        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response(body, AICapability::EMBEDDING)))
                 << body;
     }
-    EXPECT_TRUE(
-            std::holds_alternative<AIProviderMalformed>(provider.parse_response("{}", AICapability::EMBEDDING)));
+    EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response("{}", AICapability::EMBEDDING)));
     EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
             provider.parse_response(R"({"output":{"embeddings":[{"index":0,"embedding":[1]}]}})", AICapability::CHAT)));
 }
@@ -213,12 +211,10 @@ TEST(AIProviderFactoryTest, ValidatesExplicitProtocolAndCapability) {
     EXPECT_TRUE(create_ai_provider(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::CHAT)
                         .status()
                         .is_not_supported());
-    EXPECT_TRUE(create_ai_provider(static_cast<AIProviderProtocol>(99), AICapability::CHAT)
-                        .status()
-                        .is_not_supported());
-    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::OPENAI, static_cast<AICapability>(99))
-                        .status()
-                        .is_not_supported());
+    EXPECT_TRUE(
+            create_ai_provider(static_cast<AIProviderProtocol>(99), AICapability::CHAT).status().is_not_supported());
+    EXPECT_TRUE(
+            create_ai_provider(AIProviderProtocol::OPENAI, static_cast<AICapability>(99)).status().is_not_supported());
 }
 
 } // namespace

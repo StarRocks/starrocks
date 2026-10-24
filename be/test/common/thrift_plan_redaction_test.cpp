@@ -55,8 +55,9 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_fragment), thrift_plan_debug_string(fragment));
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_request), thrift_plan_debug_string(request));
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_info), thrift_plan_debug_string(info));
-        EXPECT_EQ(secret,
-                  request.fragment.plan.nodes[0].ai_project_node.ai_provider_mapping.at("provider:test-id").params.at("api_key"));
+        EXPECT_EQ(secret, request.fragment.plan.nodes[0]
+                                  .ai_project_node.ai_provider_mapping.at("provider:test-id")
+                                  .params.at("api_key"));
         EXPECT_EQ(secret, info.plan_fragment.plan.nodes[0]
                                   .ai_project_node.ai_provider_mapping.at("provider:test-id")
                                   .params.at("api_key"));

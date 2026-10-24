@@ -1691,23 +1691,24 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
         const bool embedding = request.url == embed_endpoint;
         const bool explicit_chat = request.url == chat_endpoint;
         EXPECT_TRUE(embedding || explicit_chat || request.url == kEndpointSentinel);
-        const std::string key = embedding       ? "embed-provider-secret"
-                                : explicit_chat ? "chat-provider-secret"
-                                                : std::string(kSecretSentinel);
+        const std::string key = embedding ? "embed-provider-secret"
+                                          : explicit_chat ? "chat-provider-secret" : std::string(kSecretSentinel);
         EXPECT_NE(request.headers.end(),
                   std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
                       return header.name == "Authorization" && header.value == "Bearer " + key;
                   }));
-        EXPECT_NE(std::string::npos, request.body.find(embedding       ? "explicit-embed-model"
-                                                       : explicit_chat ? "explicit-chat-model"
-                                                                       : kModelSentinel));
+        EXPECT_NE(std::string::npos,
+                  request.body.find(embedding ? "explicit-embed-model"
+                                              : explicit_chat ? "explicit-chat-model" : kModelSentinel));
         EXPECT_NE(std::string::npos, request.body.find(embedding ? "\"input\"" : "\"messages\""));
     }
     while (_http.pending_count() != 0) {
         const auto& url = _http.request().url;
-        _http.complete_next(url == embed_endpoint  ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
-                            : url == chat_endpoint ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
-                                                   : R"({"choices":[{"message":{"content":"system answer"}}]})");
+        _http.complete_next(url == embed_endpoint
+                                    ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
+                                    : url == chat_endpoint
+                                              ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
+                                              : R"({"choices":[{"message":{"content":"system answer"}}]})");
         _completion.run_until_idle();
         _control.run_until_idle();
     }
