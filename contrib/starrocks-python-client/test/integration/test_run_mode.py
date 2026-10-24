@@ -86,7 +86,7 @@ class RunModeTest(fixtures.TestBase):
 
     def test_read_only_user_detects_run_mode_without_warning(self, read_only_engine, caplog):
         if not _supports_run_mode_variable(config.db):
-            config.skip_test("server has no @@run_mode variable (added in StarRocks 4.0)")
+            config.skip_test("server has no @@run_mode variable (added in StarRocks 4.0.7)")
 
         warnings = _connect_and_capture_warnings(read_only_engine, caplog)
 

@@ -51,7 +51,6 @@ from sqlalchemy.testing.suite import (
     ServerSideCursorsTest as _ServerSideCursorsTest,
     StringTest as _StringTest,
 )
-from sqlalchemy.testing.util import mock
 
 from starrocks.datatype import INTEGER
 from starrocks.requirements import IS_SQLALCHEMY_2
@@ -59,7 +58,6 @@ from test.util import normalize_sql
 
 
 if IS_SQLALCHEMY_2:
-    from sqlalchemy.engine import ObjectKind, ObjectScope
     from sqlalchemy.testing.suite import EnumTest, TrueDivTest as _TrueDivTest
 else:
     from sqlalchemy.testing.suite import (
@@ -184,104 +182,7 @@ class ComponentReflectionTest(_ComponentReflectionTest):
             if autoincrement_column is not None:
                 autoincrement_column.autoincrement = True
 
-    if IS_SQLALCHEMY_2:
-        # Updated because Starrocks does not currently support column comments
-        def exp_columns(
-                self,
-                schema=None,
-                scope=ObjectScope.ANY,
-                kind=ObjectKind.ANY,
-                filter_names=None,
-        ):
-            def col(
-                    name, auto=False, default=mock.ANY, comment=None, nullable=True
-            ):
-                res = {
-                    "name": name,
-                    "autoincrement": auto,
-                    "type": mock.ANY,
-                    "default": default,
-                    "comment": comment if config.requirements.comment_reflection.enabled else '',
-                    "nullable": nullable,
-                }
-                if auto == "omit":
-                    res.pop("autoincrement")
-                return res
-
-            def pk(name, **kw):
-                kw = {"auto": True, "default": mock.ANY, "nullable": False, **kw}
-                return col(name, **kw)
-
-            materialized = {
-                (schema, "dingalings_v"): [
-                    col("dingaling_id", auto="omit", nullable=mock.ANY),
-                    col("address_id"),
-                    col("id_user"),
-                    col("data"),
-                ]
-            }
-            views = {
-                (schema, "email_addresses_v"): [
-                    col("address_id", auto="omit", nullable=mock.ANY),
-                    col("remote_user_id"),
-                    col("email_address"),
-                ],
-                (schema, "users_v"): [
-                    col("user_id", auto="omit", nullable=mock.ANY),
-                    col("test1", nullable=mock.ANY),
-                    col("test2", nullable=mock.ANY),
-                    col("parent_user_id"),
-                ],
-                (schema, "user_tmp_v"): [
-                    col("id", auto="omit", nullable=mock.ANY),
-                    col("name"),
-                    col("foo"),
-                ],
-            }
-            self._resolve_views(views, materialized)
-            tables = {
-                (schema, "users"): [
-                    pk("user_id"),
-                    col("test1", nullable=False),
-                    col("test2", nullable=False),
-                    col("parent_user_id"),
-                ],
-                (schema, "dingalings"): [
-                    pk("dingaling_id"),
-                    col("address_id"),
-                    col("id_user"),
-                    col("data"),
-                ],
-                (schema, "email_addresses"): [
-                    pk("address_id"),
-                    col("remote_user_id"),
-                    col("email_address"),
-                ],
-                (schema, "comment_test"): [
-                    pk("id", comment="id comment"),
-                    col("data", comment="data % comment"),
-                    col(
-                        "d2",
-                        comment=r"""Comment types type speedily ' " \ '' Fun!""",
-                    ),
-                    col("d3", comment="Comment\nwith\rescapes"),
-                ],
-                (schema, "no_constraints"): [col("data")],
-                (schema, "local_table"): [pk("id"), col("data"), col("remote_id")],
-                (schema, "remote_table"): [pk("id"), col("local_id"), col("data")],
-                (schema, "remote_table_2"): [pk("id"), col("data")],
-                (schema, "noncol_idx_test_nopk"): [col("q")],
-                (schema, "noncol_idx_test_pk"): [pk("id"), col("q")],
-                (schema, self.temp_table_name()): [
-                    pk("id"),
-                    col("name"),
-                    col("foo"),
-                ],
-            }
-            res = self._resolve_kind(kind, tables, views, materialized)
-            res = self._resolve_names(schema, scope, filter_names, res)
-            return res
-    else:
+    if not IS_SQLALCHEMY_2:
         test_get_indexes = testing.requires.index_reflection(_ComponentReflectionTest.test_get_indexes)
 
 
@@ -616,6 +517,13 @@ class JSONTest(_JSONTest):
 FOR_UPDATE = testing.skip("starrocks", "StarRocks does not support SELECT ... FOR UPDATE")
 
 
+NO_AUTOINCREMENT_IN_THE_1_4_FIXTURE = testing.skip(
+    "starrocks",
+    "SQLAlchemy 1.4's fixture leaves out test_needs_autoincrement (2.0 adds it), and the dialect renders "
+    "AUTO_INCREMENT only when it is asked for, so the inserted rows get no id",
+)
+
+
 class ServerSideCursorsTest(_ServerSideCursorsTest):
     """Upstream's cursor status test, with its FOR UPDATE combinations skipped.
 
@@ -681,17 +589,13 @@ class ServerSideCursorsTest(_ServerSideCursorsTest):
                 eq_(self._is_server_side(result.cursor), cursor_ss_status)
                 result.close()
 
-        @testing.skip(
-            "starrocks",
-            "SQLAlchemy 1.4's fixture leaves out test_needs_autoincrement (2.0 adds it), and the dialect renders "
-            "AUTO_INCREMENT only when it is asked for, so the inserted rows get no id",
-        )
+        @NO_AUTOINCREMENT_IN_THE_1_4_FIXTURE
         def test_roundtrip_fetchmany(self, metadata):
             pass
 
-    @testing.skip("starrocks", 'Auto Increment seems to increment by 100000, not 1')
-    def test_roundtrip_fetchall(self, metadata):
-        pass
+        @NO_AUTOINCREMENT_IN_THE_1_4_FIXTURE
+        def test_roundtrip_fetchall(self, metadata):
+            pass
 
 SINGLE_COLUMN_INDEXES = testing.skip("starrocks", "a StarRocks index covers one column, and this one has two")
 

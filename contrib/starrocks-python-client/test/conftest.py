@@ -34,7 +34,8 @@ import pytest
 from sqlalchemy.dialects import registry
 
 
-registry.register("starrocks+pymysql", "starrocks.dialect", "StarRocksDialect")
+registry.register("starrocks.pymysql", "starrocks.dialect", "StarRocksDialect")
+registry.register("starrocks.asyncmy", "starrocks.asyncmy", "StarRocksDialect_asyncmy")
 registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
 
 # It's just used to suppress a spurious warning from pytest.
