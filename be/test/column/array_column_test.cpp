@@ -340,6 +340,98 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_filter_noncanonical_bytes) {
+    const std::vector<uint8_t> non_zero_bytes = {0x01, 0x02, 0x7f, 0x80, 0xff};
+    for (size_t n : {size_t(16), size_t(32), size_t(48), size_t(65), size_t(97)}) {
+        auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                          UInt32Column::create());
+        Filter filter(n, 0);
+        std::vector<int32_t> expected_first_elem;
+        for (size_t i = 0; i < n; ++i) {
+            column->append_datum(DatumArray{static_cast<int32_t>(i), static_cast<int32_t>(i * 10)});
+            bool select_row = (n == 97 && i >= 32 && i < 64) ? true : (i % 2 == 0);
+            if (select_row) {
+                filter[i] = non_zero_bytes[expected_first_elem.size() % non_zero_bytes.size()];
+                expected_first_elem.push_back(static_cast<int32_t>(i));
+            }
+        }
+        size_t ret = column->filter_range(filter, 0, n);
+        ASSERT_EQ(expected_first_elem.size(), ret) << "n=" << n;
+        ASSERT_EQ(expected_first_elem.size(), column->size()) << "n=" << n;
+        for (size_t i = 0; i < expected_first_elem.size(); ++i) {
+            auto arr = column->get(i).get_array();
+            ASSERT_EQ(2u, arr.size()) << "n=" << n << " i=" << i;
+            ASSERT_EQ(expected_first_elem[i], arr[0].get_int32()) << "n=" << n << " i=" << i;
+            ASSERT_EQ(expected_first_elem[i] * 10, arr[1].get_int32()) << "n=" << n << " i=" << i;
+        }
+    }
+    // All-empty column (elements_end == 0): exercises empty element_filter (data() == nullptr)
+    // across all-hit SIMD batch, mixed-hit SIMD batch, and scalar tail.
+    {
+        constexpr size_t n = 97;
+        auto col = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                       UInt32Column::create());
+        Filter filter(n, 0);
+        size_t expected_kept = 0;
+        for (size_t i = 0; i < n; ++i) {
+            col->append_datum(DatumArray{});
+            bool select_row = (i >= 32 && i < 64) ? true : (i % 2 == 0);
+            if (select_row) {
+                filter[i] = non_zero_bytes[expected_kept % non_zero_bytes.size()];
+                ++expected_kept;
+            }
+        }
+        ASSERT_EQ(0u, col->elements_column()->size());
+        size_t ret = col->filter_range(filter, 0, n);
+        ASSERT_EQ(expected_kept, ret);
+        ASSERT_EQ(expected_kept, col->size());
+        ASSERT_EQ(0u, col->elements_column()->size());
+        for (size_t i = 0; i < expected_kept; ++i) {
+            ASSERT_EQ(0u, col->get(i).get_array().size()) << "i=" << i;
+        }
+    }
+    // Non-empty prefix [0, from) followed by all-empty sub-range [from, to) (elements_end == elements_start > 0),
+    // plus empty range (from == to).
+    {
+        constexpr size_t from = 4;
+        constexpr size_t to = 69;
+        const std::vector<uint8_t> sub_non_zero_bytes = {0x01, 0x80, 0xff};
+        auto col = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                       UInt32Column::create());
+        for (size_t i = 0; i < from; ++i) {
+            col->append_datum(DatumArray{static_cast<int32_t>(i + 100)});
+        }
+        for (size_t i = from; i < to; ++i) {
+            col->append_datum(DatumArray{});
+        }
+        Filter filter(to, 0);
+        size_t expected_kept = 0;
+        for (size_t i = from; i < to; ++i) {
+            bool select_row = (i >= 36 && i < 68) ? true : ((i - from) % 2 == 0);
+            if (select_row) {
+                filter[i] = sub_non_zero_bytes[expected_kept % sub_non_zero_bytes.size()];
+                ++expected_kept;
+            }
+        }
+        ASSERT_EQ(to, col->filter_range(filter, to, to));
+        ASSERT_EQ(to, col->size());
+
+        size_t ret = col->filter_range(filter, from, to);
+        ASSERT_EQ(from + expected_kept, ret);
+        ASSERT_EQ(from + expected_kept, col->size());
+        ASSERT_EQ(from, col->elements_column()->size());
+        for (size_t i = 0; i < from; ++i) {
+            auto arr = col->get(i).get_array();
+            ASSERT_EQ(1u, arr.size()) << "i=" << i;
+            ASSERT_EQ(static_cast<int32_t>(i + 100), arr[0].get_int32()) << "i=" << i;
+        }
+        for (size_t i = from; i < col->size(); ++i) {
+            ASSERT_EQ(0u, col->get(i).get_array().size()) << "i=" << i;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_append_array) {
     auto offsets = UInt32Column::create();
     auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
