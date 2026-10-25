@@ -40,6 +40,8 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.LiteralExpr;
@@ -60,8 +62,10 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.LogicalSinkMVMeta;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
@@ -69,6 +73,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -92,11 +97,20 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TOlapTableIndexSchema;
@@ -105,6 +119,7 @@ import com.starrocks.thrift.TOlapTableLocationParam;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TOlapTableSchemaParam;
+import com.starrocks.thrift.TOlapTableLogicalSink;
 import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
@@ -224,6 +239,229 @@ public class OlapTableSink extends DataSink {
         }
     }
 
+    // CK-compatible logical sink MVs (`CREATE MATERIALIZED VIEW ... TO <table>`) attached to the base
+    // table. Built at plan time (where the DescriptorTable is available) and carried on the base sink;
+    // the BE constructs a child sink per entry to fan transformed rows out to each target table within
+    // this load transaction.
+    private List<TOlapTableLogicalSink> logicalSinks = null;
+
+    public void setLogicalSinks(List<TOlapTableLogicalSink> logicalSinks) {
+        this.logicalSinks = logicalSinks;
+    }
+
+    // Build the secondary sinks for all TO-table MVs on the base table. Must be called at plan time:
+    // it allocates a target TupleDescriptor in {@code descTbl} and reuses the same schema/partition/
+    // location builders used for the base table. Each child carries the MV's per-target-column transform
+    // expressions (plain projection or scalar/JSON/conditional exprs over the base columns) and an optional
+    // WHERE predicate, all bound to the base sink's output-tuple slots. MVs whose definition is outside the
+    // supported shape (CTE/UNION, join/subquery, aggregation, `SELECT *`) are skipped (logged).
+    public static List<TOlapTableLogicalSink> buildLogicalSinks(long dbId, OlapTable baseTable,
+                                                                TupleDescriptor baseTupleDesc,
+                                                                DescriptorTable descTbl,
+                                                                long warehouseId) throws StarRocksException {
+        List<TOlapTableLogicalSink> result = Lists.newArrayList();
+        if (!baseTable.hasLogicalSinkMV()) {
+            return result;
+        }
+        // Map base column name -> base input slot (base tuple slots follow the base full schema order).
+        Map<String, SlotDescriptor> nameToSlot = new HashMap<>();
+        List<Column> baseSchema = baseTable.getBaseSchema();
+        List<SlotDescriptor> baseSlots = baseTupleDesc.getSlots();
+        for (int i = 0; i < baseSchema.size() && i < baseSlots.size(); i++) {
+            nameToSlot.put(baseSchema.get(i).getName().toLowerCase(), baseSlots.get(i));
+        }
+
+        for (LogicalSinkMVMeta meta : baseTable.getLogicalSinkMVs().values()) {
+            Table target = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(meta.getDbId(), meta.getTargetTableId());
+            if (!(target instanceof OlapTable)) {
+                LOG.warn("logical sink MV {} target table id {} missing or not olap; skip",
+                        meta.getMvName(), meta.getTargetTableId());
+                continue;
+            }
+            OlapTable targetTable = (OlapTable) target;
+
+            // Compile the MV's per-target-column transform expressions and optional WHERE predicate from
+            // the persisted define statement, binding every column reference to the base sink's output
+            // tuple slots so the BE can evaluate them directly over the base load chunk. Handles plain
+            // column projection as well as scalar / JSON / conditional expressions and a row filter.
+            List<TExpr> transformExprs;
+            TExpr wherePredicate = null;
+            try {
+                LogicalSinkExprs compiled = compileLogicalSinkExprs(meta, targetTable, nameToSlot);
+                if (compiled == null) {
+                    continue; // unsupported shape (CTE/join/aggregate/`SELECT *`); already logged
+                }
+                transformExprs = compiled.transformExprs;
+                wherePredicate = compiled.wherePredicate;
+            } catch (Exception e) {
+                LOG.warn("logical sink MV {}: failed to compile transform exprs ({}); write-path fan-out skipped",
+                        meta.getMvName(), e.getMessage());
+                continue;
+            }
+
+            // Target sink descriptors (a dedicated tuple so the child sink maps by target columns).
+            TupleDescriptor targetTuple = descTbl.createTupleDescriptor();
+            for (Column col : targetTable.getBaseSchema()) {
+                SlotDescriptor sd = descTbl.addSlotDescriptor(targetTuple);
+                sd.setIsMaterialized(true);
+                sd.setType(col.getType());
+                sd.setColumn(col);
+                sd.setIsNullable(col.isAllowNull());
+            }
+            targetTuple.computeMemLayout();
+
+            List<Long> targetPartitionIds = targetTable.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+            TOlapTablePartitionParam partitionParam = createPartition(dbId, targetTable, targetTuple,
+                    false, 0, targetPartitionIds);
+            TOlapTableLogicalSink t = new TOlapTableLogicalSink();
+            t.setMv_id(meta.getMvId());
+            t.setMv_name(meta.getMvName());
+            t.setTarget_table_id(meta.getTargetTableId());
+            t.setKeys_type(targetTable.getKeysType().toThrift());
+            t.setTuple_id(targetTuple.getId().asInt());
+            t.setSchema(createSchema(dbId, targetTable, targetTuple));
+            t.setPartition(partitionParam);
+            t.setLocation(createLocation(targetTable, partitionParam, targetTable.enableReplicatedStorage(),
+                    warehouseId));
+            t.setTransform_exprs(transformExprs);
+            if (wherePredicate != null) {
+                t.setWhere_predicate(wherePredicate);
+            }
+            result.add(t);
+        }
+        return result;
+    }
+
+    // Holder for a logical sink MV's compiled write-path expressions.
+    private static class LogicalSinkExprs {
+        final List<TExpr> transformExprs;
+        final TExpr wherePredicate; // nullable: no WHERE clause
+
+        LogicalSinkExprs(List<TExpr> transformExprs, TExpr wherePredicate) {
+            this.transformExprs = transformExprs;
+            this.wherePredicate = wherePredicate;
+        }
+    }
+
+    // Recover the MV's SELECT items and optional WHERE from the persisted define statement, analyze them
+    // against the base table, and bind every column reference to the base output-tuple slots in {@code
+    // nameToSlot} so the BE evaluates them over the base load chunk. SELECT item i maps to target column i
+    // (CK TO-table positional semantics); each transform expr is cast to its target column type. Returns
+    // null for shapes the write-path fan-out does not support (CTE/UNION, join/subquery, aggregation,
+    // `SELECT *`); throws when an expression fails to analyze (e.g. references a non-base column).
+    private static LogicalSinkExprs compileLogicalSinkExprs(LogicalSinkMVMeta meta, OlapTable targetTable,
+                                                            Map<String, SlotDescriptor> nameToSlot) {
+        String defineStmt = meta.getDefineStmt();
+        if (defineStmt == null || defineStmt.isEmpty()) {
+            // Legacy meta without a define statement: fall back to the recorded plain-projection mapping.
+            return plainProjectionExprs(meta, nameToSlot);
+        }
+
+        ConnectContext ctx = ConnectContext.get() != null ? ConnectContext.get() : new ConnectContext();
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        List<StatementBase> stmts = SqlParser.parse(defineStmt, sqlMode);
+        StatementBase parsed = stmts.get(0);
+        if (!(parsed instanceof CreateMaterializedViewStmt)) {
+            LOG.warn("logical sink MV {}: define stmt is not a CREATE MATERIALIZED VIEW; skip", meta.getMvName());
+            return null;
+        }
+        QueryStatement queryStatement = ((CreateMaterializedViewStmt) parsed).getQueryStatement();
+        QueryRelation qr = queryStatement.getQueryRelation();
+        if (qr.hasWithClause() || !(qr instanceof SelectRelation)) {
+            LOG.warn("logical sink MV {}: only a single-level SELECT over the base table is supported by "
+                    + "write-path fan-out (no CTE/UNION); flatten the definition. Skip.", meta.getMvName());
+            return null;
+        }
+        SelectRelation select = (SelectRelation) qr;
+        if (select.getGroupByClause() != null || !(select.getRelation() instanceof TableRelation)) {
+            LOG.warn("logical sink MV {}: aggregation/join/subquery in the definition is not supported by "
+                    + "write-path fan-out; skip.", meta.getMvName());
+            return null;
+        }
+
+        List<Column> targetColumns = targetTable.getBaseSchema();
+        List<SelectListItem> items = select.getSelectList().getItems();
+        if (items.size() != targetColumns.size()) {
+            LOG.warn("logical sink MV {}: SELECT item count {} != target column count {}; skip.",
+                    meta.getMvName(), items.size(), targetColumns.size());
+            return null;
+        }
+
+        List<TExpr> transformExprs = Lists.newArrayList();
+        for (int i = 0; i < targetColumns.size(); i++) {
+            SelectListItem item = items.get(i);
+            if (item.isStar()) {
+                LOG.warn("logical sink MV {}: `SELECT *` is not supported; list columns explicitly. Skip.",
+                        meta.getMvName());
+                return null;
+            }
+            Expr expr = rewriteAndAnalyze(item.getExpr().clone(), nameToSlot);
+            if (expr.containsAggregate()) {
+                LOG.warn("logical sink MV {}: aggregate functions are not supported by write-path fan-out; skip.",
+                        meta.getMvName());
+                return null;
+            }
+            Type targetType = targetColumns.get(i).getType();
+            if (!expr.getType().matchesType(targetType)) {
+                expr = new CastExpr(targetType, expr);
+            }
+            transformExprs.add(expr.treeToThrift());
+        }
+
+        TExpr wherePredicate = null;
+        if (select.hasWhereClause() && select.getWhereClause() != null) {
+            Expr where = rewriteAndAnalyze(select.getWhereClause().clone(), nameToSlot);
+            wherePredicate = where.treeToThrift();
+        }
+        return new LogicalSinkExprs(transformExprs, wherePredicate);
+    }
+
+    // Replace every base-column SlotRef in {@code expr} with a real SlotRef into the base output tuple
+    // (resolved by column name), then analyze + cast-fold so function signatures and implicit casts are
+    // bound for BE evaluation. analyzeAndCastFold ignores slots, so the descriptor bindings are preserved.
+    private static Expr rewriteAndAnalyze(Expr expr, Map<String, SlotDescriptor> nameToSlot) {
+        expr = bindBaseSlots(expr, nameToSlot);
+        return Expr.analyzeAndCastFold(expr);
+    }
+
+    // Recursively rebind base-column SlotRef leaves to the base output-tuple slot descriptors.
+    private static Expr bindBaseSlots(Expr expr, Map<String, SlotDescriptor> nameToSlot) {
+        if (expr instanceof SlotRef) {
+            String col = ((SlotRef) expr).getColumnName();
+            SlotDescriptor sd = col == null ? null : nameToSlot.get(col.toLowerCase());
+            if (sd == null) {
+                throw new SemanticException("logical sink MV references unknown base column '" + col + "'");
+            }
+            SlotRef ref = new SlotRef(sd);
+            ref.setColumnName(col);
+            return ref;
+        }
+        List<Expr> children = expr.getChildren();
+        for (int i = 0; i < children.size(); i++) {
+            expr.setChild(i, bindBaseSlots(children.get(i), nameToSlot));
+        }
+        return expr;
+    }
+
+    // Fast path for legacy meta lacking a define statement: one plain SlotRef per recorded base column.
+    private static LogicalSinkExprs plainProjectionExprs(LogicalSinkMVMeta meta,
+                                                         Map<String, SlotDescriptor> nameToSlot) {
+        if (!meta.isPlainProjection()) {
+            return null;
+        }
+        List<TExpr> transformExprs = Lists.newArrayList();
+        for (String baseCol : meta.getProjectBaseColumns()) {
+            SlotDescriptor sd = nameToSlot.get(baseCol.toLowerCase());
+            if (sd == null) {
+                return null;
+            }
+            transformExprs.add(new SlotRef(sd).treeToThrift());
+        }
+        return new LogicalSinkExprs(transformExprs, null);
+    }
+
     public void setMissAutoIncrementColumn() {
         this.missAutoIncrementColumn = true;
     }
@@ -305,6 +543,10 @@ public class OlapTableSink extends DataSink {
                 enableAutomaticPartition, automaticBucketSize, getOpenPartitions());
         tSink.setPartition(partitionParam);
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
+        // CK-compatible TO-table MVs: secondary sinks built at plan time; the BE fans rows out to each.
+        if (logicalSinks != null && !logicalSinks.isEmpty()) {
+            tSink.setLogical_sinks(logicalSinks);
+        }
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId,
                 getSystemInfoService(dstTable)));
         tSink.setPartial_update_mode(this.partialUpdateMode);
