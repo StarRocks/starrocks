@@ -339,4 +339,71 @@ public class MvRefreshArbiter {
                 .map(context::getBaseTableRefreshInfo)
                 .orElseGet(Maps::newHashMap);
     }
+
+    /**
+     * The mv partitions holding rows that no tracked partition of {@code refBaseTable} accounts for.
+     * <p>
+     * OlapPartitionTraits#getUpdatedPartitionNames reads an untracked base partition at its initial version as new and
+     * empty, which holds only while the version map is complete: after a reset, an emptied partition reads the same.
+     *
+     * @param mvToBasePartitions the partitions of each ref base table intersecting each mv partition
+     */
+    public static Set<String> getMvPartitionsWithUntrackedRows(
+            MaterializedView mv, Table refBaseTable, Map<String, Map<Table, PCellSortedSet>> mvToBasePartitions) {
+        if (mvToBasePartitions == null || !canLeaveUntrackedRows(mv, refBaseTable)) {
+            return Sets.newHashSet();
+        }
+        try (Timer ignored = Tracers.watchScope("MVPartitionsWithUntrackedRows")) {
+            Set<String> tracked = getTrackedPartitionVersions(mv, refBaseTable).keySet();
+            Set<String> untracked = mv.getPartitions().stream()
+                    .filter(MvRefreshArbiter::holdsRows)
+                    .map(Partition::getName)
+                    .filter(name -> {
+                        Map<Table, PCellSortedSet> intersected = mvToBasePartitions.get(name);
+                        PCellSortedSet basePartitions = intersected == null ? null : intersected.get(refBaseTable);
+                        return basePartitions != null && !basePartitions.isEmpty()
+                                && Collections.disjoint(basePartitions.getPartitionNames(), tracked);
+                    })
+                    .collect(Collectors.toSet());
+            if (!untracked.isEmpty()) {
+                logMVPrepare(mv, String.format("No tracked partition of base table %s accounts for the rows of mv " +
+                        "partitions %s, refreshing them", refBaseTable.getName(), untracked));
+            }
+            return untracked;
+        }
+    }
+
+    /** {@link #getMvPartitionsWithUntrackedRows} for a non-partitioned mv, which every base partition feeds. */
+    public static boolean hasUntrackedRows(MaterializedView mv, Table baseTable) {
+        if (!canLeaveUntrackedRows(mv, baseTable) || mv.getPartitions().stream().noneMatch(MvRefreshArbiter::holdsRows)) {
+            return false;
+        }
+        Set<String> livePartitions = ((OlapTable) baseTable).getVisiblePartitionNames();
+        boolean untracked = !livePartitions.isEmpty()
+                && Collections.disjoint(livePartitions, getTrackedPartitionVersions(mv, baseTable).keySet());
+        if (untracked) {
+            logMVPrepare(mv, String.format("No tracked partition of base table %s accounts for the rows of the mv, " +
+                    "refreshing it", baseTable.getName()));
+        }
+        return untracked;
+    }
+
+    // Only a native table's untracked partitions are read as new and empty, and a table excluded from refresh never
+    // makes the mv recompute anyway.
+    private static boolean canLeaveUntrackedRows(MaterializedView mv, Table table) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(info -> mv.shouldRefreshTable(info.getDbName(), table.getName()))
+                .orElse(false);
+    }
+
+    // The initial version, not Partition#hasData, which reports data for every partition in unit tests.
+    private static boolean holdsRows(Partition mvPartition) {
+        return mvPartition.getSubPartitions().stream()
+                .anyMatch(physical -> physical.getVisibleVersion() != Partition.PARTITION_INIT_VERSION);
+    }
 }
