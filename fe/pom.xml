@@ -82,7 +82,7 @@ under the License.
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.9</protobuf-java.version>
         <paimon.version>2.0.0</paimon.version>
-        <fluss.version>0.9.1-incubating</fluss.version>
+        <fluss.version>1.0.0</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
         <staros.version>4.2-rc6</staros.version>

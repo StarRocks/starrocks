@@ -21,10 +21,10 @@ import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.scanner.Scan;
 import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.ScanRecords;
 import org.apache.fluss.config.Configuration;
-import org.apache.fluss.flink.lake.reader.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.flink.lake.reader.LakeSnapshotScanner;
 import org.apache.fluss.flink.source.split.LogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitSerializer;
@@ -89,6 +89,7 @@ public class FlussSplitScannerTest {
                                 .build())
                         .distributedBy(1)
                         .build(),
+                null,
                 0,
                 0);
         Scan scan = mock(Scan.class);
