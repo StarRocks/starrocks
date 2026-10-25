@@ -66,6 +66,11 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         copiedProperties.put(AwsProperties.GLUE_CATALOG_SKIP_NAME_VALIDATION, "true");
+        // 翻译 StarRocks aws.glue.catalog_id → Iceberg glue.id
+        String catalogId = copiedProperties.get("aws.glue.catalog_id");
+        if (catalogId != null) {
+            copiedProperties.put(AwsProperties.GLUE_CATALOG_ID, catalogId);
+        }
         delegate = (GlueCatalog) CatalogUtil.loadCatalog(GlueCatalog.class.getName(), name, copiedProperties, conf);
     }
 
