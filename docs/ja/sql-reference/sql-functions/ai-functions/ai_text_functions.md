@@ -12,7 +12,7 @@ toc_max_heading_level: 2
 | 関数 | 用途 | 戻り値の型 |
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | プロンプトからテキストを生成 | VARCHAR |
-| [ai_embed](#ai_embed) | テキストの埋め込みベクトルを生成 | ARRAY&lt;FLOAT&gt; |
+| [ai_embed](#ai_embed) | テキストの埋め込みベクトルを生成 | `ARRAY<FLOAT>` |
 | [ai_sentiment](#ai_sentiment) | テキストの感情を分析 | VARCHAR |
 | [ai_classify](#ai_classify) | 指定されたカテゴリにテキストを分類 | JSON |
 | [ai_extract](#ai_extract) | 指定された情報を抽出 | JSON |

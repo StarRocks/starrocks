@@ -12,7 +12,7 @@ This page describes all AI functions for text processing. Before calling them, c
 | Function | Purpose | Return type |
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | Generate text from a prompt | VARCHAR |
-| [ai_embed](#ai_embed) | Generate a text embedding | ARRAY&lt;FLOAT&gt; |
+| [ai_embed](#ai_embed) | Generate a text embedding | `ARRAY<FLOAT>` |
 | [ai_sentiment](#ai_sentiment) | Analyze text sentiment | VARCHAR |
 | [ai_classify](#ai_classify) | Classify text into given categories | JSON |
 | [ai_extract](#ai_extract) | Extract specified information | JSON |

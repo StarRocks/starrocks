@@ -56,6 +56,7 @@ public final class AIModelConfigs {
     }
 
     public static String providerName(Expr expression) {
+        Preconditions.checkState(expression != null, "AI function is missing its provider argument");
         if (!expression.isConstant()) {
             throw new SemanticException("AI function requires a constant AI provider name", expression.getPos());
         }

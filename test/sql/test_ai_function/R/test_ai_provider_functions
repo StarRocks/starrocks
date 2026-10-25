@@ -69,7 +69,7 @@ ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'anthropic');
 
 EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_chat_${uuid0}', model => 'explicit-model');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not ANTHROPIC.")
+E: (1064, "Getting analyzing error. Detail message: AI functions only support an OPENAI provider protocol now, not ANTHROPIC.")
 -- !result
 
 ALTER AI PROVIDER ai_chat_${uuid0} SET ('protocol' = 'openai');
@@ -87,7 +87,7 @@ ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'cohere');
 
 EXPLAIN SELECT ai_embed(input => 'text', provider => 'ai_embedding_${uuid0}', model => 'explicit-model');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: AI functions require an OPENAI provider protocol, not COHERE.")
+E: (1064, "Getting analyzing error. Detail message: AI functions only support an OPENAI provider protocol now, not COHERE.")
 -- !result
 
 ALTER AI PROVIDER ai_embedding_${uuid0} SET ('protocol' = 'openai');

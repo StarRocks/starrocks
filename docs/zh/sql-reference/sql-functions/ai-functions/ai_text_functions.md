@@ -12,7 +12,7 @@ toc_max_heading_level: 2
 | 函数 | 用途 | 返回类型 |
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | 按提示词生成文本 | VARCHAR |
-| [ai_embed](#ai_embed) | 生成文本向量 | ARRAY&lt;FLOAT&gt; |
+| [ai_embed](#ai_embed) | 生成文本向量 | `ARRAY<FLOAT>` |
 | [ai_sentiment](#ai_sentiment) | 判断文本情感倾向 | VARCHAR |
 | [ai_classify](#ai_classify) | 按给定类别分类 | JSON |
 | [ai_extract](#ai_extract) | 提取指定信息 | JSON |
