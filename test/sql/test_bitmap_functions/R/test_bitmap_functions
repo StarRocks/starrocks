@@ -754,3 +754,27 @@ select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide
 6	8589934592	8589934592,8589934593,8589934594,8589934595,8589934596,8589934597,8589934598,8589934599,8589934600,8589934601
 6	8589934602	8589934602,8589934603,8589934604,8589934605,8589934606,8589934607,8589934608,8589934609,8589934610
 -- !result
+select bitmap_to_string(orthogonal_bitmap_intersect(`v1`, `k1`, 1, 2)) from test_bitmap_table1;
+-- result:
+1
+-- !result
+select bitmap_to_string(orthogonal_bitmap_intersect(`v1`, `k1`, 2, 3)) from test_bitmap_table1;
+-- result:
+1,2,3,4,5,6,7,8,9,10
+-- !result
+select bitmap_count(orthogonal_bitmap_difference(`v1`, `k1`, 2, 1)) from test_bitmap_table1;
+-- result:
+9
+-- !result
+select bitmap_count(orthogonal_bitmap_difference(`v1`, `k1`, 3, 2)) from test_bitmap_table1;
+-- result:
+90
+-- !result
+select bitmap_intersect_count_each_column(`v1`, `k1`, 2, 1, 3) from test_bitmap_table1;
+-- result:
+[10,1,10]
+-- !result
+select bitmap_difference_count_each_column(`v1`, `k1`, 2, 1, 3) from test_bitmap_table1;
+-- result:
+[10,9,0]
+-- !result
