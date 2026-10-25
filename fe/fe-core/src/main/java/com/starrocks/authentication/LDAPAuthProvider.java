@@ -94,7 +94,15 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapBindDNPattern,
                             LdapGroupSource ldapGroupSource,
                             String ldapMemberOfAttr) {
+<<<<<<< HEAD
         this.ldapGroupSource = ldapGroupSource == null ? LdapGroupSource.GROUP_PROVIDER : ldapGroupSource;
+=======
+        // The legacy `AS '<dn>'` form does not support memberOf: its groups keep coming from the group
+        // providers whatever the configured group source says. Settled once here so that every reader of
+        // the group source - memberOf reading and the group-provider gate alike - agrees.
+        this.ldapGroupSource = ldapGroupSource == null || !Strings.isNullOrEmpty(ldapUserDN)
+                ? GroupSource.GROUP_PROVIDER : ldapGroupSource;
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
@@ -121,8 +129,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
+<<<<<<< HEAD
         // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
         boolean readMemberOf = ldapGroupSource.readsMemberOf() && !legacyPerUserDN;
+=======
+        // Always false for the legacy `AS '<dn>'` form, see the constructor.
+        boolean readMemberOf = ldapGroupSource.usesAuthenticatorGroups();
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         // The entry's own spelling of the name, wanted only when the session identity is going to be
         // taken from the directory rather than from what the client typed.
         boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
@@ -270,19 +283,26 @@ public class LDAPAuthProvider implements AuthenticationProvider {
      *     account. With several patterns configured we cannot know which one is the real entry
      *     without binding, so they are tried in the configured order and the first one that answers
      *     wins.</li>
+     *     <li>the legacy `AS '<dn>'` form: the DN is the one the user was created with. memberOf is
+     *     still not read (see the constructor), but the DN is handed back so that a group provider
+     *     keyed by DN can match the target the same way it matches that user's own login.</li>
      * </ul>
      *
      * @return the resolved group names, empty when this mode/configuration cannot resolve them - an
      * empty result is never an error here, it just means the caller keeps the group providers only
      */
     public TargetUserGroups resolveMemberOfGroupsForUser(String user) {
+<<<<<<< HEAD
         if (!ldapGroupSource.readsMemberOf()) {
+=======
+        if (!Strings.isNullOrEmpty(ldapUserDN)) {
+            // Known without a directory round trip, and never paired with memberOf.
+            return new TargetUserGroups(ldapUserDN, Set.of());
+        }
+        if (!ldapGroupSource.usesAuthenticatorGroups()) {
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
             // Nothing to read, and deliberately no request: the default configuration must not pay
             // for a directory round trip it does not need.
-            return TargetUserGroups.NONE;
-        }
-        if (!Strings.isNullOrEmpty(ldapUserDN)) {
-            // The legacy per-user-DN form does not support memberOf at all, see authenticate().
             return TargetUserGroups.NONE;
         }
         if (!canProbeWithServiceAccount()) {
