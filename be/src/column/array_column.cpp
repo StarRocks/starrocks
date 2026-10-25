@@ -321,6 +321,14 @@ size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];
     uint32_t elements_end = offsets[to];
+    // By monotonicity of offsets, elements_end == elements_start means every row in [from, to)
+    // is empty and offsets[from .. to] already equals elements_start. Short-circuiting here avoids
+    // allocating element_filter and guarantees elements_end > 0 (element_filter.data() != nullptr) below.
+    if (to == from || elements_end == elements_start) {
+        size_t result_offset = from + (to > from ? SIMD::count_nonzero(filter.data() + from, to - from) : 0);
+        resize(result_offset);
+        return result_offset;
+    }
     Filter element_filter(elements_end, 0);
 
     auto check_offset = from;
@@ -334,7 +342,7 @@ size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {
 
     while (check_offset + kBatchSize < to) {
         __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + check_offset));
-        uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
+        uint32_t mask = ~static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0)));
 
         if (mask == 0) {
             // all no hit, pass

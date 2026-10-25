@@ -1279,4 +1279,155 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
         }
     }
 }
+
+template <LogicalType LT>
+static void run_date_or_datetime_case_when_test() {
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    constexpr size_t kNumRows = 65; // Crosses two 32-row AVX2 batches + 1-row scalar tail
+    auto make_val = [](size_t seed) -> CppType {
+        if constexpr (LT == TYPE_DATE) {
+            return DateValue{static_cast<int32_t>(DateValue::MIN_DATE_VALUE._julian + seed)};
+        } else {
+            return TimestampValue{static_cast<int64_t>(TimestampValue::MIN_TIMESTAMP_VALUE._timestamp + seed * 1000)};
+        }
+    };
+
+    const int32_t saved_ratio = config::case_when_selective_eval_ratio;
+    DeferOp restore([&]() { config::case_when_selective_eval_ratio = saved_ratio; });
+    config::case_when_selective_eval_ratio = 0;
+
+    // Test SIMD arities (2, 4, 8 <= max_simd_case_when_size) and scalar fallback arity (9 > max_simd_case_when_size).
+    for (int arity : {2, 4, 8, 9}) {
+        SCOPED_TRACE(arity);
+        // Mode 0: all variable non-null columns
+        // Mode 1: mixed variable/ConstColumn THEN + ConstColumn ELSE
+        // Mode 2: nullable THEN0 with has_null() == true (exercises nullable fallback path)
+        // Mode 3: non-canonical boolean WHEN bytes (0x80 and 0xff in raw BooleanColumn buffer via MockExpr)
+        // Mode 4: ConstColumn WHEN on last branch (verifies SIMD path unpacks ConstColumn vs scalar fallback)
+        for (int mode : {0, 1, 2, 3, 4}) {
+            SCOPED_TRACE(mode);
+            TExprNode node;
+            node.opcode = TExprOpcode::ADD;
+            node.child_type = TPrimitiveType::BOOLEAN;
+            node.node_type = TExprNodeType::CASE_EXPR;
+            node.num_children = 2 * arity + 1;
+            node.__isset.opcode = true;
+            node.__isset.child_type = true;
+            node.type = gen_type_desc(to_thrift(LT));
+            node.case_expr.has_case_expr = false;
+            node.case_expr.has_else_expr = true;
+
+            ObjectPool pool;
+            Expr* expr = pool.add(VectorizedCaseExprFactory::from_thrift(node, LT, TYPE_BOOLEAN));
+            expr->set_type(TypeDescriptor(LT));
+
+            BooleanColumn::MutablePtr const_when_data;
+            for (int b = 0; b < arity; ++b) {
+                ColumnPtr when_col;
+                if (mode == 4 && b == arity - 1) {
+                    const_when_data = BooleanColumn::create();
+                    const_when_data->append(1);
+                    when_col = ConstColumn::create(const_when_data, kNumRows);
+                } else {
+                    auto raw_when = BooleanColumn::create();
+                    auto& when_bytes = raw_when->get_data();
+                    when_bytes.resize(kNumRows);
+                    for (size_t i = 0; i < kNumRows; ++i) {
+                        const int winner = static_cast<int>(i % (arity + 1));
+                        const bool hit = (winner == b) || (mode == 3 && winner == b - 1);
+                        if (!hit) {
+                            when_bytes[i] = 0;
+                        } else if (mode == 3) {
+                            when_bytes[i] = ((i + b) & 1) ? 0x80 : 0xff;
+                        } else {
+                            when_bytes[i] = 1;
+                        }
+                    }
+                    when_col = std::move(raw_when);
+                }
+                expr->add_child(pool.add(new MockExpr(TypeDescriptor(TYPE_BOOLEAN), std::move(when_col))));
+
+                ColumnPtr then_col;
+                if (mode == 1 && (b % 2 == 1)) {
+                    auto c_then = ColumnType::create();
+                    c_then->append(make_val(700 + b));
+                    then_col = ConstColumn::create(std::move(c_then), kNumRows);
+                } else {
+                    auto v_then = ColumnType::create();
+                    for (size_t i = 0; i < kNumRows; ++i) {
+                        v_then->append(make_val(static_cast<size_t>(b + 1) * 100 + i));
+                    }
+                    if (mode == 2 && b == 0) {
+                        auto null_map = NullColumn::create(kNumRows, 0);
+                        null_map->get_data()[0] = 1;
+                        then_col = NullableColumn::create(std::move(v_then), std::move(null_map));
+                    } else {
+                        then_col = std::move(v_then);
+                    }
+                }
+                expr->add_child(pool.add(new MockExpr(TypeDescriptor(LT), std::move(then_col))));
+            }
+
+            ColumnPtr else_col;
+            const CppType const_else_val = make_val(888);
+            if (mode == 1) {
+                auto c_else = ColumnType::create();
+                c_else->append(const_else_val);
+                else_col = ConstColumn::create(std::move(c_else), kNumRows);
+            } else {
+                auto v_else = ColumnType::create();
+                for (size_t i = 0; i < kNumRows; ++i) {
+                    v_else->append(make_val(900 + i));
+                }
+                else_col = std::move(v_else);
+            }
+            expr->add_child(pool.add(new MockExpr(TypeDescriptor(LT), std::move(else_col))));
+
+            Chunk chunk;
+            auto dummy_col = BooleanColumn::create(kNumRows, 0);
+            chunk.append_column(std::move(dummy_col), 0);
+
+            ColumnPtr res = expr->evaluate(nullptr, &chunk);
+            ASSERT_EQ(kNumRows, res->size());
+
+            if (mode == 4) {
+                // When SIMD_muti_selector is enabled and arity <= max_simd_case_when_size (8),
+                // evaluate_no_case unpacks ConstColumn WHEN inputs to kNumRows; the >8 scalar fallback does not.
+                if (arity <= 8) {
+                    ASSERT_EQ(kNumRows, const_when_data->size());
+                } else {
+                    ASSERT_EQ(1u, const_when_data->size());
+                }
+            }
+
+            ColumnViewer<LT> viewer(res);
+            for (size_t i = 0; i < kNumRows; ++i) {
+                if (mode == 2 && i == 0) {
+                    ASSERT_TRUE(viewer.is_null(i));
+                    continue;
+                }
+                ASSERT_FALSE(viewer.is_null(i));
+                const int winner = static_cast<int>(i % (arity + 1));
+                CppType expected_val;
+                if (winner < arity) {
+                    expected_val = (mode == 1 && (winner % 2 == 1))
+                                           ? make_val(700 + winner)
+                                           : make_val(static_cast<size_t>(winner + 1) * 100 + i);
+                } else if (mode == 4) {
+                    expected_val = make_val(static_cast<size_t>(arity) * 100 + i);
+                } else {
+                    expected_val = (mode == 1) ? const_else_val : make_val(900 + i);
+                }
+                ASSERT_EQ(expected_val, viewer.value(i)) << "row=" << i;
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, whenNoCaseDateTimeAndDateSimdAndFallback) {
+    run_date_or_datetime_case_when_test<TYPE_DATETIME>();
+    run_date_or_datetime_case_when_test<TYPE_DATE>();
+}
 } // namespace starrocks

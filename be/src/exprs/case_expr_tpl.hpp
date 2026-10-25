@@ -655,7 +655,15 @@ private:
             constexpr int max_simd_case_when_size = 8;
 
             // optimization for no-nullable Arithmetic Type
-            if constexpr (isArithmeticLT<ResultType>) {
+#if defined(__AVX2__)
+            constexpr bool enable_simd_mulselector = isArithmeticLT<ResultType> || lt_is_date_or_datetime<ResultType>;
+#else
+            constexpr bool enable_simd_mulselector = isArithmeticLT<ResultType>;
+#endif
+            if constexpr (enable_simd_mulselector) {
+                static_assert(!lt_is_date_or_datetime<ResultType> ||
+                              (std::is_trivially_copyable_v<RunTimeCppType<ResultType>> &&
+                               (sizeof(RunTimeCppType<ResultType>) == 4 || sizeof(RunTimeCppType<ResultType>) == 8)));
                 bool then_columns_has_null = false;
                 for (const auto& column : then_columns) {
                     then_columns_has_null |= column->has_null();
