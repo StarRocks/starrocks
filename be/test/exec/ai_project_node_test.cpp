@@ -39,7 +39,7 @@
 namespace starrocks {
 namespace {
 
-constexpr int64_t kAICompletePromptFid = 200100;
+constexpr int64_t kAICompletePromptFid = 200001;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;

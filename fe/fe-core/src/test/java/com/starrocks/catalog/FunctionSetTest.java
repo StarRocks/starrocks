@@ -395,7 +395,7 @@ public class FunctionSetTest {
                 .sorted(Comparator.comparingLong(Function::getFunctionId))
                 .toList();
 
-        long[] expectedIds = {200100L, 200104L};
+        long[] expectedIds = {200001L, 200002L};
         Type[][] expectedArgs = {
                 {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
                 {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
@@ -463,7 +463,7 @@ public class FunctionSetTest {
                 {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
                 {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
         };
-        long[] expectedIds = {200100L, 200104L};
+        long[] expectedIds = {200001L, 200002L};
 
         for (int i = 0; i < concreteArgs.length; i++) {
             Function resolved = functionSet.getFunction(

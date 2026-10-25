@@ -87,7 +87,7 @@ public:
 namespace pipeline {
 namespace {
 
-constexpr int64_t kAICompletePromptFid = 200100;
+constexpr int64_t kAICompletePromptFid = 200001;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
@@ -191,7 +191,7 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
     if (embedding) {
         const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
         call.fn.name.__set_function_name("ai_embed");
-        call.fn.__set_fid(200134);
+        call.fn.__set_fid(200004);
         call.fn.__set_arg_types({file_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
                                  TypeDescriptor(TYPE_JSON).to_thrift()});
         call.fn.__set_ret_type(result_type);
@@ -199,7 +199,7 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
         call.__set_ai_provider_id("provider:default_embedding");
         expression.nodes[1] = std::move(file);
     } else {
-        call.fn.__set_fid(200104);
+        call.fn.__set_fid(200002);
         call.fn.__set_arg_types({varchar_type().to_thrift(), file_type, varchar_type().to_thrift(),
                                  varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
         call.__set_num_children(5);
@@ -721,7 +721,7 @@ protected:
             call.__set_type(result_type);
             call.__set_ai_provider_id("provider:embedding");
             call.fn.name.__set_function_name("ai_embed");
-            call.fn.__set_fid(200130);
+            call.fn.__set_fid(200003);
             call.fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
                                      TypeDescriptor(TYPE_JSON).to_thrift()});
             call.fn.__set_ret_type(result_type);
@@ -753,7 +753,7 @@ protected:
         call.__set_num_children(4);
         call.__set_type(result_type);
         call.fn.name.__set_function_name("ai_classify");
-        call.fn.__set_fid(200112);
+        call.fn.__set_fid(200006);
         call.fn.__set_arg_types(
                 {varchar_type().to_thrift(), array_type, varchar_type().to_thrift(), varchar_type().to_thrift()});
         call.fn.__set_ret_type(result_type);
@@ -861,12 +861,12 @@ protected:
                                    : make_ai_complete(_tuple_id, kCommonSlotId);
         auto& call = expression.nodes.front();
         if (provider) {
-            call.fn.__set_fid(embedding ? 200130 : 200100);
+            call.fn.__set_fid(embedding ? 200003 : 200001);
             call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
             call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
             expression.nodes[2].string_literal.__set_value(std::move(provider_name));
         } else if (embedding) {
-            call.fn.__set_fid(200130);
+            call.fn.__set_fid(200003);
             call.fn.name.__set_function_name("ai_embed");
             call.__set_ai_provider_id("provider:default_embedding");
         }
@@ -1641,7 +1641,7 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     auto make_provider_call = [&](bool embedding) {
         auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
-        call.fn.__set_fid(embedding ? 200130 : 200100);
+        call.fn.__set_fid(embedding ? 200003 : 200001);
         call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
         call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
         expression.nodes[2].string_literal.__set_value(embedding ? "embed" : "chat");

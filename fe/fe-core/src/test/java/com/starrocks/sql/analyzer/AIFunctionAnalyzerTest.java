@@ -101,11 +101,11 @@ public class AIFunctionAnalyzerTest {
         Expr defaults = new StringLiteral("");
         Expr options = ((SelectRelation) ((QueryStatement) analyzeSuccess("select json_object('temperature', 0.5)"))
                 .getQueryRelation()).getOutputExpression().get(0);
-        assertTypedFunctionId("ai_complete", 200104, prompt, fileSlot());
-        assertTypedFunctionId("ai_complete", 200104, prompt, fileSlot(), defaults, model, options);
-        assertTypedFunctionId("ai_complete", 200104, prompt, fileSlot(), defaults, model, new NullLiteral());
-        assertTypedFunctionId("ai_embed", 200134, fileSlot());
-        assertTypedFunctionId("ai_embed", 200134, fileSlot(), defaults, model, options);
+        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot());
+        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot(), defaults, model, options);
+        assertTypedFunctionId("ai_complete", 200002, prompt, fileSlot(), defaults, model, new NullLiteral());
+        assertTypedFunctionId("ai_embed", 200004, fileSlot());
+        assertTypedFunctionId("ai_embed", 200004, fileSlot(), defaults, model, options);
     }
 
     @Test
@@ -264,11 +264,11 @@ public class AIFunctionAnalyzerTest {
         String[] args = {"'p'", "'p', ['a']", "'p', ['a']", "'p'", "'p', ['a']",
                 "'p', 'en', 'zh'", "'p', 'q'", "'p'", "'p', 'condition'"};
         for (int i = 0; i < names.length; i++) {
-            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200110 + i * 2);
-            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200110 + i * 2);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ")", 200005 + i);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", '', 'model')", 200005 + i);
         }
         for (int i = 0; i < names.length; i++) {
-            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200110 + i * 2);
+            assertFunctionId("select " + names[i] + "(" + args[i] + ", 'test_default_chat', 'model')", 200005 + i);
         }
 
     }
@@ -577,11 +577,15 @@ public class AIFunctionAnalyzerTest {
                                 + "(select ai_complete(cast(t1.v4 as varchar)) from t2))",
                         "SELECT list cannot contain correlated AI function ai_complete"));
     }
+
     @ParameterizedTest
-    @ValueSource(strings = {"ai_complete('p', NULL)", "ai_complete('p', NULL, NULL)", "ai_embed(NULL)"})
-    public void testAmbiguousUntypedNullRequiresCast(String expression) {
-        analyzeFail("select " + expression, "is ambiguous because it is an untyped NULL");
-        analyzeFail("select " + expression, "CAST(NULL AS");
+    @CsvSource(value = {"ai_complete('p', NULL)|200001", "ai_complete('p', NULL, NULL)|200001",
+            "ai_embed(NULL)|200003"}, delimiter = '|')
+    public void testUntypedNullUsesBuiltinOverloadResolution(String expression, long expectedId) {
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
+        assertFunctionId("select " + expression, expectedId);
     }
 
     @Test
@@ -589,11 +593,11 @@ public class AIFunctionAnalyzerTest {
         AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
         AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
         AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
-        assertFunctionId("select ai_complete('p', '', 'm', cast(NULL as json))", 200100);
-        assertTypedFunctionId("ai_complete", 200104, new StringLiteral("p"), NullLiteral.create(FileType.FILE));
-        assertFunctionId("select ai_embed(cast(NULL as varchar))", 200130);
-        assertFunctionId("select ai_embed('p', '', 'm', cast(NULL as json))", 200130);
-        assertTypedFunctionId("ai_embed", 200134, NullLiteral.create(FileType.FILE));
+        assertFunctionId("select ai_complete('p', '', 'm', cast(NULL as json))", 200001);
+        assertTypedFunctionId("ai_complete", 200002, new StringLiteral("p"), NullLiteral.create(FileType.FILE));
+        assertFunctionId("select ai_embed(cast(NULL as varchar))", 200003);
+        assertFunctionId("select ai_embed('p', '', 'm', cast(NULL as json))", 200003);
+        assertTypedFunctionId("ai_embed", 200004, NullLiteral.create(FileType.FILE));
     }
 
     @ParameterizedTest
@@ -632,7 +636,7 @@ public class AIFunctionAnalyzerTest {
         session.setDisableFunctionFoldConstants(true);
         try {
             analyzeSuccess("select ai_complete(nullif('x', 'x'))");
-            analyzeFail("select ai_complete('a', NULL)", "is ambiguous");
+            assertFunctionId("select ai_complete('a', NULL)", 200001);
             Assertions.assertTrue(session.isDisableFunctionFoldConstants());
         } finally {
             session.setDisableFunctionFoldConstants(previous);

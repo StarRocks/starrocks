@@ -164,10 +164,10 @@ TEST_F(AiFunctionsTest, AiQueryBuiltinRegistrationPreservesNullRows) {
     EXPECT_TRUE(nullable_result->is_null(1));
 }
 
-TEST_F(AiFunctionsTest, AiCompleteIsExcludedFromOrdinaryBuiltinDescriptorTable) {
-    // ai_complete is dispatched asynchronously by AIProject and must not enter the ordinary synchronous
+TEST_F(AiFunctionsTest, AIProjectFunctionsAreExcludedFromOrdinaryBuiltinDescriptorTable) {
+    // AIProject functions are dispatched asynchronously and must not enter the ordinary synchronous
     // builtin descriptor table.
-    for (int64_t function_id : {200100, 200101, 200102, 200103}) {
+    for (int64_t function_id = 200001; function_id <= 200013; ++function_id) {
         EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(function_id));
     }
 }

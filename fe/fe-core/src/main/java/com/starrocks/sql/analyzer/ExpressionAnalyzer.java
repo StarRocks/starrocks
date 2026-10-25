@@ -1107,8 +1107,6 @@ public class ExpressionAnalyzer {
                 return visitFunctionCall(node, scope);
             }
  
-            AIFunctionAnalyzer.prepareNamedArguments(node);
-
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 

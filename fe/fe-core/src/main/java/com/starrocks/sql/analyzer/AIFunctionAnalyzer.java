@@ -16,10 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionName;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -33,15 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
-import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 final class AIFunctionAnalyzer {
     private AIFunctionAnalyzer() {
@@ -60,70 +48,6 @@ final class AIFunctionAnalyzer {
                 validateHelperArray(node.getChild(i), node.getFn().getArgs()[i], node);
             }
         }
-    }
-
-    // An untyped NULL must not silently choose between text and FILE overloads.
-    // Match the original arguments; empty values are never rewritten into options.
-    static void prepareNamedArguments(FunctionCallExpr node) {
-        if (!VectorizedBuiltinFunctions.AI_FUNCTION_NAMES.contains(node.getFunctionName())
-                || node.getFnName().getParts().size() != 1
-                || node.getChildren().stream().noneMatch(AIFunctionAnalyzer::isUntypedNull)) {
-            return;
-        }
-        List<String> names = node.getParams().getExprsNames();
-        Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-        List<Function> overloads = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
-                .filter(fn -> fn.isAI() && fn.functionName().equals(node.getFunctionName()))
-                .toList();
-        List<Function> candidates = new ArrayList<>();
-        for (Function fn : overloads) {
-            if (names != null && !names.isEmpty()
-                    && !new HashSet<>(Arrays.asList(fn.getArgNames())).containsAll(names)) {
-                continue;
-            }
-            Function lookup = new Function(new FunctionName(node.getFunctionName()), argumentTypes,
-                    names == null ? null : names.toArray(new String[0]), InvalidType.INVALID, false);
-            if (fn.compare(lookup, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF)
-                    && FunctionSet.isCastMatchAllowed(lookup, fn)) {
-                boolean compatible = true;
-                for (int i = 0; i < argumentTypes.length; i++) {
-                    String name = fn.getArgNames()[argumentIndex(fn, names, i)];
-                    Type type = argumentTypes[i];
-                    // JSON can implicitly cast to VARCHAR, but it cannot be an AI selector.
-                    // Exclude candidates that argument validation would reject after resolution.
-                    if (name.equals("options") && !type.isJsonType() && !type.isNull()
-                            || (name.equals("provider") || name.equals("model"))
-                            && !type.isStringType() && !type.isNull()) {
-                        compatible = false;
-                        break;
-                    }
-                }
-                if (compatible) {
-                    candidates.add(fn);
-                }
-            }
-        }
-        for (int i = 0; i < argumentTypes.length; i++) {
-            if (!isUntypedNull(node.getChild(i))) {
-                continue;
-            }
-            Set<String> casts = new TreeSet<>();
-            for (Function candidate : candidates) {
-                Type type = candidate.getArgs()[argumentIndex(candidate, names, i)];
-                casts.add(type.isFileType() ? "a FILE-typed input expression"
-                        : type.isJsonType() ? "json_object() for options (or omit options)"
-                        : "CAST(NULL AS " + type.toSql() + ")");
-            }
-            if (casts.size() > 1) {
-                throw new SemanticException(node.getFunctionName() + " argument " + (i + 1)
-                        + " is ambiguous because it is an untyped NULL. Use " + String.join(" or ", casts)
-                        + " to specify its type", node.getChild(i).getPos());
-            }
-        }
-    }
-
-    private static int argumentIndex(Function function, List<String> names, int supplied) {
-        return names == null || names.isEmpty() ? supplied : Arrays.asList(function.getArgNames()).indexOf(names.get(supplied));
     }
 
     // Arguments have been reordered and defaults appended by the named argument framework.
@@ -165,10 +89,6 @@ final class AIFunctionAnalyzer {
                         + " must not contain only whitespace", expression.getPos());
             }
         }
-    }
-
-    private static boolean isUntypedNull(Expr expression) {
-        return expression instanceof NullLiteral && expression.getType().isNull();
     }
 
     private static void validateHelperArray(Expr expression, Type formalType, FunctionCallExpr node) {

@@ -59,7 +59,6 @@ public:
     std::string_view provider_id() const { return _provider_id; }
     AICapability capability() const;
     AIFunctionResultKind result_kind() const;
-    bool requires_default_model() const;
 
     bool is_constant() const override { return false; }
 

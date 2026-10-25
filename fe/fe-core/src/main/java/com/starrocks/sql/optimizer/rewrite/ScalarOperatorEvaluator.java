@@ -153,14 +153,13 @@ public enum ScalarOperatorEvaluator {
         }
 
         // return Null directly iff:
-        // 1. Not UDF or AI function
+        // 1. Not UDF
         // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
         // 3. Has null parameter
         // 4. Not assert_true
         if (!GlobalStateMgr.getCurrentState()
                 .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
                 && !fn.isUdf()
-                && !fn.isAI()
                 && !FunctionSet.ASSERT_TRUE.equals(fn.getFunctionName().getFunction())) {
             for (ScalarOperator op : root.getChildren()) {
                 if (((ConstantOperator) op).isNull()) {

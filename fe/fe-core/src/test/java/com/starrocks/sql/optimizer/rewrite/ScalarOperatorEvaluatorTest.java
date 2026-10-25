@@ -18,15 +18,16 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
@@ -42,16 +43,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
+    private static Function aiCompleteFunction() {
+        FunctionSet functionSet = new FunctionSet();
+        functionSet.init();
+        Function fn = functionSet.getFunction(new Function(new FunctionName("ai_complete"),
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
+                VarcharType.VARCHAR, false), Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(fn);
+        return fn;
+    }
+
     @Test
     public void evaluationPreservesAiCallsIncludingNullArguments() {
-        Function fn = new Function(new FunctionName("ai_test_function"),
-                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
-        fn.setBinaryType(TFunctionBinaryType.AI);
+        Function fn = aiCompleteFunction();
         for (ConstantOperator argument : List.of(ConstantOperator.createNull(VarcharType.VARCHAR),
                 ConstantOperator.createVarchar("prompt"))) {
-            CallOperator call = new CallOperator("ai_test_function", VarcharType.VARCHAR, List.of(argument), fn);
+            CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(),
+                    List.of(argument, ConstantOperator.createVarchar(""), ConstantOperator.createVarchar(""),
+                            ConstantOperator.createNull(JsonType.JSON)), fn);
             Assertions.assertSame(call, ScalarOperatorEvaluator.INSTANCE.evaluation(call));
             Assertions.assertSame(call, ScalarOperatorEvaluator.INSTANCE.evaluation(call, true));
+            assertTrue(Utils.isNotAlwaysNullResultWithNullScalarOperator(call));
         }
     }
 
@@ -61,10 +73,10 @@ public class ScalarOperatorEvaluatorTest {
                 new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
         CallOperator argument = new CallOperator(FunctionSet.LOWER, VarcharType.VARCHAR,
                 List.of(ConstantOperator.createVarchar("PROMPT")), lower);
-        Function ai = new Function(new FunctionName("ai_test_function"),
-                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
-        ai.setBinaryType(TFunctionBinaryType.AI);
-        CallOperator call = new CallOperator("ai_test_function", VarcharType.VARCHAR, List.of(argument), ai);
+        Function ai = aiCompleteFunction();
+        CallOperator call = new CallOperator(ai.functionName(), ai.getReturnType(),
+                List.of(argument, ConstantOperator.createVarchar(""), ConstantOperator.createVarchar(""),
+                        ConstantOperator.createNull(JsonType.JSON)), ai);
 
         ScalarOperator result = new ScalarOperatorRewriter().rewrite(call, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
 

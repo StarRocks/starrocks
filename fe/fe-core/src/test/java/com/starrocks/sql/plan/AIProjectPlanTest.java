@@ -229,7 +229,7 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
-                Assertions.assertEquals(embedding ? 200134 : 200104, call.getFn().getId());
+                Assertions.assertEquals(embedding ? 200004 : 200002, call.getFn().getId());
                 Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
                 String configId = call.getAi_provider_id();
                 Assertions.assertEquals(configId, call.getAi_provider_id());

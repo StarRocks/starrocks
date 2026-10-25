@@ -14,8 +14,6 @@
 
 #include "exec/ai_project_node.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -46,10 +44,6 @@ constexpr std::string_view kInvalidAIProjectPlan = "Invalid AI project plan";
 
 Status invalid_ai_project_plan() {
     return Status::InvalidArgument(kInvalidAIProjectPlan);
-}
-
-bool is_non_blank(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c) == 0; });
 }
 
 size_t count_ai_expressions(const Expr* expr) {
@@ -154,8 +148,7 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
             return invalid_ai_project_plan();
         }
         const auto route = projection_spec.model_configs().find(ai_expr->provider_id());
-        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability() ||
-            (ai_expr->requires_default_model() && !is_non_blank(route->second.model))) {
+        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability()) {
             return invalid_ai_project_plan();
         }
         output.kind = pipeline::AIProjectOutputKind::AI;

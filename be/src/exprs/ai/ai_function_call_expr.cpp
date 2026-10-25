@@ -405,11 +405,6 @@ AIFunctionResultKind AIFunctionCallExpr::result_kind() const {
     return _descriptor->result_kind;
 }
 
-bool AIFunctionCallExpr::requires_default_model() const {
-    // Every signature can select the provider default through a NULL or empty model.
-    return true;
-}
-
 Status AIFunctionCallExpr::_validate_children() const {
     const auto* spec = _descriptor;
     if (_argument_types.size() != spec->argument_count || _children.size() != spec->argument_count) {
