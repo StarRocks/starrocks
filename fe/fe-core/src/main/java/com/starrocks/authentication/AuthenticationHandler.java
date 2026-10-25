@@ -57,25 +57,8 @@ public class AuthenticationHandler {
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
                                             byte[] authResponse)
             throws AuthenticationException {
-<<<<<<< HEAD
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
-=======
-        AccessControlContext authContext = context.getAccessControlContext();
-
-        // The context outlives one authentication (COM_CHANGE_USER authenticates again on the same
-        // one), and only a provider that resolves groups by itself writes this field. Every
-        // authentication starts from an empty set, so whatever this login resolves - or does not -
-        // the previous user's authenticator groups are never carried over to the new one.
-        authContext.setAuthenticatorGroups(Set.of());
-
-        // Input validation, not dispatch: anything but a token has to name the user it is for.
-        // A token does not - the name is inside it.
-        if (cred.kind() != AuthCredentialKind.BEARER_TOKEN
-                && (cred.userDeclared() == null || cred.userDeclared().isEmpty())) {
-            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "",
-                    cred.rawSecret().length == 0 ? "NO" : "YES");
->>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         }
 
         /*

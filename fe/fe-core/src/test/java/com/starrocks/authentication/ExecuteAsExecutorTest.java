@@ -326,9 +326,7 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context,
-                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
-                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 
@@ -381,9 +379,7 @@ public class ExecuteAsExecutorTest {
                     List.of(), Map.of(), NodePosition.ZERO));
 
             ConnectContext context = new ConnectContext();
-            AuthenticationHandler.authenticate(context,
-                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
-                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+            AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
 
             ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
 

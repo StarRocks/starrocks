@@ -268,7 +268,7 @@ class LDAPMemberOfAuthProviderTest {
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
         // Unsupported means unchanged, not "no group": the group providers keep serving it.
         Assertions.assertTrue(provider.isGroupProviderUsed());
-        Assertions.assertFalse(provider.isAuthenticatorGroupsUsed());
+        Assertions.assertFalse(provider.isMemberOfUsed());
     }
 
     @Test
