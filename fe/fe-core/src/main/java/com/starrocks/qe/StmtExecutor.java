@@ -1461,6 +1461,9 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addCpuCostNs(execStats.getCpuCostNs() != null ? execStats.getCpuCostNs() : 0);
         context.getAuditEventBuilder()
                 .addMemCostBytes(execStats.getMemCostBytes() != null ? execStats.getMemCostBytes() : 0);
+        if (execStats.getMemUsageGibHours() != null) {
+            context.getAuditEventBuilder().addMemUsageGiBHours(execStats.getMemUsageGibHours());
+        }
         context.getAuditEventBuilder().addScanBytes(execStats.getScanBytes() != null ? execStats.getScanBytes() : 0);
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);

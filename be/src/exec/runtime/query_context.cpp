@@ -223,6 +223,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                     _profile->name() + "/connector_scan", connector_scan_parent);
             _query_runtime_state.set_connector_scan_mem_tracker(_connector_scan_mem_tracker.get());
         }
+        _mem_tracker->enable_memory_usage_accounting();
     });
 }
 
@@ -291,6 +292,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
 
     query_statistic->add_cpu_costs(_query_runtime_state.consume_delta_cpu_cost());
     query_statistic->add_mem_costs(mem_cost_bytes());
+    query_statistic->add_mem_usage_gib_hours(_mem_tracker->memory_usage_gib_hours(true));
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
     query_statistic->add_read_stats(_query_runtime_state.consume_delta_read_local_cnt(),
                                     _query_runtime_state.consume_delta_read_remote_cnt());
@@ -311,6 +313,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(_query_runtime_state.cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
+    res->add_mem_usage_gib_hours(_mem_tracker->memory_usage_gib_hours(false));
     res->add_spill_bytes(get_spill_bytes());
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
     res->add_transmitted_bytes(get_transmitted_bytes());
@@ -332,6 +335,7 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     res->add_cpu_costs(_query_runtime_state.cpu_cost());
     if (_mem_tracker != nullptr) {
         res->add_mem_costs(mem_cost_bytes());
+        res->add_mem_usage_gib_hours(_mem_tracker->memory_usage_gib_hours(false));
     }
     res->add_spill_bytes(get_spill_bytes());
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());

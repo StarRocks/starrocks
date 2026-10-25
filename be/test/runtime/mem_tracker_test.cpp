@@ -16,6 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <thread>
+#include <vector>
+
 namespace starrocks {
 
 class MemTrackerTest : public testing::Test {
@@ -297,6 +303,104 @@ TEST_F(MemTrackerTest, has_enough_reserved_memory) {
 TEST_F(MemTrackerTest, err_msg_with_fragment_instance_id) {
     std::string err_msg = _query_1->err_msg("mock msg", "abc-fragment-id");
     ASSERT_NE(err_msg.find("fragment: abc-fragment-id"), std::string::npos);
+}
+
+TEST(MemTrackerMemoryUsageTest, TracksChildMemoryChangesAndIgnoresRejectedConsumption) {
+    constexpr int64_t gib = 1LL << 30;
+    MemTracker root(-1, "root");
+    MemTracker query(MemTrackerType::QUERY, 2 * gib, "query", &root);
+    query.enable_memory_usage_accounting();
+    MemTracker child(-1, "child", &query);
+
+    ASSERT_EQ(nullptr, child.try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    child.release(gib);
+    const double total = query.memory_usage_gib_hours(false);
+    EXPECT_GT(total, 1e-6);
+    EXPECT_LT(total, 1e-3);
+    EXPECT_EQ(0, query.consumption());
+    EXPECT_EQ(0, child.consumption());
+    EXPECT_DOUBLE_EQ(total, query.memory_usage_gib_hours(true));
+    EXPECT_DOUBLE_EQ(0, query.memory_usage_gib_hours(true));
+
+    EXPECT_EQ(&query, child.try_consume(3 * gib));
+    EXPECT_EQ(0, root.consumption());
+    EXPECT_DOUBLE_EQ(total, query.memory_usage_gib_hours(false));
+}
+
+TEST(MemTrackerMemoryUsageTest, ConcurrentChildUpdatesKeepConsumptionAndUsageBounded) {
+    using Clock = std::chrono::steady_clock;
+    constexpr int64_t gib = 1LL << 30;
+    constexpr int64_t chunk = 4LL << 20;
+    constexpr int kThreads = 8;
+    constexpr int kIterations = 2000;
+    MemTracker root(-1, "root");
+    MemTracker query(MemTrackerType::QUERY, 64 * gib, "query", &root);
+    query.enable_memory_usage_accounting();
+    MemTracker base(-1, "base", &query);
+    std::vector<std::unique_ptr<MemTracker>> children;
+    for (int i = 0; i < kThreads; ++i) {
+        children.push_back(std::make_unique<MemTracker>(-1, "child_" + std::to_string(i), &query));
+    }
+
+    auto gib_hours = [](int64_t bytes, Clock::time_point start, Clock::time_point end) {
+        return static_cast<double>(bytes) / gib * std::chrono::duration<double, std::ratio<3600>>(end - start).count();
+    };
+
+    const auto before_base = Clock::now();
+    base.consume(gib);
+    const auto after_base = Clock::now();
+
+    std::atomic<bool> done{false};
+    double reported_deltas = 0;
+    std::thread reader([&]() {
+        while (!done.load()) {
+            reported_deltas += query.memory_usage_gib_hours(true);
+            std::this_thread::yield();
+        }
+    });
+
+    std::atomic<int> failed_consumes{0};
+    std::vector<std::thread> workers;
+    for (int t = 0; t < kThreads; ++t) {
+        workers.emplace_back([&, t]() {
+            MemTracker* child = children[t].get();
+            for (int i = 0; i < kIterations; ++i) {
+                if (t % 2 == 0) {
+                    if (child->try_consume(chunk) != nullptr) {
+                        failed_consumes++;
+                        continue;
+                    }
+                } else {
+                    child->consume(chunk);
+                }
+                child->release(chunk);
+            }
+        });
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    done = true;
+    reader.join();
+
+    const auto before_release = Clock::now();
+    base.release(gib);
+    const auto after_release = Clock::now();
+
+    EXPECT_EQ(0, failed_consumes.load());
+    EXPECT_EQ(0, query.consumption());
+    EXPECT_EQ(0, root.consumption());
+    for (const auto& child : children) {
+        EXPECT_EQ(0, child->consumption());
+    }
+
+    const double total = query.memory_usage_gib_hours(false);
+    EXPECT_GE(total + 1e-11, gib_hours(gib, after_base, before_release));
+    EXPECT_LE(total, gib_hours(gib + kThreads * chunk, before_base, after_release) + 1e-11);
+
+    reported_deltas += query.memory_usage_gib_hours(true);
+    EXPECT_NEAR(total, reported_deltas, 1e-9);
 }
 
 } // namespace starrocks

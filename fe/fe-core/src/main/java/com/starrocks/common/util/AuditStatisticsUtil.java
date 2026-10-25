@@ -96,6 +96,9 @@ public class AuditStatisticsUtil {
         pb.returnedRows = tb.getReturned_rows();
         pb.cpuCostNs = tb.getCpu_cost_ns();
         pb.memCostBytes = tb.getMem_cost_bytes();
+        if (tb.isSetMem_usage_gib_hours()) {
+            pb.memUsageGibHours = tb.getMem_usage_gib_hours();
+        }
         pb.spillBytes = tb.getSpill_bytes();
         pb.transmittedBytes = tb.getTransmitted_bytes();
         if (tb.isSetStats_items()) {
@@ -149,6 +152,12 @@ public class AuditStatisticsUtil {
                 to.memCostBytes = 0L;
             }
             to.memCostBytes = Math.max(from.memCostBytes, to.memCostBytes);
+        }
+        if (from.memUsageGibHours != null) {
+            if (to.memUsageGibHours == null) {
+                to.memUsageGibHours = 0.0;
+            }
+            to.memUsageGibHours += from.memUsageGibHours;
         }
         if (from.spillBytes != null) {
             if (to.spillBytes == null) {
@@ -231,6 +240,9 @@ public class AuditStatisticsUtil {
         }
         if (pb.memCostBytes != null) {
             tb.setMem_cost_bytes(pb.memCostBytes);
+        }
+        if (pb.memUsageGibHours != null) {
+            tb.setMem_usage_gib_hours(pb.memUsageGibHours);
         }
         if (pb.spillBytes != null) {
             tb.setSpill_bytes(pb.spillBytes);

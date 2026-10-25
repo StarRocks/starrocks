@@ -116,6 +116,8 @@ public class AuditEvent {
     public long cpuCostNs = -1;
     @AuditField(value = "MemCostBytes", ignore_zero = true)
     public long memCostBytes = -1;
+    @AuditField(value = "MemUsageGiBHours")
+    public double memUsageGiBHours = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -423,6 +425,15 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addMemUsageGiBHours(double gibHours) {
+            if (auditEvent.memUsageGiBHours == -1) {
+                auditEvent.memUsageGiBHours = gibHours;
+            } else {
+                auditEvent.memUsageGiBHours += gibHours;
+            }
+            return this;
+        }
+
         public AuditEventBuilder addSpilledBytes(long spilledBytes) {
             if (auditEvent.spilledBytes == -1) {
                 auditEvent.spilledBytes = spilledBytes;
@@ -688,6 +699,7 @@ public class AuditEvent {
         public void copyExecStatsFrom(AuditEvent event) {
             this.auditEvent.cpuCostNs = event.cpuCostNs;
             this.auditEvent.memCostBytes = event.memCostBytes;
+            this.auditEvent.memUsageGiBHours = event.memUsageGiBHours;
             this.auditEvent.scanBytes = event.scanBytes;
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;

@@ -221,4 +221,18 @@ public class AuditEventTest {
                 .build();
         Assertions.assertEquals("line one line two", event.errorMessage);
     }
+
+    @Test
+    public void testMemoryGiBHoursIsNumericAndCopied() throws NoSuchFieldException {
+        AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
+                .addMemUsageGiBHours(0.25)
+                .addMemUsageGiBHours(0.5);
+        Assertions.assertEquals(0.75, builder.buildSnapshot().memUsageGiBHours);
+        Assertions.assertEquals("MemUsageGiBHours",
+                AuditEvent.class.getField("memUsageGiBHours").getAnnotation(AuditEvent.AuditField.class).value());
+
+        AuditEvent.AuditEventBuilder copied = new AuditEvent.AuditEventBuilder();
+        copied.copyExecStatsFrom(builder.build());
+        Assertions.assertEquals(0.75, copied.build().memUsageGiBHours);
+    }
 }

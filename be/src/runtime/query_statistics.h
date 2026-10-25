@@ -62,6 +62,7 @@ public:
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
+    void add_mem_usage_gib_hours(double gib_hours);
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
     void add_read_stats(int64_t local_cnt, int64_t remote_cnt) {
         read_local_cnt += local_cnt;
@@ -78,6 +79,7 @@ public:
 
     int64_t get_scan_rows() const { return scan_rows; }
     int64_t get_mem_bytes() const { return mem_cost_bytes; }
+    double get_mem_usage_gib_hours() const { return mem_usage_gib_hours.load(); }
     int64_t get_transmitted_bytes() const { return transmitted_bytes; }
     int64_t get_cpu_ns() const { return cpu_ns; }
     int64_t get_read_local_cnt() const { return read_local_cnt; }
@@ -95,6 +97,7 @@ private:
     std::atomic_int64_t scan_bytes{0};
     std::atomic_int64_t cpu_ns{0};
     std::atomic_int64_t mem_cost_bytes{0};
+    std::atomic<double> mem_usage_gib_hours{0};
     std::atomic_int64_t spill_bytes{0};
     std::atomic_int64_t read_local_cnt{0};
     std::atomic_int64_t read_remote_cnt{0};
