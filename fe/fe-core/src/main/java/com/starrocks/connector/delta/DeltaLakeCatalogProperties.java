@@ -19,6 +19,7 @@ import org.apache.iceberg.util.PropertyUtil;
 import java.util.Map;
 
 public class DeltaLakeCatalogProperties {
+    public static final String ENABLE_DELTA_LAKE_NATIVE_ADLS = "enable_delta_lake_native_adls";
     public static final String ENABLE_DELTA_LAKE_TABLE_CACHE = "enable_deltalake_table_cache";
     public static final String ENABLE_DELTA_LAKE_JSON_META_CACHE = "enable_deltalake_json_meta_cache";
     public static final String DELTA_LAKE_JSON_META_CACHE_TTL = "deltalake_json_meta_cache_ttl_sec";
@@ -85,6 +86,10 @@ public class DeltaLakeCatalogProperties {
 
     public double getDeltaLakeCheckpointMetaCacheMemoryUsageRatio() {
         return deltaLakeCheckpointMetaCacheMemoryUsageRatio;
+    }
+
+    public boolean isEnableDeltaLakeNativeAdls() {
+        return PropertyUtil.propertyAsBoolean(properties, ENABLE_DELTA_LAKE_NATIVE_ADLS, false);
     }
 
     public Map<String, String> getProperties() {

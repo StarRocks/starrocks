@@ -31,6 +31,7 @@ import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
 import io.delta.kernel.TransactionBuilder;
 import io.delta.kernel.data.ColumnarBatch;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
 import io.delta.kernel.exceptions.TableNotFoundException;
@@ -99,8 +100,8 @@ public class DeltaLakeCredentialIsolationTest {
         new MockUp<DeltaLakeParquetHandler>() {
             @Mock
             public List<ColumnarBatch> readParquetFile(String filePath, long fileSize, long modificationTime,
-                                                       StructType physicalSchema, Configuration hadoopConf) {
-                observedAccessKey[0] = hadoopConf.get(Constants.ACCESS_KEY);
+                                                       StructType physicalSchema, FileIO fileIO) {
+                observedAccessKey[0] = fileIO.getConf(Constants.ACCESS_KEY).orElse(null);
                 return Lists.newArrayList();
             }
         };
@@ -132,17 +133,17 @@ public class DeltaLakeCredentialIsolationTest {
     }
 
     private static String accessKeyOf(DeltaLakeEngine engine) throws Exception {
-        return configurationOf(engine).get(Constants.ACCESS_KEY);
+        return fileIOOf(engine).getConf(Constants.ACCESS_KEY).orElse(null);
     }
 
     private static String credentialFingerprintOf(DeltaLakeEngine engine) throws Exception {
-        return configurationOf(engine).get(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING);
+        return fileIOOf(engine).getConf(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING).orElse(null);
     }
 
-    private static Configuration configurationOf(DeltaLakeEngine engine) throws Exception {
-        Field field = DeltaLakeEngine.class.getDeclaredField("hadoopConf");
+    private static FileIO fileIOOf(DeltaLakeEngine engine) throws Exception {
+        Field field = DeltaLakeEngine.class.getDeclaredField("fileIO");
         field.setAccessible(true);
-        return (Configuration) field.get(engine);
+        return (FileIO) field.get(engine);
     }
 
     private static void readCheckpointThrough(DeltaLakeEngine engine) throws IOException {

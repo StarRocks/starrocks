@@ -23,6 +23,8 @@ import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.replay.LogReplay;
@@ -72,14 +74,15 @@ public class DeltaLakeParquetHandlerTest {
                 @Override
                 public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
                     return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.first.getSize(),
-                            pair.first.getModificationTime(), pair.second, hdfsConfiguration);
+                            pair.first.getModificationTime(), pair.second, new HadoopFileIO(hdfsConfiguration));
                 }
             });
 
     @Test
     public void testParquetMetadata() {
         String path = deltaLakePath + "/00000000000000000030.checkpoint.parquet";
-        DeltaLakeParquetHandler deltaLakeParquetHandler = new DeltaLakeParquetHandler(hdfsConfiguration, checkpointCache);
+        DeltaLakeParquetHandler deltaLakeParquetHandler =
+                new DeltaLakeParquetHandler(new HadoopFileIO(hdfsConfiguration), checkpointCache);
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
         File file = new File(path);
         FileStatus fileStatus = FileStatus.of(path, file.length(), file.lastModified());
@@ -140,14 +143,15 @@ public class DeltaLakeParquetHandlerTest {
                     @NotNull
                     @Override
                     public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first, 0, 0, pair.second, hdfsConfiguration);
+                        return DeltaLakeParquetHandler.readParquetFile(
+                                pair.first, 0, 0, pair.second, new HadoopFileIO(hdfsConfiguration));
                     }
                 });
         List<ColumnarBatch> columnarBatches = Lists.newArrayList();
         new MockUp<DeltaLakeParquetHandler>() {
             @Mock
             public List<ColumnarBatch> readParquetFile(@NotNull String path, long fileSize, long modificationTime,
-                                                       @NotNull StructType schema, @NotNull Configuration hdfsConfiguration) {
+                                                       @NotNull StructType schema, @NotNull FileIO fileIO) {
                 return columnarBatches;
             }
         };

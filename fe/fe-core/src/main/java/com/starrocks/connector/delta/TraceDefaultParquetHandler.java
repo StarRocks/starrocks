@@ -18,14 +18,13 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
-import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
 import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
-import org.apache.hadoop.conf.Configuration;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -33,10 +32,10 @@ import java.util.Optional;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class TraceDefaultParquetHandler extends DefaultParquetHandler {
-    private final Configuration hadoopConf;
-    public TraceDefaultParquetHandler(Configuration hadoopConf) {
-        super(new HadoopFileIO(hadoopConf));
-        this.hadoopConf = hadoopConf;
+    private final FileIO fileIO;
+    public TraceDefaultParquetHandler(FileIO fileIO) {
+        super(fileIO);
+        this.fileIO = fileIO;
     }
 
     // This method copies the implementation from DefaultParquetHandler.java
@@ -47,7 +46,7 @@ public class TraceDefaultParquetHandler extends DefaultParquetHandler {
             Optional<Predicate> predicate) throws IOException {
         return new CloseableIterator<FileReadResult>() {
             private final io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =
-                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(new HadoopFileIO(hadoopConf));
+                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(fileIO);
             private CloseableIterator<ColumnarBatch> currentFileReader;
             private String currentFilePath;
 
