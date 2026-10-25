@@ -29,6 +29,8 @@ DOUBLE PERCENTILE_APPROX(expr, DOUBLE|ARRAY<DOUBLE> p[, DOUBLE compression])
 
 返回值为数值类型。
 
+`compression` 必须是结果为整数的常量表达式。支持 `5000`、`5000.0`、`CAST(5000 AS DOUBLE)` 和 `2500 * 2`。对于 `5000.5` 等非整数值及非常量表达式，函数会报错，不会进行取整。省略此参数、指定 `NULL` 或指定超出 [2048, 10000] 范围的整数时，使用默认值 `10000`。
+
 ## 示例
 
 ```plain text
