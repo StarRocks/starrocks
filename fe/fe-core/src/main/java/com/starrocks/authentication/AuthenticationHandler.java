@@ -40,6 +40,62 @@ public class AuthenticationHandler {
 
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost, byte[] authResponse)
             throws AuthenticationException {
+<<<<<<< HEAD
+=======
+        AccessControlContext authContext = context.getAccessControlContext();
+
+        // The context outlives one authentication (COM_CHANGE_USER authenticates again on the same
+        // one), and only a provider that resolves groups by itself writes this field. Every
+        // authentication starts from an empty set, so whatever this login resolves - or does not -
+        // the previous user's authenticator groups are never carried over to the new one.
+        authContext.setAuthenticatorGroups(Set.of());
+
+        // Input validation, not dispatch: anything but a token has to name the user it is for.
+        // A token does not - the name is inside it.
+        if (cred.kind() != AuthCredentialKind.BEARER_TOKEN
+                && (cred.userDeclared() == null || cred.userDeclared().isEmpty())) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "",
+                    cred.rawSecret().length == 0 ? "NO" : "YES");
+        }
+
+        // Native first, then the security integration chain. There is no branch for Bearer here on
+        // purpose: a Bearer request declares no user, so the native lookup has nothing to look up
+        // and says so itself. Giving it its own top-level path would read as "tokens are an SI-only
+        // concept", which is not true - a native user can carry a JWT plugin and does so over
+        // MySQL.
+        AuthenticationResult authenticationResult = authenticateWithNative(authContext, cred);
+        if (authenticationResult == null) {
+            authenticationResult = authenticateWithSecurityIntegration(authContext, cred);
+        }
+
+        if (authenticationResult == null) {
+            // Nothing claimed the credential. For a token that means no integration was tried for
+            // its issuer - a configuration gap, which the metric should not file under bad
+            // credentials.
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL,
+                    cred.userDeclared() == null ? "" : cred.userDeclared(),
+                    cred.rawSecret().length == 0 ? "NO" : "YES")
+                    .withReason(cred.kind() == AuthCredentialKind.BEARER_TOKEN
+                            ? AuthFailureReason.NO_MATCHING_SI : AuthFailureReason.BAD_CREDENTIAL);
+        }
+
+        setAuthenticationResultToContext(context, authenticationResult, cred);
+        return authenticationResult;
+    }
+
+    /**
+     * Forget every remembered rejection. The cache is process-wide, so tests must reset it between cases; an
+     * operator can achieve the same by flipping {@code authentication_failure_cache_ttl_second} (any change to
+     * the TTL or the capacity rebuilds the cache).
+     */
+    public static void invalidateRejectedCredentialCache() {
+        RejectedCredentialCache.invalidateAll();
+    }
+
+    private static AuthenticationResult authenticateWithNative(AccessControlContext authContext, AuthCredentials cred)
+            throws AuthenticationException {
+        String user = cred.userDeclared();
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
         }

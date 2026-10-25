@@ -44,6 +44,8 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -139,6 +141,352 @@ public class ExecuteAsExecutorTest {
         Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
     }
 
+<<<<<<< HEAD
+=======
+    /** memberOf value the stubbed directory publishes for whoever is asked about. */
+    private static final String TARGET_MEMBEROF_GROUP = "SR Analysts";
+
+    /**
+     * Replace only the two methods that talk to the directory. Note that neither of them takes a
+     * password: resolving somebody else's groups never needed their credential, which is what makes
+     * the target-side resolution possible at all.
+     */
+    private static void stubDirectoryForAnyUser() {
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected LdapUserEntry findUserEntryByRoot(String user, String[] requestedAttributes) {
+                BasicAttributes attributes = new BasicAttributes(true);
+                attributes.put(new BasicAttribute("memberOf",
+                        "CN=" + TARGET_MEMBEROF_GROUP + ",OU=Groups,DC=starrocks,DC=com"));
+                return new LdapUserEntry("uid=" + user + ",ou=People,dc=starrocks,dc=com", attributes);
+            }
+
+            @Mock
+            protected void checkPassword(String dn, String password) {
+            }
+        };
+    }
+
+    /**
+     * The target of `EXECUTE AS` is never authenticated - there is no credential for it - but its
+     * groups can still be resolved, because reading another entry's attributes only needs the
+     * service account. A pre-created LDAP user resolves through the FE configuration, exactly as its
+     * own login would.
+     */
+    @Test
+    public void testExecuteAsResolvesTheMemberOfGroupsOfTheTargetUser() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        try {
+            Config.authentication_ldap_simple_group_source = "both";
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            // u1 is an LDAP user declared without AS '<dn>', and the group provider knows it as well.
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            // Both of the target's own sources: its group provider entry and its own memberOf.
+            Assertions.assertEquals(Set.of("group1", TARGET_MEMBEROF_GROUP), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+        }
+    }
+
+    /**
+     * `EXECUTE AS EXTERNAL USER` has no catalog entry to look the target's method up in, so the
+     * security integration has to be chosen from `authentication_chain`. Choosing "the first LDAP
+     * integration" is not enough: a chain often carries more than one - a leftover from an earlier
+     * setup, or two directories side by side - and the first may not read memberOf at all. The chain
+     * is a fallback list on the login path, and it has to behave like one here too.
+     * <p>
+     * Without this, the target resolved to no groups at all while an ordinary login for the same user
+     * resolved them fine, which is exactly how it showed up in the system test.
+     */
+    @Test
+    public void testExecuteAsExternalUserSkipsAnIntegrationThatCannotResolveTheTarget() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        String[] savedChain = Config.authentication_chain;
+        try {
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+            Config.authentication_ldap_simple_group_source = "group_provider";
+
+            // First in the chain: an LDAP integration that does NOT read memberOf (the leftover).
+            authenticationMgr.replayCreateSecurityIntegration("stale_ldap", ldapIntegrationProperties("group_provider"));
+            // Second: the one that is actually configured for memberOf.
+            authenticationMgr.replayCreateSecurityIntegration("real_ldap", ldapIntegrationProperties("memberof"));
+            Config.authentication_chain = new String[] {"stale_ldap", "real_ldap", "native"};
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(
+                    new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false), context);
+
+            Assertions.assertTrue(context.getGroups().contains(TARGET_MEMBEROF_GROUP),
+                    "the second integration in the chain should have resolved the target, got "
+                            + context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+            Config.authentication_chain = savedChain;
+        }
+    }
+
+    private static Map<String, String> ldapIntegrationProperties(String groupSource) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_ldap_simple");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN, "cn=svc,dc=starrocks,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "secret");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "dc=starrocks,dc=com");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "uid");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE, groupSource);
+        return properties;
+    }
+
+    /**
+     * A native-password target has no LDAP identity, so nothing is read from a directory for it even
+     * when the FE configuration turns memberOf on for LDAP users.
+     */
+    @Test
+    public void testExecuteAsToANativeUserReadsNoDirectory() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        try {
+            Config.authentication_ldap_simple_group_source = "both";
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            Assertions.assertEquals(Set.of("group1"), context.getGroups());
+            Assertions.assertFalse(context.getGroups().contains(TARGET_MEMBEROF_GROUP));
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+        }
+    }
+
+    /**
+     * The legacy `AS '<dn>'` form does not support memberOf, so as an `EXECUTE AS` target it resolves
+     * exactly as its own login does: through the group providers, even when the FE configuration says
+     * `memberof`, and without reading memberOf.
+     */
+    @Test
+    public void testExecuteAsToALegacyPerUserDnUserKeepsTheGroupProviders() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        try {
+            Config.authentication_ldap_simple_group_source = "memberof";
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
+                            false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+        }
+    }
+
+    /**
+     * A group provider without `ldap_user_search_attr` keys its cache by DN. The legacy `AS '<dn>'`
+     * form carries that DN in the user itself, and its own login hands it to the group providers;
+     * as an `EXECUTE AS` target it must hand over the same DN, not the login name, whatever the
+     * configured group source - which the legacy form ignores.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"group_provider", "both", "memberof"})
+    public void testExecuteAsToALegacyPerUserDnUserAsksADnKeyedGroupProviderWithItsDn(String groupSource)
+            throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        String[] savedGroupProvider = Config.group_provider;
+        try {
+            Config.authentication_ldap_simple_group_source = groupSource;
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            // No ldap_user_search_attr -> the cache is keyed by the (lower-cased) DN.
+            Map<String, String> properties = new HashMap<>();
+            properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+            authenticationMgr.replayCreateGroupProvider("dn_keyed_provider", properties);
+            LDAPGroupProvider dnKeyed =
+                    (LDAPGroupProvider) authenticationMgr.getGroupProvider("dn_keyed_provider");
+            Map<String, Set<String>> cache = new HashMap<>();
+            cache.put("uid=u1,ou=people,dc=starrocks,dc=com", Set.of("Platform Ops"));
+            dnKeyed.setUserToGroupCache(cache);
+            Config.group_provider = new String[] {"dn_keyed_provider"};
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", "uid=u1,ou=People,dc=starrocks,dc=com",
+                            false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            // No memberOf group either: the legacy form never reads it.
+            Assertions.assertEquals(Set.of("Platform Ops"), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+            Config.group_provider = savedGroupProvider;
+        }
+    }
+
+    /**
+     * A group provider without `ldap_user_search_attr` keys its cache by DN. Resolving the target's
+     * own entry produces that DN as a by-product, so the provider can finally be asked with something
+     * it can match - before, this path only had a login name to offer and such a provider always
+     * came back empty after `EXECUTE AS`.
+     */
+    @Test
+    public void testExecuteAsAsksADnKeyedGroupProviderWithTheResolvedDn() throws Exception {
+        stubDirectoryForAnyUser();
+        String savedGroupSource = Config.authentication_ldap_simple_group_source;
+        String savedRootDn = Config.authentication_ldap_simple_bind_root_dn;
+        String savedRootPwd = Config.authentication_ldap_simple_bind_root_pwd;
+        String[] savedGroupProvider = Config.group_provider;
+        try {
+            Config.authentication_ldap_simple_group_source = "both";
+            Config.authentication_ldap_simple_bind_root_dn = "cn=svc,dc=starrocks,dc=com";
+            Config.authentication_ldap_simple_bind_root_pwd = "secret";
+
+            // No ldap_user_search_attr -> the cache is keyed by the (lower-cased) DN.
+            Map<String, String> properties = new HashMap<>();
+            properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+            authenticationMgr.replayCreateGroupProvider("dn_keyed_provider", properties);
+            LDAPGroupProvider dnKeyed =
+                    (LDAPGroupProvider) authenticationMgr.getGroupProvider("dn_keyed_provider");
+            Map<String, Set<String>> cache = new HashMap<>();
+            cache.put("uid=u1,ou=people,dc=starrocks,dc=com", Set.of("Platform Ops"));
+            dnKeyed.setUserToGroupCache(cache);
+            Config.group_provider = new String[] {"dn_keyed_provider"};
+
+            authenticationMgr.createUser(
+                    new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                            NodePosition.ZERO));
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef("u1", "%", false, NodePosition.ZERO), true,
+                    new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE", null, false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+
+            ConnectContext context = new ConnectContext();
+            AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+            Assertions.assertEquals(Set.of("Platform Ops", TARGET_MEMBEROF_GROUP), context.getGroups());
+        } finally {
+            Config.authentication_ldap_simple_group_source = savedGroupSource;
+            Config.authentication_ldap_simple_bind_root_dn = savedRootDn;
+            Config.authentication_ldap_simple_bind_root_pwd = savedRootPwd;
+            Config.group_provider = savedGroupProvider;
+        }
+    }
+
+    /**
+     * AC-8d: the groups read from the *original* user's own LDAP entry must not follow the session
+     * into the target identity. The group set is replaced anyway, so this also pins the explicit
+     * clearing of the carrier field - drop that line and the last assertion fails, which is the
+     * point: it stops the guarantee from resting on "nothing happens to read the field".
+     */
+    @Test
+    public void testExecuteAsDropsTheMemberOfGroupsOfTheOriginalUser() throws Exception {
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context,
+                    MysqlProto.handshakeCredentials("impersonate_user", MysqlPassword.EMPTY_PASSWORD,
+                            AuthPlugin.Client.MYSQL_NATIVE_PASSWORD.toString(), "%"));
+
+        // Stand in for a login that resolved groups from the original user's own entry.
+        String originalOnly = "Original Only Group";
+        context.getAccessControlContext().setAuthenticatorGroups(Set.of(originalOnly));
+        context.setGroups(Set.of(originalOnly));
+
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
+
+        // u1 gets its own groups from the group provider, and nothing of the original user's.
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        Assertions.assertFalse(context.getGroups().contains(originalOnly));
+        Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty(),
+                "the memberOf groups of the original user must not survive the identity switch");
+    }
+
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
     @Test
     public void testExecuteAsGroupWithRoles() throws Exception {
         ConnectContext context = new ConnectContext();

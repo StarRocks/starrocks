@@ -94,6 +94,119 @@ public class ExecuteAsExecutor {
     /**
      * Get group provider list based on security integration
      */
+<<<<<<< HEAD
+=======
+    private static class ResolvedTarget {
+        private final List<String> groupProviderList;
+        private final LDAPAuthProvider ldapProvider;
+        private final String distinguishedName;
+        private final Set<String> memberOfGroups;
+
+        private ResolvedTarget(List<String> groupProviderList, LDAPAuthProvider ldapProvider,
+                               LDAPAuthProvider.TargetUserGroups fromOwnEntry) {
+            this.groupProviderList = groupProviderList;
+            this.ldapProvider = ldapProvider;
+            this.distinguishedName = fromOwnEntry == null ? null : fromOwnEntry.distinguishedName();
+            this.memberOfGroups = fromOwnEntry == null ? Set.of() : fromOwnEntry.memberOfGroups();
+        }
+    }
+
+    /**
+     * Work out where the target's groups come from. `memberOf` is read using the **target's** own
+     * configuration, not the session's: the impersonator may have logged in through a different
+     * security integration, or natively, and its configuration says nothing about the target's own
+     * LDAP entry. The group providers keep their pre-existing default, the session's - see
+     * {@link #getGroupProviderList}.
+     * <ul>
+     *     <li>A user that exists in the catalog carries its own authentication method, so the choice
+     *     is exact: a native-password user has no LDAP identity and only gets the group providers;
+     *     an `authentication_ldap_simple` user gets a provider built from the FE configuration, the
+     *     same one its own login would use.</li>
+     *     <li>An external user (`EXECUTE AS EXTERNAL USER`) has no catalog entry, so there is nothing
+     *     to look its method up in - which is why its groups already came from a security integration
+     *     before this change. See {@link #resolveExternalTarget}.</li>
+     * </ul>
+     */
+    private static ResolvedTarget resolveTarget(ConnectContext ctx, UserIdentity userIdentity) {
+        AuthenticationMgr authMgr = ctx.getGlobalStateMgr().getAuthenticationMgr();
+        List<String> defaultGroupProviders = getGroupProviderList(ctx);
+
+        if (userIdentity.isEphemeral()) {
+            return resolveExternalTarget(authMgr, userIdentity, defaultGroupProviders);
+        }
+
+        UserAuthenticationInfo info = authMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        String authPlugin = info == null ? null : info.getAuthPlugin();
+        if (authPlugin == null
+                || !authPlugin.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())) {
+            // Native or any other authentication method: no LDAP identity to read an attribute from.
+            return new ResolvedTarget(defaultGroupProviders, null, null);
+        }
+        // A pre-created LDAP user reads the FE configuration, exactly as at login. When it was
+        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form) and only
+        // hands back that DN for the group providers.
+        LDAPAuthProvider provider =
+                asLdapProvider(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.getProvider(info.getAuthString()));
+        return new ResolvedTarget(defaultGroupProviders, provider,
+                provider == null ? null : provider.resolveMemberOfGroupsForUser(userIdentity.getUser()));
+    }
+
+    /**
+     * For an external target, walk `authentication_chain` in its configured order and take the first
+     * integration that can actually resolve the user's own entry.
+     * <p>
+     * "The first LDAP integration in the chain" is not good enough: a chain often carries more than
+     * one - a leftover from an earlier setup, or two directories side by side - and the first one may
+     * be configured not to read memberOf at all, or may not know this user. Trying them in order is
+     * also what the login path does with the same chain, so the two agree.
+     * <p>
+     * The loop is cheap: an integration whose group source does not read memberOf answers without
+     * sending anything to a directory, so only integrations that could actually answer cost a
+     * request. If none resolves the user, only the group providers are left, and they stay the
+     * session's - exactly what happened before this method existed.
+     */
+    private static ResolvedTarget resolveExternalTarget(AuthenticationMgr authMgr, UserIdentity userIdentity,
+                                                        List<String> defaultGroupProviders) {
+        for (String name : Config.authentication_chain) {
+            if (name == null || name.isEmpty()
+                    || name.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                continue;
+            }
+            SecurityIntegration si = authMgr.getSecurityIntegration(name);
+            if (si == null) {
+                continue;
+            }
+            // Only the open-source LDAP integration can answer for memberOf: the enterprise `ldap`
+            // type resolves groups through its own role mapping and is out of scope here.
+            if (!(si instanceof SimpleLDAPSecurityIntegration)) {
+                continue;
+            }
+            List<String> groupProviders =
+                    si.getGroupProviderName().isEmpty() ? defaultGroupProviders : si.getGroupProviderName();
+            LDAPAuthProvider provider;
+            try {
+                provider = asLdapProvider(si.getAuthenticationProvider());
+            } catch (Exception e) {
+                LOG.warn("Failed to build the authentication provider of security integration {}: {}",
+                        name, e.getMessage());
+                continue;
+            }
+            if (provider == null) {
+                continue;
+            }
+
+            LDAPAuthProvider.TargetUserGroups fromOwnEntry =
+                    provider.resolveMemberOfGroupsForUser(userIdentity.getUser());
+            if (fromOwnEntry.distinguishedName() != null) {
+                // This integration found the entry - that is the one the user would authenticate
+                // against, so it decides both sources.
+                return new ResolvedTarget(groupProviders, provider, fromOwnEntry);
+            }
+        }
+        return new ResolvedTarget(defaultGroupProviders, null, null);
+    }
+
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
     private static List<String> getGroupProviderList(ConnectContext ctx) {
         String securityIntegration = ctx.getSecurityIntegration();
 

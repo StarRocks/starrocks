@@ -61,6 +61,33 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapSearchFilter,
                             String ldapUserDN,
                             String ldapBindDNPattern) {
+<<<<<<< HEAD
+=======
+        this(ldapServerHost, ldapServerPort, useSSL, trustStorePath, trustStorePwd, ldapBindRootDN, ldapBindRootPwd,
+                ldapBindBaseDN, ldapSearchFilter, ldapUserDN, ldapBindDNPattern,
+                GroupSource.GROUP_PROVIDER, "memberOf");
+    }
+
+    public LDAPAuthProvider(String ldapServerHost,
+                            int ldapServerPort,
+                            boolean useSSL,
+                            String trustStorePath,
+                            String trustStorePwd,
+                            String ldapBindRootDN,
+                            String ldapBindRootPwd,
+                            String ldapBindBaseDN,
+                            String ldapSearchFilter,
+                            String ldapUserDN,
+                            String ldapBindDNPattern,
+                            GroupSource ldapGroupSource,
+                            String ldapMemberOfAttr) {
+        // The legacy `AS '<dn>'` form does not support memberOf: its groups keep coming from the group
+        // providers whatever the configured group source says. Settled once here so that every reader of
+        // the group source - memberOf reading and the group-provider gate alike - agrees.
+        this.ldapGroupSource = ldapGroupSource == null || !Strings.isNullOrEmpty(ldapUserDN)
+                ? GroupSource.GROUP_PROVIDER : ldapGroupSource;
+        this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
         this.useSSL = useSSL;
@@ -83,6 +110,30 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
 
+<<<<<<< HEAD
+=======
+        String user = userIdentity.getUser();
+        boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
+        // Always false for the legacy `AS '<dn>'` form, see the constructor.
+        boolean readMemberOf = ldapGroupSource.usesAuthenticatorGroups();
+        // The entry's own spelling of the name, wanted only when the session identity is going to be
+        // taken from the directory rather than from what the client typed.
+        boolean readCanonicalName = Config.authentication_ldap_case_insensitive && !legacyPerUserDN;
+        // Empty array means "return no attribute at all"; leaving it unset would make JNDI ask the
+        // directory for every attribute of the entry and then throw them away.
+        List<String> requested = new ArrayList<>();
+        if (readMemberOf) {
+            requested.add(ldapMemberOfAttr);
+        }
+        if (readCanonicalName) {
+            requested.add(ldapSearchFilter);
+        }
+        String[] requestedAttributes = requested.toArray(new String[0]);
+
+        String distinguishedName;
+        LdapUserEntry userEntry = null;
+        boolean directBind = false;
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
         try {
             String password = new String(clearPassword, StandardCharsets.UTF_8);
             String distinguishedName;
@@ -106,6 +157,239 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());
         }
+<<<<<<< HEAD
+=======
+
+        if (readCanonicalName) {
+            authContext.setAuthenticatedUserName(
+                    userEntry == null ? null : readSearchAttrValue(userEntry.attributes()));
+        }
+
+        if (readMemberOf) {
+            // Authentication already succeeded at this point. A group-resolution failure must never
+            // turn into an authentication failure, so everything below is contained.
+            try {
+                authContext.setAuthenticatorGroups(
+                        resolveMemberOfGroups(user, distinguishedName,
+                                userEntry == null ? null : userEntry.attributes(), directBind));
+            } catch (Exception e) {
+                LOG.warn("failed to resolve memberOf groups for user: {}, dn: {}", user, distinguishedName, e);
+                authContext.setAuthenticatorGroups(Set.of());
+            }
+        }
+        return userIdentity;
+    }
+
+    @Override
+    public boolean supportsCredentialKind(AuthCredentialKind kind) {
+        // Binds against the directory with a password. The MySQL clear-password frame is unwrapped
+        // at the entry point, so this one shape covers MySQL and HTTP Basic alike. A Bearer token
+        // is not a password: leaving it out is what keeps the security-integration chain from
+        // offering this provider a token it cannot check.
+        return kind == AuthCredentialKind.PLAIN_PASSWORD;
+    }
+
+    /**
+     * Read the entry's own spelling of the attribute the search filtered on, e.g. `uid` or
+     * `sAMAccountName`. That is the authoritative form of the name; anything StarRocks derives on its
+     * own is a guess at a spelling the directory may not hold.
+     *
+     * @return null when the attribute was not returned or is not textual
+     */
+    private String readSearchAttrValue(Attributes attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        try {
+            Attribute attribute = attributes.get(ldapSearchFilter);
+            if (attribute == null || attribute.size() == 0) {
+                return null;
+            }
+            Object value = attribute.get(0);
+            return value instanceof String ? (String) value : null;
+        } catch (NamingException e) {
+            LOG.debug("cannot read '{}' back from the user entry", ldapSearchFilter, e);
+            return null;
+        }
+    }
+
+    /**
+     * @return true if the configured group providers take part in this login's group set.
+     * <p>
+     * False means `memberof`, and then they are not merely dropped from the result - they are not
+     * called at all: calling and discarding would pay for a read we said we do not want, and a broken
+     * group provider would still be able to affect a mode that explicitly excludes it.
+     */
+    @Override
+    public boolean isGroupProviderUsed() {
+        return ldapGroupSource.usesGroupProvider();
+    }
+
+    /**
+     * @return true if the groups read from the user's own entry take part in this login's group set.
+     * The counterpart of {@link #isGroupProviderUsed()}: both sides of the union are gated by the
+     * configured group source, so neither can silently keep contributing after the other is turned
+     * off.
+     */
+    @Override
+    public boolean isAuthenticatorGroupsUsed() {
+        return ldapGroupSource.usesAuthenticatorGroups();
+    }
+
+    /**
+     * Resolve the groups of a user we are *not* authenticating - the target of `EXECUTE AS`.
+     * <p>
+     * Impersonation never presents the target's password, so this path can only work with the
+     * service account, and that is enough: reading somebody else's attributes never needed their
+     * credential. How the DN is obtained differs by mode, and neither way needs a password:
+     * <ul>
+     *     <li>search-and-bind: one search as the service account returns the DN and the attribute
+     *     together - the same request a login makes;</li>
+     *     <li>`bind_dn_pattern`: the DN is computed from the pattern, then read as the service
+     *     account. With several patterns configured we cannot know which one is the real entry
+     *     without binding, so they are tried in the configured order and the first one that answers
+     *     wins.</li>
+     *     <li>the legacy `AS '<dn>'` form: the DN is the one the user was created with. memberOf is
+     *     still not read (see the constructor), but the DN is handed back so that a group provider
+     *     keyed by DN can match the target the same way it matches that user's own login.</li>
+     * </ul>
+     *
+     * @return the resolved group names, empty when this mode/configuration cannot resolve them - an
+     * empty result is never an error here, it just means the caller keeps the group providers only
+     */
+    public TargetUserGroups resolveMemberOfGroupsForUser(String user) {
+        if (!Strings.isNullOrEmpty(ldapUserDN)) {
+            // Known without a directory round trip, and never paired with memberOf.
+            return new TargetUserGroups(ldapUserDN, Set.of());
+        }
+        if (!ldapGroupSource.usesAuthenticatorGroups()) {
+            // Nothing to read, and deliberately no request: the default configuration must not pay
+            // for a directory round trip it does not need.
+            return TargetUserGroups.NONE;
+        }
+        if (!canProbeWithServiceAccount()) {
+            LOG.info("cannot resolve {} for user {} without authenticating it: no service account " +
+                            "({}, {}) is configured", ldapMemberOfAttr, user,
+                    SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_DN,
+                    SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD);
+            return TargetUserGroups.NONE;
+        }
+
+        String[] requested = new String[] {ldapMemberOfAttr};
+        try {
+            if (!Strings.isNullOrEmpty(ldapBindDNPattern)) {
+                // On the login path the password decides which of several candidate DNs is the right
+                // entry. Here there is no password, so a name that exists under more than one pattern
+                // is genuinely ambiguous - two different people can share a uid across two OUs, which
+                // is exactly why multiple patterns exist. Handing out the first one that answers would
+                // give the target another person's groups and, through GRANT ... TO EXTERNAL GROUP,
+                // their roles. Resolve only when exactly one candidate answers.
+                String resolvedDn = null;
+                Attributes resolvedAttributes = null;
+                List<String> collisions = new ArrayList<>();
+                for (String dn : candidateDNsFromPattern(user)) {
+                    try {
+                        Attributes attributes = readAttributesAsServiceAccount(dn, requested);
+                        collisions.add(dn);
+                        if (resolvedDn == null) {
+                            resolvedDn = dn;
+                            resolvedAttributes = attributes;
+                        }
+                    } catch (Exception e) {
+                        LOG.debug("cannot read {} at dn '{}' for user '{}': {}",
+                                ldapMemberOfAttr, dn, user, e.getMessage());
+                    }
+                }
+                if (collisions.size() > 1) {
+                    LOG.warn("refusing to resolve {} for user {} without authenticating it: the name exists " +
+                                    "under more than one bind dn pattern ({}), and no password is available to " +
+                                    "tell them apart. Falling back to the group providers only.",
+                            ldapMemberOfAttr, user, collisions);
+                    return TargetUserGroups.NONE;
+                }
+                if (resolvedDn == null) {
+                    return TargetUserGroups.NONE;
+                }
+                return new TargetUserGroups(resolvedDn,
+                        LDAPMemberOfExtractor.extractGroupNames(resolvedAttributes, ldapMemberOfAttr, user));
+            } else {
+                LdapUserEntry entry = findUserEntryByRoot(user, requested);
+                return new TargetUserGroups(entry.dn(),
+                        LDAPMemberOfExtractor.extractGroupNames(entry.attributes(), ldapMemberOfAttr, user));
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to resolve {} for user {} with the service account: {}",
+                    ldapMemberOfAttr, user, e.getMessage());
+            return TargetUserGroups.NONE;
+        }
+    }
+
+    /**
+     * What could be learned about a user without authenticating it.
+     *
+     * @param distinguishedName the resolved DN, or null when it could not be established. Worth
+     *                          passing on: a group provider without `ldap_user_search_attr` keys its
+     *                          cache by DN, and on this path the caller would otherwise only have a
+     *                          login name to offer it.
+     * @param memberOfGroups    the groups read from the user's own entry, possibly empty
+     */
+    public record TargetUserGroups(String distinguishedName, Set<String> memberOfGroups) {
+        private static final TargetUserGroups NONE = new TargetUserGroups(null, Set.of());
+    }
+
+    public GroupSource getGroupSource() {
+        return ldapGroupSource;
+    }
+
+    public String getMemberOfAttr() {
+        return ldapMemberOfAttr;
+    }
+
+    /**
+     * Turn the attributes read during authentication into group names, falling back to a service
+     * account probe when the user could not read the attribute on its own.
+     */
+    private Set<String> resolveMemberOfGroups(String user, String dn, Attributes attributes, boolean directBind) {
+        Set<String> groups = LDAPMemberOfExtractor.extractGroupNames(attributes, ldapMemberOfAttr, user);
+        if (!groups.isEmpty()) {
+            return groups;
+        }
+
+        // Nothing came back. On the direct-bind path the reader was the logging-in user itself, and a
+        // directory may forbid a user from reading its own group membership - retry once as the
+        // service account rather than forcing the customer to change authentication mode.
+        // The decision looks only at what memberOf returned: the group providers have not run yet at
+        // this point, so their result is not visible here by construction.
+        if (directBind && canProbeWithServiceAccount()) {
+            try {
+                Attributes probed = readAttributesAsServiceAccount(dn, new String[] {ldapMemberOfAttr});
+                groups = LDAPMemberOfExtractor.extractGroupNames(probed, ldapMemberOfAttr, user);
+                LOG.info("probed {} for user {} with the service account, resolved {} group(s)",
+                        ldapMemberOfAttr, user, groups.size());
+            } catch (Exception e) {
+                LOG.warn("failed to probe {} for user {} (dn: {}) with the service account",
+                        ldapMemberOfAttr, user, dn, e);
+            }
+        }
+
+        if (groups.isEmpty()) {
+            // Two very different situations look identical on the wire - the user really belongs to no
+            // group, or the directory does not publish the attribute at all - so say both out loud.
+            // Without the hint this reads as a StarRocks bug, while on OpenLDAP it is usually a
+            // missing memberof overlay.
+            LOG.warn("resolved no group from attribute '{}' for user {} (dn: {}){}: either the user belongs to " +
+                            "no group, or the directory does not maintain this attribute - OpenLDAP only does " +
+                            "with the memberof overlay loaded, and a directory may also forbid reading it",
+                    ldapMemberOfAttr, user, dn,
+                    directBind && !canProbeWithServiceAccount()
+                            ? " and no service account is configured to probe with" : "");
+        }
+        return groups;
+    }
+
+    private boolean canProbeWithServiceAccount() {
+        return !Strings.isNullOrEmpty(ldapBindRootDN) && !Strings.isNullOrEmpty(ldapBindRootPwd);
+>>>>>>> 05dced9 ([BugFix] Keep group providers for legacy per-user-DN LDAP users (#81399))
     }
 
     private String getURL() {
