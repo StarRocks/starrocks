@@ -120,10 +120,14 @@ public class CloudConfigurationFactory {
                 properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, null));
         String endpoint = properties.getOrDefault(S3FileIOProperties.ENDPOINT,
                 properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, null));
-        if (sessionAk != null && sessionSk != null && sessionToken != null) {
+        // Some catalogs (e.g. Cloudflare R2, MinIO) vend static scoped keys without an STS
+        // session token, so the token is optional.
+        if (sessionAk != null && sessionSk != null) {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
-            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+            if (sessionToken != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+            }
             if (region != null) {
                 copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
             }
