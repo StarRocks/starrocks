@@ -1842,45 +1842,10 @@ CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
-<<<<<<< HEAD
 // clear *.data cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_data, "false");
-=======
-// clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted
-// recovers from remote storage. Test environments that need the corrupted copy to keep failing reads and
-// stay in the cache for root-causing set it to false.
-CONF_mBool(lake_clear_corrupted_cache_data, "true");
-// Dump the locally cached blocks of a file to local disk before one of the automatic
-// corruption-recovery paths drops them, so the bytes the cache was serving can be analysed
-// offline instead of disappearing with the drop. Dumps land in lake_cache_dump_dir and are
-// rate limited, capped and garbage collected by the configs below; a dump that cannot be
-// taken never blocks the drop. Only meaningful together with lake_clear_corrupted_cache_meta
-// / lake_clear_corrupted_cache_data: nothing is preserved when nothing is dropped.
-CONF_mBool(lake_dump_corrupted_cache, "true");
-// Where cache dumps are written. Empty means <first storage_root_path>/cache_dump: a dump is
-// data, so it belongs on a storage disk rather than on the log disk, and one root is enough
-// even when several storage paths are configured. Only the directory this resolves to is
-// garbage collected -- after changing it, dumps under the previous root stay on disk, and a
-// dump_dir passed to the HTTP API is never swept.
-CONF_mString(lake_cache_dump_dir, "");
-// At most one automatic dump every this many seconds, process wide and regardless of which
-// file failed: when a disk goes bad every file is a first offender, so one global interval
-// is what actually bounds the work. Dumps requested through the HTTP API are exempt.
-CONF_mInt32(lake_cache_dump_interval_seconds, "600");
-// Upper bound on a single automatic dump. A dump narrowed to the suspect range is a block or
-// two, so this only clips whole-file dumps, which are then marked truncated in the manifest.
-CONF_mInt64(lake_cache_dump_max_bytes_per_event, "134217728");
-// How many dumps are kept under lake_cache_dump_dir. Taking a dump first removes the oldest
-// ones until there is room for it, so the limit holds the most recent dumps rather than the
-// first to arrive. A count rather than a byte budget: what an operator wants is the last N
-// corruption events, the disk exposure of the automatic dumps is already bounded by
-// lake_cache_dump_max_bytes_per_event, and counting directories costs the sweep nothing.
-CONF_mInt32(lake_cache_dump_max_dumps, "50");
-// How long a dump is kept before the sweep removes it.
-CONF_mInt32(lake_cache_dump_retention_seconds, "172800");
 // clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
 CONF_mBool(external_table_clear_corrupted_cache_data, "true");
->>>>>>> b0923ead570... [Enhancement][RB-463] Drop the corrupted datacache of an external file and read it again bypassing datacache (#65490)
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");

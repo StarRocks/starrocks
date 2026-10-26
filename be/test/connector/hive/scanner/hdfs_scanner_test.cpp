@@ -19,11 +19,8 @@
 
 #include <filesystem>
 #include <fstream>
-<<<<<<< HEAD
-#include <limits>
-=======
 #include <functional>
->>>>>>> b0923ead570... [Enhancement][RB-463] Drop the corrupted datacache of an external file and read it again bypassing datacache (#65490)
+#include <limits>
 #include <memory>
 #include <vector>
 
