@@ -122,6 +122,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -801,6 +802,15 @@ public class ExpressionAnalyzer {
                 String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
+            }
+            String fnName = fn.getFunctionName().getFunction();
+            if (FunctionSet.SECONDS_ADD.equals(fnName) || FunctionSet.SECONDS_SUB.equals(fnName)) {
+                // A literal amount with more than 6 decimals is refused here already, so that a definition that uses it,
+                // such as a generated column or a view, is refused when it is created rather than each time it is used
+                BigDecimal seconds = IntervalSeconds.literalValue(node.getChild(1));
+                if (seconds != null) {
+                    IntervalSeconds.split(seconds, node.getPos());
+                }
             }
             node.setType(fn.getReturnType());
             return null;
