@@ -637,8 +637,11 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
-            vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
-                                           db.getId(), table.getId(), partition.getParentId(), partition.getId());
+            vacuumRequest.retainSnapshots = clusterSnapshotMgr.getVacuumRetainSnapshots(
+                    db.getId(), table.getId(), partition.getParentId(), partition.getId());
+            // Older BEs ignore retainSnapshots; keep their version protection during rolling upgrades.
+            vacuumRequest.retainVersions = vacuumRequest.retainSnapshots.stream()
+                    .map(snapshot -> snapshot.version).collect(Collectors.toList());
             vacuumRequest.minActiveTxnId = txnLogSweepWatermark;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
