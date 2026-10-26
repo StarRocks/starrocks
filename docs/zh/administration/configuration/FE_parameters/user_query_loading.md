@@ -69,7 +69,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当为 true 时，StarRocks 会在将凭据从任务 SQL 定义返回到 `information_schema.tasks` 和 `information_schema.task_runs` 之前，通过对 DEFINITION 列应用 SqlCredentialRedactor.redact 来屏蔽凭据。在 `information_schema.task_runs` 中，无论定义是来自任务运行状态还是在为空时来自任务定义查找，都应用相同的屏蔽。当为 false 时，返回原始任务定义（可能会暴露凭据）。屏蔽是 CPU/字符串处理工作，当任务或 `task_runs` 数量很大时可能非常耗时；仅当您需要未屏蔽的定义并接受安全风险时才禁用。
+- 描述: 当为 true 时，StarRocks 会在将凭据从任务 SQL 定义返回到 `information_schema.tasks` 和 `information_schema.task_runs` 之前，通过对 DEFINITION 列应用 SqlCredentialRedactor.redact 来屏蔽凭据。在 `information_schema.task_runs` 中，无论定义是来自任务运行状态还是在为空时来自任务定义查找，都应用相同的屏蔽。任务运行结束、归档到 `_statistics_.task_run_history` 之前，也会先屏蔽定义中的凭据，历史表里不会保存明文凭据。当为 false 时，返回并归档原始任务定义（可能会暴露凭据）。屏蔽是 CPU/字符串处理工作，当任务或 `task_runs` 数量很大时可能非常耗时；仅当您需要未屏蔽的定义并接受安全风险时才禁用。
 - 引入版本: v3.5.6
 
 ### `privilege_max_role_depth`
@@ -90,63 +90,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用户可以拥有的最大角色数量。
 - 引入版本: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 使用 Ranger Hive Service（即设置了 `ranger.plugin.hive.service.name`）的 External Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled` 的默认值。生效值为 `true` 时，StarRocks 向 Ranger 发送的 `database` 资源为 `<catalog_name><separator><database_name>` 而不是裸库名，避免共用同一个 Ranger Hive Service 的多个 Catalog 在同名库上互相命中。Catalog 显式设置了该属性时以属性为准。修改后对收到该修改的所有 FE 立即生效。
+- 引入版本: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- 默认值: _
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: `ranger_hive_catalog_prefix_enabled`（或 Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled`）为 `true` 时，拼接在 Catalog 名与库名之间的分隔符。共用同一个 Ranger Hive Service 的所有 Catalog 必须使用相同的分隔符，因此该项只在全局配置。
+- 引入版本: v4.2
+
 ## 查询引擎
-
-### `ai_default_chat_endpoint`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、查询串、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
-- 引入版本: -
-
-### `ai_default_chat_model`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
-- 引入版本: -
-
-### `ai_default_chat_provider`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 有效值: `openai_compatible`
-- 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
-- 引入版本: -
-
-### `ai_default_embedding_endpoint`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 调用使用的完整 HTTPS POST URL，独立于聊天端点，必须单独配置。必须含主机，不得含用户信息、查询串、片段或控制字符；显式端口须在 1 至 65535 范围内。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。每个执行查询的 BE 必须将 `AI_FUNCTION_EMBEDDING_ENDPOINT` 绑定到完全相同的 URL，并在本地配置 `AI_FUNCTION_EMBEDDING_API_KEY`。修改任一 BE 环境变量后需重启该 BE。凭证不是 FE 配置，不会随计划下发。参见 [ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md)。
-- 引入版本: -
-
-### `ai_default_embedding_model`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 未显式指定模型时使用的默认模型。此类调用要求该值非空白，且不能含 C0 控制字符或 DEL。如果所有向量调用均显式指定模型，则可为空。不会回退到聊天默认模型。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
-- 引入版本: -
-
-### `ai_default_embedding_provider`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 有效值: `openai_compatible`
-- 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
-- 引入版本: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
 
@@ -200,6 +162,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 单条外部表统计信息收集查询允许运行的最长时间。统计收集会按 (分区, 列组) 拆分成多条查询，每条只读取一个分区、受上述扫描预算限制并产出固定大小的 sketch，正常情况下远小于一秒即可返回。若没有该上限，每条查询都会继承 `statistic_collect_query_timeout` 的剩余时间——而后者是整个收集任务的预算，因此一条被过载 BE 卡住的查询就可能耗尽全部预算，导致其后的所有分区都来不及采集。对于冷存储或远端对象存储，受限扫描确实可能更慢，可调大该值。取值 `0` 或更小表示不设置独立上限，查询可再次使用任务的全部剩余预算。实际生效的超时始终取该值与任务剩余预算中的较小者。
+- 引入版本: v4.1
+
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- 默认值: 0.5
+- 类型: Double
+- 是否可变: Yes
+- 描述: 一列的统计信息被记录下来所需的最低覆盖率——即本次外部表统计收集请求的分区中，实际采集成功的比例下限。被中断的收集（部分查询被容忍跳过，或任务中途失败）仍会把已读取分区的行写入并记录请求了多少个分区，读路径据此正确放大。但覆盖率低到一定程度就不值得了：行数可以按采集到的分区外推，NDV 不能，而 NDV 恰恰是 join 基数估算最敏感的输入。一列只采到二十分之一的分区，就会给优化器一个偏低约 20 倍、却被当作事实的 NDV。低于该比例的列不写元数据，优化器退回 connector 自身的表元数据：行数准确、没有 NDV，用默认选择率总好过一个自信的错误值。该比例以本次收集"请求了多少分区"为分母，而不是整表分区数，因此采样不会仅仅因为是采样就被判为覆盖不足。取值 `0` 或更小表示采到多少就记多少。
+- 引入版本: v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单个外部表统计信息收集任务用于等待 BE 释放内存的总时长上限。当 BE 因为整个进程内存超限而拒绝一条收集查询时，该查询会在等待一段时间后重试，而不是被计入失败分区——因为内存是被其他负载占用的，过一会就会恢复。但这只对短暂的内存尖峰成立：在持续的内存紧张下每条查询都会被拒绝，若没有该上限，任务会把 `statistic_collect_query_timeout` 的整个预算都花在 sleep 上，同时一直占用 `connector_table_query_trigger_analyze_max_running_task_num` 个并发槽之一——既没采到统计，也让其他表无法被采集。预算用尽后任务不再等待，其失败按 `statistic_full_statistics_failure_tolerance_ratio` 正常计数（即退回引入重试之前的行为），任务也能尽早结束，等集群恢复后重新触发。取值 `0` 或更小表示不限制等待时长，仅受 `statistic_collect_query_timeout` 约束。
+- 引入版本: v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- 默认值: 1800
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 查询触发的 analyze 持续失败时，该表在被再次尝试之前最多被跳过多久。失败的收集不会提交任何元数据，因此它要采的统计仍然缺失，下一条查询会再次请求采集，调度器在下一个 tick（即每 `connector_table_query_trigger_task_schedule_interval` 秒）就会再跑一遍同样的任务，只要失败一直存在就会一直循环。上面的 interval 配置拦不住它，因为那些判据比较的是失败任务从未写入的元数据。每连续失败一次，跳过时长翻倍，从 1 分钟起，上限为该值；一次成功的收集即清零。手工 `ANALYZE` 不受影响。取值 `0` 或更小表示关闭退避，恢复成每个调度 tick 都重试。
 - 引入版本: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -1191,6 +1179,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 完成事务期间获取数据库和表锁的默认超时。
 - 引入版本: v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 内存中保留的已完成或已取消 ALTER 作业的最大数量，这些作业可通过 SHOW ALTER TABLE 查看。schema 变更作业与优化作业共用一个上限，rollup 作业单独计数。超出上限时，按完成时间从早到晚删除作业，即使作业尚未超过 `history_job_keep_max_second` 设定的保留时长。以下两种情况下作业会继续保留，作业数因此可能暂时超过上限：一是正在进行的导入可能还在使用该作业变更前的 schema；二是存算分离集群中仍有集群快照依赖该作业。设为 `0` 或负数表示不限制。
+- 引入版本: -
 
 ### `history_job_keep_max_second`
 

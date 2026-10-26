@@ -27,6 +27,7 @@
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
+#include "column/file_column.h"
 #include "common/object_pool.h"
 #include "exprs/ai/ai_provider_options_builder.h"
 #include "exprs/expr_context.h"
@@ -41,9 +42,11 @@ enum class AIArgumentType : uint8_t {
     VARCHAR,
     OPTIONS,
     STRING_ARRAY,
+    FILE,
 };
 
 enum class AIPromptKind : uint8_t {
+    NONE,
     PASSTHROUGH,
     SENTIMENT,
     CLASSIFY,
@@ -59,9 +62,6 @@ enum class AIPromptKind : uint8_t {
 #include "gen_cpp/opcode/AIFunctionDescriptors.inc"
 
 namespace {
-
-constexpr std::string_view kSystemConfigId = "__system_chat__";
-constexpr std::string_view kEmbeddingConfigId = "__system_embedding__";
 
 Status invalid_ai_expression() {
     return Status::InvalidArgument("Invalid AI function expression");
@@ -116,19 +116,15 @@ bool is_varchar_type(const TTypeDesc& type) {
 }
 
 bool is_options_type(const TTypeDesc& type) {
-    if (!is_valid_type(type) || type.types.size() < 3 || type.types[0].type != TTypeNodeType::MAP ||
-        type.types[1].type != TTypeNodeType::SCALAR) {
-        return false;
-    }
-    if (type.types[1].scalar_type.type == TPrimitiveType::VARCHAR) {
-        return true;
-    }
-    // FE serializes the unresolved MAP<NULL,NULL> produced by map{} as MAP<BOOLEAN,BOOLEAN>.
-    return type.types.size() == 3 && type.types[1].scalar_type.type == TPrimitiveType::BOOLEAN &&
-           type.types[2].type == TTypeNodeType::SCALAR && type.types[2].scalar_type.type == TPrimitiveType::BOOLEAN;
+    return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
+           type.types[0].scalar_type.type == TPrimitiveType::JSON;
 }
 
 bool matches_argument_type(const TTypeDesc& type, AIArgumentType expected) {
+    if (expected == AIArgumentType::FILE) {
+        return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
+               type.types[0].scalar_type.type == TPrimitiveType::FILE;
+    }
     if (expected == AIArgumentType::STRING_ARRAY) {
         return is_valid_type(type) && type.types.size() == 2 && type.types[0].type == TTypeNodeType::ARRAY &&
                type.types[1].type == TTypeNodeType::SCALAR && type.types[1].scalar_type.type == TPrimitiveType::VARCHAR;
@@ -158,50 +154,11 @@ bool is_fe_string_type(const TypeDescriptor& type) {
     return type.type == TYPE_CHAR || type.type == TYPE_VARCHAR;
 }
 
-bool matches_safe_map_type(const TypeDescriptor& declared, const TypeDescriptor& child);
-
-bool matches_main_compatible_type(const TypeDescriptor& declared, const TypeDescriptor& child) {
-    if (is_fe_string_type(declared) && is_fe_string_type(child)) {
-        return true;
-    }
-    if (declared.type != child.type || declared.children.size() != child.children.size()) {
-        return false;
-    }
-    if (declared.type == TYPE_MAP) {
-        return matches_safe_map_type(declared, child);
-    }
-    if (!declared.children.empty()) {
-        for (size_t i = 0; i < declared.children.size(); ++i) {
-            if (!matches_main_compatible_type(declared.children[i], child.children[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return declared == child;
-}
-
-bool matches_safe_map_type(const TypeDescriptor& declared, const TypeDescriptor& child) {
-    if (declared.type != TYPE_MAP || declared.children.size() != 2 || child.type != TYPE_MAP ||
-        child.children.size() != 2) {
-        return false;
-    }
-
-    const bool declared_normalized =
-            declared.children[0].type == TYPE_BOOLEAN && declared.children[1].type == TYPE_BOOLEAN;
-    const bool child_normalized = child.children[0].type == TYPE_BOOLEAN && child.children[1].type == TYPE_BOOLEAN;
-    if (declared_normalized || child_normalized) {
-        return declared_normalized && child_normalized;
-    }
-
-    // Every ordinary provider-option map depth requires VARCHAR keys. CHAR is only
-    // compatible in values (including ARRAY/STRUCT leaves), never in map keys.
-    return declared.children[0].type == TYPE_VARCHAR && child.children[0].type == TYPE_VARCHAR &&
-           matches_main_compatible_type(declared.children[1], child.children[1]);
-}
-
 bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDescriptor& child,
                                    AIArgumentType expected) {
+    if (expected == AIArgumentType::FILE) {
+        return declared.type == TYPE_FILE && child.type == TYPE_FILE;
+    }
     if (expected == AIArgumentType::VARCHAR) {
         return declared.type == TYPE_VARCHAR && is_fe_string_type(child);
     }
@@ -210,7 +167,7 @@ bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDes
                child.children.size() == 1 && declared.children[0].type == TYPE_VARCHAR &&
                is_fe_string_type(child.children[0]);
     }
-    return matches_safe_map_type(declared, child);
+    return declared.type == TYPE_JSON && child.type == TYPE_JSON && child.children.empty();
 }
 
 bool contains_only_ascii_whitespace(const Slice& value) {
@@ -299,6 +256,8 @@ StatusOr<std::string> read_constant_string_array(const Column& column) {
 
 std::string build_prompt(AIPromptKind kind, std::string text, const std::string& second, const std::string& third) {
     switch (kind) {
+    case AIPromptKind::NONE:
+        return {};
     case AIPromptKind::PASSTHROUGH:
         return text;
     case AIPromptKind::SENTIMENT:
@@ -387,7 +346,7 @@ AIFunctionCallExpr::AIFunctionCallExpr(const TExprNode& node, const AIFunctionDe
                                        std::vector<TypeDescriptor> argument_types)
         : Expr(node),
           _descriptor(descriptor),
-          _model_config_id(node.ai_model_config_id),
+          _provider_id(node.ai_provider_id),
           _argument_types(std::move(argument_types)) {
     _fn = TFunction();
 }
@@ -395,17 +354,16 @@ AIFunctionCallExpr::AIFunctionCallExpr(const TExprNode& node, const AIFunctionDe
 AIFunctionCallExpr::AIFunctionCallExpr(const AIFunctionCallExpr& other)
         : Expr(other),
           _descriptor(other._descriptor),
-          _model_config_id(other._model_config_id),
+          _provider_id(other._provider_id),
           _argument_types(other._argument_types) {}
 
 StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const TExprNode& node) {
     if (pool == nullptr ||
         (node.node_type != TExprNodeType::FUNCTION_CALL && node.node_type != TExprNodeType::COMPUTE_FUNCTION_CALL) ||
         !node.__isset.fn || node.fn.binary_type != TFunctionBinaryType::AI ||
-        !is_ai_function_name(node.fn.name.function_name) || !node.fn.__isset.fid || !node.fn.__isset.ai_model_source ||
-        !node.__isset.ai_model_config_id || node.fn.has_var_args || !node.__isset.is_nullable || !node.is_nullable ||
-        node.fn.__isset.hdfs_location || node.fn.__isset.content || node.fn.__isset.cloud_configuration ||
-        node.fn.__isset.service_url) {
+        !is_ai_function_name(node.fn.name.function_name) || !node.fn.__isset.fid || !node.__isset.ai_provider_id ||
+        node.fn.has_var_args || !node.__isset.is_nullable || !node.is_nullable || node.fn.__isset.hdfs_location ||
+        node.fn.__isset.content || node.fn.__isset.cloud_configuration || node.fn.__isset.service_url) {
         return invalid_ai_expression();
     }
 
@@ -416,17 +374,9 @@ StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const
         !matches_result_type(node.fn.ret_type, spec->result_kind)) {
         return invalid_ai_expression();
     }
-    if (node.fn.ai_model_source != spec->model_source) {
-        return invalid_ai_expression();
-    }
-    if (spec->model_source == TAIModelSource::PROVIDER) {
-        const std::string& key = node.ai_model_config_id;
-        if (contains_only_ascii_whitespace(Slice(key)) || key == kSystemConfigId || key == kEmbeddingConfigId ||
-            std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
-            return invalid_ai_expression();
-        }
-    } else if (node.ai_model_config_id !=
-               (spec->capability == AICapability::CHAT ? kSystemConfigId : kEmbeddingConfigId)) {
+    const std::string& key = node.ai_provider_id;
+    if (contains_only_ascii_whitespace(Slice(key)) ||
+        std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
         return invalid_ai_expression();
     }
     for (size_t i = 0; i < spec->argument_count; ++i) {
@@ -451,16 +401,8 @@ AICapability AIFunctionCallExpr::capability() const {
     return _descriptor->capability;
 }
 
-TAIModelSource::type AIFunctionCallExpr::model_source() const {
-    return _descriptor->model_source;
-}
-
 AIFunctionResultKind AIFunctionCallExpr::result_kind() const {
     return _descriptor->result_kind;
-}
-
-bool AIFunctionCallExpr::requires_default_model() const {
-    return _descriptor->model_argument < 0;
 }
 
 Status AIFunctionCallExpr::_validate_children() const {
@@ -506,7 +448,8 @@ Status AIFunctionCallExpr::open(RuntimeState* state, ExprContext* context, Funct
 }
 
 StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext* context, Chunk* chunk,
-                                                                     std::string_view default_model) const {
+                                                                     std::string_view default_model,
+                                                                     size_t max_input_file_bytes) const {
     RETURN_IF_ERROR(_validate_children());
     if (context == nullptr || chunk == nullptr || chunk->num_rows() == 0) {
         return invalid_ai_expression();
@@ -541,18 +484,22 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             batch.options = std::make_shared<const AIProviderOptions>(std::move(options));
             break;
         }
-        case AIArgumentType::STRING_ARRAY:
+        case AIArgumentType::STRING_ARRAY: {
             if (!_children[index]->is_constant()) {
                 return Status::InvalidArgument("AI function categories or keys must be constant");
             }
             ASSIGN_OR_RETURN(constant_arrays[index], read_constant_string_array(*columns[index]));
             break;
         }
+        case AIArgumentType::FILE:
+            break;
+        }
     }
     if (spec.provider_argument >= 0) {
         const size_t index = spec.provider_argument;
-        if (!_children[index]->is_constant() || !columns[index]->is_constant() || strings[index]->is_null(0) ||
-            contains_only_ascii_whitespace(strings[index]->value(0))) {
+        if (!_children[index]->is_constant() || !columns[index]->is_constant() ||
+            (!strings[index]->is_null(0) && !strings[index]->value(0).empty() &&
+             contains_only_ascii_whitespace(strings[index]->value(0)))) {
             return invalid_ai_expression();
         }
     }
@@ -560,7 +507,8 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
     for (size_t row = 0; row < chunk->num_rows(); ++row) {
         bool is_null = false;
         for (size_t index = 0; index < strings.size(); ++index) {
-            if (!strings[index]) {
+            if (!strings[index] || static_cast<int>(index) == spec.model_argument ||
+                static_cast<int>(index) == spec.provider_argument) {
                 continue;
             }
             if (strings[index]->is_null(row)) {
@@ -570,15 +518,55 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                            contains_only_ascii_whitespace(strings[index]->value(row));
             }
         }
+        Datum file;
+        if (spec.file_argument >= 0) {
+            file = columns[spec.file_argument]->get(row);
+            is_null |= file.is_null();
+        }
         if (is_null) {
             batch.rows.emplace_back();
             continue;
         }
-        if (spec.model_argument >= 0 && contains_only_ascii_whitespace(strings[spec.model_argument]->value(row))) {
-            batch.rows.emplace_back(AIFunctionRowInput{
-                    .action = AIFunctionRowAction::TERMINAL_ROW_FAILURE,
-            });
+        const bool use_default_model = spec.model_argument < 0 || strings[spec.model_argument]->is_null(row) ||
+                                       strings[spec.model_argument]->value(row).empty();
+        std::string model =
+                use_default_model ? std::string(default_model) : strings[spec.model_argument]->value(row).to_string();
+        if (contains_only_ascii_whitespace(Slice(model))) {
+            batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
             continue;
+        }
+        std::optional<AIMediaInput> media;
+        if (spec.file_argument >= 0) {
+            const auto& fields = file.get_struct();
+            if (fields.size() != FileColumn::NUM_FIELDS) {
+                return invalid_ai_expression();
+            }
+            if (fields[FileColumn::INLINE].is_null() && !fields[FileColumn::URI].is_null()) {
+                // FILE is a value, not authority to fetch an arbitrary URI. Reference inputs must
+                // wait for the shared, authorized FILE reader; never forward their URI to a provider.
+                return Status::NotSupported(
+                        "AI reference FILE inputs require an authorized FILE reader; "
+                        "only inline FILE inputs are supported");
+            }
+            if (fields[FileColumn::INLINE].is_null() || !fields[FileColumn::URI].is_null() ||
+                !fields[FileColumn::OFFSET].is_null() || !fields[FileColumn::SIZE].is_null()) {
+                batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+                continue;
+            }
+            const Slice bytes = fields[FileColumn::INLINE].get_slice();
+            const Slice content_type =
+                    fields[FileColumn::CONTENT_TYPE].is_null() ? Slice() : fields[FileColumn::CONTENT_TYPE].get_slice();
+            auto prepared = prepare_inline_ai_media(std::string_view(bytes.data, bytes.size),
+                                                    std::string_view(content_type.data, content_type.size),
+                                                    max_input_file_bytes);
+            if (!prepared.ok()) {
+                if (!prepared.status().is_invalid_argument()) {
+                    return prepared.status();
+                }
+                batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+                continue;
+            }
+            media.emplace(std::move(prepared).value());
         }
         auto input_value = [&](size_t input_index) -> std::string {
             if (input_index >= spec.input_count) {
@@ -592,9 +580,9 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
         };
         batch.rows.emplace_back(AIFunctionRowInput{
                 .action = AIFunctionRowAction::DISPATCH,
-                .model = spec.model_argument >= 0 ? strings[spec.model_argument]->value(row).to_string()
-                                                  : std::string(default_model),
+                .model = std::move(model),
                 .prompt = build_prompt(spec.prompt_kind, input_value(0), input_value(1), input_value(2)),
+                .media = std::move(media),
         });
     }
     return batch;

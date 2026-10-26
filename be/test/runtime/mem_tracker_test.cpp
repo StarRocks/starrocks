@@ -53,6 +53,9 @@ TEST_F(MemTrackerTest, label_type_convert) {
     // Verify builtin_inverted_index is registered
     ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::BUILTIN_INVERTED_INDEX), "builtin_inverted_index");
     ASSERT_EQ(MemTracker::label_to_type("builtin_inverted_index"), MemTrackerType::BUILTIN_INVERTED_INDEX);
+
+    ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::JVM), "jvm");
+    ASSERT_EQ(MemTracker::label_to_type("jvm"), MemTrackerType::JVM);
 }
 
 TEST_F(MemTrackerTest, get_snapshot) {
@@ -294,6 +297,36 @@ TEST_F(MemTrackerTest, has_enough_reserved_memory) {
 TEST_F(MemTrackerTest, err_msg_with_fragment_instance_id) {
     std::string err_msg = _query_1->err_msg("mock msg", "abc-fragment-id");
     ASSERT_NE(err_msg.find("fragment: abc-fragment-id"), std::string::npos);
+}
+
+// FE matches these closing sentences to decide whether a memory-limit failure is worth retrying
+// (StatisticsCollectJob#isSharedMemoryExhausted): the shared budgets retry, a statement's own limit does not.
+// A wording change here must be mirrored there.
+TEST_F(MemTrackerTest, err_msg_closing_sentence_per_type) {
+    auto err_msg_of = [](MemTrackerType type, const std::string& label) {
+        MemTracker tracker(type, 1, label);
+        return tracker.err_msg("mock msg");
+    };
+    auto contains = [](const std::string& msg, const std::string& part) { return msg.find(part) != std::string::npos; };
+
+    // Shared with other queries.
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::PROCESS, "process"), "Memory of process exceed limit"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::PROCESS, "process"), "Mem usage has exceed the limit of BE"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::QUERY_POOL, "query_pool"),
+                         "Mem usage has exceed the limit of query pool"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP, "default_wg"),
+                         "Mem usage has exceed the limit of query pool"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP, "rg1"),
+                         "Mem usage has exceed the limit of the resource group [rg1]"));
+    ASSERT_TRUE(contains(err_msg_of(MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL, "pool1"),
+                         "Mem usage has exceed the limit of resource group memory pool [pool1]"));
+
+    // The statement's own limit.
+    std::string big_query = err_msg_of(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, "rg1");
+    ASSERT_TRUE(contains(big_query, "Mem usage has exceed the big query limit of the resource group [rg1]"));
+    ASSERT_FALSE(contains(big_query, "exceed the limit of the resource group ["));
+    ASSERT_TRUE(
+            contains(err_msg_of(MemTrackerType::QUERY, "query_1"), "Mem usage has exceed the limit of single query"));
 }
 
 } // namespace starrocks

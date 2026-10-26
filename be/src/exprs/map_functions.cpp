@@ -297,30 +297,71 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     } else {
         filter = down_cast<const ArrayColumn*>(raw_filter.get());
     }
+    // The loop below runs once per map entry, so everything that does not depend on the entry is
+    // resolved here: the offsets buffers, and the filter's elements. The filter is ARRAY<BOOLEAN>,
+    // so its elements are a one-byte column, optionally nullable - reading them through raw pointers
+    // lifts two virtual calls and a Datum out of the inner loop.
+    const size_t num_rows = src_column->size();
+    const uint32_t* src_offsets = src_column->offsets().immutable_data().data();
+    const uint32_t* filter_offsets = filter->offsets().immutable_data().data();
+    const uint8_t* dest_nulls = dest_null_map == nullptr ? nullptr : dest_null_map->get_data().data();
+    const uint8_t* filter_nulls = filter_null_map == nullptr ? nullptr : filter_null_map->immutable_data().data();
+
+    const Column& generic_elements = filter->elements();
+    const Column* filter_elements = &generic_elements;
+    const uint8_t* elem_nulls = nullptr;
+    if (filter_elements->is_nullable()) {
+        const auto* nullable_elements = down_cast<const NullableColumn*>(filter_elements);
+        if (nullable_elements->has_null()) {
+            elem_nulls = nullable_elements->immutable_null_column_data().data();
+        }
+        filter_elements = nullable_elements->data_column().get();
+    }
+    // BOOLEAN is UInt8Column; accept Int8Column too, the zero/non-zero test is the same either way.
+    const uint8_t* elem_data = nullptr;
+    if (const auto* u8 = dynamic_cast<const UInt8Column*>(filter_elements); u8 != nullptr) {
+        elem_data = u8->immutable_data().data();
+    } else if (const auto* i8 = dynamic_cast<const Int8Column*>(filter_elements); i8 != nullptr) {
+        elem_data = reinterpret_cast<const uint8_t*>(i8->immutable_data().data());
+    }
+
+    // Reserve for the common case without letting a wide chunk turn into a large speculative
+    // allocation: a predicate that rejects nearly everything would otherwise pay four bytes per
+    // input entry for a result that keeps none. The buffer still grows on demand past the cap.
+    constexpr size_t kIndexReserveCap = 16 * 1024; // 64 KiB of indexes
     Buffer<uint32_t> indexes;
+    indexes.reserve(std::min<size_t>(src_offsets[num_rows] - src_offsets[0], kIndexReserveCap));
+    dest_offsets.reserve(dest_offsets.size() + num_rows);
+
     // only keep the elements whose filter is not null and not 0.
-    for (size_t i = 0; i < src_column->size(); ++i) {
-        if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {               // dest_null_map[i] is not null
-            if (filter_null_map == nullptr || !filter_null_map->immutable_data()[i]) { // filter_null_map[i] is not null
-                size_t elem_size = 0;
-                size_t filter_elem_id = filter->offsets().immutable_data()[i];
-                size_t filter_elem_limit = filter->offsets().immutable_data()[i + 1];
-                for (size_t src_elem_id = src_column->offsets().immutable_data()[i];
-                     src_elem_id < src_column->offsets().immutable_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
-                    // only keep the valid elements
-                    if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
-                        filter->elements().get(filter_elem_id).get_int8() != 0) {
-                        indexes.emplace_back(src_elem_id);
-                        ++elem_size;
+    auto scan = [&](auto keep) {
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (dest_nulls == nullptr || !dest_nulls[i]) {         // dest_null_map[i] is not null
+                if (filter_nulls == nullptr || !filter_nulls[i]) { // filter_null_map[i] is not null
+                    size_t elem_size = 0;
+                    size_t filter_elem_id = filter_offsets[i];
+                    const size_t filter_elem_limit = filter_offsets[i + 1];
+                    for (size_t src_elem_id = src_offsets[i]; src_elem_id < src_offsets[i + 1];
+                         ++filter_elem_id, ++src_elem_id) {
+                        // only keep the valid elements
+                        if (filter_elem_id < filter_elem_limit && keep(filter_elem_id)) {
+                            indexes.emplace_back(src_elem_id);
+                            ++elem_size;
+                        }
                     }
+                    dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                } else { // filter_null_map[i] is null, empty the map by design[, alternatively keep all elements]
+                    dest_offsets.emplace_back(dest_offsets.back());
                 }
-                dest_offsets.emplace_back(dest_offsets.back() + elem_size);
-            } else { // filter_null_map[i] is null, empty the map by design[, alternatively keep all elements]
+            } else { // dest_null_map[i] is null
                 dest_offsets.emplace_back(dest_offsets.back());
             }
-        } else { // dest_null_map[i] is null
-            dest_offsets.emplace_back(dest_offsets.back());
         }
+    };
+    if (elem_data != nullptr) {
+        scan([&](size_t id) { return (elem_nulls == nullptr || !elem_nulls[id]) && elem_data[id] != 0; });
+    } else { // the filter's elements are not a plain 1-byte column - fall back to the generic accessors.
+        scan([&](size_t id) { return !generic_elements.is_null(id) && generic_elements.get(id).get_int8() != 0; });
     }
     dest_column->keys_column_raw_ptr()->append_selective(src_column->keys(), indexes);
     dest_column->values_column_raw_ptr()->append_selective(src_column->values(), indexes);

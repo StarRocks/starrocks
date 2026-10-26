@@ -53,7 +53,13 @@ import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.10.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml. This class shadows the one in
+// iceberg-core (identical FQN, and fe-core's classes precede the jar on the classpath), so if
+// upstream changes a constructor or method that iceberg-core itself calls, this copy still
+// compiles and then fails at RUNTIME with NoSuchMethodError. That is what happened on the
+// 1.10.0 -> 1.11.0 bump: ManifestFiles.read() started calling a 7-arg constructor that only
+// existed upstream.
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
@@ -85,6 +91,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private final InputFile file;
     private final InheritableMetadata inheritableMetadata;
     private final Long firstRowId;
+    private final boolean isCommitted;
     private final FileType content;
     private final PartitionSpec spec;
     private final Schema fileSchema;
@@ -122,12 +129,28 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             InheritableMetadata inheritableMetadata,
             Long firstRowId,
             FileType content) {
+        this(file, specId, specsById, inheritableMetadata, firstRowId, true, content);
+    }
+
+    // Iceberg 1.11.0 added the isCommitted parameter and ManifestFiles.read() calls THIS
+    // overload. Because this class shadows the one in iceberg-core (same FQN, and fe-core's
+    // classes come first on the classpath), omitting it made iceberg-core's own
+    // ManifestFiles.read() fail with NoSuchMethodError at runtime while still compiling.
+    protected ManifestReader(
+            InputFile file,
+            int specId,
+            Map<Integer, PartitionSpec> specsById,
+            InheritableMetadata inheritableMetadata,
+            Long firstRowId,
+            boolean isCommitted,
+            FileType content) {
         Preconditions.checkArgument(
                 firstRowId == null || content == FileType.DATA_FILES,
                 "First row ID is not valid for delete manifests");
         this.file = file;
         this.inheritableMetadata = inheritableMetadata;
         this.firstRowId = firstRowId;
+        this.isCommitted = isCommitted;
         this.content = content;
 
         if (specsById != null) {
@@ -426,7 +449,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
 
         CloseableIterable<ManifestEntry<F>> withMetadata =
                 CloseableIterable.transform(reader, inheritableMetadata::apply);
-        return CloseableIterable.transform(withMetadata, idAssigner(firstRowId));
+        return CloseableIterable.transform(withMetadata, idAssigner(firstRowId, isCommitted));
     }
 
     CloseableIterable<ManifestEntry<F>> liveEntries() {
@@ -516,7 +539,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     }
 
     private static <F extends ContentFile<F>> Function<ManifestEntry<F>, ManifestEntry<F>> idAssigner(
-            Long firstRowId) {
+            Long firstRowId, boolean isCommitted) {
         if (firstRowId != null) {
             return new Function<>() {
                 private long nextRowId = firstRowId;
@@ -534,7 +557,13 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                     return entry;
                 }
             };
+        } else if (!isCommitted) {
+            // Preserve firstRowId for entries in uncommitted manifests, including EXISTING entries
+            // that may be merged later. Without this branch an uncommitted manifest would have its
+            // row IDs nulled out below and row lineage would be lost on merge.
+            return Function.identity();
         } else {
+            // committed manifest with a null manifest-level firstRowId (pre-v3 upgrade path):
             // data file's first_row_id is null when the manifest's first_row_id is null
             return entry -> {
                 if (entry.file() instanceof BaseFile) {

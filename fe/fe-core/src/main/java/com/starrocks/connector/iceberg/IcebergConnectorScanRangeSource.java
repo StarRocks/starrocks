@@ -34,13 +34,13 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -56,26 +56,29 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
-import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +94,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.FILE_PATH;
 import static com.starrocks.catalog.IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 import static com.starrocks.catalog.IcebergTable.ROW_ID;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -106,9 +110,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Optional<List<BucketProperty>> bucketProperties;
     private final RemoteFileInfoSource remoteFileInfoSource;
 
-    private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
     // specId, StructLikeWrapper -> partitionId
     private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
+    // spec_id -> wrapper whose comparator is reused by copyFor(); forType() builds a new comparator on each call
+    private final Map<Integer, StructLikeWrapper> partitionWrapperCache = Maps.newHashMap();
+    // partitionId -> partition value sent with the scan ranges, shared by every file of the partition
+    private final Map<Long, THdfsPartition> partitionValues = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -130,6 +137,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
+    private Set<String> runtimeFilterPruningColumns = Set.of();
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -200,6 +208,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    private boolean readsRowLineage() {
+        return desc != null && desc.getSlots().stream().map(slot -> slot.getColumn().getName())
+                .anyMatch(name -> name.equalsIgnoreCase(ROW_ID) || name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER));
+    }
+
     @Override
     public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
@@ -208,7 +221,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
-                checkFileFormatSupportedDelete(fileScanTask, usedForDelete);
+                checkFileFormatSupportedDelete(fileScanTask, usedForDelete, usedForDelete && readsRowLineage());
                 res.addAll(toScanRanges(fileScanTask));
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
@@ -315,6 +328,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             target.setFull_path(deleteFile.path().toString());
             target.setFile_content(TIcebergFileContent.POSITION_DELETES);
             target.setLength(deleteFile.fileSizeInBytes());
+            if (deleteFile.format() == FileFormat.PARQUET || deleteFile.format() == FileFormat.ORC) {
+                // a position delete file may have another format than its data file (write.delete.format.default)
+                target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
+            }
             posDeleteFiles.add(target);
         }
 
@@ -331,8 +348,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (file.content() != FileContent.EQUALITY_DELETES) {
                 continue;
             }
+            // each equality-id group has its own delete scan; a file of another group would be read with its
+            // missing key columns filled with NULL and match rows whose key is NULL
+            if (!file.equalityFieldIds().equals(morParams.getEqualityIds())) {
+                continue;
+            }
 
             if (!seenEqDeleteFiles.contains(file.path().toString())) {
+                checkRuntimeFilterPruningColumns(task, file);
                 THdfsScanRange hdfsScanRange = buildScanRange(task, file, partitionId);
                 res.add(buildTScanRangeLocations(hdfsScanRange));
                 seenEqDeleteFiles.add(file.path().toString());
@@ -341,8 +364,30 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         return res;
     }
 
+    public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {
+        this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
+    }
+
+    // A runtime-filter pruning column of the delete scan takes the delete file's identity partition value, which
+    // only a partition-scoped delete of the data file's own spec has. Any other delete file would get a wrong value
+    // and silently stop deleting rows, so fail the query instead.
+    private void checkRuntimeFilterPruningColumns(FileScanTask task, DeleteFile file) {
+        if (runtimeFilterPruningColumns.isEmpty()) {
+            return;
+        }
+        List<Integer> identitySlotIds = partitionSlotIdsCache.get(file.specId());
+        boolean valid = file.specId() == task.spec().specId() && !task.spec().isUnpartitioned() &&
+                identitySlotIds != null && runtimeFilterPruningColumns.stream()
+                        .map(desc::getColumnSlot)
+                        .allMatch(slot -> slot != null && identitySlotIds.contains(slot.getId().asInt()));
+        if (!valid) {
+            throw new StarRocksConnectorException("Equality delete file %s cannot be pruned by runtime filters on %s. " +
+                    "You can execute `set %s = false` then rerun it", file.location(), runtimeFilterPruningColumns,
+                    SessionVariable.ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING);
+        }
+    }
+
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
-        DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         String filePath = file.path().toString();
         String tableLocation = table.getTableLocation();
@@ -362,8 +407,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         ConnectContext context = ConnectContext.get();
-        if (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
-                partitionSlotIdsCache.containsKey(file.specId())) {
+        // the runtime-filter pruning columns of a delete scan exist only as identity partition values, whatever the
+        // session (incremental scan ranges are built without one)
+        boolean identityColumnOptimize = !runtimeFilterPruningColumns.isEmpty() ||
+                (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize());
+        if (identityColumnOptimize && partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(partitionId);
             hdfsScanRange.setIdentity_partition_slot_ids(partitionSlotIdsCache.get(file.specId()));
         } else {
@@ -375,12 +423,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setModification_time(0);
         hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
-        THdfsPartition tPartition = new THdfsPartition();
-        tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(ExprToThrift::treeToThrift)
-                .collect(Collectors.toList()));
-
-        hdfsScanRange.setPartition_value(tPartition);
+        hdfsScanRange.setPartition_value(partitionValues.get(partitionId));
         hdfsScanRange.setTable_id(table.getId());
 
         // fill extended column value
@@ -411,6 +454,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
                 value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 setExtendedColumns(slot, extendedColumns, value);
+            } else if (isPartitionKeyColumn(name, table.getNativeTable().schema())) {
+                String partitionKey = buildPartitionKey(table.getNativeTable().specs().get(file.specId()), file.partition());
+                value = partitionKey == null ? new NullLiteral()
+                        : LiteralExprFactory.create(partitionKey, StringType.STRING);
+                setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(FILE_PATH)) {
                 value = LiteralExprFactory.create(file.location(), StringType.STRING);
                 setExtendedColumns(slot, extendedColumns, value);
@@ -438,6 +486,48 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return hdfsScanRange;
+    }
+
+    // A real table column of the same name is read from the file; only the column the equality delete rewrite
+    // adds is filled with the partition key.
+    static boolean isPartitionKeyColumn(String name, Schema schema) {
+        return name.equalsIgnoreCase(PARTITION_KEY) && schema.caseInsensitiveFindField(PARTITION_KEY) == null;
+    }
+
+    /**
+     * Encodes the spec id and partition values of a file, so that a data file and a partitioned equality delete
+     * file get the same key exactly when the delete applies to the data file by partition. Returns null for an
+     * unpartitioned spec: such deletes are global.
+     */
+    static String buildPartitionKey(PartitionSpec spec, StructLike partition) {
+        if (spec == null || spec.isUnpartitioned()) {
+            return null;
+        }
+        StringBuilder key = new StringBuilder().append(spec.specId());
+        List<Types.NestedField> fields = spec.partitionType().fields();
+        for (int i = 0; i < fields.size(); i++) {
+            Object partitionValue = partition.get(i, Object.class);
+            key.append('|');
+            if (partitionValue == null) {
+                key.append('n');
+            } else {
+                // int -> long and float -> double are allowed type promotions, so the two sides of one query may
+                // see a field under either type (an older schema, or a concurrent ALTER); always encode the wide one
+                Type type = fields.get(i).type();
+                if ((type.typeId() == Type.TypeID.INTEGER || type.typeId() == Type.TypeID.LONG) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.LongType.get();
+                    partitionValue = number.longValue();
+                } else if ((type.typeId() == Type.TypeID.FLOAT || type.typeId() == Type.TypeID.DOUBLE) &&
+                        partitionValue instanceof Number number) {
+                    type = Types.DoubleType.get();
+                    partitionValue = number.doubleValue();
+                }
+                key.append('v').append(Base64.getEncoder().encodeToString(
+                        ByteBuffers.toByteArray(Conversions.toByteBuffer(type, partitionValue))));
+            }
+        }
+        return key.toString();
     }
 
     private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {
@@ -490,6 +580,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
 
+        // Look up before building the PartitionKey: this runs once per data file, and with a non-identity
+        // transform such as bucket(N) the cache below sees N keys per identity partition.
+        StructLikeWrapper wrappedPartition = partitionWrapperCache
+                .computeIfAbsent(spec.specId(), ignore -> StructLikeWrapper.forType(spec.partitionType()))
+                .copyFor(task.file().partition());
+        Pair<Integer, StructLikeWrapper> cacheKey = Pair.create(spec.specId(), wrappedPartition);
+
+        Long cachedId = partitionKeyToId.get(cacheKey);
+        if (cachedId != null) {
+            return cachedId;
+        }
+
         if (!partitionSlotIdsCache.containsKey(spec.specId())) {
             partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
         }
@@ -502,25 +604,19 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         StructLike origPartition = task.partition();
         PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
-
-        StructLikeWrapper wrappedPartition = StructLikeWrapper.forType(spec.partitionType())
-                .copyFor(task.file().partition());
-        Pair<Integer, StructLikeWrapper> cacheKey = Pair.create(spec.specId(), wrappedPartition);
-
-        Long cachedId = partitionKeyToId.get(cacheKey);
-        if (cachedId != null) {
-            return cachedId;
-        }
-
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
-
-        Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
-        DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
-                new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
-                        filePath.getParent().toString());
-
         partitionKeyToId.put(cacheKey, partitionId);
-        referencedPartitions.put(partitionId, referencedPartitionInfo);
+
+        // The PartitionKey holds identity fields only, so several cache keys (one per bucket, say) share one
+        // partition id and one thrift value. The scheduler sends it once per fragment instance and drops it from
+        // later ranges (FragmentInstance.removeDuplicatedPartitionValues).
+        partitionValues.computeIfAbsent(partitionId, ignore -> {
+            THdfsPartition value = new THdfsPartition();
+            value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                    .map(ExprToThrift::treeToThrift)
+                    .collect(Collectors.toList()));
+            return value;
+        });
         checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }

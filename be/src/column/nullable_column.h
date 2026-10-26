@@ -155,12 +155,6 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data_column->has_large_column(); }
-
     bool append_strings(const Slice* data, size_t size) override;
 
     bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
@@ -188,7 +182,13 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
+    uint32_t max_one_element_serialize_size_compact() const override {
+        return sizeof(bool) + _data_column->max_one_element_serialize_size_compact();
+    }
+
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
+
+    uint32_t serialize_compact(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;
 
@@ -196,6 +196,8 @@ public:
                          uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 

@@ -1153,8 +1153,9 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
-                verifyNoAiInConditionalFunction(node);
+                verifyNoAIInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1179,8 +1180,9 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
-                    verifyNoAiInConditionalFunction(node);
+                    verifyNoAIInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1195,8 +1197,9 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
-            verifyNoAiInConditionalFunction(node);
+            verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
         }
 
@@ -1209,7 +1212,7 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
             String resolvedFunctionName = node.getFn().functionName();
             if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
                     || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
@@ -1257,6 +1260,10 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
+                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
+                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
+            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:

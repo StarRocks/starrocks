@@ -16,71 +16,6 @@ description: "Alphabetical t - z"
 - 単位: -
 - 説明: このBE内のタブレットの最高累積コンパクションスコア。
 
-## `tablet_merge_sstable_fallback_cohort_mismatch_total`
-
-- 単位: カウント
-- 説明: ソース SST コホートの数、順序、またはセマンティックメタデータが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
-
-- 単位: カウント
-- 説明: 候補 SST コホートに物理 SST ファイル名の重複があり、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_embedded_delvec_total`
-
-- 単位: カウント
-- 説明: SST の投影後に必要な埋め込み削除ベクターを解決できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
-
-- 単位: カウント
-- 説明: ソースからターゲットへの RSSID マッピングまたは所有権がメタデータの安全な再利用に必要な一様性を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_projected_domain_total`
-
-- 単位: カウント
-- 説明: 投影後の SST 所有者、RSSID オフセット、またはウォーターマークが再利用可能なライブドメインまたはサポート対象ドメインを外れ、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
-
-- 単位: カウント
-- 説明: ソース rowset の物理レイアウトが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_shared_or_mixed_total`
-
-- 単位: カウント
-- 説明: ソース SST の所有権が共有または混在していてメタデータを安全に再利用できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
-
-- 単位: カウント
-- 説明: ソース範囲または SST メタデータがサポート対象の再利用形式を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_meta_identical_total`
-
-- 単位: カウント
-- 説明: 完全かつ同一の継承 SST コホートをマージ後のタブレットメタデータで再利用したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_meta_lazy_rebuild_total`
-
-- 単位: カウント
-- 説明: ソース SST メタデータを省略し、次にプライマリキーインデックスをロードする処理または利用側がそのインデックスを再構築するタブレットマージの累計回数。
-
-## `tablet_merge_sstable_meta_private_total`
-
-- 単位: カウント
-- 説明: 完全なプライベートソース SST メタデータのコホートを投影して再利用したタブレットマージの累計回数。
-
-## `tablet_merge_sstable_omitted_bytes_total`
-
-- 単位: Bytes
-- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計サイズ。
-
-## `tablet_merge_sstable_omitted_file_total`
-
-- 単位: カウント
-- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計数。
-
 ## `tablet_metadata_mem_bytes`
 
 - 単位: バイト
@@ -104,6 +39,11 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: このメトリクスは、マージ プランニング中にタブレットが除外されたイベントの累積回数を表すものであり、現在ブロックされているタブレット数ではありません。あるプランニング パスで本来マージ可能なタブレットが除外と判定されるたびに 1 増加し、その後値が減ることはなく、FE の再起動時にのみ 0 に戻ります。そのため、値そのものではなく増加のレートに注目してください。タブレットが除外される理由は、タブレット分割で残った、マージをブロックする共有データファイルをまだ保持しているか、そうしたファイルを保持していないことがまだ証明されていないかのいずれかです。後者は多くの場合 compaction がまだ追いついていないことを意味しますが、対象タブレットがこのチェックに対応する前の BE 上にある、あるいはまだ観測されていないだけということもあります。分割が残した共有ファイルを解消するには、それらを書き換える compaction が必要です。主キー以外のテーブルであれば `ALTER TABLE ... COMPACT` で任意のタイミングで実行できます。主キーテーブルでも同じ文を実行できますが、base compaction が行われるのは未処理の削除を抱えたタブレットに限られ、分割直後によく見られる削除のないタブレットには効果がなく、通常の compaction が該当する rowset に到達するのを待つことになります。このカウンタをインクリメントするのは Leader FE のみです。
 
+## `tablet_reshard_merge_rejected_total`
+
+- 単位: カウント
+- 説明: この BE がファイルを書き込む前に実行を拒否したタブレットマージの累計回数。マージ対象のタブレットがマージの前提条件を満たさない場合に拒否されます。典型的な原因は、分割後も他のタブレットと共有しているデータファイルをタブレットがまだ保持している、2 つのタブレットが同じファイルを宣言している、各タブレットのテーブルレベルの設定が一致しない、などです。拒否された publish はメッセージが `MERGE_REJECTED` で始まるエラーを返し、BE はソースタブレットとターゲットタブレットを示す WARNING ログを出力します。
+
 ## `tablet_schema_mem_bytes`
 
 - 単位: バイト
@@ -118,6 +58,12 @@ description: "Alphabetical t - z"
 
 - 単位: カウント
 - 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+
+## `thrift_client_retries_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: FE が発行した Thrift RPC が接続の切断により再試行した累計回数。各再試行の前に、FE はランダムな時間だけ待機（指数バックオフ: 最初の再試行の前は 100～200 ms、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ms に達するまで増加）してから、接続を再開してリクエストを再送します。タイムアウトした呼び出しは再試行されず、カウントもされません。1 回の呼び出しあたりの再試行回数は `thrift_rpc_retry_times` によって制限されます。値が増加し続けている場合、FE と他のノードとの Thrift 接続が頻繁に切断されていることを意味します。よくある原因は、接続先（たとえば Leader FE）の Thrift ワーカー プールが飽和し、新しい接続を即座にクローズしていることです。接続先の `thrift_server_rejected_connections_total` と併せて確認してください。
 
 ## `thrift_connections_total`
 

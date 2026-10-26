@@ -66,7 +66,9 @@ TEST(NativeGeoTypeTest, OptionalSemanticMetadata) {
         EXPECT_FALSE(type.to_protobuf().types(0).scalar_type().has_geo());
         EXPECT_EQ(type, TypeDescriptor::from_thrift(type.to_thrift()));
         EXPECT_EQ(type, TypeDescriptor::from_protobuf(type.to_protobuf()));
-        if (type.is_geo_type()) EXPECT_FALSE(type.is_assignable(type));
+        if (type.is_geo_type()) {
+            EXPECT_FALSE(type.is_assignable(type));
+        }
     }
     auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {});
     EXPECT_TRUE(TypeDescriptor::from_thrift(type.to_thrift()).geo_type.has_value());

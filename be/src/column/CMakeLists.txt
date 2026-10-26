@@ -81,7 +81,6 @@ ADD_BE_LIB(ChunkCore
         chunk_slice.cpp
         column_access_path.cpp
         datum_tuple.cpp
-        segmented_chunk.cpp
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)

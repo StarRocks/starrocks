@@ -172,7 +172,10 @@ StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Rang
                 std::vector<ExprContext*> ctxs = _post_read_conjuncts_by_slot.at(slot_id);
                 ASSIGN_OR_RETURN(hit_count, eval_slot_conjuncts(ctxs, slot_id, chunk, filter));
                 if (hit_count == 0) {
-                    break;
+                    // No row left: skip the regular columns too, like the other early exits below. Reading
+                    // them with an all-zero filter is wasted work and leaves the stored readers' page state
+                    // out of step with their read cursors.
+                    return hit_count;
                 }
             }
         }
@@ -293,12 +296,13 @@ Status ColumnMaterializer::read_lazy_columns(const Range<uint64_t>& full_range,
         SlotId slot_id = _param.read_cols[col_idx].slot_id();
         if (_slot_cache.count(slot_id)) {
             // Column was triggered during predicate eval: it has full_range data.
-            // Mutate (COW) and filter to match active_chunk's surviving row count.
+            // Filter a copy to match active_chunk's surviving row count; the read chunk and the slot cache
+            // still hold the original. Not Column::mutate: with COW off it copies every subcolumn twice.
             ColumnPtr& col = _read_chunk->get_column_by_slot_id(slot_id);
             if (has_filter) {
-                auto mutable_col = Column::mutate(col);
-                mutable_col->filter(chunk_filter);
-                active_chunk->append_column(ColumnPtr(std::move(mutable_col)), slot_id);
+                auto filtered = col->clone();
+                filtered->filter(chunk_filter);
+                active_chunk->append_column(ColumnPtr(std::move(filtered)), slot_id);
             } else {
                 active_chunk->append_column(col, slot_id);
             }

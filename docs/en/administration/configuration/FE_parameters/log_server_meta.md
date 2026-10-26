@@ -438,6 +438,33 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when it contacts an external system, such as a Hive Metastore, a JDBC source, an Iceberg REST catalog, or a thrift peer, while holding an FE metadata lock. The lock's hold time then becomes that external system's round-trip time, and every operation waiting on the same lock pays it. The check is placed at the last layer the FE owns before a network request is issued, so a cache hit never reaches it and every reported violation is a request that really went out. Valid values: `off` (do not check), `warn` (log the violation with the offending caller's stack trace and let the call proceed), and `error` (refuse the call). Any unrecognized value behaves as `warn`. Unlike `lock_target_validation_mode`, this check is expected to report violations on a cluster that is behaving normally, because the call sites it covers are still being migrated; `warn` therefore turns them into a log you can aggregate by transport, and `error` is only appropriate once those logs are clean. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=blocking_call_under_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` or `lock_blocking_call_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_target_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a metadata lock is requested on an object the internal catalog does not own, such as a database from an external catalog or a placeholder table ID. Such an identifier names nothing the lock manager can protect: it either never collides with another lock, or collides with every other lock of its kind. Valid values: `off` (do not check), `warn` (log the violation with a stack trace and let the operation proceed), and `error` (refuse the operation). Any unrecognized value behaves as `warn`. Because this item is mutable, a cluster can run at `warn`, confirm that its logs stay clean, and then tighten to `error` without a restart. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION`, carrying the offending caller's stack trace; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - Default: 3
@@ -815,6 +842,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000
@@ -968,9 +1004,22 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2.0
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
-  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
+  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
 
-  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+  `/dump`, `/dump_starmgr`, and `/service_id` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege through a role that is active at login, for example the built-in `cluster_admin` role set as a default role of the user (when `activate_all_roles_on_login` is `true`, any granted role counts); the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
+
+  `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
+
+  Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+
+### `enable_rest_bearer_authentication`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1063,6 +1112,15 @@ This topic introduces the following types of FE configurations:
   1. `select version();`
   2. Handshake packet version
   3. Value of the global variable `version` (`show variables like 'version';`)
+- Introduced in: -
+
+### `mysql_service_compression_enabled`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE offers the MySQL compressed protocol (zlib and zstd) in the connection handshake. Only clients that request compression get compressed traffic, for example `mysql --compression-algorithms=zstd` or JDBC `useCompression=true`; other clients are unaffected. When set to `false`, the FE stops offering compression. A change applies to new connections only.
 - Introduced in: -
 
 ### `mysql_service_io_threads_num`
@@ -1206,7 +1264,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which idle client connections time out.
+- Description: The length of time after which idle client connections time out. The FE Thrift server closes a client connection once it has been idle for this long. An FE therefore replaces its own pooled connections to other FEs once they have been idle for 80% of this value, instead of sending a request on a connection that the other FE may already have closed. Set the same value on all FEs.
 - Introduced in: -
 
 ### `thrift_rpc_max_body_size`
@@ -1755,6 +1813,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
 - Introduced in: -
 
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- Default: 128L * 1024 * 1024 (134217728)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of the off-heap buffers that the FE keeps for gzip and zlib compression, such as compressing query profiles before they are stored in `ProfileManager`. Compressing between off-heap buffers keeps the JVM from blocking garbage collection during compression, which can otherwise make memory allocations fail with an `OutOfMemoryError` while the heap still has room to reclaim. Each compression in progress uses two 256 KB buffers regardless of the data size, so the default value allows 256 compressions at the same time. When no buffer is available within this limit, the data is compressed on the heap as before. Lowering the value at runtime takes effect as buffers are returned. Set it to `0` to disable off-heap compression: all data is then compressed on the heap in small chunks, and the off-heap buffers already allocated are released.
+- Introduced in: -
+
 ### `profile_info_format`
 
 - Default: default
@@ -1827,7 +1894,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
+- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Before each retry, the executor waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms) and only then reopens the connection, so that callers that lost their connections at the same moment do not all reconnect at the same moment. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
 - Introduced in: v3.2.0
 
 ### `thrift_rpc_strict_mode`

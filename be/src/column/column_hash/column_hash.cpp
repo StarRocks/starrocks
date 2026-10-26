@@ -233,8 +233,7 @@ public:
         }
     }
 
-    template <typename SizeT>
-    Status do_visit(const BinaryColumnBase<SizeT>& column) {
+    Status do_visit(const BinaryColumn& column) {
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();

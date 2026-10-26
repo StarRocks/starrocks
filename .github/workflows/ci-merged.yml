@@ -317,6 +317,8 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
       MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
+      # true = print the issue updates without writing them; unset = write.
+      ISSUE_DRY_RUN: ${{ vars.ISSUE_DRY_RUN }}
 
     steps:
       - name: Update Issue Body & Label(main)

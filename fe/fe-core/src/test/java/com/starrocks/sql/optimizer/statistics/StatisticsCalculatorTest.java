@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -43,6 +44,9 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -85,6 +89,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -356,6 +361,72 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testLogicalIcebergTableScanCapturesAnalyzedStatsToDump() {
+        // A query dump records the per-column ANALYZE row counts and the iceberg format version of an external table
+        // planned from ANALYZE statistics, so replay can reproduce the scan row count and V3-only rewrites.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> cols) {
+                Statistics.Builder builder = Statistics.builder();
+                cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
+                return builder.setOutputRowCount(100).build();
+            }
+        };
+        String analyzed = columns.get(0).getName();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+                return cols.stream().map(c -> c.equals(analyzed)
+                        ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
+                        : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+            }
+        };
+
+        DumpInfo previous = connectContext.getDumpInfo();
+        try {
+            QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+            // the analyzer registers every table of a dumped query
+            dumpInfo.addTable("partitioned_db", icebergTable);
+            connectContext.setDumpInfo(dumpInfo);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            Assertions.assertEquals(Map.of("partitioned_db.t1", Map.of(analyzed, 3612L)),
+                    dumpInfo.getExternalColumnRowCountMap());
+            Assertions.assertEquals(1, dumpInfo.getExternalTableFormatVersionMap().size());
+
+            // a dump info that does not keep these sections, and no dump at all, plan the same way
+            connectContext.setDumpInfo(new MockDumpInfo());
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            connectContext.setDumpInfo(null);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+        } finally {
+            connectContext.setDumpInfo(previous);
+            optimizerContext.setObtainedFromInternalStatistics(false);
+        }
+    }
+
+    private void estimateIcebergScan(Table icebergTable, Map<ColumnRefOperator, Column> refToColumn,
+                                     Map<Column, ColumnRefOperator> columnToRef) {
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                null, TvrTableSnapshot.empty());
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    @Test
     public void testLogicalOlapTableEmptyPartition() {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -599,6 +670,35 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testPredicateOnColumnPinnedToSingleValue() {
+        // `d_year = 2000` narrows the range to one value but keeps its NDV; the same filter applied again, e.g. on a
+        // CTE consumer, must keep every row instead of dividing by that NDV a second time
+        Statistics input = Statistics.builder().setOutputRowCount(1000).build();
+        ColumnStatistic pinned = new ColumnStatistic(2000, 2000, 0, 4, 202);
+        Assertions.assertEquals(1000, BinaryPredicateStatisticCalculator.estimatePredicateRange(Optional.empty(),
+                pinned, new StatisticRangeValues(2000, 2000, 1), input).getOutputRowCount(), 1e-6);
+        // `col < 2000` / `col > 2000` are encoded as ranges including 2000 (with NaN NDV, as the LT / GT estimators
+        // build them); they must not keep the pinned rows
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(Double.NEGATIVE_INFINITY, 2000, Double.NaN), input)
+                .getOutputRowCount(), 1e-6);
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(2000, Double.POSITIVE_INFINITY, Double.NaN), input)
+                .getOutputRowCount(), 1e-6);
+        // outside the pinned value: nothing is kept (the row count is floored at 1)
+        Assertions.assertTrue(BinaryPredicateStatisticCalculator.estimatePredicateRange(Optional.empty(),
+                pinned, new StatisticRangeValues(2001, 2001, 1), input).getOutputRowCount() <= 1);
+        // a string constant has no finite bounds, and a string column's min = max is only a placeholder
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), pinned, new StatisticRangeValues(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                        1), input).getOutputRowCount(), 1e-6);
+        // a real range still keeps 1 / NDV of its rows for a single value
+        ColumnStatistic spread = new ColumnStatistic(1900, 2100, 0, 4, 202);
+        Assertions.assertEquals(1000.0 / 202, BinaryPredicateStatisticCalculator.estimatePredicateRange(
+                Optional.empty(), spread, new StatisticRangeValues(2000, 2000, 1), input).getOutputRowCount(), 1e-6);
+    }
+
+    @Test
     public void testJoinEstimateWithMultiColumns() {
         // child 1 output column
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
@@ -659,6 +759,18 @@ public class StatisticsCalculatorTest {
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
         statisticsCalculator.estimatorStats();
         Assertions.assertEquals(1800000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+
+        // on predicate : t0.v2 = t1.v4 and t0.v1 = t1.v3, the same predicates in the other order: middle ground
+        // applies the larger selectivity first whatever the order, so the estimate must not change
+        GroupExpression swappedExpression = new GroupExpression(
+                new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND, eqOnPredicate2, eqOnPredicate1)),
+                Lists.newArrayList(childGroup1, childGroup2));
+        swappedExpression.setGroup(new Group(2));
+        ExpressionContext swappedContext = new ExpressionContext(swappedExpression);
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        new StatisticsCalculator(swappedContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(400000.0, swappedContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 2);

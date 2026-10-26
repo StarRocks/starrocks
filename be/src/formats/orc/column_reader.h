@@ -16,7 +16,9 @@
 
 #include <orc/OrcFile.hh>
 #include <utility>
+#include <vector>
 
+#include "base/time/tz_offset_cache.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -75,9 +77,9 @@ public:
     static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
                                                              bool nullable, const OrcMappingPtr& orc_mapping,
                                                              OrcChunkReader* reader);
-    static StatusOr<std::unique_ptr<ORCColumnReader>> create_default_column_reader(const TypeDescriptor& type,
-                                                                                   bool nullable,
-                                                                                   OrcChunkReader* reader);
+    static StatusOr<std::unique_ptr<ORCColumnReader>> create_default_column_reader(
+            const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+            const std::optional<std::string>& initial_default = std::nullopt);
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:
@@ -109,10 +111,15 @@ protected:
 
 class DefaultColumnReader final : public ORCColumnReader {
 public:
-    DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader)
-            : ORCColumnReader(type, nullptr, nullable, reader) {}
+    DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+                        ColumnPtr default_column = nullptr)
+            : ORCColumnReader(type, nullptr, nullable, reader), _default_column(std::move(default_column)) {}
     ~DefaultColumnReader() override = default;
     Status get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) override;
+
+private:
+    // one row holding an Iceberg initial-default; nullptr reads NULL
+    ColumnPtr _default_column;
 };
 
 class PrimitiveColumnReader : public ORCColumnReader {
@@ -237,6 +244,12 @@ public:
     ~TimestampColumnReader() override = default;
 
     Status get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) override;
+
+private:
+    // Offset windows of the reader time zone and per-batch scratch for TIMESTAMP_INSTANT values.
+    TzOffsetCache _offset_cache;
+    std::vector<int64_t> _offsets;
+    std::vector<uint8_t> _is_null;
 };
 
 class ComplexColumnReader : public ORCColumnReader {

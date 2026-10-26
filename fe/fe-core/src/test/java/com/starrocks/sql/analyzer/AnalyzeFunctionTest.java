@@ -18,12 +18,16 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -38,6 +42,10 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
+    private static final ScalarType CRS84_GEOGRAPHY = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                    "OGC:CRS84", 4326));
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -65,7 +73,7 @@ public class AnalyzeFunctionTest {
     public void testNativeGeographySqlBoundary() {
         QueryRelation relation = ((QueryStatement) analyzeSuccess(
                 "select ST_GeogFromText('POINT (1 2)')")).getQueryRelation();
-        Assertions.assertEquals(AnyGeographyType.GEOGRAPHY,
+        Assertions.assertEquals(CRS84_GEOGRAPHY,
                 ((SelectRelation) relation).getOutputExpression().get(0).getType());
 
         analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
@@ -118,6 +126,33 @@ public class AnalyzeFunctionTest {
                         "ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), " +
                         "ST_GeogFromText('POINT (3 4)'))",
                 "No matching function with signature: st_distance");
+    }
+
+    @Test
+    public void testNativeGeoStructAdmission() {
+        for (String geo : List.of("ST_GeogFromText('POINT (1 2)')",
+                "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
+            analyzeFail("select row(" + geo + ")", "does not support native GEO arguments");
+            analyzeFail("select ST_AsText(row(" + geo + ").col1)", "does not support native GEO arguments");
+            analyzeFail("select named_struct('g', " + geo + ")", "does not support native GEO arguments");
+            analyzeFail("select row(named_struct('g', " + geo + "))", "does not support native GEO arguments");
+            analyzeFail("select named_struct('g', row(" + geo + "))", "does not support native GEO arguments");
+            analyzeSuccess("select row(ST_AsText(" + geo + "))");
+        }
+        analyzeSuccess("select row(1, NULL, 'a')");
+        analyzeSuccess("select named_struct('i', 1, 'n', NULL)");
+        // Legacy geometry is VARCHAR and is not affected by native-GEO admission.
+        analyzeSuccess("select row(ST_GeomFromText('POINT (1 2)'))");
+    }
+
+    @Test
+    public void testGeometryOpaqueCrsDescriptor() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1 2)', 'EPSG:+4326')")).getQueryRelation();
+        ScalarType type = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals("EPSG:+4326", type.getGeoDescriptor().crs());
+        Assertions.assertNull(type.getGeoDescriptor().srid());
+        analyzeSuccess("select ST_AsText(ST_GeomFromText('POINT (1 2)', 'EPSG:+4326'))");
     }
 
     @Test
@@ -236,13 +271,269 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ST_Area('POLYGON ((0 0, 1 0, 0 0))')",
                 "No matching function with signature: st_area(varchar)");
     }
+    @Test
+    public void testNativeGeoBufferContract() {
+        for (String crs : new String[] {"EPSG:3857", "EPSG:4326"}) {
+            String geometry = "ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', '" + crs + "')";
+            for (String radius : new String[] {"1.0", "-1.0", "0", "NULL", "CAST(2 AS DOUBLE)"}) {
+                String sql = "select ST_Buffer(" + geometry + ", " + radius + ")";
+                assertFunctionContract(sql, 120401, PrimitiveType.GEOMETRY);
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+                ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs), output.getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_Area(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), r)) " +
+                "from (select CAST(1 AS DOUBLE) r union all select CAST(2 AS DOUBLE)) radii");
+        analyzeSuccess("select ST_SRID(ST_Buffer(ST_GeomFromText('POINT EMPTY', 'EPSG:4326'), 1))");
+        analyzeFail("select ST_Buffer(ST_GeogFromText('POINT (0 0)'), 1)", "No matching function with signature");
+        analyzeFail("select ST_Buffer('POINT (0 0)', 1)", "No matching function with signature");
+        analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'))",
+                "No matching function with signature");
+        analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 8)",
+                "No matching function with signature");
+        for (String function : new String[] {"ST_CoverageSimplify"}) {
+            analyzeFail("select " + function + "(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1)",
+                    "only used in analytic function");
+        }
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyContract() {
+        for (String crs : new String[] {"EPSG:3857", "EPSG:4326"}) {
+            String geometry = "ST_GeomFromText('LINESTRING (0 0,1 0,2 0)', '" + crs + "')";
+            for (String tolerance : new String[] {"0.01", "0", "NULL", "CAST(2 AS DOUBLE)"}) {
+                String sql = "select ST_SimplifyPreserveTopology(" + geometry + ", " + tolerance + ")";
+                assertFunctionContract(sql, 120411, PrimitiveType.GEOMETRY);
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+                ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs), output.getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_SRID(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('MULTIPOLYGON EMPTY', 'EPSG:4326'), 0))");
+        analyzeSuccess("select ST_AsText(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('GEOMETRYCOLLECTION (POINT EMPTY,LINESTRING (0 0,1 0,2 0))', 'EPSG:3857'), t)) " +
+                "from (select CAST(0 AS DOUBLE) t union all select CAST(1 AS DOUBLE)) tolerances");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeogFromText('POINT (0 0)'), 1)",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology('POINT (0 0)', 1)", "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'))",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 2)",
+                "No matching function with signature");
+    }
+
+    @Test
+    public void testNativeGeoCoverageWindowSignaturesAndDescriptors() {
+        for (String crs : new String[] {"EPSG:4326", "EPSG:3857"}) {
+            String geometry = "ST_GeomFromText('POLYGON EMPTY', '" + crs + "')";
+            for (String tail : new String[] {"0", "1 + 2", "NULL", "1, TRUE", "1, FALSE", "1, NULL"}) {
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                        "select ST_CoverageSimplify(" + geometry + ", " + tail + ") over ()")).getQueryRelation();
+                AnalyticExpr call = (AnalyticExpr) ((SelectRelation) relation).getOutputExpression().get(0);
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs),
+                        ((ScalarType) call.getType()).getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_CoverageSimplify(g, cast(1+2 as double), 1=1) over (partition by v1) " +
+                "from (select v1, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857') g from t0) q");
+        // A NULL optional parameter suppresses the kernel after constness/type checks.
+        analyzeSuccess("select ST_CoverageSimplify(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), -1, NULL) over ()");
+    }
+
+    @Test
+    public void testNativeGeoCoverageWindowRejectsUnsupportedForms() {
+        String geometry = "ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857')";
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1)", "only used in analytic function");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", v1) over () from t0", "plan-constant");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", v1, NULL) over () from t0", "plan-constant");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, v1=1) over () from t0", "plan-constant");
+        for (String parameter : new String[] {"-1", "1e200"}) {
+            analyzeFail("select ST_CoverageSimplify(" + geometry + ", " + parameter + ") over ()",
+                    "finite nonnegative tolerance");
+        }
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 'x') over ()", "tolerance must be numeric");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, 1) over ()", "boundary must be BOOLEAN");
+        analyzeFail("select ST_CoverageSimplify(ST_GeogFromText('POLYGON EMPTY'), 1) over ()",
+                    "native GEOMETRY CRS descriptor");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) over (order by v1) from t0", "full partition");
+        analyzeFail("select ST_CoverageSimplify(" + geometry +
+                ", 1) over (order by v1 rows between unbounded preceding and unbounded following) from t0",
+                "full partition");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) over ([skew] partition by v1) from t0");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) ignore nulls over ()");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) respect nulls over ()");
+        analyzeFail("select ST_CoverageSimplify(distinct " + geometry + ", 1) over ()");
+        analyzeFail("select ST_CoverageSimplify_state(" + geometry + ", 1)");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ") over ()", "two or three arguments");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, TRUE, TRUE) over ()", "two or three arguments");
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyRejectsMissingDescriptor() {
+        // Native SQL constructors attach a CRS; exercise the guard with a descriptorless resolved slot.
+        ScalarType geometryType = new ScalarType(PrimitiveType.GEOMETRY);
+        SlotRef geometry = new SlotRef(null, "geometry_without_crs");
+        geometry.setType(geometryType);
+        FloatLiteral tolerance = new FloatLiteral(1.0);
+        FunctionCallExpr call = new FunctionCallExpr(FunctionSet.ST_SIMPLIFY_PRESERVE_TOPOLOGY,
+                List.of(geometry, tolerance));
+
+        SemanticException error = Assertions.assertThrows(SemanticException.class,
+                () -> FunctionAnalyzer.getAnalyzedFunction(getConnectContext(), call,
+                        new Type[] {geometryType, tolerance.getType()}));
+        Assertions.assertEquals("st_simplifypreservetopology requires a GEOMETRY CRS descriptor", error.getDetailMsg());
+    }
+
+    @Test
+    public void testNativeGeoPolygonOverlayContract() {
+        String geometry = "ST_GeomFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))', 'EPSG:3857')";
+        String geography = "ST_GeogFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))')";
+        String[] functions = {"ST_Intersection", "ST_Union", "ST_Difference", "ST_SymDifference"};
+        long[] ids = {120341, 120351, 120361, 120371};
+        for (int i = 0; i < functions.length; ++i) {
+            String function = functions[i];
+            String sql = "select " + function + "(" + geometry + ", " + geometry + ")";
+            assertFunctionContract(sql, ids[i], PrimitiveType.GEOMETRY);
+            QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+            ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+            Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), output.getGeoDescriptor());
+            for (String arguments : new String[] {geometry + ", NULL", "NULL, " + geometry}) {
+                QueryRelation nullRelation = ((QueryStatement) analyzeSuccess(
+                        "select " + function + "(" + arguments + ")")).getQueryRelation();
+                ScalarType nullableOutput = (ScalarType) ((SelectRelation) nullRelation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), nullableOutput.getGeoDescriptor());
+            }
+            String degrees = geometry.replace("EPSG:3857", "EPSG:4326");
+            QueryRelation degreeRelation = ((QueryStatement) analyzeSuccess(
+                    "select ST_SRID(" + function + "(" + degrees + ", " + degrees + "))")).getQueryRelation();
+            Assertions.assertEquals(PrimitiveType.INT,
+                    ((SelectRelation) degreeRelation).getOutputExpression().get(0).getType().getPrimitiveType());
+            analyzeFail("select " + function + "(" + geometry + ", " + degrees + ")",
+                    "requires compatible GEOMETRY CRS descriptors");
+            analyzeFail("select " + function + "(" + geography + ", " + geography + ")",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "(" + geography + ", " + geometry + ")",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "('POLYGON EMPTY', 'POLYGON EMPTY')",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "(" + geometry + ")", "No matching function with signature");
+            analyzeFail("select " + function + "(" + geometry + ", " + geometry + ", 0)",
+                    "No matching function with signature");
+        }
+        analyzeSuccess("select ST_Area(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_AsText(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_Transform(ST_Intersection(" + geometry + ", " + geometry + "), 4326)");
+    }
+
+    @Test
+    public void testNativeGeoCrsContract() {
+        String geometry = "ST_GeomFromText('POINT (10 20)', 'EPSG:4326')";
+        String geography = "ST_GeogFromText('POINT (10 20)')";
+        assertFunctionContract("select ST_SRID(" + geometry + ")", 120300, PrimitiveType.INT);
+        assertFunctionContract("select ST_SetSRID(" + geometry + ", 3857)", 120305, PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_Transform(" + geometry + ", 3857)", 120310, PrimitiveType.GEOMETRY);
+
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_Transform(" + geometry + ", cast(4326 + 1 - 1 as int))")).getQueryRelation();
+        ScalarType transformedType = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:4326"), transformedType.getGeoDescriptor());
+
+        QueryRelation retagged = ((QueryStatement) analyzeSuccess(
+                "select ST_SetSRID(" + geometry + ", 3857)")).getQueryRelation();
+        ScalarType retaggedType = (ScalarType) ((SelectRelation) retagged).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), retaggedType.getGeoDescriptor());
+
+        analyzeFail("select ST_Transform(" + geometry + ", cast(v1 as int)) from t0",
+                "requires a foldable constant target SRID");
+        analyzeFail("select ST_Transform(" + geometry + ", cast(null as int))",
+                "requires a positive INT target SRID");
+        analyzeFail("select ST_SetSRID(" + geometry + ", 0)",
+                "requires a positive INT target SRID");
+        for (String function : new String[] {"ST_SetSRID", "ST_Transform"}) {
+            for (String invalidSrid : new String[] {
+                    "2147483648", "18446744073709555942", "-18446744073709547290"}) {
+                analyzeFail("select " + function + "(" + geometry + ", " + invalidSrid + ")",
+                        "requires a positive INT target SRID");
+            }
+        }
+        for (String function : new String[] {"ST_SetSRID", "ST_Transform"}) {
+            analyzeFail("select " + function + "(" + geometry + ", 9895)",
+                    "supports only EPSG:4326 and EPSG:3857");
+        }
+        analyzeFail("select ST_Transform(" + geography + ", 3857)",
+                "No matching function with signature: st_transform");
+    }
+
+    @Test
+    public void testH3Contract() {
+        String point = "ST_GeogFromText('POINT (0 0)')";
+        String polygon = "ST_GeogFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')";
+        assertFunctionContract("select H3_FromGeo(" + point + ", 3)", 120500, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_GridDisk(617700169958293503, 1)", 120501);
+        assertFunctionContract("select H3_ToParent(617700169958293503, 2)", 120502, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_ToChildren(617700169958293503, 4)", 120503);
+        assertFunctionContract("select H3_Resolution(617700169958293503)", 120504, PrimitiveType.INT);
+        assertH3ArrayContract("select H3_PolygonToCells(" + polygon + ", 3)", 120506);
+
+        QueryStatement statement = (QueryStatement) analyzeSuccess(
+                "select H3_ToBoundary(617700169958293503)");
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(120505, call.getFn().getFunctionId());
+        ScalarType type = (ScalarType) call.getType();
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, type.getPrimitiveType());
+        Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                "OGC:CRS84", 4326), type.getGeoDescriptor());
+        analyzeFail("select H3_FromGeo(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 3)",
+                "No matching function with signature: h3_fromgeo");
+    }
+
+    @Test
+    public void testH3SqlPlanning() throws Exception {
+        String cell = "592035265791393791";
+        String point = "ST_GeogFromText('POINT (0 0)')";
+        String polygon = "ST_GeogFromText('POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))')";
+        // Cover SQL-tester query planning, including optimizer statistics and fragment construction.
+        for (String sql : List.of(
+                "SELECT IF(H3_FromGeo(" + point + ", 3) = " + cell + ", 'OK', 'FAIL')",
+                "SELECT IF(H3_Resolution(" + cell + ") = 3 AND H3_ToParent(" + cell + ", 3) = " + cell +
+                        " AND array_length(H3_ToChildren(" + cell + ", 3)) = 1, 'OK', 'FAIL')",
+                "SELECT IF(array_length(H3_GridDisk(" + cell + ", 0)) = 1 AND array_contains(H3_GridDisk(" +
+                        cell + ", 0), " + cell + "), 'OK', 'FAIL')",
+                "SELECT IF(ST_GeometryType(H3_ToBoundary(" + cell + ")) = 'ST_Polygon', 'OK', 'FAIL')",
+                "SELECT IF(array_contains(H3_PolygonToCells(" + polygon + ", 3), " + cell + "), 'OK', 'FAIL')",
+                "SELECT IF(H3_Resolution(CAST(NULL AS BIGINT)) IS NULL AND " +
+                        "H3_FromGeo(ST_GeogFromText('POINT EMPTY'), 3) IS NULL, 'OK', 'FAIL')",
+                "SELECT IF(array_length(H3_PolygonToCells(ST_GeogFromText('POLYGON EMPTY'), 3)) = 0, 'OK', 'FAIL')",
+                "SELECT H3_FromGeo(ST_GeogFromText('POINT (0 0)', 4326), 3)",
+                "SELECT H3_FromGeo(ST_GeogFromWKB(ST_AsWKB(" + point + ")), 3)",
+                "SELECT H3_FromGeo(ST_GeogFromWKB(ST_AsWKB(" + point + "), 4326), 3)",
+                "SELECT H3_FromGeo(ST_Centroid(" + polygon + "), 3)")) {
+            UtFrameUtils.getPlanAndFragment(getConnectContext(), sql).second.getFragments().forEach(fragment -> {
+                fragment.toThrift();
+            });
+        }
+    }
+
+    private static void assertH3ArrayContract(String sql, long functionId) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
+        Assertions.assertTrue(call.getType().isArrayType(), sql);
+        Assertions.assertEquals(PrimitiveType.BIGINT, ((ArrayType) call.getType()).getItemType().getPrimitiveType(), sql);
+    }
+
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                 .getOutputExpression().get(0);
         Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
         if (returnType == PrimitiveType.GEOGRAPHY) {
-            Assertions.assertEquals(AnyGeographyType.GEOGRAPHY, call.getType(), sql);
+            Assertions.assertEquals(CRS84_GEOGRAPHY, call.getType(), sql);
         } else {
             Assertions.assertEquals(returnType, call.getType().getPrimitiveType(), sql);
         }

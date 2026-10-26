@@ -867,4 +867,56 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clo
     ASSERT_EQ(3, to_char.value()->size());
 }
 
+// One base row whose remain is the JSON object `json`, with the given typed path.
+static MutableColumnPtr build_one_row_variant_with_typed_path(const std::string& json, const std::string& path,
+                                                              const TypeDescriptor& type, MutableColumnPtr typed) {
+    auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+    DCHECK(encoded.ok()) << encoded.status().to_string();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto metadata_raw = encoded->get_metadata().raw();
+    auto value_raw = encoded->get_value().raw();
+    metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+    remain->append(Slice(value_raw.data(), value_raw.size()));
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({path}, {type}, std::move(typed_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+// A path read as ARRAY<VARIANT> (shredded array) in one chunk and as VARIANT in another merges into VARIANT
+// without losing the array elements, which are a VariantColumn.
+PARALLEL_TEST(VariantColumnMergerTest, merge_array_of_variant_path_with_variant_path) {
+    const TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    auto elements = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    for (const char* element_json : {R"({"k":1})", R"({"k":2})"}) {
+        auto element = VariantEncoder::encode_json_text_to_variant(element_json);
+        ASSERT_TRUE(element.ok());
+        elements->append_datum(Datum(&element.value()));
+    }
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    auto array_typed = NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                              NullColumn::create(1, 0));
+    auto src0 = build_one_row_variant_with_typed_path(R"({"x":1})", "a", array_of_variant, std::move(array_typed));
+
+    auto variant_typed = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    auto value = VariantEncoder::encode_json_text_to_variant("[3]");
+    ASSERT_TRUE(value.ok());
+    variant_typed->append_datum(Datum(&value.value()));
+    auto src1 = build_one_row_variant_with_typed_path(R"({"x":2})", "a", TypeDescriptor(TYPE_VARIANT),
+                                                      std::move(variant_typed));
+
+    Columns inputs{std::move(src0), std::move(src1)};
+    auto merged_status = VariantColumnMerger::merge(inputs);
+    ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
+    auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
+    ASSERT_EQ(2, merged->size());
+    EXPECT_EQ(TYPE_VARIANT, merged->shredded_types()[merged->find_shredded_path("a")].type);
+    assert_variant_row_json(merged, 0, R"({"a":[{"k":1},{"k":2}],"x":1})");
+    assert_variant_row_json(merged, 1, R"({"a":[3],"x":2})");
+}
+
 } // namespace starrocks

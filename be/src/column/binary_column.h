@@ -34,17 +34,11 @@
 
 namespace starrocks {
 
-template <typename T>
-class BinaryColumnBase;
-
 class BinaryImmContainer {
 public:
     BinaryImmContainer() = default;
 
-    template <typename T>
-    explicit BinaryImmContainer(const BinaryColumnBase<T>& column) {
-        init(column);
-    }
+    explicit BinaryImmContainer(const BinaryColumn& column) : _column(&column) {}
 
     Slice operator[](size_t index) const;
 
@@ -53,17 +47,18 @@ public:
     size_t immutable_bytes_size() const;
 
 private:
-    template <typename T>
-    void init(const BinaryColumnBase<T>& column);
-
-    const Column* _column = nullptr;
-    bool _is_large = false;
+    const BinaryColumn* _column = nullptr;
 };
 
 // Serialize the |idx|-th binary value as [uint32_t length][bytes] into |pos| and return the
 // number of bytes written. This is the single definition of the binary serialize wire format:
 // the per-element serialize() and the batch serializers all encode through it, each dispatching
 // the offsets width once at its own boundary.
+//
+// THIS FORMAT IS PERSISTED. RowStoreEncoderSimple writes it into the tablet for
+// column-with-row-store tables, and its reader hardcodes the 4-byte width
+// (row_store_encoder_simple.cpp: "0x0 (column separator) + col length (4) + char(n) value").
+// Do not change it without a row-store format version.
 template <typename Offset>
 ALWAYS_INLINE uint32_t serialize_binary_element(const Offset* __restrict offsets, size_t idx,
                                                 const uint8_t* __restrict base, uint8_t* pos) {
@@ -75,20 +70,68 @@ ALWAYS_INLINE uint32_t serialize_binary_element(const Offset* __restrict offsets
     return sizeof(uint32_t) + binary_size;
 }
 
-template <typename T>
-class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
-    friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
+// ---------------------------------------------------------------------------------------------
+// Compact length prefix, used only by the in-memory hash-table key encoders (group by, distinct,
+// except/intersect, partition) via the serialize_batch* / deserialize_*_batch* family. Never
+// persisted and never sent over the wire.
+//
+//   len <= 254 : [uint8 len]
+//   len >= 255 : [0xFF][uint32 len]
+//
+// A serialized group-by key is compared byte-for-byte, so the encoding must be canonical: the
+// encoder MUST always pick the shortest form. Emitting the escape form for a short length would
+// give one logical key two different byte strings and split it into two hash-table entries.
+// ---------------------------------------------------------------------------------------------
+inline constexpr uint8_t BINARY_COMPACT_LEN_ESCAPE = 0xFF;
+inline constexpr uint32_t BINARY_COMPACT_LEN_INLINE_MAX = 254;
+
+inline ALWAYS_INLINE uint32_t compact_len_size(uint32_t len) {
+    return len <= BINARY_COMPACT_LEN_INLINE_MAX ? 1 : 1 + sizeof(uint32_t);
+}
+
+inline ALWAYS_INLINE uint32_t write_compact_len(uint8_t* pos, uint32_t len) {
+    if (LIKELY(len <= BINARY_COMPACT_LEN_INLINE_MAX)) {
+        *pos = static_cast<uint8_t>(len);
+        return 1;
+    }
+    *pos = BINARY_COMPACT_LEN_ESCAPE;
+    strings::memcpy_inlined(pos + 1, &len, sizeof(uint32_t));
+    return 1 + sizeof(uint32_t);
+}
+
+inline ALWAYS_INLINE const uint8_t* read_compact_len(const uint8_t* pos, uint32_t* len) {
+    const uint8_t head = *pos;
+    if (LIKELY(head != BINARY_COMPACT_LEN_ESCAPE)) {
+        *len = head;
+        return pos + 1;
+    }
+    strings::memcpy_inlined(len, pos + 1, sizeof(uint32_t));
+    return pos + 1 + sizeof(uint32_t);
+}
+
+// Compact counterpart of serialize_binary_element().
+template <typename Offset>
+ALWAYS_INLINE uint32_t serialize_binary_element_compact(const Offset* __restrict offsets, size_t idx,
+                                                        const uint8_t* __restrict base, uint8_t* pos) {
+    const auto offset = offsets[idx];
+    const auto binary_size = static_cast<uint32_t>(offsets[idx + 1] - offset);
+    const uint32_t header_size = write_compact_len(pos, binary_size);
+    strings::memcpy_inlined(pos + header_size, base + offset, binary_size);
+    return header_size + binary_size;
+}
+
+class BinaryColumn final : public CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn> {
+    friend class CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn>;
 
 public:
     using ValueType = Slice;
 
     /*
-     * Use AdaptiveOffsets instead of Buffer<T> to store offsets, which can automatically promote to uint64_t
+     * Use AdaptiveOffsets instead of Buffer<uint32_t> to store offsets, which can automatically promote to uint64_t
      * when the offset value exceeds UINT32_MAX.
-     * For the compatibility reason, we still reserve the binaryColumn/LargeBinaryColumn interface for the callers,
-     * But we will re-implement them using the newly added AdaptiveOffsets.
+     * BinaryColumn therefore covers payloads over 4GB as well.
      *
-     * Important NOTE: Even upgrade offset from Buffer<T> -> AdaptiveOffsets, max size of single element is still 2^32 !!!!
+     * Important NOTE: Even upgrade offset from Buffer<uint32_t> -> AdaptiveOffsets, max size of single element is still 2^32 !!!!
     */
     using Offsets = AdaptiveOffsets;
     using Byte = uint8_t;
@@ -100,64 +143,53 @@ public:
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumnBase() { _offsets.emplace_back(0); }
+    BinaryColumn() { _offsets.emplace_back(0); }
     // Default value is empty string
-    explicit BinaryColumnBase(size_t size) { _offsets.resize(size + 1, 0); }
-    BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    explicit BinaryColumn(size_t size) { _offsets.resize(size + 1, 0); }
+    BinaryColumn(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
+    explicit BinaryColumn(ContainerResource resource, Offsets offsets);
 
-    DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
+    DISALLOW_COPY(BinaryColumn);
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
+    BinaryColumn(BinaryColumn&& rhs) noexcept
             : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), _resource(std::move(rhs._resource)) {}
 
-    BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
-        BinaryColumnBase<T> tmp(std::move(rhs));
+    BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
+        BinaryColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
     }
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override;
-
     // Whether the byte payload size and offset payload byte size fit the size
-    // representation used by this BinaryColumnBase instance.
+    // representation used by the legacy u32 format.
     Status is_payload_size_representable() const {
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            constexpr uint64_t max_capacity_limit = Column::MAX_CAPACITY_LIMIT;
-            const auto bytes_size = get_immutable_bytes().size();
-            if (bytes_size >= max_capacity_limit) {
-                return Status::CapacityLimitExceed(fmt::format(
-                        "Binary column byte payload size is not representable with legacy u32 format, bytes_size: {}, "
-                        "limit: {}",
-                        bytes_size, max_capacity_limit));
-            }
-
-            const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
-            if (offset_bytes_size >= max_capacity_limit) {
-                return Status::CapacityLimitExceed(
-                        fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
-                                    "offset_bytes_size: {}, limit: {}",
-                                    offset_bytes_size, max_capacity_limit));
-            }
-
-            return Status::OK();
-        } else {
-            static_assert(std::is_same_v<T, uint64_t>);
-            return Status::OK();
+        constexpr uint64_t max_capacity_limit = Column::MAX_CAPACITY_LIMIT;
+        const auto bytes_size = get_immutable_bytes().size();
+        if (bytes_size >= max_capacity_limit) {
+            return Status::CapacityLimitExceed(fmt::format(
+                    "Binary column byte payload size is not representable with legacy u32 format, bytes_size: {}, "
+                    "limit: {}",
+                    bytes_size, max_capacity_limit));
         }
+
+        const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
+        if (offset_bytes_size >= max_capacity_limit) {
+            return Status::CapacityLimitExceed(
+                    fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
+                                "offset_bytes_size: {}, limit: {}",
+                                offset_bytes_size, max_capacity_limit));
+        }
+
+        return Status::OK();
     }
 
-    ~BinaryColumnBase() override {
+    ~BinaryColumn() override {
 #ifndef NDEBUG
         // sometimes we may fill _bytes and _offsets separately and resize them in the final stage,
         // if an exception is thrown in the middle process, _offsets maybe inconsistent with _bytes,
@@ -177,8 +209,7 @@ public:
         }
     }
 
-    bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
-    bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
+    bool is_binary() const override { return true; }
 
     size_t size() const override { return _offsets.size() - 1; }
 
@@ -295,10 +326,19 @@ public:
 
     uint32_t max_one_element_serialize_size() const override;
 
+    uint32_t max_one_element_serialize_size_compact() const override;
+
     ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
         const uint8_t* base = _data_base();
         return _offsets.visit_storage([&](const auto& offsets) -> uint32_t {
             return serialize_binary_element(offsets.data(), idx, base, pos);
+        });
+    }
+
+    ALWAYS_INLINE uint32_t serialize_compact(size_t idx, uint8_t* pos) const override {
+        const uint8_t* base = _data_base();
+        return _offsets.visit_storage([&](const auto& offsets) -> uint32_t {
+            return serialize_binary_element_compact(offsets.data(), idx, base, pos);
         });
     }
 
@@ -319,17 +359,19 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
+    const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
+
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size, Buffer<uint8_t>& is_nulls,
                                                bool& has_null) override;
 
     uint32_t serialize_size(size_t idx) const override {
-        // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
+        // max size of one string is 2^32, so use sizeof(uint32_t)
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
+    MutableColumnPtr clone_empty() const override { return BinaryColumn::create(); }
 
     MutableColumnPtr clone() const override {
         auto p = clone_empty();
@@ -351,14 +393,7 @@ public:
     void set_is_binary_type(bool v) { _is_binary_type = v; }
     bool is_binary_type() const { return _is_binary_type; }
 
-    std::string get_name() const override {
-        static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-        if (std::is_same_v<T, uint32_t>) {
-            return "binary";
-        } else {
-            return "large-binary";
-        }
-    }
+    std::string get_name() const override { return "binary"; }
 
     GermanStringContainer& get_german_strings() {
         if (!_german_strings_cache) {
@@ -403,7 +438,7 @@ public:
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
-        auto& r = down_cast<BinaryColumnBase<T>&>(rhs);
+        auto& r = down_cast<BinaryColumn&>(rhs);
         using std::swap;
         swap(this->_delete_state, r._delete_state);
         swap(_bytes, r._bytes);
@@ -445,7 +480,7 @@ public:
 
 private:
     void _append_binary_impl(const Offsets& src_offsets, const uint8_t* src_base, size_t offset, size_t count);
-    void _append_selective_general(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
+    void _append_selective_general(const BinaryColumn& src_column, const uint32_t* indexes, uint32_t size,
                                    size_t prev_num_offsets, uint64_t dst_begin);
 
     void _build_german_strings() const;
@@ -468,15 +503,11 @@ private:
     bool _is_binary_type = false;
 };
 
-using Offsets = BinaryColumnBase<uint32_t>::Offsets;
-using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
+using Offsets = BinaryColumn::Offsets;
 
 inline Slice BinaryImmContainer::operator[](size_t index) const {
     DCHECK(_column != nullptr);
-    if (_is_large) {
-        return down_cast<const LargeBinaryColumn*>(_column)->get_slice(index);
-    }
-    return down_cast<const BinaryColumn*>(_column)->get_slice(index);
+    return _column->get_slice(index);
 }
 
 inline size_t BinaryImmContainer::size() const {
@@ -487,16 +518,7 @@ inline size_t BinaryImmContainer::immutable_bytes_size() const {
     if (_column == nullptr) {
         return 0;
     }
-    if (_is_large) {
-        return down_cast<const LargeBinaryColumn*>(_column)->get_immutable_bytes().size();
-    }
-    return down_cast<const BinaryColumn*>(_column)->get_immutable_bytes().size();
-}
-
-template <typename T>
-inline void BinaryImmContainer::init(const BinaryColumnBase<T>& column) {
-    _column = &column;
-    _is_large = std::is_same_v<T, uint64_t>;
+    return _column->get_immutable_bytes().size();
 }
 
 } // namespace starrocks

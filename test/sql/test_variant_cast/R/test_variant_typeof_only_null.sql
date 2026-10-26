@@ -5,7 +5,7 @@ None
 -- !result
 SELECT variant_typeof(variant_query(s.v, '$.missing')) FROM (SELECT PARSE_JSON('{"age": 7}') AS v) s;
 -- result:
-Null
+None
 -- !result
 SELECT variant_typeof(variant_query(s.v, '$.age')) FROM (SELECT PARSE_JSON('{"age": 7}') AS v) s;
 -- result:

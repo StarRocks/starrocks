@@ -16,12 +16,14 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "exprs/ai/ai_function_result.h"
 #include "exprs/expr.h"
+#include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
 
 namespace starrocks {
@@ -38,6 +40,7 @@ struct AIFunctionRowInput {
     AIFunctionRowAction action = AIFunctionRowAction::SQL_NULL;
     std::string model;
     std::string prompt;
+    std::optional<AIMediaInput> media;
 };
 
 struct AIFunctionInputBatch {
@@ -53,16 +56,14 @@ public:
 
     Expr* clone(ObjectPool* pool) const override;
 
-    std::string_view model_config_id() const { return _model_config_id; }
-    TAIModelSource::type model_source() const;
+    std::string_view provider_id() const { return _provider_id; }
     AICapability capability() const;
     AIFunctionResultKind result_kind() const;
-    bool requires_default_model() const;
 
     bool is_constant() const override { return false; }
 
-    StatusOr<AIFunctionInputBatch> build_input_batch(ExprContext* context, Chunk* chunk,
-                                                     std::string_view default_model) const;
+    StatusOr<AIFunctionInputBatch> build_input_batch(ExprContext* context, Chunk* chunk, std::string_view default_model,
+                                                     size_t max_input_file_bytes = kDefaultAIMaxInputFileBytes) const;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override;
 
@@ -78,7 +79,7 @@ private:
     Status _validate_children() const;
 
     const AIFunctionDescriptor* const _descriptor;
-    const std::string _model_config_id;
+    const std::string _provider_id;
     const std::vector<TypeDescriptor> _argument_types;
 };
 

@@ -65,6 +65,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -375,8 +376,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                backgroundExecutor.submit(() -> partitionCache.refresh(key));
-                return null;
+                try {
+                    backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                    return null;
+                } catch (RejectedExecutionException e) {
+                    // The connector was shut down while this query was in flight; load synchronously instead.
+                }
             }
         }
         return IcebergCatalog.super.listPartitionNames(icebergTable, requestContext, executorService);
@@ -541,6 +546,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void shutdown() {
+        delegate.shutdown();
+    }
+
+    @Override
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
@@ -588,6 +598,27 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private Caffeine<Object, Object> newCacheBuilderWithMaximumSize(long expiresAfterWriteSec, long refreshInterval,
                                                                     long maximumSize) {
         return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
+    }
+
+    // Returns the cached data files of this manifest whose locations are in `locations`, or null unless the
+    // manifest is cached completely (its live file count is known and matches the cached entry).
+    public Map<String, DataFile> findCachedDataFiles(ManifestFile manifest, Set<String> locations) {
+        Set<DataFile> files = dataFileCache.getIfPresent(manifest.path());
+        Integer added = manifest.addedFilesCount();
+        Integer existing = manifest.existingFilesCount();
+        if (files == null || added == null || existing == null || files.size() != added + existing) {
+            return null;
+        }
+        Map<String, DataFile> found = new HashMap<>();
+        for (DataFile file : files) {
+            if (locations.contains(file.location())) {
+                if (file.specId() != manifest.partitionSpecId()) {
+                    return null;
+                }
+                found.put(file.location(), file);
+            }
+        }
+        return found;
     }
 
     // We still allow reads from caches, but skip populating or refreshing them when this flag is set.

@@ -46,7 +46,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         });
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-                RETURN_IF_ERROR(iceberg_delete_builder.build_parquet(*delete_file));
+                RETURN_IF_ERROR(iceberg_delete_builder.build_position_delete(*delete_file, THdfsFileFormat::PARQUET));
             } else {
                 const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                    delete_file->file_content);
@@ -111,6 +111,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
 
     // dict filter
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
+    RuntimeProfile::Counter* group_chunk_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
     RuntimeProfile::Counter* dict_code_predicate_eval_count = nullptr;
@@ -175,6 +176,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     column_reader_init_timer = ADD_CHILD_TIMER(root, "ReaderInitColumnReaderInit", kParquetProfileSectionPrefix);
 
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
+    group_chunk_filter_timer = ADD_CHILD_TIMER(root, "GroupChunkFilter", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
     dict_code_predicate_eval_count =
@@ -230,6 +232,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(footer_cache_read_timer, _app_stats.footer_cache_read_ns);
     COUNTER_UPDATE(column_reader_init_timer, _app_stats.column_reader_init_ns);
     COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
+    COUNTER_UPDATE(group_chunk_filter_timer, _app_stats.group_chunk_filter_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
     COUNTER_UPDATE(active_lazy_coalesce_together, _app_stats.active_lazy_coalesce_together);

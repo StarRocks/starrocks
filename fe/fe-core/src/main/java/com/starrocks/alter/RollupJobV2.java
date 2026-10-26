@@ -834,8 +834,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             // If waitingCreatingReplica == false, we will assume that
             // cancel thread will get the object lock very quickly.
             if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+                // No latch means the wait has ended since, and the job was reset or pruned.
+                MarkedCountDownLatch<Long, Long> latch = createReplicaLatch;
+                if (latch != null) {
+                    latch.countDownToZero(new Status(TStatusCode.OK, ""));
+                }
             }
             synchronized (this) {
                 return cancelInternal(errMsg);
@@ -1042,9 +1045,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
-        // progress
-        if (jobState == JobState.RUNNING && rollupBatchTask.getTaskNum() > 0) {
-            info.add(rollupBatchTask.getFinishedTaskNum() + "/" + rollupBatchTask.getTaskNum());
+        // progress. Read once: this runs without the job lock, and pruning the done job replaces the batch.
+        AgentBatchTask batchTask = rollupBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            info.add(batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum());
         } else {
             info.add(FeConstants.NULL_STRING);
         }
@@ -1071,6 +1075,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @Override
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
         return physicalPartitionIdToRollupIndex;
+    }
+
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIdToRollupIndex = Maps.newHashMap();
+        physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+        rollupBatchTask = new AgentBatchTask();
+        // A cancel in PENDING or a replica creation timeout leaves a mark for every replica not created.
+        createReplicaLatch = null;
     }
 
     private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {

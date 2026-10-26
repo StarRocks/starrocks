@@ -36,75 +36,6 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
-    // small column
-    auto column = BinaryColumn::create();
-    for (size_t i = 0; i < 10; i++) {
-        column->append(std::to_string(i));
-    }
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    // offset overflow
-    column = BinaryColumn::create();
-    size_t count = 1 << 30;
-    for (size_t i = 0; i < count; i++) {
-        column->append(std::to_string(i));
-    }
-    ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value()->is_large_binary());
-    ASSERT_EQ(ret.value()->size(), count);
-
-    for (size_t i = 0; i < count; i++) {
-        ASSERT_EQ(ret.value()->get(i).get_slice().to_string(), std::to_string(i));
-    }
-
-    // row size overflow
-    // this case will allocate a lot of memory, so it is temporarily disabled
-    count = Column::MAX_CAPACITY_LIMIT + 5;
-    column = BinaryColumn::create();
-    column->reserve(count);
-    for (size_t i = 0; i < count; i++) {
-        column->append("a");
-    }
-    ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(!ret.ok());
-}
-
-// NOLINTNEXTLINE
-GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
-    auto column = BinaryColumn::create();
-    column->append_string("test");
-    ASSERT_FALSE(column->has_large_column());
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    auto large_column = LargeBinaryColumn::create();
-    ASSERT_TRUE(large_column->has_large_column());
-    for (size_t i = 0; i < 10; i++) {
-        large_column->append_string(std::to_string(i));
-    }
-    ret = large_column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(ret.value()->has_large_column());
-    ASSERT_EQ(ret.value()->size(), 10);
-    for (size_t i = 0; i < 10; i++) {
-        ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
-    }
-
-    large_column = LargeBinaryColumn::create();
-    size_t count = 1 << 29;
-    for (size_t i = 0; i < count; i++) {
-        large_column->append("0123456789");
-    }
-    ret = large_column->downgrade();
-    ASSERT_FALSE(ret.ok());
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_get_data) {
     auto column = BinaryColumn::create();
     for (int i = 0; i < 100; i++) {
@@ -228,6 +159,17 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_TRUE(c1->append_strings_overflow(values.data(), 0, max_length));
     ASSERT_EQ(values.size() * 2, c1->size());
     ASSERT_EQ(total_length * 2, c1->get_bytes().size());
+
+    // A dictionary of long values can still hand out a batch whose selected values are all
+    // empty. The offsets must repeat the current end and the byte buffer must not grow.
+    auto c3 = BinaryColumn::create();
+    std::vector<Slice> empties(4, Slice(backing.data(), 0));
+    ASSERT_TRUE(c3->append_strings_overflow(empties.data(), empties.size(), max_length));
+    ASSERT_EQ(empties.size(), c3->size());
+    ASSERT_EQ(0u, c3->get_bytes().size());
+    for (size_t i = 0; i < empties.size(); i++) {
+        ASSERT_EQ(0u, c3->immutable_data()[i].size);
+    }
 
     // Nullable BinaryColumn forwards to the same path.
     auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
@@ -769,13 +711,6 @@ PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
     EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
 }
 
-PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("foo"); // 3 bytes
-    col->append_string("bar"); // 3 bytes
-    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
-}
-
 // ---- append(const Column& src, size_t offset, size_t count) ----
 
 // Same type: BinaryColumn -> BinaryColumn
@@ -785,30 +720,6 @@ PARALLEL_TEST(BinaryColumnTest, test_append_same_type_binary) {
     dst->append(*src, 1, 2); // append "bb", "cc"
 
     EXPECT_EQ("['xx', 'bb', 'cc']", dst->debug_string());
-}
-
-// Same type: LargeBinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_same_type_large_binary) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("aa");
-    src->append_string("bb");
-    src->append_string("cc");
-
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("xx");
-    dst->append(*src, 0, 2); // append "aa", "bb"
-
-    EXPECT_EQ("['xx', 'aa', 'bb']", dst->debug_string());
-}
-
-// Cross type: BinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_binary_to_large) {
-    auto src = ColumnTestHelper::build_column<Slice>({"hello", "world", "foo"});
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("bar");
-    dst->append(*src, 1, 2); // append "world", "foo"
-
-    EXPECT_EQ("['bar', 'world', 'foo']", dst->debug_string());
 }
 
 // Append from offset=0 into an empty dst
@@ -829,13 +740,258 @@ PARALLEL_TEST(BinaryColumnTest, test_append_zero_count) {
     EXPECT_EQ("['y']", dst->debug_string());
 }
 
-// Cross type (unsupported): LargeBinaryColumn -> BinaryColumn must be rejected.
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupported) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("hello");
+// Cross type (unsupported): a non-binary column -> BinaryColumn must be rejected.
+PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_non_binary_unsupported) {
+    auto src = Int32Column::create();
+    src->append(1);
     auto dst = BinaryColumn::create();
     dst->append_string("bar");
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
+}
+
+// Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
+//   BinaryColumn::deserialize_and_append_batch_nullable() <- NullableColumn::
+//   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
+//   Aggregator::convert_hash_set_to_chunk().
+//
+// convert_hash_set_to_chunk() sizes `hash_set.results` to the whole chunk size and then fills only
+// the first `read_index` entries. A streaming DISTINCT aggregation that AggregateDistinctStreaming
+// SourceOperator::_output_chunk_from_hash_set() has just reset drains a brand new, empty hash set,
+// so read_index is 0 and every Slice in the buffer is still default constructed -- Slice() points
+// its data at the 1-byte "" literal. Both deserialize_and_append_batch overloads peeked at srcs[0]
+// to size a reserve() before consulting chunk_size, reading 4 bytes off the end of that literal.
+//
+// Deserializing zero rows must not touch srcs[0] at all.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_size) {
+    // Exactly what Aggregator::convert_hash_set_to_chunk() hands down when the hash set is empty:
+    // a full-size buffer of default constructed slices, and a row count of 0.
+    Buffer<Slice> srcs(4096);
+    ASSERT_EQ(0u, srcs[0].size);
+
+    auto column = BinaryColumn::create();
+    column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, column->size());
+
+    auto large_column = BinaryColumn::create();
+    large_column->get_offset().ensure_width_for_value(uint64_t{1} << 32);
+    ASSERT_TRUE(large_column->get_offset().is_large());
+    large_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, large_column->size());
+
+    // The nullable wrapper is the path the crash actually took.
+    auto nullable_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    nullable_column->deserialize_and_append_batch(srcs, 0);
+    ASSERT_EQ(0u, nullable_column->size());
+    ASSERT_FALSE(nullable_column->has_null());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Compact key encoding (serialize_compact / serialize_batch* / deserialize_compact_and_append).
+//
+// These bytes are compared for equality inside the group-by / distinct / except / intersect /
+// partition hash tables, so two invariants decide correctness and both are tested here:
+//
+//   1. The encoding is canonical -- one length has exactly one byte string. A non-canonical
+//      encoder would give one logical key two byte strings and split it into two groups.
+//   2. The row-wise encoder (serialize_compact, used by the huge-key fallback) and the
+//      column-wise encoder (serialize_batch*) agree byte for byte. Mixing the two inside one
+//      hash table has the same effect.
+//
+// The legacy serialize()/deserialize_and_append() pair must stay on the 4-byte prefix, because
+// RowStoreEncoderSimple persists it into the tablet.
+// ---------------------------------------------------------------------------------------------
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_compact_len_roundtrip) {
+    // Both sides of the escape boundary, plus the values around it.
+    const std::vector<uint32_t> lengths = {0, 1, 2, 127, 128, 253, 254, 255, 256, 1000, 65535, 65536, 1u << 20};
+    for (uint32_t len : lengths) {
+        uint8_t buf[16] = {};
+        const uint32_t written = write_compact_len(buf, len);
+        ASSERT_EQ(compact_len_size(len), written) << "len=" << len;
+        ASSERT_EQ(len <= 254 ? 1u : 5u, written) << "len=" << len;
+
+        uint32_t decoded = 0xdeadbeef;
+        const uint8_t* end = read_compact_len(buf, &decoded);
+        ASSERT_EQ(len, decoded) << "len=" << len;
+        ASSERT_EQ(buf + written, end) << "len=" << len;
+    }
+}
+
+// Invariant 1: always the shortest form. If this ever regresses, equal keys stop comparing equal.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_compact_len_is_canonical) {
+    for (uint32_t len = 0; len <= 254; ++len) {
+        uint8_t buf[16] = {};
+        ASSERT_EQ(1u, write_compact_len(buf, len)) << "len=" << len;
+        ASSERT_NE(BINARY_COMPACT_LEN_ESCAPE, buf[0]) << "len=" << len << " must not use the escape form";
+        ASSERT_EQ(static_cast<uint8_t>(len), buf[0]) << "len=" << len;
+    }
+    uint8_t buf[16] = {};
+    ASSERT_EQ(5u, write_compact_len(buf, 255));
+    ASSERT_EQ(BINARY_COMPACT_LEN_ESCAPE, buf[0]);
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_serialize_compact_roundtrip) {
+    auto column = BinaryColumn::create();
+    column->append_string("");
+    column->append_string("a");
+    column->append_string("hello world");
+    column->append_string(std::string(254, 'x')); // last length that fits in one byte
+    column->append_string(std::string(255, 'y')); // first length that needs the escape
+    column->append_string(std::string(4096, 'z'));
+
+    std::vector<uint8_t> buf(64 * 1024);
+    auto dst = BinaryColumn::create();
+    for (size_t i = 0; i < column->size(); ++i) {
+        const uint32_t written = column->serialize_compact(i, buf.data());
+        const Slice v = column->get_slice(i);
+        ASSERT_EQ(compact_len_size(v.size) + v.size, written) << "i=" << i;
+
+        const uint8_t* end = dst->deserialize_compact_and_append(buf.data());
+        ASSERT_EQ(buf.data() + written, end) << "i=" << i;
+    }
+    ASSERT_EQ(column->size(), dst->size());
+    for (size_t i = 0; i < column->size(); ++i) {
+        ASSERT_EQ(column->get_slice(i), dst->get_slice(i)) << "i=" << i;
+    }
+}
+
+// Invariant 2, non-nullable: serialize_batch() must lay out each row exactly as serialize_compact().
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_serialize_batch_matches_serialize_compact) {
+    auto column = BinaryColumn::create();
+    column->append_string("");
+    column->append_string("abc");
+    column->append_string(std::string(254, 'x'));
+    column->append_string(std::string(300, 'y')); // forces the escape, and the widest row
+    const size_t rows = column->size();
+
+    const uint32_t stride = column->max_one_element_serialize_size_compact();
+    // The bound must actually cover the widest element, including the escape byte.
+    ASSERT_GE(stride, compact_len_size(300) + 300u);
+
+    std::vector<uint8_t> batch(stride * rows + 16, 0);
+    Buffer<uint32_t> sizes(rows, 0);
+    column->serialize_batch(batch.data(), sizes, rows, stride);
+
+    std::vector<uint8_t> one(stride + 16, 0);
+    for (size_t i = 0; i < rows; ++i) {
+        const uint32_t written = column->serialize_compact(i, one.data());
+        ASSERT_EQ(written, sizes[i]) << "row " << i << ": batch and row-wise sizes differ";
+        ASSERT_EQ(0, memcmp(one.data(), batch.data() + i * stride, written))
+                << "row " << i << ": batch and row-wise bytes differ";
+    }
+
+    // And the batch bytes decode back to the original values.
+    Buffer<Slice> srcs(rows);
+    for (size_t i = 0; i < rows; ++i) {
+        srcs[i] = Slice(batch.data() + i * stride, sizes[i]);
+    }
+    auto dst = BinaryColumn::create();
+    dst->deserialize_and_append_batch(srcs, rows);
+    ASSERT_EQ(rows, dst->size());
+    for (size_t i = 0; i < rows; ++i) {
+        ASSERT_EQ(column->get_slice(i), dst->get_slice(i)) << "i=" << i;
+    }
+}
+
+// Invariant 2, nullable: the same equivalence through the NullableColumn wrapper, which is the
+// shape every real group-by key column has.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_nullable_serialize_batch_matches_serialize_compact) {
+    auto data = BinaryColumn::create();
+    auto nulls = NullColumn::create();
+    auto append = [&](const std::string& v, bool is_null) {
+        data->append_string(is_null ? "" : v);
+        nulls->append(is_null ? 1 : 0);
+    };
+    append("", false);
+    append("abc", false);
+    append("ignored", true);
+    append(std::string(254, 'x'), false);
+    append(std::string(300, 'y'), false);
+    append("ignored", true);
+
+    auto column = NullableColumn::create(std::move(data), std::move(nulls));
+    const size_t rows = column->size();
+    ASSERT_TRUE(column->has_null());
+
+    const uint32_t stride = column->max_one_element_serialize_size_compact();
+    std::vector<uint8_t> batch(stride * rows + 16, 0);
+    Buffer<uint32_t> sizes(rows, 0);
+    column->serialize_batch(batch.data(), sizes, rows, stride);
+
+    std::vector<uint8_t> one(stride + 16, 0);
+    for (size_t i = 0; i < rows; ++i) {
+        const uint32_t written = column->serialize_compact(i, one.data());
+        ASSERT_EQ(written, sizes[i]) << "row " << i;
+        ASSERT_EQ(0, memcmp(one.data(), batch.data() + i * stride, written)) << "row " << i;
+    }
+
+    Buffer<Slice> srcs(rows);
+    for (size_t i = 0; i < rows; ++i) {
+        srcs[i] = Slice(batch.data() + i * stride, sizes[i]);
+    }
+    auto dst = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    dst->deserialize_and_append_batch(srcs, rows);
+    ASSERT_EQ(rows, dst->size());
+    ASSERT_TRUE(dst->has_null());
+    for (size_t i = 0; i < rows; ++i) {
+        ASSERT_EQ(column->is_null(i), dst->is_null(i)) << "i=" << i;
+        if (!column->is_null(i)) {
+            ASSERT_EQ(column->get(i).get_slice(), dst->get(i).get_slice()) << "i=" << i;
+        }
+    }
+}
+
+// Distinct values must keep producing distinct byte strings, in particular across the escape
+// boundary -- this is the property that stops two logical groups from colliding, and the mirror
+// of the canonical-encoding property above.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_distinct_values_encode_distinctly) {
+    auto column = BinaryColumn::create();
+    column->append_string(std::string(254, 'a'));
+    column->append_string(std::string(255, 'a'));
+    column->append_string(std::string(256, 'a'));
+    column->append_string(std::string(254, 'b'));
+
+    std::vector<std::string> encoded;
+    std::vector<uint8_t> buf(4096);
+    for (size_t i = 0; i < column->size(); ++i) {
+        const uint32_t n = column->serialize_compact(i, buf.data());
+        encoded.emplace_back(reinterpret_cast<const char*>(buf.data()), n);
+    }
+    for (size_t i = 0; i < encoded.size(); ++i) {
+        for (size_t j = i + 1; j < encoded.size(); ++j) {
+            ASSERT_NE(encoded[i], encoded[j]) << "rows " << i << " and " << j << " encode identically";
+        }
+    }
+}
+
+// The persisted encoding must not have moved: RowStoreEncoderSimple writes serialize() into the
+// tablet and its reader hardcodes "0x0 (column separator) + col length (4) + char(n) value".
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnCompactKeyTest, test_legacy_serialize_still_uses_four_byte_prefix) {
+    auto column = BinaryColumn::create();
+    column->append_string("hello");
+
+    uint8_t buf[64] = {};
+    const uint32_t written = column->serialize(0, buf);
+    ASSERT_EQ(sizeof(uint32_t) + 5u, written);
+    ASSERT_EQ(sizeof(uint32_t) + 5u, column->serialize_size(0));
+
+    uint32_t len = 0;
+    memcpy(&len, buf, sizeof(uint32_t));
+    ASSERT_EQ(5u, len);
+    ASSERT_EQ(0, memcmp(buf + sizeof(uint32_t), "hello", 5));
+
+    // And it still round-trips through the legacy reader.
+    auto dst = BinaryColumn::create();
+    ASSERT_EQ(buf + written, dst->deserialize_and_append(buf));
+    ASSERT_EQ(Slice("hello"), dst->get_slice(0));
 }
 
 } // namespace starrocks

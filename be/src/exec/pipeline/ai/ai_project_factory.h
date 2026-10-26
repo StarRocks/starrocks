@@ -25,6 +25,7 @@
 #include "base/statusor.h"
 #include "common/global_types.h"
 #include "gen_cpp/Types_types.h"
+#include "platform/llm/ai_provider.h"
 #include "platform/llm/ai_rate_limiter.h"
 
 namespace starrocks {
@@ -38,17 +39,16 @@ class AISinkOperatorFactory;
 class AISourceOperatorFactory;
 class PipelineBuilderContext;
 
-// Query-plan snapshot. Provider credentials belong to this query; SYSTEM
-// credentials are bound locally by the dispatcher. Never print this object.
-// Map keys are query-local correlation keys; Provider registry identities stay in FE metadata.
+// Query-plan snapshot. Provider credentials belong to this query. Never print this object.
+// Map keys are Provider registry IDs carried by the AI expressions.
 struct AIProjectModelConfig {
     std::string endpoint;
     std::string model;
     std::string api_key;
     AICapability capability = AICapability::CHAT;
-    TAIModelSource::type source = TAIModelSource::SYSTEM;
     std::optional<int64_t> timeout_ms;
     std::optional<int32_t> dimensions;
+    AIProviderProtocol protocol = AIProviderProtocol::OPENAI;
 };
 
 using AIProjectModelConfigs = std::map<std::string, AIProjectModelConfig, std::less<>>;

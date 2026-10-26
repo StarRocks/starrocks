@@ -24,6 +24,7 @@ sr api lib in this module
 """
 import base64
 import bz2
+import contextlib
 import copy
 import datetime
 import json
@@ -92,6 +93,86 @@ if not os.path.exists(CRASH_DIR):
 
 LOG_LEVEL = logging.INFO
 QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
+
+# A shared-data alter job is cancelled with this message when any transaction id is allocated,
+# anywhere in the cluster, between taking the watershed txn id and adding the shadow index
+# (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
+# cleaned up and nothing is lost, so the statement can just be submitted again -- as often as it
+# takes until the wait's deadline: on a busy cluster several attempts in a row can be cancelled.
+ALTER_RERUN_MSG = "please re-run the alter table command"
+# Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
+# ALTER MATERIALIZED VIEW (RollupProcDir).
+SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
+ROLLUP_INDEX_NAME_COL, ROLLUP_STATE_COL, ROLLUP_MSG_COL = 5, 8, 9
+# An unquoted identifier. Stops at the `;` SQL-tester keeps on the statement.
+_ALTER_UNQUOTED = r"[^\s`.(;]+"
+# A backquoted identifier, which may contain spaces and `` (StarRocksLex.g4 BACKQUOTED_IDENTIFIER).
+_ALTER_QUOTED = r"`(?:[^`]|``)+`"
+# An identifier, either of the two.
+_ALTER_IDENT = r"(?:{q}|{u})".format(q=_ALTER_QUOTED, u=_ALTER_UNQUOTED)
+# A possibly db-qualified name.
+_ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
+ALTER_STMT_RE = re.compile(
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|(?:CREATE|DROP)\s+INDEX\s+{i}\s+ON\s+(?P<index>{n})"
+    r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(i=_ALTER_IDENT, n=_ALTER_NAME),
+    re.IGNORECASE,
+)
+
+
+def alter_job_key(statement):
+    """
+    What identifies the alter job an ALTER TABLE / CREATE INDEX / DROP INDEX / CREATE MATERIALIZED
+    VIEW statement creates, as (column, unqualified unquoted name), else None. SHOW ALTER lists a
+    schema change or rollup under its table, and a synchronous MV under its base table with the MV
+    as RollupIndexName, so an MV is matched by its own name. An asynchronous MV creates no alter
+    job and so never matches anything.
+    """
+    m = ALTER_STMT_RE.match(statement)
+    if not m:
+        return None
+    column = "RollupIndexName" if m.group("mv") else "TableName"
+    names = re.findall(_ALTER_IDENT, m.group("alter") or m.group("index") or m.group("mv"))
+    # The FE drops every backquote of a backquoted identifier, `` included
+    # (AstBuilder#visitBackQuotedIdentifier), so that is the name SHOW ALTER reports.
+    return column, names[-1].replace("`", "")
+
+
+def is_watershed_cancel(state, msg):
+    """True iff an alter job in `state` with `msg` was cancelled by the watershed check."""
+    return state == "CANCELLED" and ALTER_RERUN_MSG in str(msg)
+
+
+def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name):
+    """
+    True iff a job listed by SHOW ALTER was cancelled by the watershed check and belongs to
+    `last_alter`, the statement execute_single_statement remembered. SHOW ALTER is scoped to the
+    current database, which is the case's own, but the newest job there may still come from
+    another table the case altered. `rollup_index_name` is None for a schema change.
+    """
+    if not is_watershed_cancel(status, msg) or last_alter is None:
+        return False
+    column, name = last_alter[2]
+    actual = table_name if column == "TableName" else rollup_index_name
+    return actual is not None and str(actual) == name
+
+
+# `install plugin from "http..."` downloads the plugin from an external URL. When that URL cannot be
+# reached the failure says nothing about StarRocks, so the case is skipped instead of failed.
+INSTALL_PLUGIN_URL_RE = re.compile(r'^\s*install\s+plugin\s+from\s+"(https?://([^/":]+)[^"]*)"', re.IGNORECASE)
+NETWORK_ERROR_RE = re.compile(r"timed out|Connection refused|Connection reset|No route to host", re.IGNORECASE)
+
+
+def skip_if_plugin_download_failed(sql, act):
+    """Raise SkipTest if `sql` installs a plugin from a URL and `act` is a network error reaching it."""
+    m = INSTALL_PLUGIN_URL_RE.match(sql)
+    if not m or not str(act).startswith("E: "):
+        return
+    url, host = m.group(1), m.group(2)
+    # UnknownHostException carries only the host name as its message. A 404 carries the full URL
+    # instead; that is not matched, because a removed plugin file is not a transient network issue.
+    if NETWORK_ERROR_RE.search(str(act)) or str(act).endswith("'%s')" % host):
+        log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
+        raise SkipTest("plugin download failed (network): %s" % act)
 
 
 class Filter(logging.Filter):
@@ -163,6 +244,8 @@ class StarrocksSQLApiLib(object):
         self.db = list()
         self.resource = list()
         self.arrow_sql_lib = ArrowSqlLib()
+        # The alter statement each thread last ran, see _remember_alter.
+        self._last_alter_local = threading.local()
         self.starrocks_sql_lib = MysqlLib()
         self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
@@ -704,6 +787,53 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
+    def assert_paimon_reader(self, query, table, expected):
+        """Assert one reader and reject empty scans or mixed routes."""
+        self.assert_paimon_readers(query, table, expected)
+
+    def assert_paimon_readers(self, query, table, expected, reasons=""):
+        """Assert the complete reader set and optional positive selection-reason counters."""
+        counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
+                    "starrocks": "starRocksNativeReaderReadNum"}
+        readers = {reader.strip() for reader in expected.split(",")}
+        if not readers or not readers <= counters.keys():
+            raise ValueError("expected readers must be native, jni, or starrocks")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        prefix = "Paimon.metadata.reader.%s." % table
+        for reader, counter in counters.items():
+            values = re.findall(re.escape(prefix + counter) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader in readers) for value in values):
+                raise AssertionError("expected %s readers for %s; trace:\n%s" % (expected, table, trace))
+        for reason in filter(None, (item.strip() for item in reasons.split(","))):
+            values = re.findall(re.escape(prefix + "selectionReason." + reason) + r"\s*:\s*(\d+)", trace)
+            if not values or any(int(value) <= 0 for value in values):
+                raise AssertionError("expected %s reason for %s; trace:\n%s" % (reason, table, trace))
+
+    def assert_paimon_native_profile(self, query):
+        """Verify an executed paimon-cpp scan, using the existing BE profile section."""
+        settings = self.execute_sql("SELECT @@enable_profile, @@enable_async_profile", True)
+        if not settings["status"]:
+            raise AssertionError("cannot read profile settings")
+        enabled, asynchronous = settings["result"][0]
+        try:
+            for sql in ("SET enable_profile = true", "SET enable_async_profile = false", query):
+                result = self.execute_sql(sql, True)
+                if not result["status"]:
+                    raise AssertionError("Paimon profile query failed: %s" % result.get("msg"))
+            query_id = self.execute_sql("SELECT last_query_id()", True)["result"][0][0]
+            result = self.execute_sql("SELECT get_query_profile('%s')" % query_id, True)
+            if not result["status"]:
+                raise AssertionError("cannot read Paimon query profile")
+            profile = "\n".join(str(value) for row in result["result"] for value in row)
+            if not re.search(r"^\s*-\s*PaimonNativeReader:", profile, re.MULTILINE):
+                raise AssertionError("executed query has no PaimonNativeReader profile section")
+        finally:
+            self.execute_sql("SET enable_profile = %s" % str(enabled).lower(), True)
+            self.execute_sql("SET enable_async_profile = %s" % str(asynchronous).lower(), True)
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """
@@ -856,7 +986,8 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            with conn.cursor() as cursor:
+            # trino's dbapi cursor is not a context manager
+            with contextlib.closing(conn.cursor()) as cursor:
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)
@@ -1327,6 +1458,10 @@ class StarrocksSQLApiLib(object):
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
 
+            alter_key = alter_job_key(statement)
+            if alter_key is not None:
+                self._remember_alter((statement, conn, alter_key))
+
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
 
@@ -1425,6 +1560,7 @@ class StarrocksSQLApiLib(object):
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
+        skip_if_plugin_download_failed(sql, act)
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
@@ -2079,6 +2215,47 @@ class StarrocksSQLApiLib(object):
         """
         self._wait_alter_mv_job("CANCELLED", check_count)
 
+    def _remember_alter(self, last_alter):
+        """
+        Keep `last_alter`, (statement, conn, alter_job_key), so the alter wait helpers can submit
+        it again, see ALTER_RERUN_MSG. Per thread: the threads of a concurrency block run their
+        statements and waits on this same object, each on its own connection.
+        """
+        self._last_alter_local.value = last_alter
+
+    def _take_last_alter(self):
+        """
+        Return the alter this thread last remembered, or None, and forget it, so no return path of
+        a wait helper leaves it for a later wait to resubmit.
+        """
+        last_alter = getattr(self._last_alter_local, "value", None)
+        self._last_alter_local.value = None
+        return last_alter
+
+    def _resubmit_alter(self, stmt, conn, job_id, msg, rerun, table_name, deadline):
+        """
+        Submit `stmt` again on `conn` after its job `job_id` on `table_name` was cancelled by the
+        watershed check, see ALTER_RERUN_MSG.
+
+        The table has to be NORMAL first. A cancelled schema change releases it before reporting
+        CANCELLED (LakeTableSchemaChangeJob#removeShadowIndex), but a cancelled rollup or sync MV
+        does not: LakeRollupJob#cancelImpl only removes the rollup index and the table is released
+        later by MaterializedViewHandler#onJobDone, the same gap wait_table_state_normal explains
+        for a finished one.
+        """
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+        # wait_table_state_normal returns on NORMAL without looking at the clock, so the deadline
+        # may have passed by now; a job submitted after it would outlive the failed case.
+        tools.assert_true(
+            time.monotonic() < deadline,
+            "timed out before resubmitting alter after job %s was cancelled: %s" % (job_id, msg),
+        )
+        log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
+        res = self.execute_sql(stmt, conn=conn)
+        tools.assert_true(res["status"], "resubmit alter failed: %s" % res.get("msg"))
+
     def _wait_alter_mv_job(self, expect_status, timeout):
         """
         Block until the alter listed by SHOW ALTER MATERIALIZED VIEW reaches `expect_status` and
@@ -2105,10 +2282,12 @@ class StarrocksSQLApiLib(object):
         42 recorded results across the two callers are None.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
+        last_alter = self._take_last_alter()
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
         table_name = None
+        rerun = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True
@@ -2127,6 +2306,20 @@ class StarrocksSQLApiLib(object):
                 # helper's -- a CREATE that never made a job recorded its own failure already.
                 return None
 
+            # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
+            if (
+                expect_status == "FINISHED"
+                and time.monotonic() < deadline
+                and should_resubmit_alter(
+                    last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
+                )
+            ):
+                rerun += 1
+                seen = job_id
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, row[ROLLUP_MSG_COL], rerun, table_name, deadline)
+                continue
+
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
 
@@ -2138,7 +2331,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_mv_job_id = job_id
-        tools.assert_equal(expect_status, status, "wait materialized view job %s" % job_id)
+        tools.assert_equal(expect_status, status, "wait materialized view job %s, msg: %s" % (job_id, row[ROLLUP_MSG_COL]))
 
         # The database has to be asked for: this helper has no other way to know which one the
         # case is in.
@@ -2572,6 +2765,91 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
+    def alter_and_wait(self, sql, alter_type="COLUMN", timeout=600):
+        """
+        Submit `sql`, an alter that may create a job listed by SHOW ALTER TABLE `alter_type`
+        (COLUMN for a schema change, ROLLUP for ADD ROLLUP or a synchronous MV), and block until
+        that job has landed. The explicit form of the statement followed by wait_alter_table_finish:
+        being handed the statement, it needs no statement matching to retry a watershed cancel
+        (ALTER_RERUN_MSG), which it does like wait_alter_table_finish, through _resubmit_alter.
+        Any other outcome than FINISHED fails.
+
+        `timeout` bounds waiting for the job and for the table, retries included, and no statement
+        is submitted once it has passed. The statements themselves (the SHOWs and each submission
+        of `sql`) are not interrupted: they run under the connection's own timeouts, so a slow one
+        can take the call past `timeout`.
+
+        The job is told apart by JobId: the newest id is read before `sql` is submitted, and since
+        a job is registered within the DDL's own execution (see wait_alter_table_finish), a newer
+        id afterwards is this statement's and no newer id means the alter was applied inline. That
+        holds as long as nothing else alters a table in the database meanwhile, which a case
+        running statements one at a time guarantees; it is not meant for alters issued from
+        several threads of a case at once.
+
+        Returns None, which is what the R file records.
+        """
+        # State and Msg of each layout. OPTIMIZE is a valid SHOW ALTER type too, with its own
+        # layout, but its jobs never hit the watershed cancel; refuse it rather than misread it.
+        layouts = {
+            "COLUMN": (SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL),
+            "ROLLUP": (ROLLUP_STATE_COL, ROLLUP_MSG_COL),
+        }
+        tools.assert_true(
+            alter_type.upper() in layouts,
+            "alter_and_wait supports alter_type COLUMN or ROLLUP, got %s" % alter_type,
+        )
+        state_col, msg_col = layouts[alter_type.upper()]
+        rollup = alter_type.upper() == "ROLLUP"
+        show_sql = "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type
+        deadline = time.monotonic() + timeout
+
+        res = self.execute_sql(show_sql, True)
+        tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+        watermark = int(res["result"][0][0]) if res["result"] else None
+
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], "alter failed: %s" % res["msg"])
+
+        rerun = 0
+        while True:
+            res = self.execute_sql(show_sql, True)
+            tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+            if not res["result"] or (watermark is not None and int(res["result"][0][0]) <= watermark):
+                # No job of its own: the alter was applied inline.
+                return None
+            row = res["result"][0]
+            job_id, table_name, state, msg = int(row[0]), row[1], row[state_col], row[msg_col]
+
+            if state not in ("FINISHED", "CANCELLED"):
+                tools.assert_true(
+                    time.monotonic() < deadline,
+                    "alter_and_wait timed out after %ss, job %s is %s" % (timeout, job_id, state),
+                )
+                time.sleep(0.1)
+                continue
+
+            # Keep the watermarks of the legacy wait helpers past this job, so one used later in
+            # the case does not take it for its own.
+            self._last_alter_job_id = max(job_id, getattr(self, "_last_alter_job_id", None) or 0)
+            if rollup:
+                self._last_alter_mv_job_id = max(job_id, getattr(self, "_last_alter_mv_job_id", None) or 0)
+
+            if state == "FINISHED":
+                if rollup:
+                    res = self.execute_sql("SELECT DATABASE()", True)
+                    tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+                    # See wait_table_state_normal: a finished rollup releases the table later.
+                    self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+                return None
+
+            tools.assert_true(
+                is_watershed_cancel(state, msg),
+                "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
+            )
+            rerun += 1
+            watermark = job_id
+            self._resubmit_alter(sql, None, job_id, msg, rerun, table_name, deadline)
+
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
         """
         Block until the alter submitted just before this call has landed.
@@ -2604,10 +2882,13 @@ class StarrocksSQLApiLib(object):
         waited on with the default COLUMN is not covered. See wait_table_state_normal.
         """
         seen = getattr(self, "_last_alter_job_id", None)
+        last_alter = self._take_last_alter()
         deadline = time.monotonic() + timeout
         status = ""
+        msg = ""
         job_id = None
         table_name = None
+        rerun = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2617,6 +2898,8 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             job_id, table_name, status = res["result"][0][0], res["result"][0][1], res["result"][0][off]
+            # Msg is the column right after State for both COLUMN and ROLLUP.
+            msg = res["result"][0][off + 1] if len(res["result"][0]) > off + 1 else ""
             if seen is not None and int(job_id) <= int(seen):
                 # No job of our own: either the alter was applied inline, or it created a job of
                 # a different type than the one being listed (a caller that leaves alter_type at
@@ -2627,6 +2910,18 @@ class StarrocksSQLApiLib(object):
                 # is reserved for the pre-existing "no rows at all" return above, whose recorded
                 # value callers already depend on.
                 return None
+
+            rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
+            if (
+                time.monotonic() < deadline
+                and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
+            ):
+                # Wait for the resubmitted job instead.
+                rerun += 1
+                seen = int(job_id)
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, msg, rerun, table_name, deadline)
+                continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
@@ -2639,7 +2934,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_job_id = int(job_id)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal("FINISHED", status, "wait alter table finish error, msg: %s" % msg)
 
         if alter_type.upper() == "ROLLUP":
             # The rollup is finished but the table may not be released yet -- see
@@ -2972,6 +3267,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
                 return ""
             time.sleep(1)
+
+    def wait_until_has_queries(self, timeout_sec=60):
+        """
+        wait until a query shows up in current_queries. A query is listed there only after its
+        coordinator exists, so a KILL / DROP TASK issued afterwards reaches it instead of being lost.
+        """
+        for _ in range(timeout_sec):
+            sql = "show proc '/current_queries'"
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "run current_queries error")
+            if len(res["result"]) > 0:
+                return ""
+            time.sleep(1)
+        tools.assert_true(False, "no query showed up in current_queries within %ss" % timeout_sec)
 
     def wait_util_no_queries(self):
         while True:
@@ -3331,13 +3641,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         scan_table_sql = (
             f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
+        # PhySegmentsCount counts each segment once; SegmentsReadCount counts it once per split that reads
+        # it, and is the only one a shared-nothing or older build reports.
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
             )
-            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
-            from profile 
-            where line like "%- SegmentsReadCount%"
+            select coalesce(
+                max(if(line like "%- PhySegmentsCount%",
+                       regexp_extract(line, ".*- PhySegmentsCount: (?:.*\\()?(\\d+)\\)?", 1), null)),
+                max(if(line like "%- SegmentsReadCount%",
+                       regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1), null))) as value
+            from profile
+            where line like "%- PhySegmentsCount%" or line like "%- SegmentsReadCount%"
         """
 
         while timeout > 0:
@@ -3709,6 +4025,24 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_explain_matches(self, query, *expects):
+        """
+        assert explain result matches every expect pattern
+
+        The contains form covers almost every case. This one is for an expectation that is
+        only meaningful with a wildcard in the middle of it -- a residual predicate on some
+        column of a table, say, where the plan's slot numbering is not what is being
+        asserted and pinning it would make the case brittle.
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_regex(
+                str(res["result"]),
+                expect,
+                "assert expect {} does not match plan {}".format(expect, res["result"]),
             )
 
     def assert_explain_not_contains(self, query, *expects):

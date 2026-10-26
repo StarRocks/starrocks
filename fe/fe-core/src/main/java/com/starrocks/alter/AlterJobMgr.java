@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -256,56 +257,126 @@ public class AlterJobMgr {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-            ConnectContext context = ConnectContext.buildInner();
-            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-            context.setCurrentUserIdentity(UserIdentity.ROOT);
-            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-            String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
-            QueryStatement mvQueryStatement = null;
             try {
-                mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
-            } catch (Exception e) {
-                LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
-                throw new SemanticException("Can not active materialized view [%s]" +
-                        " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
+                return resolveActivate(materializedView, reason, isReplay);
+            } catch (RuntimeException e) {
+                applyActivateFailure(materializedView, e);
+                throw e;
             }
-
-            // Skip checks to maintain eventual consistency when replay
-            Map<TableName, Table> tableNameTableMap =
-                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
-            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
-            if (!isReplay) {
-                MaterializedViewAnalyzer.checkBaseTables(
-                        tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
-            }
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            Task task = taskManager.getTask(materializedView);
-            if (task == null) {
-                throw new SemanticException("Can not find running task for materialized view [%s]",
-                        materializedView.getName());
-            }
-            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-            if (currentTask != null) {
+            // Killing the running refresh is best effort: the inactivation must go on (and be journaled) even when
+            // the task run lock is busy, because callers inactivate after journaling the base table change that
+            // caused it. A refresh left running cannot publish versions past an inactivation that cleared the
+            // version map (see MaterializedView#resetVisibleVersionMap), and its task is suspended by the apply.
+            // A replaying FE runs no refresh, so there is nothing to kill.
+            if (currentTask != null && !isReplay) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                if (!taskRunManager.tryTaskRunLock()) {
-                    throw new SemanticException("Failed to acquire task run lock when altering " +
-                            "mv status:" + materializedView.getName());
-                }
-                try {
-                    taskRunManager.killTaskRun(currentTask.getId(), true, "killed by ALTER MATERIALIZED VIEW");
-                } finally {
-                    taskRunManager.taskRunUnlock();
+                if (taskRunManager.tryTaskRunLock()) {
+                    try {
+                        taskRunManager.killTaskRun(currentTask.getId(), true, "killed by ALTER MATERIALIZED VIEW");
+                    } finally {
+                        taskRunManager.taskRunUnlock();
+                    }
+                } else {
+                    LOG.warn("Failed to acquire the task run lock to kill the running refresh of materialized view {}, "
+                            + "inactivating it anyway", materializedView.getName());
+                    // The suspension leaves the runs alone, not to wait for the lock once more: a run left over
+                    // cannot publish versions past an inactivation that cleared the version map.
+                    return new AlterMaterializedViewStatusContext(status, reason, null, currentTask, false);
                 }
             }
             return new AlterMaterializedViewStatusContext(status, reason, null, currentTask);
         } else {
             throw new SemanticException("Unsupported modification materialized view status:" + status);
+        }
+    }
+
+    /**
+     * The analysis half of an ACTIVE transition: re-parse and re-analyze the MV's definition and resolve the
+     * base tables it names. Every step can reach the connector of an external base table. It does not modify
+     * the MV, so the leader runs it before taking the MV write lock (see
+     * {@code AlterMVJobExecutor#resolveBeforeLock}); a failure that has to be recorded on the MV is left to
+     * {@link #applyActivateFailure}, for the caller to apply once it holds the lock.
+     */
+    public AlterMaterializedViewStatusContext resolveActivate(
+            MaterializedView materializedView, String reason, boolean isReplay) {
+        ConnectContext context = ConnectContext.buildInner();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+        String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
+        QueryStatement mvQueryStatement = null;
+        try {
+            mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
+        } catch (Exception e) {
+            LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
+            // Suppressed, not the cause: DDLStmtExecutor reports the cause's message instead of this one when a
+            // RuntimeException has a cause. applyActivateFailure looks at the suppressed ones too.
+            SemanticException failure = new SemanticException(String.format("Can not active materialized view [%s]" +
+                    " because analyze materialized view define sql: \n\n%s" +
+                    "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage()));
+            failure.addSuppressed(e);
+            throw failure;
+        }
+
+        Map<TableName, Table> tableNameTableMap =
+                AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
+        Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
+        // Skip checks to maintain eventual consistency when replay
+        if (!isReplay) {
+            MaterializedViewAnalyzer.checkBaseTables(
+                    tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(materializedView);
+        if (task == null) {
+            throw new SemanticException("Can not find running task for materialized view [%s]",
+                    materializedView.getName());
+        }
+        return new AlterMaterializedViewStatusContext(AlterMaterializedViewStatusClause.ACTIVE, reason,
+                Lists.newArrayList(baseTableInfos), task);
+    }
+
+    /**
+     * Record on the MV what a failed {@link #resolveActivate} found out about it. Only an incompatible column
+     * schema is recorded: it replaces the inactive reason, so that SHOW MATERIALIZED VIEWS says why the MV
+     * cannot be activated. Must run under the MV write lock.
+     */
+    public static void applyActivateFailure(MaterializedView materializedView, Throwable failure) {
+        IncompatibleSchemaException incompatible = findIncompatibleSchema(failure);
+        if (incompatible != null) {
+            materializedView.setInactiveAndReason(incompatible.inactiveReason);
+        }
+    }
+
+    private static IncompatibleSchemaException findIncompatibleSchema(Throwable failure) {
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            if (t instanceof IncompatibleSchemaException) {
+                return (IncompatibleSchemaException) t;
+            }
+            for (Throwable suppressed : t.getSuppressed()) {
+                IncompatibleSchemaException found = findIncompatibleSchema(suppressed);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Thrown by {@link #recreateMVQuery} when the re-analyzed definition no longer produces the MV's columns.
+     */
+    public static class IncompatibleSchemaException extends SemanticException {
+        private final String inactiveReason;
+
+        public IncompatibleSchemaException(String inactiveReason) {
+            super(inactiveReason);
+            this.inactiveReason = inactiveReason;
         }
     }
 
@@ -323,13 +394,22 @@ public class AlterJobMgr {
             // suspend the inactive mv's task
             if (context.task() != null) {
                 // suspend the task to avoid scheduling new task runs
-                taskManager.suspendTask(context.task(), isReplay);
+                if (!isReplay && !context.killTaskRuns()) {
+                    taskManager.suspendTaskLeavingRuns(context.task());
+                } else {
+                    taskManager.suspendTask(context.task(), isReplay);
+                }
             }
         }
     }
 
+    // killTaskRuns: INACTIVE only, whether suspending the task also kills its runs.
     public record AlterMaterializedViewStatusContext(
-            String status, String reason, List<BaseTableInfo> baseTableInfos, Task task) {
+            String status, String reason, List<BaseTableInfo> baseTableInfos, Task task, boolean killTaskRuns) {
+        public AlterMaterializedViewStatusContext(String status, String reason, List<BaseTableInfo> baseTableInfos,
+                                                  Task task) {
+            this(status, reason, baseTableInfos, task, true);
+        }
     }
 
     /*
@@ -379,10 +459,9 @@ public class AlterJobMgr {
             if (!isSchemaCompatible(existed, created)) {
                 LOG.warn("Active materialized view {} failed, column schema changed: {} != {}",
                         materializedView.getName(), existed.toString(), created.toString());
-                String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
-                        existed.toString(), created.toString());
-                materializedView.setInactiveAndReason(message);
-                throw new SemanticException(message);
+                // Not recorded on the MV here: the caller may not hold the MV lock, see applyActivateFailure.
+                throw new IncompatibleSchemaException(MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                            existed.toString(), created.toString()));
             }
         }
 
@@ -463,6 +542,10 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        // An entry journaled for an MV dropped with its database meanwhile has nothing to apply to.
+        if (db == null) {
+            return;
+        }
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getId(), tableId);
         if (mv == null) {
@@ -474,6 +557,26 @@ public class AlterJobMgr {
         // To be compatible with the old version, if the reason is empty, use the default reason
         String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
         try {
+            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus())
+                    && log.getBaseTableInfos() != null) {
+                // Adopt the base tables the leader activated with instead of re-analyzing the define query,
+                // which resolves every base table through the connector under this lock. Entries written by
+                // older versions carry none and take the path below.
+                Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+                if (task == null) {
+                    throw new SemanticException("Can not find running task for materialized view [%s]",
+                            mv.getName());
+                }
+                mv.activateOnReplay(Lists.newArrayList(log.getBaseTableInfos()));
+                // resume the mv scheduler
+                GlobalStateMgr.getCurrentState().getTaskManager().resumeTask(task, true);
+                return;
+            }
+            // The clear goes first, so that a failure below cannot skip it.
+            if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(log.getStatus())
+                    && clearsOnInactivation(log, reason)) {
+                mv.getRefreshScheme().clearVersionState();
+            }
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
@@ -483,6 +586,17 @@ public class AlterJobMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
         }
+    }
+
+    // Whether replaying an INACTIVE entry clears the version map. An entry written before the clear was journaled
+    // carries no flag, although that leader cleared the map in memory on every inactivation but a manual one:
+    // replay does the same, so that no FE keeps serving the versions it cleared.
+    @VisibleForTesting
+    static boolean clearsOnInactivation(AlterMaterializedViewStatusLog log, String reason) {
+        if (log.isClearVersionMapUnset()) {
+            return !MANUAL_INACTIVE_MV_REASON.equals(reason);
+        }
+        return log.isClearVersionMap();
     }
 
     public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
@@ -552,19 +666,29 @@ public class AlterJobMgr {
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
             newMvRefreshScheme.setMoment(moment);
 
-            long maxChangedTableRefreshTime =
-                    MvUtils.getMaxTablePartitionInfoRefreshTime(
-                            log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
-            newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+            if (log.getLastRefreshTime() != null) {
+                newMvRefreshScheme.setLastRefreshTime(log.getLastRefreshTime());
+            } else {
+                // Both maps, the way the leader maxes over every refreshed base table. Max with the current
+                // value too: the maps get cleared and pruned, so a derivation alone can regress.
+                long derived = Math.max(
+                        MvUtils.getMaxTablePartitionInfoRefreshTime(
+                                asyncRefreshContext.getBaseTableVisibleVersionMap().values()),
+                        MvUtils.getMaxTablePartitionInfoRefreshTime(
+                                asyncRefreshContext.getBaseTableInfoVisibleVersionMap().values()));
+                newMvRefreshScheme.setLastRefreshTime(
+                        Math.max(oldRefreshScheme.getLastRefreshTime(), derived));
+            }
             newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                            "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
+                            "interval step to {}, timeunit to {}, id: {}, lastRefreshTime:{}",
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
-                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
+                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(),
+                    newMvRefreshScheme.getLastRefreshTime());
 
             // trigger timeless info event since mv refresh scheme has changed
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
@@ -681,8 +805,14 @@ public class AlterJobMgr {
 
     public void alterView(AlterViewInfo alterViewInfo) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        if (db == null) {
+            throw new AlterJobException("database " + alterViewInfo.getDbId() + " was dropped concurrently");
+        }
         View view = (View) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            throw new AlterJobException("view " + alterViewInfo.getTableId() + " was dropped concurrently");
+        }
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         long sqlMode = alterViewInfo.getSqlMode();
         String originalViewDef = alterViewInfo.getOriginalViewDef();
@@ -690,6 +820,11 @@ public class AlterJobMgr {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
+            // The view was looked up before the lock: a DROP VIEW in between leaves it detached from the db, and
+            // altering it would write a MODIFY entry for a view that no longer exists.
+            if (!db.isExist() || db.getTable(view.getId()) != view) {
+                throw new AlterJobException("view " + view.getName() + " was dropped concurrently");
+            }
             try {
                 view.checkInlineViewDef(inlineViewDef, sqlMode);
             } catch (StarRocksException e) {
@@ -716,8 +851,15 @@ public class AlterJobMgr {
 
     public void replayAlterView(AlterViewInfo alterViewInfo) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
-        View view = (View) GlobalStateMgr.getCurrentState()
+        View view = db == null ? null : (View) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            // Journals written before the alter path rechecked the view under its lock can carry a MODIFY
+            // after the DROP of the same view.
+            LOG.warn("skip replaying alter of view {} in db {}: it no longer exists",
+                    alterViewInfo.getTableId(), alterViewInfo.getDbId());
+            return;
+        }
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
@@ -832,6 +974,8 @@ public class AlterJobMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             schemaChangeHandler.addAlterJobV2(alterJobV2);
+            // Images written by older versions still carry the per-tablet data of every done job.
+            alterJobV2.pruneIfDone();
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
             // to prevent TabletInvertedIndex data loss,
@@ -844,6 +988,8 @@ public class AlterJobMgr {
 
         reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             materializedViewHandler.addAlterJobV2(alterJobV2);
+            // Images written by older versions still carry the per-tablet data of every done job.
+            alterJobV2.pruneIfDone();
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
             // to prevent TabletInvertedIndex data loss,

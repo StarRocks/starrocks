@@ -22,12 +22,15 @@
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
 
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <sstream>
 #include <string>
 
+#include "base/auth/credential_mask.h"
 #include "common/logging.h"
 #include "platform/http/http_handler.h"
+#include "platform/http/http_headers.h"
 
 namespace starrocks {
 
@@ -75,19 +78,52 @@ int HttpRequest::init_from_evhttp() {
     return 0;
 }
 
+// Headers that carry a credential: Basic Auth is base64 of "user:password", and a browser sends the
+// session cookie of another service on the same host (such as the FE web UI) along to the BE port.
+static bool is_credential_header(const std::string& key) {
+    return boost::iequals(key, HttpHeaders::AUTHORIZATION) || boost::iequals(key, HttpHeaders::PROXY_AUTHORIZATION) ||
+           boost::iequals(key, HttpHeaders::COOKIE);
+}
+
 std::string HttpRequest::debug_string() const {
+    return debug_string(nullptr);
+}
+
+std::string HttpRequest::debug_string(const std::function<bool(std::string_view)>& is_sensitive_param) const {
+    auto is_sensitive = [&](const std::string& key) { return is_sensitive_param && is_sensitive_param(key); };
+    // The uri carries the query string verbatim. If it holds a sensitive param, print it rebuilt from the
+    // parsed query params instead, with that value masked.
+    std::string uri = _uri;
+    if (std::any_of(_query_params.begin(), _query_params.end(),
+                    [&](const auto& kv) { return is_sensitive(kv.first); })) {
+        uri = _raw_path + "?";
+        bool first = true;
+        for (const auto& [key, value] : _query_params) {
+            uri += (first ? "" : "&") + key + "=" + (is_sensitive(key) ? std::string(kCredentialMask) : value);
+            first = false;
+        }
+    }
+
     std::stringstream ss;
     ss << "HttpRequest: \n"
        << "method:" << _method << "\n"
-       << "uri:" << _uri << "\n"
+       << "uri:" << uri << "\n"
        << "raw_path:" << _raw_path << "\n"
        << "headers: \n";
     for (auto& iter : _headers) {
-        ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        if (is_credential_header(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
     }
     ss << "params: \n";
     for (auto& iter : _params) {
-        ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        if (is_sensitive(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
     }
 
     return ss.str();

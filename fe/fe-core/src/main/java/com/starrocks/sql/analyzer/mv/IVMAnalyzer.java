@@ -449,6 +449,7 @@ public class IVMAnalyzer {
 
         // Build the row ID from the group keys, normalized like the refresh aggregate (see normalizeGroupKeys).
         List<Expr> rowIdKeys = normalizeGroupKeys(groupByExprs);
+        validateRowIdKeyTypes(rowIdKeys);
         int encodeRowIdVersion = (pinnedEncodeRowIdVersion != null)
                 ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
                 : IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
@@ -508,6 +509,20 @@ public class IVMAnalyzer {
 
     private Expr substituteWithMap(Expr expr, ExprSubstitutionMap substitutionMap) {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
+    }
+
+    // encode_fingerprint_sha256 dispatches on APPLY_FOR_ALL_SCALAR_TYPE, so a complex key contributes no
+    // bytes at all -- not even a null marker -- and every value of it hashes to the same row id.
+    private static void validateRowIdKeyTypes(List<Expr> rowIdKeys) {
+        for (Expr key : rowIdKeys) {
+            Type type = key.getType();
+            if (type != null && !type.isScalarType()) {
+                throw new SemanticException(
+                        "IVMAnalyzer does not support complex type %s as a group by / distinct key, but got: %s. "
+                                + "Such a key is encoded into the mv's row id, which supports scalar types only.",
+                        type.toSql(), key.toString());
+            }
+        }
     }
 
     private static void validateAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {

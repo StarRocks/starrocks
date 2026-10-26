@@ -193,6 +193,18 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 - StarRocks FEでArrow Flightがリッスンに使用するポート
 - 必要な権限を持つStarRocksユーザーのユーザー名とパスワード
 
+JWT または OAuth 2.0 の[セキュリティインテグレーション](../administration/user_privs/authentication/security_integration.md)を設定している場合、ID プロバイダーが発行したトークンをユーザー名とパスワードの代わりに使えます。`USERNAME` と `PASSWORD` ではなく authorization ヘッダーとして渡します:
+
+```Python
+from adbc_driver_flightsql import DatabaseOptions
+
+conn = flight_sql.connect(uri=f"grpc://{FE_HOST}:{FE_PORT}", db_kwargs={
+    DatabaseOptions.AUTHORIZATION_HEADER.value: "Bearer " + token,
+})
+```
+
+サーバーは最初の呼び出しに対して自身のセッショントークンを返し、クライアントは接続の残りの間それを使います。ユーザー名とパスワードで認証した後とまったく同じ動作です。セッションは JWT より長く生きられません: トークンの `exp` を過ぎると接続は拒否され、クライアントは新しいトークンで接続し直す必要があります。[各認証方式が使えるエントリポイント](../administration/user_privs/authentication/authentication.mdx#各認証方式が使えるエントリポイント) を参照してください。
+
 例:
 
 ```Python

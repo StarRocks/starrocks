@@ -29,6 +29,18 @@
 # example round functions: 1               013             0       = 10130
 #                          ^                ^              ^
 #                   {math function} {function group} {sub-function}
+def ai_metadata(capability, prompt_kind, result_kind, *, inputs, null_as_empty=(), blank_as_null=()):
+    # Inputs and NULL policies refer to named_args; fixed roles are inferred by name.
+    return {
+        'capability': capability,
+        'prompt_kind': prompt_kind,
+        'result_kind': result_kind,
+        'inputs': list(inputs),
+        'null_as_empty': list(null_as_empty),
+        'blank_as_null': list(blank_as_null),
+    }
+
+
 vectorized_functions = [
     # 10xxx: math functions
     [10010, "pi", True, False, "DOUBLE", [], "MathFunctions::pi"],
@@ -747,6 +759,7 @@ vectorized_functions = [
     [70117, 'if', True, False, 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70118, 'if', True, False, 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70119, 'if', True, False, 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+    [70120, 'if', True, False, 'VARIANT', ['BOOLEAN', 'VARIANT', 'VARIANT'], 'nullptr'],
 
     [70200, 'ifnull', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -771,6 +784,7 @@ vectorized_functions = [
     [70217, 'ifnull', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70218, 'ifnull', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70219, 'ifnull', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70220, 'ifnull', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70300, 'nullif', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -795,6 +809,7 @@ vectorized_functions = [
     [70317, 'nullif', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70318, 'nullif', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70319, 'nullif', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70320, 'nullif', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70400, 'coalesce', True, False, 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
@@ -819,6 +834,7 @@ vectorized_functions = [
     [70418, 'coalesce', True, False, 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
     [70419, 'coalesce', True, False, 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
     [70420, 'coalesce', True, False, 'JSON', ['JSON', '...'], 'nullptr'],
+    [70421, 'coalesce', True, False, 'VARIANT', ['VARIANT', '...'], 'nullptr'],
 
     [70415, 'esquery', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -1003,6 +1019,7 @@ vectorized_functions = [
      "VariantFunctions::get_variant_time",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
+    [110209, "is_variant_null", False, False, "BOOLEAN", ["VARIANT"], "VariantFunctions::is_variant_null"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
@@ -1032,6 +1049,7 @@ vectorized_functions = [
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
     [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+    [120163, "encode_fingerprint_sha256_v2", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256_v2"],
 
 
     # geo function
@@ -1090,6 +1108,8 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_as_wkb"],
     [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_x"],
+    # Historical GEOGRAPHY IDs 120081/120082/120083 are handled in function_call_expr.cpp.
+    # Do not allocate 120082 or 120083 again. 120081 is disambiguated by native argument type.
     [120081, "ST_X", False, False, "DOUBLE", ["GEOMETRY"],
      "GeoFunctions::st_geometry_x"],
     [120090, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
@@ -1172,6 +1192,61 @@ vectorized_functions = [
     [120291, "ST_IsValid", False, False, "BOOLEAN", ["GEOMETRY"],
      "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
      "GeoFunctions::native_geo_unary_close"],
+
+    [120300, "ST_SRID", False, False, "INT", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_srid"],
+    # reserve 120301-120304 for future ST_SRID overloads
+    [120305, "ST_SetSRID", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_set_srid", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+    # reserve 120306-120309 for future ST_SetSRID overloads
+    [120310, "ST_Transform", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_transform", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+
+    # reserve 120311-120314 for future ST_Transform overloads
+    # Contract 5.3 polygon overlays: base slot reserved for future GEOGRAPHY overloads.
+    # Reserved 120340: ST_Intersection(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120341, "ST_Intersection", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersection", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120350: ST_Union(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120351, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120360: ST_Difference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120361, "ST_Difference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120370: ST_SymDifference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120371, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+
+    # Contract 5.4 scalar ID reservations; comments do not register overloads.
+    # Reserved 120400: ST_Buffer / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120401, "ST_Buffer", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_buffer", "GeoFunctions::native_geo_buffer_prepare", "GeoFunctions::native_geo_buffer_close"],
+    # Reserved 120410: ST_SimplifyPreserveTopology / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120411, "ST_SimplifyPreserveTopology", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_simplify_preserve_topology", "GeoFunctions::native_geo_simplify_prepare",
+     "GeoFunctions::native_geo_simplify_close"],
+    # Window ST_CoverageSimplify reservations belong to FunctionSet's analytic section.
+
+
+    # Contract 5.6: H3 cells are signed SQL BIGINT values.
+    # Start H3 IDs at 120500 to leave room for future ST_ functions.
+    [120500, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_from_geo"],
+    [120501, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_grid_disk"],
+    [120502, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_parent"],
+    [120503, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_children"],
+    [120504, "H3_Resolution", False, False, "INT", ["BIGINT"],
+     "GeoFunctions::h3_resolution"],
+    [120505, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
+     "GeoFunctions::h3_to_boundary"],
+    [120506, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_polygon_to_cells_prepare",
+     "GeoFunctions::h3_polygon_to_cells_close"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
@@ -1702,89 +1777,138 @@ vectorized_functions = [
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
 
     # ai functions
-    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
-]
+    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AIFunctions::ai_query"],
 
-# AI functions are registered as FE metadata independently from ordinary builtins. They are
-# dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
-# BE builtin descriptor table.
-def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=()):
-    # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
-    return {
-        'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
-        'capability': capability,
-        'prompt_kind': prompt_kind,
-        'result_kind': result_kind,
-        'input_arguments': list(input_arguments),
-        'model_argument': model_argument,
-        'provider_argument': provider_argument,
-        'null_as_empty_arguments': list(null_as_empty_arguments),
-        'blank_as_null_arguments': list(blank_as_null_arguments),
-    }
-
-
-ai_vectorized_functions = [
-    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
-    [200101, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
-    [200102, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_complete',
-     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
-    [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
-    [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
-    [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [1], model_argument=0)],
-    [200112, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [0, 1])],
-    [200113, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [1, 2], model_argument=0)],
-    [200114, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [0, 1])],
-    [200115, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [1, 2], model_argument=0)],
-    [200116, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [0])],
-    [200117, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [1], model_argument=0)],
-    [200118, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [0, 1])],
-    [200119, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
-     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [1, 2], model_argument=0)],
-    [200120, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [0, 1, 2],
-                                           null_as_empty_arguments=[1], blank_as_null_arguments=[2])],
-    [200121, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [1, 2, 3], model_argument=0,
-                                           null_as_empty_arguments=[2], blank_as_null_arguments=[3])],
-    [200122, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [0, 1])],
-    [200123, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [1, 2], model_argument=0)],
-    [200124, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR'],
-     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [0])],
-    [200125, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [1], model_argument=0)],
-    [200126, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [0, 1])],
-    [200127, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [1, 2], model_argument=0)],
-    [200130, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
-    [200131, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
-    [200132, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_embed',
-     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
-    [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
-    [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
-    [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
-    [200142, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'],
-     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
-    [200143, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
-     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
+    # AIProject functions share registration metadata with ordinary named-argument builtins.
+    [200001, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_complete', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200002, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_complete', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'file'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200003, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_embed', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', inputs=('input',))
+     }],
+    [200004, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'AIFunctions::ai_embed', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'NONE', 'EMBEDDING', inputs=())
+     }],
+    [200005, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_sentiment', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', inputs=('input',))
+     }],
+    [200006, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_classify', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'CLASSIFY', 'JSON', inputs=('input', 'categories'))
+     }],
+    [200007, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_extract', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'labels'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'labels'))
+     }],
+    [200008, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_fix_grammar', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', inputs=('input',))
+     }],
+    [200009, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_redact', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'REDACT', 'STRING', inputs=('input', 'categories'))
+     }],
+    [200010, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_translate', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'source_language'},
+             {'name': 'target_language'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'TRANSLATE', 'STRING', inputs=('input', 'source_language', 'target_language'),
+                           null_as_empty=('source_language',),
+                           blank_as_null=('target_language',))
+     }],
+    [200011, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_similarity', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'other'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', inputs=('input', 'other'))
+     }],
+    [200012, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_summarize', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SUMMARIZE', 'STRING', inputs=('input',))
+     }],
+    [200013, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AIFunctions::ai_filter', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'condition'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
+     }],
 ]

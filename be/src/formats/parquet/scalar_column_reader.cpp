@@ -214,8 +214,9 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                            const uint64_t rg_num_rows) const {
     bool filtered = false;
-    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
-        // statistics is not existed, don't filter
+    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr ||
+        has_geo_annotation(get_column_parquet_field()->schema_element)) {
+        // Missing statistics or undefined GEO sort order cannot filter this row group.
         return filtered;
     }
 
@@ -246,11 +247,9 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            st = StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
-                                                            get_column_parquet_field(), _opts.timezone);
-            RETURN_IF(!st.ok(), filtered);
-            st = StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
-                                                            get_column_parquet_field(), _opts.timezone);
+            st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, min_values, max_values,
+                                                               null_pages, col_type, get_column_parquet_field(),
+                                                               _opts.timezone);
             RETURN_IF(!st.ok(), filtered);
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
@@ -272,6 +271,10 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
+    // ColumnIndex min/max is undefined for GEO too; do not read or prune from it.
+    if (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element)) {
+        return false;
+    }
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
         !chunk_meta->__isset.meta_data) {
         // no page index, dont filter
@@ -297,17 +300,9 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
 
     MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
     MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
-    // deal with min_values
-    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, col_type,
-                                                         get_column_parquet_field(), _opts.timezone);
-    if (!st.ok()) {
-        // swallow error status
-        LOG(INFO) << "Error when decode min/max statistics, type " << col_type.debug_string();
-        return false;
-    }
-    // deal with max_values
-    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, null_pages, col_type,
-                                                    get_column_parquet_field(), _opts.timezone);
+    auto st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, column_index.min_values,
+                                                            column_index.max_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
         LOG(INFO) << "Error when decode min/max statistics, type " << col_type.debug_string();

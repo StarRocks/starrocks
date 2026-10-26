@@ -1,0 +1,208 @@
+-- name: test_paimon_compatibility_json
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_json_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_json_v1 order by id", "reader_json_v1", "jni", "FILE_FORMAT")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_json_v1 order by id", "FILE_FORMAT")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_json_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_json_v1 order by id", "reader_json_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_per_level
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_per_level_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_per_level_v1 order by id", "reader_per_level_v1", "jni", "FILE_FORMAT")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_per_level_v1 order by id", "FILE_FORMAT")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_per_level_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_per_level_v1 order by id", "reader_per_level_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_aggregate_product
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_aggregate_product_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_aggregate_product_v1 order by id", "reader_aggregate_product_v1", "jni", "MERGE_FUNCTION")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_aggregate_product_v1 order by id", "MERGE_FUNCTION")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_aggregate_product_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_aggregate_product_v1 order by id", "reader_aggregate_product_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_timestamp9
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,cast(v as varchar) from paimon_boundaries_${uuid0}.paimon_test.reader_timestamp9_v1 order by id;
+function: assert_paimon_readers("select id,cast(v as varchar) from paimon_boundaries_${uuid0}.paimon_test.reader_timestamp9_v1 order by id", "reader_timestamp9_v1", "jni", "TIMESTAMP")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,cast(v as varchar) from paimon_boundaries_${uuid0}.paimon_test.reader_timestamp9_v1 order by id", "TIMESTAMP")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,cast(v as varchar) from paimon_boundaries_${uuid0}.paimon_test.reader_timestamp9_v1 order by id;
+function: assert_paimon_readers("select id,cast(v as varchar) from paimon_boundaries_${uuid0}.paimon_test.reader_timestamp9_v1 order by id", "reader_timestamp9_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_orc_legacy
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,date_format(v,'%f') from paimon_boundaries_${uuid0}.paimon_test.reader_orc_legacy_v1 order by id;
+function: assert_paimon_readers("select id,date_format(v,'%f') from paimon_boundaries_${uuid0}.paimon_test.reader_orc_legacy_v1 order by id", "reader_orc_legacy_v1", "jni", "ORC_LEGACY_TIMESTAMP")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,date_format(v,'%f') from paimon_boundaries_${uuid0}.paimon_test.reader_orc_legacy_v1 order by id", "ORC_LEGACY_TIMESTAMP")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,date_format(v,'%f') from paimon_boundaries_${uuid0}.paimon_test.reader_orc_legacy_v1 order by id;
+function: assert_paimon_readers("select id,date_format(v,'%f') from paimon_boundaries_${uuid0}.paimon_test.reader_orc_legacy_v1 order by id", "reader_orc_legacy_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_nullable_map_orc
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id;
+function: assert_paimon_readers("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id", "reader_pk_nullable_map_orc_v1", "jni", "NULLABLE_MAP_KEY")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id", "NULLABLE_MAP_KEY")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id;
+function: assert_paimon_readers("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id", "reader_pk_nullable_map_orc_v1", "jni", "EXPLICIT_MODE")
+[ORDER]select id,array_sort(map_keys(v)),array_sort(map_values(v)) from paimon_boundaries_${uuid0}.paimon_test.reader_pk_nullable_map_orc_v1 order by id;
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_nullable_map_avro
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id;
+function: assert_paimon_readers("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id", "reader_nullable_map_avro_v1", "jni", "NULLABLE_MAP_KEY")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id", "NULLABLE_MAP_KEY")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id;
+function: assert_paimon_readers("select id,map_size(v) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id", "reader_nullable_map_avro_v1", "jni", "EXPLICIT_MODE")
+[ORDER]select id,array_sort(map_keys(v)),array_sort(map_values(v)) from paimon_boundaries_${uuid0}.paimon_test.reader_nullable_map_avro_v1 order by id;
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_schema_cast
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_schema_cast_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_schema_cast_v1 order by id", "reader_schema_cast_v1", "jni", "SCHEMA_EVOLUTION")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_schema_cast_v1 order by id", "SCHEMA_EVOLUTION")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_schema_cast_v1 order by id;
+function: assert_paimon_readers("select id,v from paimon_boundaries_${uuid0}.paimon_test.reader_schema_cast_v1 order by id", "reader_schema_cast_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};
+
+-- name: test_paimon_compatibility_bitmap64
+create external catalog paimon_boundaries_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set time_zone = 'UTC';
+set enable_count_star_optimization = false;
+set paimon_reader_mode = 'auto';
+[ORDER]select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1;
+function: assert_paimon_readers("select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1", "reader_bitmap64_dv_v1", "jni", "DELETION_VECTOR")
+set paimon_reader_mode = 'native';
+function: assert_query_error_contains("select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1", "DELETION_VECTOR")
+set paimon_reader_mode = 'jni';
+[ORDER]select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1;
+function: assert_paimon_readers("select count(*),count(v),sum(cast(v as bigint)) from paimon_boundaries_${uuid0}.paimon_test.reader_bitmap64_dv_v1", "reader_bitmap64_dv_v1", "jni", "EXPLICIT_MODE")
+set catalog default_catalog;
+drop catalog paimon_boundaries_${uuid0};

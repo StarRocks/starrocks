@@ -16,6 +16,8 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Maps;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
@@ -104,6 +106,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_RUNNING.getMetric(category).increase((long) slot.getNumPhysicalSlots());
         MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_ALLOCATED_TOTAL.getMetric(category)
                 .increase((long) slot.getNumPhysicalSlots());
+        clearMemoryGateHoldIfDrained();
     }
 
     @Override
@@ -124,18 +127,41 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_RUNNING.getMetric(String.valueOf(slotContext.getSubQueueIndex()))
                     .increase((long) -slot.getNumPhysicalSlots());
         }
+        clearMemoryGateHoldIfDrained();
+    }
+
+    private void clearMemoryGateHoldIfDrained() {
+        if (requiringQueue.isEmpty()) {
+            // No query is left to admit, so no report has to wake admission up until the gate holds a query again.
+            slotManager.clearHeldByMemoryGate(warehouseId);
+        }
     }
 
     @Override
     public List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker) {
         updateOptionsPeriodically();
 
+        // The memory gate is evaluated at most once per batch, when the first candidate has passed the slot checks.
+        // Usage only changes with the next report, so every candidate of this batch sees the same decision; how
+        // many can overshoot in one batch is bounded by the slot pool, the concurrency limit and query_mem_limit.
+        final Supplier<MemoryAdmissionGate.Status> memoryGate =
+                Suppliers.memoize(() -> MemoryAdmissionGate.evaluate(warehouseId, slotManager));
+        // With nothing running in the warehouse the gate still admits one query. The memory of a node also holds
+        // loads, compaction, caches and queries that bypass the queue, which queueing cannot release, so without
+        // this a warehouse over its limit could stop admitting forever.
+        final boolean idle = slotTracker.getCurrentCurrency() == 0;
+
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
         // allocate small slots
         int curNumAllocatedSmallSlots = numAllocatedSmallSlots;
         for (SlotContext slotContext : requiringSmallSlots.values()) {
             LogicalSlot slot = slotContext.getSlot();
-            if (!isSmallSlotAvailable(slotTracker, slot, curNumAllocatedSmallSlots)) {
+            if (!isSmallSlotAvailable(slotTracker, slot, curNumAllocatedSmallSlots, slotsToAllocate.size())) {
+                break;
+            }
+            if (!isMemoryAvailable(memoryGate, idle, slotsToAllocate.size())) {
+                // No slot release may follow to wake admission up once usage drops, so the next report has to.
+                slotManager.onQueryHeldByMemoryGate(warehouseId);
                 break;
             }
 
@@ -150,7 +176,13 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         int numAllocatedSlots = slotTracker.getNumAllocatedSlots() - numAllocatedSmallSlots;
         while (!requiringQueue.isEmpty()) {
             SlotContext slotContext = requiringQueue.peak();
-            if (!isGlobalSlotAvailable(slotTracker, numAllocatedSlots, slotContext.getSlot())) {
+            if (!isGlobalSlotAvailable(slotTracker, numAllocatedSlots, slotContext.getSlot(),
+                    slotsToAllocate.size())) {
+                break;
+            }
+            if (!isMemoryAvailable(memoryGate, idle, slotsToAllocate.size())) {
+                // No slot release may follow to wake admission up once usage drops, so the next report has to.
+                slotManager.onQueryHeldByMemoryGate(warehouseId);
                 break;
             }
 
@@ -205,38 +237,49 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
     private boolean isSmallSlotAvailable(BaseSlotTracker slotTracker,
                                          LogicalSlot slot,
-                                         int curNumAllocatedSmallSlots) {
+                                         int curNumAllocatedSmallSlots,
+                                         int numSelectedQueriesInBatch) {
         // if the small slot limit is reached, return false
         if (curNumAllocatedSmallSlots + slot.getNumPhysicalSlots() > opts.v2().getTotalSmallSlots()) {
             return false;
         }
         // if the concurrency limit is set and the limit is reached, return false
-        if (!isQueryConcurrencyLimitAvailable(slotTracker)) {
+        if (!isQueryConcurrencyLimitAvailable(slotTracker, numSelectedQueriesInBatch)) {
             return false;
         }
         return true;
     }
 
-    private boolean isGlobalSlotAvailable(BaseSlotTracker slotTracker, int numAllocatedSlots, LogicalSlot slot) {
+    private boolean isGlobalSlotAvailable(BaseSlotTracker slotTracker, int numAllocatedSlots, LogicalSlot slot,
+                                          int numSelectedQueriesInBatch) {
         // check the total slots limit is reached
         final int numTotalSlots = opts.v2().getTotalSlots();
         if (numAllocatedSlots != 0 && numAllocatedSlots + slot.getNumPhysicalSlots() > numTotalSlots) {
             return false;
         }
         // if the concurrency limit is set and the limit is reached, return false
-        if (!isQueryConcurrencyLimitAvailable(slotTracker)) {
+        if (!isQueryConcurrencyLimitAvailable(slotTracker, numSelectedQueriesInBatch)) {
             return false;
         }
         return true;
     }
 
-    private boolean isQueryConcurrencyLimitAvailable(BaseSlotTracker slotTracker) {
+    private boolean isQueryConcurrencyLimitAvailable(BaseSlotTracker slotTracker, int numSelectedQueriesInBatch) {
         // if the query queue limit is not set(by default), return true
         int queryQueueConcurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
         if (queryQueueConcurrencyLimit <= 0) {
             return true;
         }
-        return slotTracker.getCurrentCurrency() < queryQueueConcurrencyLimit;
+        // getCurrentCurrency() counts the queries the tracker has already allocated, and the tracker is only
+        // updated after peakSlotsToAllocate returns. Without adding the queries picked earlier in this same
+        // batch, the check compares against a value that stays constant for the whole loop, so the limit
+        // stops being an upper bound. DefaultSlotSelectionStrategy already accounts for the batch this way.
+        return slotTracker.getCurrentCurrency() + numSelectedQueriesInBatch < queryQueueConcurrencyLimit;
+    }
+
+    private static boolean isMemoryAvailable(Supplier<MemoryAdmissionGate.Status> memoryGate, boolean idle,
+                                             int numSelectedQueriesInBatch) {
+        return !memoryGate.get().isBlocked() || (idle && numSelectedQueriesInBatch == 0);
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {

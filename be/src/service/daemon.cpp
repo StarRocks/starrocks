@@ -57,6 +57,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "base/hash/crc32c.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
@@ -240,6 +241,8 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
     DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
     DUMP_METRIC(vector_index, mem_metrics->vector_index_mem_bytes.value())
+    auto* jvm_tracker = RuntimeEnv::GetInstance()->jvm_mem_tracker();
+    DUMP_METRIC(jvm, jvm_tracker != nullptr ? jvm_tracker->consumption() : 0)
 
     DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
     DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
@@ -377,6 +380,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
     LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    LOG(INFO) << "crc32c acceleration: " << crc32c::ActiveImplementationName();
     auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
     if (!unsupported_flags.empty()) {
         LOG(FATAL) << fmt::format(
