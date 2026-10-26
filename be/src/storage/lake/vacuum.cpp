@@ -798,12 +798,13 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
                                      int64_t min_retain_version, int64_t grace_timestamp, int64_t resume_from_version,
                                      int64_t max_versions_per_round, int64_t max_empty_walk_versions,
                                      int64_t deadline_ms, int64_t* to_delete_low, int64_t* to_delete_high,
-                                     int64_t* next_propose_start_version, int64_t* pass_start_version) {
+                                     int64_t* next_propose_start_version, int64_t* pass_start_version,
+                                     bool* grace_blocked) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(max_versions_per_round > 0);
     DCHECK(max_empty_walk_versions > 0);
     DCHECK(to_delete_low != nullptr && to_delete_high != nullptr && next_propose_start_version != nullptr &&
-           pass_start_version != nullptr);
+           pass_start_version != nullptr && grace_blocked != nullptr);
 
     VacuumTabletMetaVerionRange vacuum_version_range;
     vacuum_version_range.intersect_low = true;
@@ -932,9 +933,20 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
                                                        : (stopped_by_limit ? "budget" : "chain_bottom")));
 
         if (!skip_check_timestamp) {
-            // Every version this tablet examined is still within the grace window (or none existed): it
+            if (!anchored) {
+                // Never-anchored on a fresh round: this tablet has no metadata at or below the retain floor
+                // -- a cross-generation tablet, or a non-base index whose first version sits above the floor
+                // -- so every version it "examined" was a NotFound step-down, not a real within-grace
+                // version. It is DRAINED, not grace-blocked: it neither restricts the deletable intersection
+                // (nothing below the floor to protect) nor forces the round to wait. Skip it, exactly as the
+                // resume-round path (the `if (anchored)` merge guard below) already does. Zeroing the node
+                // here instead would (a) report grace_blocked and livelock the FE forever on a tablet that
+                // can never anchor, and (b) discard the other tablets' real garbage below the raised floor.
+                continue;
+            }
+            // Anchored but every version read is still within the grace window: genuinely grace-blocked. It
             // has nothing safely deletable this round. As the partition range is the intersection across
-            // tablets, the whole round proposes nothing.
+            // tablets, the whole round must wait (its garbage is not yet eligible for deletion).
             nothing_to_delete = true;
             break;
         }
@@ -961,6 +973,11 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
     *to_delete_high = 0;
     *next_propose_start_version = 0;
     *pass_start_version = 0;
+    // Tell the FE WHY an empty proposal is empty: grace-blocked (a tablet is still within grace -> the
+    // partition round must wait) vs drained/never-anchored (chain bottom -> the FE may ignore this node).
+    // Only nothing_to_delete (the grace-branch break) is a grace block; an empty intersection from drained
+    // tablets leaves it false. Meaningless on a non-empty proposal (the FE reads it only when empty).
+    *grace_blocked = nothing_to_delete;
     if (!nothing_to_delete && vacuum_version_range.max_version > vacuum_version_range.min_version) {
         // min_version/max_version come straight from the intersection merge: min_version = max of the
         // per-tablet walk lows (intersect_low), max_version = MIN of the per-tablet retain boundaries =
@@ -1431,9 +1448,11 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         int64_t next_to_delete_high = 0;
         int64_t next_cursor = 0;
         int64_t next_pass_start = 0;
+        bool next_grace_blocked = false;
         if (auto st = propose_metadata_range(tablet_mgr, tablet_infos, min_retain_version, grace_timestamp, resume_from,
                                              request.max_versions_per_round(), max_empty_walk_versions, deadline_ms,
-                                             &next_to_delete_low, &next_to_delete_high, &next_cursor, &next_pass_start);
+                                             &next_to_delete_low, &next_to_delete_high, &next_cursor, &next_pass_start,
+                                             &next_grace_blocked);
             !st.ok()) {
             LOG(WARNING) << "incremental vacuum propose failed: partition=" << request.partition_id()
                          << " resume_from=" << resume_from << " min_retain=" << min_retain_version << ": " << st;
@@ -1443,6 +1462,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         resp_state->set_to_delete_low(next_to_delete_low);
         resp_state->set_to_delete_high(next_to_delete_high);
         resp_state->set_next_propose_start_version(next_cursor);
+        // Tell the FE whether an empty proposal is grace-blocked (wait) or drained (ignorable), so a
+        // drained node on a multi-node partition does not zero the aggregate and orphan another node's
+        // backlog. Only meaningful when the proposal is empty; harmless otherwise.
+        resp_state->set_grace_blocked(next_grace_blocked);
         // Only a fresh round (resume cursor 0/unset) establishes the pass retain floor; the FE captures
         // it then and holds it constant for the rest of the pass.
         if (resume_from == 0) {

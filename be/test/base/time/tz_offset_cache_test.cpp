@@ -109,6 +109,259 @@ PARALLEL_TEST(TzOffsetCacheTest, offset_for_unix_matches_ground_truth) {
     }
 }
 
+// The batch forms agree with cctz for sorted, shuffled and time-clustered batches with null rows, and a uniform
+// offset is only reported for a range without a transition in it.
+PARALLEL_TEST(TzOffsetCacheTest, batch_offsets_match_ground_truth) {
+    for (const std::string name : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai", "UTC", "+08:00"}) {
+        cctz::time_zone tz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(name, tz)) << name;
+        std::mt19937_64 rng(7);
+        TzOffsetCache cache;
+        for (int64_t span : {3600LL, 86400LL * 30, 86400LL * 366, 86400LL * 366 * 50}) {
+            for (int round = 0; round < 20; ++round) {
+                const size_t n = 1 + rng() % 4096;
+                const int64_t base = static_cast<int64_t>(rng() % 3000000000ULL) - 1000000000LL;
+                std::vector<int64_t> secs(n);
+                std::vector<uint8_t> is_null(n);
+                for (size_t i = 0; i < n; ++i) {
+                    secs[i] = base + static_cast<int64_t>(rng() % span);
+                    is_null[i] = rng() % 5 == 0;
+                }
+                if (round % 2 == 0) {
+                    std::sort(secs.begin(), secs.end());
+                }
+                std::vector<int64_t> offsets(n, -1);
+                cache.offsets_for_unix(secs.data(), is_null.data(), n, tz, offsets.data());
+                for (size_t i = 0; i < n; ++i) {
+                    EXPECT_EQ(is_null[i] ? 0 : ground_truth_offset(tz, secs[i]), offsets[i])
+                            << name << " span=" << span << " abs=" << secs[i];
+                }
+
+                int64_t lo = *std::min_element(secs.begin(), secs.end());
+                int64_t hi = *std::max_element(secs.begin(), secs.end());
+                int64_t offset = 0;
+                if (cache.uniform_offset_for_unix(lo, hi, tz, &offset)) {
+                    EXPECT_EQ(ground_truth_offset(tz, lo), offset) << name << " lo=" << lo;
+                    cctz::time_zone::civil_transition trans;
+                    if (tz.next_transition(unix_to_tp(lo), &trans)) {
+                        EXPECT_GT(tz.lookup(trans.to).trans, unix_to_tp(hi)) << name << " lo=" << lo << " hi=" << hi;
+                    }
+                } else {
+                    EXPECT_NE(name, "UTC");
+                    EXPECT_NE(name, "+08:00");
+                }
+            }
+        }
+
+        // Every recorded transition, to the second, in one shuffled batch and as one-transition ranges.
+        std::vector<int64_t> probes;
+        int uncached = 0;
+        auto tp = cctz::time_point<cctz::seconds>::min();
+        cctz::time_zone::civil_transition trans;
+        while (tz.next_transition(tp, &trans) && probes.size() < 20000) {
+            tp = tz.lookup(trans.to).trans;
+            const int64_t instant = tp.time_since_epoch().count();
+            for (int64_t d : {-3601LL, -3600LL, -1LL, 0LL, 1LL, 3599LL, 3600LL}) {
+                probes.push_back(instant + d);
+            }
+            // The last recorded transition of a zone still cycling past the table is not cached (uniform reports
+            // false and the batch falls back to per-value lookups); every other one is.
+            int64_t offset = 0;
+            TzOffsetCache fresh;
+            if (fresh.uniform_offset_for_unix(instant, instant, tz, &offset)) {
+                EXPECT_EQ(ground_truth_offset(tz, instant), offset) << name << " transition=" << instant;
+            } else {
+                ++uncached;
+            }
+            if (ground_truth_offset(tz, instant - 1) != ground_truth_offset(tz, instant)) {
+                EXPECT_FALSE(fresh.uniform_offset_for_unix(instant - 1, instant, tz, &offset))
+                        << name << " transition=" << instant;
+            }
+        }
+        EXPECT_LE(uncached, 1) << name;
+        // Batches of 100 transitions (served from the table) and all of them at once (past kMaxTableTransitions for
+        // a DST zone: per-value lookups), each shuffled.
+        TzOffsetCache transitions_cache;
+        for (size_t chunk : {size_t(700), probes.size()}) {
+            for (size_t from = 0; from < probes.size(); from += chunk) {
+                std::vector<int64_t> batch(probes.begin() + from,
+                                           probes.begin() + std::min(from + chunk, probes.size()));
+                std::shuffle(batch.begin(), batch.end(), rng);
+                std::vector<int64_t> offsets(batch.size());
+                transitions_cache.offsets_for_unix(batch.data(), nullptr, batch.size(), tz, offsets.data());
+                for (size_t i = 0; i < batch.size(); ++i) {
+                    EXPECT_EQ(ground_truth_offset(tz, batch[i]), offsets[i]) << name << " abs=" << batch[i];
+                }
+            }
+        }
+
+        // Values far outside any time zone data fall back to per-value lookups instead of overflowing.
+        std::vector<int64_t> extremes = {std::numeric_limits<int64_t>::min() / 2, -1, 0,
+                                         std::numeric_limits<int64_t>::max() / 2};
+        std::vector<int64_t> extreme_offsets(extremes.size());
+        TzOffsetCache extreme_cache;
+        extreme_cache.offsets_for_unix(extremes.data(), nullptr, extremes.size(), tz, extreme_offsets.data());
+        for (size_t i = 0; i < extremes.size(); ++i) {
+            EXPECT_EQ(ground_truth_offset(tz, extremes[i]), extreme_offsets[i]) << name << " abs=" << extremes[i];
+        }
+    }
+}
+
+// The bound per-value form agrees with cctz for every access pattern: clustered, sorted and random values over
+// spans up to a few centuries (past kMaxTableTransitions for a DST zone, where it falls back to cctz lookups), every
+// transition to the second, values beyond any time zone data, a rebind to another zone and back, and batch calls
+// interleaved on the same cache.
+PARALLEL_TEST(TzOffsetCacheTest, bound_offsets_match_ground_truth) {
+    const std::vector<std::string> zones = {"America/Los_Angeles", "Europe/London", "Australia/Lord_Howe",
+                                            "Asia/Shanghai",       "UTC",           "+08:00"};
+    std::vector<cctz::time_zone> tzs(zones.size());
+    for (size_t z = 0; z < zones.size(); ++z) {
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zones[z], tzs[z])) << zones[z];
+    }
+    std::mt19937_64 rng(11);
+    for (size_t z = 0; z < zones.size(); ++z) {
+        const std::string& name = zones[z];
+        const cctz::time_zone& tz = tzs[z];
+        for (int64_t span : {60LL, 86400LL * 30, 86400LL * 366, 86400LL * 366 * 50, 86400LL * 366 * 400}) {
+            for (bool sorted : {false, true}) {
+                TzOffsetCache cache;
+                cache.bind(tz);
+                std::vector<int64_t> secs(5000);
+                const int64_t base = static_cast<int64_t>(rng() % 6000000000ULL) - 3000000000LL;
+                for (auto& v : secs) {
+                    v = base + static_cast<int64_t>(rng() % span);
+                }
+                if (sorted) {
+                    std::sort(secs.begin(), secs.end());
+                }
+                for (int64_t v : secs) {
+                    ASSERT_EQ(ground_truth_offset(tz, v), cache.offset_in_bound_zone(v))
+                            << name << " span=" << span << " sorted=" << sorted << " abs=" << v;
+                }
+            }
+        }
+
+        TzOffsetCache cache;
+        cache.bind(tz);
+        auto tp = cctz::time_point<cctz::seconds>::min();
+        cctz::time_zone::civil_transition trans;
+        int count = 0;
+        while (tz.next_transition(tp, &trans) && count++ < 2000) {
+            tp = tz.lookup(trans.to).trans;
+            const int64_t instant = tp.time_since_epoch().count();
+            for (int64_t d : {-3601LL, -1LL, 0LL, 1LL, 3600LL}) {
+                ASSERT_EQ(ground_truth_offset(tz, instant + d), cache.offset_in_bound_zone(instant + d))
+                        << name << " abs=" << instant + d;
+            }
+        }
+        for (int64_t v : {std::numeric_limits<int64_t>::min() / 2, -(int64_t(1) << 41), int64_t(1) << 41,
+                          std::numeric_limits<int64_t>::max() / 2, int64_t(0)}) {
+            EXPECT_EQ(ground_truth_offset(tz, v), cache.offset_in_bound_zone(v)) << name << " abs=" << v;
+        }
+    }
+
+    // One cache rebound across zones, with batch calls in between, keeps answering for the bound zone.
+    TzOffsetCache shared;
+    std::vector<int64_t> batch_offsets(64);
+    for (int round = 0; round < 200; ++round) {
+        const size_t z = rng() % tzs.size();
+        shared.bind(tzs[z]);
+        for (int i = 0; i < 50; ++i) {
+            const int64_t v = static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL;
+            ASSERT_EQ(ground_truth_offset(tzs[z], v), shared.offset_in_bound_zone(v)) << zones[z] << " abs=" << v;
+        }
+        const size_t other = rng() % tzs.size();
+        std::vector<int64_t> batch(batch_offsets.size());
+        for (auto& v : batch) {
+            v = static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL;
+        }
+        shared.offsets_for_unix(batch.data(), nullptr, batch.size(), tzs[other], batch_offsets.data());
+        for (size_t i = 0; i < batch.size(); ++i) {
+            ASSERT_EQ(ground_truth_offset(tzs[other], batch[i]), batch_offsets[i]) << zones[other];
+        }
+        for (int i = 0; i < 50; ++i) {
+            const int64_t v = static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL;
+            ASSERT_EQ(ground_truth_offset(tzs[z], v), shared.offset_in_bound_zone(v)) << zones[z] << " abs=" << v;
+        }
+    }
+}
+
+// offset_range_for_unix gives the least and greatest offsets over [lo, hi]: the offset at lo and after every
+// transition in (lo, hi], enumerated with cctz.
+PARALLEL_TEST(TzOffsetCacheTest, offset_range_matches_ground_truth) {
+    std::mt19937_64 rng(19);
+    for (const std::string name :
+         {"America/Los_Angeles", "Europe/London", "Antarctica/Casey", "Asia/Shanghai", "UTC"}) {
+        cctz::time_zone tz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(name, tz)) << name;
+        TzOffsetCache cache;
+        for (int round = 0; round < 3000; ++round) {
+            const int64_t span = std::vector<int64_t>{3600, 86400 * 3, 86400 * 400, 86400LL * 366 * 30}[round % 4];
+            const int64_t lo = static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL;
+            const int64_t hi = lo + static_cast<int64_t>(rng() % span);
+            int64_t want_min = ground_truth_offset(tz, lo);
+            int64_t want_max = want_min;
+            auto tp = unix_to_tp(lo);
+            cctz::time_zone::civil_transition trans;
+            while (tz.next_transition(tp, &trans)) {
+                tp = tz.lookup(trans.to).trans;
+                if (tp > unix_to_tp(hi)) {
+                    break;
+                }
+                want_min = std::min<int64_t>(want_min, ground_truth_offset(tz, tp.time_since_epoch().count()));
+                want_max = std::max<int64_t>(want_max, ground_truth_offset(tz, tp.time_since_epoch().count()));
+            }
+            int64_t got_min = 0;
+            int64_t got_max = 0;
+            ASSERT_TRUE(cache.offset_range_for_unix(lo, hi, tz, &got_min, &got_max)) << name << " " << lo << " " << hi;
+            ASSERT_EQ(want_min, got_min) << name << " " << lo << " " << hi;
+            ASSERT_EQ(want_max, got_max) << name << " " << lo << " " << hi;
+        }
+        int64_t a = 0;
+        int64_t b = 0;
+        EXPECT_FALSE(cache.offset_range_for_unix(10, 9, tz, &a, &b));
+        // Far before any data: a table already covering it (no earlier transition) answers, else none is built.
+        const int64_t far = std::numeric_limits<int64_t>::min() / 2;
+        if (cache.offset_range_for_unix(far, 0, tz, &a, &b)) {
+            EXPECT_LE(a, ground_truth_offset(tz, far)) << name;
+            EXPECT_GE(b, ground_truth_offset(tz, 0)) << name;
+        }
+        TzOffsetCache fresh;
+        EXPECT_FALSE(fresh.offset_range_for_unix(far, 0, tz, &a, &b)) << name;
+    }
+}
+
+// Past the zone's enumerable transitions (~2437 for this tzdata) the batch, range and bound forms do not reuse a
+// table built for a later instant at an earlier one in the opposite season, whichever comes first.
+PARALLEL_TEST(TzOffsetCacheTest, batch_forms_past_explicit_table_do_not_poison_cache) {
+    cctz::time_zone tz;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Europe/London", tz));
+    const int64_t winter = 32503680000LL;                 // 3000-01-01 00:00 UTC
+    const int64_t summer = winter - 184LL * 86400 + 3600; // 2999-06-30 01:00 UTC
+    ASSERT_NE(ground_truth_offset(tz, winter), ground_truth_offset(tz, summer));
+    for (const auto& order : std::vector<std::pair<int64_t, int64_t>>{{winter, summer}, {summer, winter}}) {
+        TzOffsetCache batch;
+        for (int64_t v : {order.first, order.second}) {
+            int64_t offset = 0;
+            batch.offsets_for_unix(&v, nullptr, 1, tz, &offset);
+            EXPECT_EQ(ground_truth_offset(tz, v), offset) << v;
+            if (batch.uniform_offset_for_unix(v, v, tz, &offset)) {
+                EXPECT_EQ(ground_truth_offset(tz, v), offset) << v;
+            }
+            int64_t lo = 0;
+            int64_t hi = 0;
+            if (batch.offset_range_for_unix(v, v, tz, &lo, &hi)) {
+                EXPECT_EQ(ground_truth_offset(tz, v), lo) << v;
+                EXPECT_EQ(ground_truth_offset(tz, v), hi) << v;
+            }
+        }
+        TzOffsetCache bound;
+        bound.bind(tz);
+        EXPECT_EQ(ground_truth_offset(tz, order.first), bound.offset_in_bound_zone(order.first));
+        EXPECT_EQ(ground_truth_offset(tz, order.second), bound.offset_in_bound_zone(order.second));
+    }
+}
+
 // Same idea for unix_for_civil, additionally probing exactly the SKIPPED (nonexistent) and
 // REPEATED (ambiguous) civil ranges around each transition, where cctz::convert()'s tie-break
 // (SKIPPED -> transition instant, REPEATED -> earlier/"pre" instant) must be reproduced exactly.

@@ -85,7 +85,13 @@ Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_reference_builder_hash_table_once());
-    return _join_prober->pull_chunk(state);
+    ASSIGN_OR_RETURN(auto chunk, _join_prober->pull_chunk(state));
+    // The FE attaches a runtime filter to a join node when it cannot be pushed further down,
+    // e.g. a partitioned global filter whose partition_exprs span tables on both sides of this join.
+    // Nulls are kept: an outer join records the probe slot of every filter pushed through it in
+    // filter_null_value_columns, which would also drop preserved-side NULLs for a TopN filter.
+    eval_runtime_bloom_filters_keep_nulls(chunk.get());
+    return chunk;
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {

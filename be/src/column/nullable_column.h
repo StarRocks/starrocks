@@ -182,7 +182,13 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
+    uint32_t max_one_element_serialize_size_compact() const override {
+        return sizeof(bool) + _data_column->max_one_element_serialize_size_compact();
+    }
+
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
+
+    uint32_t serialize_compact(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;
 
@@ -201,6 +207,8 @@ public:
     }
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 

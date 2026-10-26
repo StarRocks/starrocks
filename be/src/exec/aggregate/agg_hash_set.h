@@ -640,17 +640,6 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         }
     }
 
-<<<<<<< HEAD
-    size_t get_max_serialize_size(const Columns& key_columns) {
-        size_t max_size = 0;
-        for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size();
-        }
-        return max_size;
-    }
-
-=======
->>>>>>> f3e68ef8d7d... [Enhancement] Pack serialized agg keys back to back instead of at a max-row stride (#63696)
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
@@ -660,8 +649,8 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             // deserialize by row
             for (size_t i = 0; i < chunk_size; i++) {
                 for (auto& key_column : key_columns) {
-                    keys[i].data =
-                            (char*)(key_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(keys[i].data)));
+                    keys[i].data = (char*)(key_column->deserialize_compact_and_append(
+                            reinterpret_cast<const uint8_t*>(keys[i].data)));
                 }
             }
         } else {

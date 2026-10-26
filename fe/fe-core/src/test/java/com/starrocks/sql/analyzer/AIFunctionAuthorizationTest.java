@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -58,29 +59,29 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
 
     @BeforeAll
     public static void setUpAIObjects() throws Exception {
-        previousAIConfig = new String[] {Config.ai_default_chat_endpoint, Config.ai_default_chat_model,
-                Config.ai_default_chat_provider, Config.ai_default_embedding_endpoint,
-                Config.ai_default_embedding_model, Config.ai_default_embedding_provider};
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "authorization-model";
-        Config.ai_default_chat_provider = "openai_compatible";
-        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
-        Config.ai_default_embedding_model = "authorization-embedding-model";
-        Config.ai_default_embedding_provider = "openai_compatible";
+        previousAIConfig = new String[] {AIProviderTestUtil.chatProperty("endpoint"), AIProviderTestUtil.chatProperty("model"),
+                AIProviderTestUtil.chatProperty("protocol"), AIProviderTestUtil.embeddingProperty("endpoint"),
+                AIProviderTestUtil.embeddingProperty("model"), AIProviderTestUtil.embeddingProperty("protocol")};
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "authorization-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "authorization-embedding-model");
+        AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
         starRocksAssert.withDatabase("ai_authorization").useDatabase("ai_authorization");
         GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider("ai_authorization_provider", AIProviderType.CHAT,
-                Map.of("endpoint", Config.ai_default_chat_endpoint, "model", "provider-model",
+                Map.of("endpoint", AIProviderTestUtil.chatProperty("endpoint"), "model", "provider-model",
                         "api_key", "private-authorization-test-key"), "");
     }
 
     @AfterAll
     public static void restoreAIConfiguration() throws Exception {
-        Config.ai_default_chat_endpoint = previousAIConfig[0];
-        Config.ai_default_chat_model = previousAIConfig[1];
-        Config.ai_default_chat_provider = previousAIConfig[2];
-        Config.ai_default_embedding_endpoint = previousAIConfig[3];
-        Config.ai_default_embedding_model = previousAIConfig[4];
-        Config.ai_default_embedding_provider = previousAIConfig[5];
+        AIProviderTestUtil.setChatProperty("endpoint", previousAIConfig[0]);
+        AIProviderTestUtil.setChatProperty("model", previousAIConfig[1]);
+        AIProviderTestUtil.setChatProperty("protocol", previousAIConfig[2]);
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", previousAIConfig[3]);
+        AIProviderTestUtil.setEmbeddingProperty("model", previousAIConfig[4]);
+        AIProviderTestUtil.setEmbeddingProperty("protocol", previousAIConfig[5]);
         GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider("ai_authorization_provider", true);
     }
 
@@ -88,6 +89,8 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
     public void createCaller() throws Exception {
         user = "ai_analyzer_usage_" + NEXT_USER.incrementAndGet();
         executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_embedding TO '" + user + "'");
         caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
         caller.setCurrentRoleIds(Set.of());
         caller.setDatabase("ai_authorization");
@@ -108,7 +111,7 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
     @ParameterizedTest
     @CsvSource(value = {
             "ai_complete | ai_complete('prompt')",
-            "ai_complete | ai_complete('model', 'prompt', map{'temperature': 0.5})",
+            "ai_complete | ai_complete(prompt => 'prompt', model => 'model', options => json_object('temperature', 0.5))",
             "ai_embed | ai_embed('prompt')",
             "ai_sentiment | ai_sentiment('prompt')",
             "ai_classify | ai_classify('prompt', ['label'])",
@@ -127,24 +130,34 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
         QueryStatement statement = (QueryStatement) analyze(sql, caller);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                 .getOutputExpression().get(0);
-        Assertions.assertTrue(call.getFn().isAi());
+        Assertions.assertTrue(call.getFn().isAI());
         Assertions.assertEquals(family, call.getFn().functionName());
         executeAsRoot("REVOKE USAGE ON AI FUNCTION " + family + " FROM '" + user + "'");
         assertAnalysisDenied(sql, caller, "AI FUNCTION");
     }
 
     @Test
+    public void testDefaultProviderRequiresItsOwnUsageGrant() throws Exception {
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
+        executeAsRoot("REVOKE USAGE ON AI PROVIDER test_default_chat FROM '" + user + "'");
+        assertAnalysisDenied("SELECT ai_complete('prompt')", caller, "AI PROVIDER");
+        assertAnalysisDenied("SELECT ai_complete(prompt => 'prompt', model => 'model')", caller, "AI PROVIDER");
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO '" + user + "'");
+        analyze("SELECT ai_complete('prompt')", caller);
+    }
+
+    @Test
     public void testProviderAndFunctionRequireSeparateUsage() throws Exception {
-        String sql = "SELECT ai_custom_query('ai_authorization_provider', 'prompt')";
+        String sql = "SELECT ai_complete(provider => 'ai_authorization_provider', model => 'explicit-model', prompt => 'prompt')";
         executeAsRoot("GRANT USAGE ON AI PROVIDER ai_authorization_provider TO '" + user + "'");
         assertAnalysisDenied(sql, caller, "AI FUNCTION");
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
         analyze(sql, caller);
         executeAsRoot("REVOKE USAGE ON AI PROVIDER ai_authorization_provider FROM '" + user + "'");
         assertAnalysisDenied(sql, caller, "AI PROVIDER");
         executeAsRoot("GRANT USAGE ON AI PROVIDER ai_authorization_provider TO '" + user + "'");
         analyze(sql, caller);
-        executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_custom_query FROM '" + user + "'");
+        executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_complete FROM '" + user + "'");
         assertAnalysisDenied(sql, caller, "AI FUNCTION");
     }
 
@@ -209,7 +222,7 @@ public class AIFunctionAuthorizationTest extends PlanTestNoneDBBase {
         Assertions.assertDoesNotThrow(() -> Authorizer.check(statement, caller));
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) ((QueryStatement) statement).getQueryRelation())
                 .getOutputExpression().get(0);
-        Assertions.assertFalse(call.getFn().isAi());
+        Assertions.assertFalse(call.getFn().isAI());
     }
 
     @Test
