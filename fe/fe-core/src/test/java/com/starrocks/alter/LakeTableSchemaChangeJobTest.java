@@ -60,11 +60,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-<<<<<<< HEAD
-=======
-import com.starrocks.service.TableSchemaService;
 import com.starrocks.sql.OptimisticVersion;
->>>>>>> b6eb7fef82d... [BugFix][RB-642] Bump lastSchemaUpdateTime before shared-data schema change swaps indexes so concurrent queries re-plan (#66589)
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
