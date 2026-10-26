@@ -78,7 +78,7 @@ public class AggStateUtils {
      * @return true if the aggregate function is supported in the combinator
      */
     public static boolean isSupportedAggStateFunction(AggregateFunction aggFunc, boolean isAggIf) {
-        if (aggFunc == null || aggFunc.isAi()
+        if (aggFunc == null || aggFunc.isAI()
                 && VectorizedBuiltinFunctions.getAIAggregateLoweringDescriptor(aggFunc.getFunctionId()) != null) {
             return false;
         }

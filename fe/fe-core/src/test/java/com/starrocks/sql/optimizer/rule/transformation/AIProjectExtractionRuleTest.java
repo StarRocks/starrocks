@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.common.Config;
-import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -70,7 +68,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
-import com.starrocks.utframe.AIProviderTestUtils;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -89,7 +87,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AIProjectExtractionRuleTest {
     private static ConnectContext connectContext;
-    private AIProviderTestUtils defaultProvider;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -98,99 +95,17 @@ public class AIProjectExtractionRuleTest {
     }
 
     @BeforeEach
-    public void setUpSystemChat() throws Exception {
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "default-model";
-        Config.ai_default_chat_provider = "openai_compatible";
-        defaultProvider = AIProviderTestUtils.withDefaultProvider("aggregate_lowering_default", AIProviderType.CHAT,
-                Map.of("endpoint", "https://provider.example.test/v1/chat/completions", "model", "aggregate-model",
-                        "api_key", "aggregate-lowering-key"));
+    public void setUpSystemChat() {
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "default-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterEach
-    public void clearSystemChat() throws Exception {
-        Config.ai_default_chat_endpoint = "";
-        Config.ai_default_chat_model = "";
-        Config.ai_default_chat_provider = "";
-        defaultProvider.close();
-    }
-
-    @Test
-    public void testOrdinaryRollupSumKeepsUnmodifiedInputThroughRepeat() {
-        RuleInput input = ruleInput("select tb, sum(tb) from tall group by rollup(tb)");
-        OptExpression root = input.logicalPlan.getRoot();
-        LogicalAggregationOperator aggregate = findOperators(root, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
-        LogicalRepeatOperator repeat = findOperators(root, OperatorType.LOGICAL_REPEAT).get(0).getOp().cast();
-        CallOperator sum = aggregate.getAggregations().values().iterator().next();
-        ColumnRefOperator sumInput = Assertions.assertInstanceOf(ColumnRefOperator.class, sum.getChild(0));
-        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
-                .noneMatch(sumInput::equals));
-        ScalarOperator clonedInput = findOperators(root, OperatorType.LOGICAL_PROJECT).stream()
-                .map(node -> (LogicalProjectOperator) node.getOp())
-                .map(project -> project.getColumnRefMap().get(sumInput)).filter(java.util.Objects::nonNull)
-                .findFirst().orElseThrow();
-        CloneOperator clone = Assertions.assertInstanceOf(CloneOperator.class, clonedInput);
-        Assertions.assertInstanceOf(ColumnRefOperator.class, clone.getChild(0));
-        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
-                .anyMatch(clone.getChild(0)::equals));
-    }
-
-    @Test
-    public void testAggregateDecorationsAreRestoredAfterReduction() {
-        RuleInput input = ruleInput("select ai_agg(ta, 'summarize') from tall");
-        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
-        LogicalAggregationOperator aggregate = aggregateExpression.getOp().cast();
-        ColumnRefOperator result = aggregate.getAggregations().keySet().iterator().next();
-        ColumnRefOperator projected = input.optimizerContext.getColumnRefFactory()
-                .create("projected", VarcharType.VARCHAR, true);
-        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.NE, result,
-                ConstantOperator.createVarchar(""));
-        LogicalAggregationOperator decorated = new LogicalAggregationOperator.Builder().withOperator(aggregate)
-                .setPredicate(predicate).setProjection(new Projection(Map.of(projected, result))).setLimit(5).build();
-        OptExpression lowered = lowerExpression(OptExpression.create(decorated, aggregateExpression.getInputs()),
-                input.optimizerContext);
-        Assertions.assertInstanceOf(LogicalLimitOperator.class, lowered.getOp());
-        Assertions.assertEquals(5, lowered.getOp().getLimit());
-        LogicalProjectOperator projection = lowered.inputAt(0).getOp().cast();
-        Assertions.assertEquals(Map.of(projected, result), projection.getColumnRefMap());
-        Assertions.assertSame(predicate, lowered.inputAt(0).inputAt(0).getOp().getPredicate());
-        LogicalAggregationOperator collector = findOperators(lowered, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
-        Assertions.assertNull(collector.getPredicate());
-        Assertions.assertNull(collector.getProjection());
-        Assertions.assertFalse(collector.hasLimit());
-        Assertions.assertEquals(new ColumnRefSet(List.of(projected)), lowered.getOutputColumns());
-        assertAIOnlyInAIProject(lowered);
-    }
-
-    @Test
-    public void testAggregateLoweringPreservesOutputAndOccurrenceIdentity() {
-        RuleInput input = ruleInput("select ta, count(*), ai_agg(cast(tb as varchar), 'summarize'), "
-                + "ai_agg(cast(tb as varchar), 'summarize') from tall group by ta");
-        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
-        LogicalAggregationOperator original = aggregateExpression.getOp().cast();
-        Assertions.assertEquals(3, original.getAggregations().size());
-        OptExpression lowered = lowerExpression(aggregateExpression, input.optimizerContext);
-        LogicalAIProjectOperator project = lowered.getOp().cast();
-        LogicalAggregationOperator collector = lowered.inputAt(0).getOp().cast();
-        Assertions.assertSame(aggregateExpression.inputAt(0), lowered.inputAt(0).inputAt(0));
-        Assertions.assertEquals(original.getGroupingKeys(), collector.getGroupingKeys());
-        Assertions.assertEquals(original.getPartitionByColumns(), collector.getPartitionByColumns());
-        Assertions.assertEquals(original.getOutputColumns(new com.starrocks.sql.optimizer.ExpressionContext(
-                aggregateExpression)), lowered.getOutputColumns());
-        original.getAggregations().forEach((output, call) -> {
-            if (call.getFunction().isAi()) {
-                CallOperator reducer = project.getColumnRefMap().get(output).cast();
-                Assertions.assertEquals("__ai_agg_reduce", reducer.getFnName());
-                Assertions.assertSame(call.getChild(2), reducer.getChild(2));
-                Assertions.assertEquals("__ai_collect_text",
-                        collector.getAggregations().get(reducer.getChild(0)).getFnName());
-                Assertions.assertFalse(project.getColumnRefMap().containsKey(reducer.getChild(0)));
-            } else {
-                Assertions.assertSame(call, collector.getAggregations().get(output));
-                Assertions.assertSame(output, project.getColumnRefMap().get(output));
-            }
-        });
-        assertAIOnlyInAIProject(lowered);
+    public void clearSystemChat() {
+        AIProviderTestUtil.setChatProperty("endpoint", "");
+        AIProviderTestUtil.setChatProperty("model", "");
+        AIProviderTestUtil.setChatProperty("protocol", "");
     }
 
     @Test
@@ -388,7 +303,7 @@ public class AIProjectExtractionRuleTest {
             Assertions.assertSame(originalRightChild, applyExpression.inputAt(1));
             Assertions.assertSame(originalRightOperand, predicate.getChild(1));
             assertApplyStatePreserved(originalApply, apply);
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()));
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()));
             Assertions.assertTrue(containsOperator(applyExpression.inputAt(0), OperatorType.LOGICAL_AI_PROJECT));
             Assertions.assertFalse(containsOperator(applyExpression.inputAt(1), OperatorType.LOGICAL_AI_PROJECT));
             assertAIOnlyInAIProject(root);
@@ -423,7 +338,7 @@ public class AIProjectExtractionRuleTest {
                         predicate.getChild(predicate.getTupleSize() + index));
             }
             assertApplyStatePreserved(originalApply, apply);
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()));
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()));
             Assertions.assertTrue(containsOperator(applyExpression.inputAt(0), OperatorType.LOGICAL_AI_PROJECT));
             Assertions.assertFalse(containsOperator(applyExpression.inputAt(1), OperatorType.LOGICAL_AI_PROJECT));
             assertAIOnlyInAIProject(root);
@@ -609,7 +524,7 @@ public class AIProjectExtractionRuleTest {
             CallOperator timeCall = new CallOperator(functionName, DateType.DATETIME, List.of());
             CallOperator wrapper = new CallOperator("concat", VarcharType.VARCHAR, List.of(timeCall));
 
-            Assertions.assertTrue(AiFunctionExtractor.containsNonReusableExpression(wrapper), functionName);
+            Assertions.assertTrue(AIFunctionExtractor.containsNonReusableExpression(wrapper), functionName);
         }
     }
 
@@ -704,7 +619,7 @@ public class AIProjectExtractionRuleTest {
         for (int rowIndex = 0; rowIndex < 2; rowIndex++) {
             LogicalProjectOperator rowProject = transformed.inputAt(rowIndex).getOp().cast();
             Assertions.assertTrue(rowProject.getColumnRefMap().values().stream()
-                    .noneMatch(AiFunctionExtractor::containsAI));
+                    .noneMatch(AIFunctionExtractor::containsAI));
             OptExpression rowAIProjectExpression = transformed.inputAt(rowIndex).inputAt(0);
             LogicalAIProjectOperator rowAIProject = rowAIProjectExpression.getOp().cast();
             CallOperator call = aiEntries(rowAIProject).get(0).getValue().cast();
@@ -723,7 +638,7 @@ public class AIProjectExtractionRuleTest {
         LogicalJoinOperator join = findOperators(result.root, OperatorType.LOGICAL_JOIN).get(0).getOp().cast();
 
         Assertions.assertEquals(JoinOperator.INNER_JOIN, join.getJoinType());
-        Assertions.assertFalse(AiFunctionExtractor.containsAI(join.getOnPredicate()));
+        Assertions.assertFalse(AIFunctionExtractor.containsAI(join.getOnPredicate()));
         Assertions.assertNotNull(join.getOnPredicate());
         Assertions.assertEquals(1, logicalAIProjects(result.root).size());
         assertAIOnlyInAIProject(result.root);
@@ -1098,7 +1013,7 @@ public class AIProjectExtractionRuleTest {
     private static List<Map.Entry<ColumnRefOperator, ScalarOperator>> aiEntries(
             LogicalAIProjectOperator project) {
         return project.getColumnRefMap().entrySet().stream()
-                .filter(entry -> AiFunctionExtractor.isAICall(entry.getValue()))
+                .filter(entry -> AIFunctionExtractor.isAICall(entry.getValue()))
                 .collect(Collectors.toList());
     }
 
@@ -1115,11 +1030,11 @@ public class AIProjectExtractionRuleTest {
 
     private static void assertAIProjectMapInvariant(LogicalAIProjectOperator project) {
         project.getColumnRefMap().forEach((output, expression) ->
-                Assertions.assertTrue(output.equals(expression) || AiFunctionExtractor.isAICall(expression),
+                Assertions.assertTrue(output.equals(expression) || AIFunctionExtractor.isAICall(expression),
                         output + " := " + expression));
         project.getCommonSubOperatorMap().values().forEach(expression -> {
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(expression), expression.toString());
-            Assertions.assertFalse(AiFunctionExtractor.containsNonReusableExpression(expression),
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(expression), expression.toString());
+            Assertions.assertFalse(AIFunctionExtractor.containsNonReusableExpression(expression),
                     expression.toString());
         });
     }
@@ -1141,28 +1056,28 @@ public class AIProjectExtractionRuleTest {
                 return;
             }
             Operator operator = expression.getOp();
-            Assertions.assertFalse(AiFunctionExtractor.containsAI(operator.getPredicate()), operator.toString());
+            Assertions.assertFalse(AIFunctionExtractor.containsAI(operator.getPredicate()), operator.toString());
             if (operator instanceof LogicalProjectOperator project) {
                 project.getColumnRefMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
             }
             if (operator.getProjection() != null) {
                 operator.getProjection().getColumnRefMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
                 operator.getProjection().getCommonSubOperatorMap().values().forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString()));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString()));
             }
             if (operator instanceof LogicalJoinOperator join) {
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(join.getOnPredicate()), join.toString());
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(join.getOnPredicate()), join.toString());
             }
             if (operator instanceof LogicalApplyOperator apply) {
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getSubqueryOperator()), apply.toString());
-                Assertions.assertFalse(AiFunctionExtractor.containsAI(apply.getCorrelationConjuncts()),
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getSubqueryOperator()), apply.toString());
+                Assertions.assertFalse(AIFunctionExtractor.containsAI(apply.getCorrelationConjuncts()),
                         apply.toString());
             }
             if (operator instanceof LogicalValuesOperator values) {
                 values.getRows().forEach(row -> row.forEach(value ->
-                        Assertions.assertFalse(AiFunctionExtractor.containsAI(value), value.toString())));
+                        Assertions.assertFalse(AIFunctionExtractor.containsAI(value), value.toString())));
             }
         });
     }
@@ -1199,4 +1114,84 @@ public class AIProjectExtractionRuleTest {
                                      Map<ColumnRefOperator, ScalarOperator> commonSlots,
                                      List<Integer> occurrenceIds) {
     }
+    @Test
+    public void testAggregateDecorationsAreRestoredAfterReduction() {
+        RuleInput input = ruleInput("select ai_agg(ta, 'summarize') from tall");
+        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
+        LogicalAggregationOperator aggregate = aggregateExpression.getOp().cast();
+        ColumnRefOperator result = aggregate.getAggregations().keySet().iterator().next();
+        ColumnRefOperator projected = input.optimizerContext.getColumnRefFactory()
+                .create("projected", VarcharType.VARCHAR, true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.NE, result,
+                ConstantOperator.createVarchar(""));
+        LogicalAggregationOperator decorated = new LogicalAggregationOperator.Builder().withOperator(aggregate)
+                .setPredicate(predicate).setProjection(new Projection(Map.of(projected, result))).setLimit(5).build();
+        OptExpression lowered = lowerExpression(OptExpression.create(decorated, aggregateExpression.getInputs()),
+                input.optimizerContext);
+        Assertions.assertInstanceOf(LogicalLimitOperator.class, lowered.getOp());
+        Assertions.assertEquals(5, lowered.getOp().getLimit());
+        LogicalProjectOperator projection = lowered.inputAt(0).getOp().cast();
+        Assertions.assertEquals(Map.of(projected, result), projection.getColumnRefMap());
+        Assertions.assertSame(predicate, lowered.inputAt(0).inputAt(0).getOp().getPredicate());
+        LogicalAggregationOperator collector = findOperators(lowered, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
+        Assertions.assertNull(collector.getPredicate());
+        Assertions.assertNull(collector.getProjection());
+        Assertions.assertFalse(collector.hasLimit());
+        Assertions.assertEquals(new ColumnRefSet(List.of(projected)), lowered.getOutputColumns());
+        assertAIOnlyInAIProject(lowered);
+    }
+
+    @Test
+    public void testAggregateLoweringPreservesOutputAndOccurrenceIdentity() {
+        RuleInput input = ruleInput("select ta, count(*), ai_agg(cast(tb as varchar), 'summarize'), "
+                + "ai_agg(cast(tb as varchar), 'summarize') from tall group by ta");
+        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
+        LogicalAggregationOperator original = aggregateExpression.getOp().cast();
+        Assertions.assertEquals(3, original.getAggregations().size());
+        OptExpression lowered = lowerExpression(aggregateExpression, input.optimizerContext);
+        LogicalAIProjectOperator project = lowered.getOp().cast();
+        LogicalAggregationOperator collector = lowered.inputAt(0).getOp().cast();
+        Assertions.assertSame(aggregateExpression.inputAt(0), lowered.inputAt(0).inputAt(0));
+        Assertions.assertEquals(original.getGroupingKeys(), collector.getGroupingKeys());
+        Assertions.assertEquals(original.getPartitionByColumns(), collector.getPartitionByColumns());
+        Assertions.assertEquals(original.getOutputColumns(new com.starrocks.sql.optimizer.ExpressionContext(
+                aggregateExpression)), lowered.getOutputColumns());
+        original.getAggregations().forEach((output, call) -> {
+            if (call.getFunction().isAI()) {
+                CallOperator reducer = project.getColumnRefMap().get(output).cast();
+                Assertions.assertEquals("__ai_agg_reduce", reducer.getFnName());
+                for (int i = 1; i <= call.getFunction().getNumArgs(); i++) {
+                    Assertions.assertSame(call.getChild(i), reducer.getChild(i));
+                }
+                Assertions.assertEquals("__ai_collect_text",
+                        collector.getAggregations().get(reducer.getChild(0)).getFnName());
+                Assertions.assertFalse(project.getColumnRefMap().containsKey(reducer.getChild(0)));
+            } else {
+                Assertions.assertSame(call, collector.getAggregations().get(output));
+                Assertions.assertSame(output, project.getColumnRefMap().get(output));
+            }
+        });
+        assertAIOnlyInAIProject(lowered);
+    }
+
+    @Test
+    public void testOrdinaryRollupSumKeepsUnmodifiedInputThroughRepeat() {
+        RuleInput input = ruleInput("select tb, sum(tb) from tall group by rollup(tb)");
+        OptExpression root = input.logicalPlan.getRoot();
+        LogicalAggregationOperator aggregate = findOperators(root, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
+        LogicalRepeatOperator repeat = findOperators(root, OperatorType.LOGICAL_REPEAT).get(0).getOp().cast();
+        CallOperator sum = aggregate.getAggregations().values().iterator().next();
+        ColumnRefOperator sumInput = Assertions.assertInstanceOf(ColumnRefOperator.class, sum.getChild(0));
+        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
+                .noneMatch(sumInput::equals));
+        ScalarOperator clonedInput = findOperators(root, OperatorType.LOGICAL_PROJECT).stream()
+                .map(node -> (LogicalProjectOperator) node.getOp())
+                .map(project -> project.getColumnRefMap().get(sumInput)).filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        CloneOperator clone = Assertions.assertInstanceOf(CloneOperator.class, clonedInput);
+        Assertions.assertInstanceOf(ColumnRefOperator.class, clone.getChild(0));
+        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
+                .anyMatch(clone.getChild(0)::equals));
+    }
+
 }

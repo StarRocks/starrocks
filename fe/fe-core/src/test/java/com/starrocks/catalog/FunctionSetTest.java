@@ -16,13 +16,10 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.optimizer.rule.transformation.AIInternalFunctions;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
-import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
@@ -31,16 +28,14 @@ import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
-import com.starrocks.type.MapType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
-import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -60,39 +55,6 @@ public class FunctionSetTest {
     public void setUp() {
         functionSet = new FunctionSet();
         functionSet.init();
-    }
-
-    @Test
-    public void testAIAggregatesPreserveRoutingAndHideImplementation() {
-        for (boolean withOptions : List.of(false, true)) {
-            List<Type> args = new ArrayList<>(List.of(VarcharType.VARCHAR, VarcharType.VARCHAR));
-            if (withOptions) {
-                args.add(new MapType(VarcharType.VARCHAR, FloatType.DOUBLE));
-            }
-            Function description = new Function(new FunctionName("ai_agg"), args, InvalidType.INVALID, false);
-            Function fn = functionSet.getFunction(description, Function.CompareMode.IS_SUPERTYPE_OF);
-            Assertions.assertInstanceOf(AggregateFunction.class, fn);
-            Assertions.assertTrue(fn.isAi());
-            TAIModelSource source = TAIModelSource.PROVIDER;
-            Assertions.assertEquals(source, fn.getAiModelSource());
-            Assertions.assertEquals(source, fn.copy().getAiModelSource());
-            Assertions.assertEquals(source, fn.toThrift().getAi_model_source());
-            Assertions.assertFalse(((AggregateFunction) fn).isAnalyticFn());
-            Assertions.assertEquals(VarbinaryType.VARBINARY, ((AggregateFunction) fn).getIntermediateType());
-            for (String suffix : List.of("_state", "_merge", "_union", "_if")) {
-                Assertions.assertFalse(functionSet.isAggregateFunction("ai_agg" + suffix));
-            }
-        }
-        for (String name : List.of("__ai_collect_text", "__ai_agg_reduce")) {
-            List<Type> args = new ArrayList<>();
-            args.add(name.equals("__ai_collect_text") ? VarcharType.VARCHAR : VarbinaryType.VARBINARY);
-            if (!name.equals("__ai_collect_text")) {
-                args.add(VarcharType.VARCHAR);
-            }
-            Assertions.assertNull(functionSet.getFunction(new Function(new FunctionName(name),
-                    args, InvalidType.INVALID, false), Function.CompareMode.IS_SUPERTYPE_OF));
-        }
-        Assertions.assertNotSame(AIInternalFunctions.createTextCollector(), AIInternalFunctions.createTextCollector());
     }
 
     @Test
@@ -433,16 +395,14 @@ public class FunctionSetTest {
                 .sorted(Comparator.comparingLong(Function::getFunctionId))
                 .toList();
 
-        long[] expectedIds = {200100L, 200101L, 200102L, 200103L, 200104L, 200105L, 200106L, 200107L};
+        long[] expectedIds = {200001L, 200002L};
         Type[][] expectedArgs = {
-                {VarcharType.VARCHAR},
-                {VarcharType.VARCHAR, AnyMapType.ANY_MAP},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP},
-                {VarcharType.VARCHAR, FileType.FILE},
-                {VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
+                {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
+        };
+        String[][] expectedNames = {
+                {"prompt", "provider", "model", "options"},
+                {"prompt", "file", "provider", "model", "options"}
         };
 
         Assertions.assertEquals(expectedIds.length, aiCompleteFunctions.size());
@@ -450,19 +410,16 @@ public class FunctionSetTest {
             Function fn = aiCompleteFunctions.get(i);
             Assertions.assertEquals(expectedIds[i], fn.getFunctionId());
             Assertions.assertArrayEquals(expectedArgs[i], fn.getArgs());
+            Assertions.assertArrayEquals(expectedNames[i], fn.getArgNames());
             Assertions.assertEquals(expectedArgs[i].length, fn.getNumArgs());
             Assertions.assertEquals(VarcharType.VARCHAR, fn.getReturnType());
             Assertions.assertTrue(fn.isNullable());
-            Assertions.assertTrue(fn.isAi());
+            Assertions.assertTrue(fn.isAI());
             Assertions.assertEquals(TFunctionBinaryType.AI, fn.getBinaryType());
-            Assertions.assertEquals(TAIModelSource.SYSTEM, fn.getAiModelSource());
 
-            // ANY_MAP is a catalog-only pseudo type and must be instantiated by the analyzer before serialization.
-            if (!fn.isPolymorphic()) {
-                TFunction thriftFunction = fn.toThrift();
-                Assertions.assertEquals(TFunctionBinaryType.AI, thriftFunction.getBinary_type());
-                Assertions.assertEquals(TAIModelSource.SYSTEM, thriftFunction.getAi_model_source());
-            }
+            Assertions.assertFalse(fn.isPolymorphic());
+            TFunction thriftFunction = fn.toThrift();
+            Assertions.assertEquals(TFunctionBinaryType.AI, thriftFunction.getBinary_type());
         }
 
         Assertions.assertTrue(FunctionSet.nonDeterministicFunctions.contains("ai_complete"));
@@ -475,9 +432,8 @@ public class FunctionSetTest {
                 .findFirst()
                 .orElseThrow();
         Assertions.assertEquals("ai_query", aiQuery.functionName());
-        Assertions.assertFalse(aiQuery.isAi());
+        Assertions.assertFalse(aiQuery.isAI());
         Assertions.assertEquals(TFunctionBinaryType.BUILTIN, aiQuery.getBinaryType());
-        Assertions.assertNull(aiQuery.getAiModelSource());
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
     }
@@ -498,24 +454,16 @@ public class FunctionSetTest {
         overload.setBinaryType(TFunctionBinaryType.BUILTIN);
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
         overload.setBinaryType(TFunctionBinaryType.AI);
-        overload.setAiModelSource(null);
-        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
-        overload.setAiModelSource(TAIModelSource.PROVIDER);
-        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
-        overload.setAiModelSource(TAIModelSource.SYSTEM);
         Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("ai_complete"));
     }
 
     @Test
-    public void testAICompletePolymorphicSpecializationPreservesMetadata() {
-        Type mapType = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
+    public void testAICompleteJsonSignaturesPreserveMetadata() {
         Type[][] concreteArgs = {
-                {VarcharType.VARCHAR, mapType},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType},
-                {VarcharType.VARCHAR, FileType.FILE, mapType},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, mapType}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
+                {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
         };
-        long[] expectedIds = {200101L, 200103L, 200105L, 200107L};
+        long[] expectedIds = {200001L, 200002L};
 
         for (int i = 0; i < concreteArgs.length; i++) {
             Function resolved = functionSet.getFunction(
@@ -526,9 +474,32 @@ public class FunctionSetTest {
             Assertions.assertEquals(expectedIds[i], resolved.getFunctionId());
             Assertions.assertArrayEquals(concreteArgs[i], resolved.getArgs());
             Assertions.assertFalse(resolved.isPolymorphic());
-            Assertions.assertTrue(resolved.isAi());
-            Assertions.assertEquals(TAIModelSource.SYSTEM, resolved.getAiModelSource());
-            Assertions.assertEquals(TAIModelSource.SYSTEM, resolved.toThrift().getAi_model_source());
+            Assertions.assertTrue(resolved.isAI());
         }
     }
+
+    @Test
+    public void testAIAggregateUsesNamedArgumentsAndHidesImplementation() {
+        Function fn = functionSet.getFunction(new Function(new FunctionName("ai_agg"),
+                List.of(VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR,
+                        VarcharType.VARCHAR, JsonType.JSON), InvalidType.INVALID, false),
+                Function.CompareMode.IS_IDENTICAL);
+        AggregateFunction aggregate = Assertions.assertInstanceOf(AggregateFunction.class, fn);
+        Assertions.assertTrue(fn.isAI());
+        Assertions.assertTrue(fn.copy().isAI());
+        Assertions.assertFalse(aggregate.isAnalyticFn());
+        Assertions.assertEquals(com.starrocks.type.VarbinaryType.VARBINARY, aggregate.getIntermediateType());
+        Assertions.assertArrayEquals(new String[] {"input", "instruction", "provider", "model", "options"},
+                fn.getArgNames());
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("provider"));
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("model"));
+        Assertions.assertNotNull(fn.getDefaultNamedExpr("options"));
+        for (String name : List.of("ai_agg_state", "ai_agg_merge", "ai_agg_union", "ai_agg_if",
+                "__ai_collect_text", "__ai_agg_reduce")) {
+            Assertions.assertFalse(functionSet.isAggregateFunction(name));
+            Assertions.assertNull(functionSet.getFunction(new Function(new FunctionName(name),
+                    List.of(VarcharType.VARCHAR), InvalidType.INVALID, false), Function.CompareMode.IS_SUPERTYPE_OF));
+        }
+    }
+
 }

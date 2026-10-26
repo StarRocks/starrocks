@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.common.Config;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -26,13 +25,12 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
-import com.starrocks.utframe.AIProviderTestUtils;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,62 +44,74 @@ public class AIAggregatePlanTest extends PlanTestBase {
     private String endpoint;
     private String model;
     private String provider;
-    private AIProviderTestUtils defaultProvider;
 
     @BeforeEach
-    public void configureAI() throws Exception {
-        endpoint = Config.ai_default_chat_endpoint;
-        model = Config.ai_default_chat_model;
-        provider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-        Config.ai_default_chat_model = "unit-test-model";
-        Config.ai_default_chat_provider = "openai_compatible";
-        defaultProvider = AIProviderTestUtils.withDefaultProvider("aggregate_plan_default", AIProviderType.CHAT,
-                Map.of("endpoint", "https://provider.example.test/v1/chat/completions", "model", "unit-test-model",
-                        "api_key", "aggregate-provider-key"));
+    public void configureAI() {
+        endpoint = AIProviderTestUtil.chatProperty("endpoint");
+        model = AIProviderTestUtil.chatProperty("model");
+        provider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://provider.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "unit-test-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterEach
-    public void restoreAI() throws Exception {
-        Config.ai_default_chat_endpoint = endpoint;
-        Config.ai_default_chat_model = model;
-        Config.ai_default_chat_provider = provider;
-        defaultProvider.close();
+    public void restoreAI() {
+        AIProviderTestUtil.setChatProperty("endpoint", endpoint);
+        AIProviderTestUtil.setChatProperty("model", model);
+        AIProviderTestUtil.setChatProperty("protocol", provider);
     }
 
     @Test
-    public void testDefaultProviderSnapshotDoesNotDependOnSystemConfiguration() throws Exception {
-        Config.ai_default_chat_endpoint = "";
-        Config.ai_default_chat_model = "";
-        Config.ai_default_chat_provider = "";
-        ExecPlan plan = getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize') from t0");
-        TPlanNode project = aiProjects(plan).get(0);
-        var configs = project.getAi_project_node().getAi_model_configs();
-        Assertions.assertEquals(1, configs.size());
-        var config = configs.values().iterator().next();
-        Assertions.assertEquals(TAIModelSource.PROVIDER, config.getSource());
-        Assertions.assertEquals("https://provider.example.test/v1/chat/completions", config.getChat().getEndpoint());
-        Assertions.assertEquals("unit-test-model", config.getChat().getModel());
-        Assertions.assertEquals("aggregate-provider-key", config.getChat().getApi_key());
-        TExpr reducer = project.getAi_project_node().getSlot_map().values().stream()
-                .filter(expr -> expr.getNodes().get(0).isSetFn()).findFirst().orElseThrow();
-        Assertions.assertEquals(TAIModelSource.PROVIDER, reducer.getNodes().get(0).getFn().getAi_model_source());
-        Assertions.assertEquals(2, reducer.getNodes().get(0).getNum_children());
-        Assertions.assertTrue(configs.containsKey(reducer.getNodes().get(0).getAi_model_config_id()));
+    public void testCanonicalControlsSurviveAggregateLowering() throws Exception {
+        String name = AIProviderTestUtil.defaultName(AIProviderType.CHAT);
+        for (String call : List.of(
+                "ai_agg(cast(v2 as varchar), 'summarize', '" + name + "', 'override-model', json_object('temperature', 0.1))",
+                "ai_agg(input => cast(v2 as varchar), options => json_object('temperature', 0.1), "
+                        + "model => 'override-model', instruction => 'summarize', provider => '" + name + "')")) {
+            ExecPlan plan = getExecPlan("select " + call + " from t0");
+            PhysicalAIProjectOperator project = onlyPhysicalAI(plan).getOp().cast();
+            CallOperator reducer = project.getColumnRefMap().values().stream().filter(CallOperator.class::isInstance)
+                    .map(CallOperator.class::cast).findFirst().orElseThrow();
+            Assertions.assertEquals(5, reducer.getFunction().getNumArgs());
+            Assertions.assertEquals(VarbinaryType.VARBINARY, reducer.getChild(0).getType());
+            Assertions.assertEquals("summarize", ((com.starrocks.sql.optimizer.operator.scalar.ConstantOperator)
+                    reducer.getChild(1)).getVarchar());
+            Assertions.assertEquals(name, ((com.starrocks.sql.optimizer.operator.scalar.ConstantOperator)
+                    reducer.getChild(2)).getVarchar());
+            Assertions.assertEquals("override-model", ((com.starrocks.sql.optimizer.operator.scalar.ConstantOperator)
+                    reducer.getChild(3)).getVarchar());
+            Assertions.assertTrue(reducer.getChild(4).getType().isJsonType());
+            TPlanNode wire = aiProjects(plan).get(0);
+            var configs = wire.getAi_project_node().getAi_provider_mapping();
+            Assertions.assertEquals(1, configs.size());
+            var config = configs.values().iterator().next();
+            Assertions.assertEquals("unit-test-model", config.getParams().get("model"));
+            TExpr expr = wire.getAi_project_node().getSlot_map().values().stream()
+                    .filter(value -> value.getNodes().get(0).isSetFn()).findFirst().orElseThrow();
+            Assertions.assertEquals(5, expr.getNodes().get(0).getNum_children());
+            Assertions.assertTrue(configs.containsKey(expr.getNodes().get(0).getAi_provider_id()));
+        }
     }
 
     @Test
-    public void testDefaultAggregateAndNamedScalarShareProviderSnapshot() throws Exception {
-        ExecPlan plan = getExecPlan("select ai_custom_query('aggregate_plan_default', "
-                + "ai_agg(cast(v2 as varchar), 'summarize')) from t0");
+    public void testOptionalNullSelectorsUseDefaultProvider() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize', NULL, NULL, NULL) from t0");
+        Assertions.assertEquals(1, aiProjects(plan).get(0).getAi_project_node().getAi_provider_mappingSize());
+        AIProviderTestUtil.setChatProperty("endpoint", "");
+        Assertions.assertThrows(Exception.class,
+                () -> getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize') from t0"));
+    }
+
+    @Test
+    public void testDefaultAggregateAndNamedScalarUseProviderUuid() throws Exception {
+        String name = AIProviderTestUtil.defaultName(AIProviderType.CHAT);
+        ExecPlan plan = getExecPlan("select ai_complete(ai_agg(cast(v2 as varchar), 'summarize'), '" + name + "') from t0");
         List<TPlanNode> projects = aiProjects(plan);
-        var ids = projects.stream().flatMap(project -> project.getAi_project_node().getAi_model_configs().keySet().stream())
+        var ids = projects.stream().flatMap(project -> project.getAi_project_node().getAi_provider_mapping().keySet().stream())
                 .collect(java.util.stream.Collectors.toSet());
-        Assertions.assertEquals(java.util.Set.of("provider:0"), ids);
-        var functions = projects.stream().flatMap(project -> project.getAi_project_node().getSlot_map().values().stream())
-                .map(expr -> expr.getNodes().get(0)).filter(node -> node.isSetFn())
-                .map(node -> node.getFn().getName().getFunction_name()).collect(java.util.stream.Collectors.toSet());
-        Assertions.assertEquals(java.util.Set.of("ai_custom_query", "__ai_agg_reduce"), functions);
+        Assertions.assertEquals(java.util.Set.of(connectContext.getGlobalStateMgr().getAIProviderMgr()
+                .getProvider(name).getId()), ids);
     }
 
     @Test
@@ -114,21 +124,22 @@ public class AIAggregatePlanTest extends PlanTestBase {
         Assertions.assertEquals(2, calls.size());
         for (TExpr call : calls) {
             Assertions.assertEquals("__ai_agg_reduce", call.getNodes().get(0).getFn().getName().getFunction_name());
-            Assertions.assertEquals(2, call.getNodes().get(0).getNum_children());
+            Assertions.assertEquals(5, call.getNodes().get(0).getNum_children());
         }
     }
 
     @Test
     public void testInstructionGroupingConstantsBindNormally() throws Exception {
-        ExecPlan plan = getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize', map{'temperature': 0.1}), "
+        ExecPlan plan = getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize', "
+                + "'', '', json_object('temperature', 0.1)), "
                 + "sum(v2) from t0 group by grouping sets (('summarize'), ())");
         TPlanNode project = aiProjects(plan).get(0);
-        Assertions.assertEquals(1, project.getAi_project_node().getAi_model_configsSize());
-        Assertions.assertEquals("unit-test-model", project.getAi_project_node().getAi_model_configs()
-                .values().iterator().next().getChat().getModel());
+        Assertions.assertEquals(1, project.getAi_project_node().getAi_provider_mappingSize());
+        Assertions.assertEquals("unit-test-model", project.getAi_project_node().getAi_provider_mapping()
+                .values().iterator().next().getParams().get("model"));
         TExpr reducer = project.getAi_project_node().getSlot_map().values().stream()
                 .filter(expr -> expr.getNodes().get(0).isSetFn()).findFirst().orElseThrow();
-        Assertions.assertEquals(3, reducer.getNodes().get(0).getNum_children());
+        Assertions.assertEquals(5, reducer.getNodes().get(0).getNum_children());
         Assertions.assertEquals("__ai_agg_reduce", reducer.getNodes().get(0).getFn().getName().getFunction_name());
     }
 

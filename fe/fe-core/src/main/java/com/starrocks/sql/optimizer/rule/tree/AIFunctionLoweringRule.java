@@ -40,8 +40,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.AIFunctionExtractor;
 import com.starrocks.sql.optimizer.rule.transformation.AIInternalFunctions;
-import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
@@ -89,27 +89,27 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
             return root;
         }
         if (root.getOp() instanceof LogicalAggregationOperator aggregate
-                && aggregate.getAggregations().values().stream().anyMatch(AiFunctionExtractor::isAICall)) {
+                && aggregate.getAggregations().values().stream().anyMatch(AIFunctionExtractor::isAICall)) {
             hasRewrite = true;
             return rewriteBottomUp(lowerAggregate(root, aggregate, context), context);
         }
         if (root.getOp() instanceof LogicalProjectOperator project
-                && project.getColumnRefMap().values().stream().anyMatch(AiFunctionExtractor::containsAI)) {
+                && project.getColumnRefMap().values().stream().anyMatch(AIFunctionExtractor::containsAI)) {
             hasRewrite = true;
             return lowerProject(root, project, context);
         }
         if (root.getOp() instanceof LogicalFilterOperator filter
-                && AiFunctionExtractor.containsAI(filter.getPredicate())) {
+                && AIFunctionExtractor.containsAI(filter.getPredicate())) {
             hasRewrite = true;
             return lowerFilter(root, filter, context);
         }
         if (root.getOp() instanceof LogicalValuesOperator values
-                && values.getRows().stream().flatMap(List::stream).anyMatch(AiFunctionExtractor::containsAI)) {
+                && values.getRows().stream().flatMap(List::stream).anyMatch(AIFunctionExtractor::containsAI)) {
             hasRewrite = true;
             return rewriteBottomUp(lowerValues(values, context), context);
         }
         if (root.getOp() instanceof LogicalJoinOperator join
-                && AiFunctionExtractor.containsAI(join.getOnPredicate())) {
+                && AIFunctionExtractor.containsAI(join.getOnPredicate())) {
             hasRewrite = true;
             return rewriteBottomUp(lowerJoin(root, join, context), context);
         }
@@ -128,7 +128,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         Map<ColumnRefOperator, ScalarOperator> outputs = new LinkedHashMap<>();
         aggregate.getGroupingKeys().forEach(key -> outputs.put(key, key));
         aggregate.getAggregations().forEach((output, call) -> {
-            if (!AiFunctionExtractor.isAICall(call)) {
+            if (!AIFunctionExtractor.isAICall(call)) {
                 collectors.put(output, call);
                 outputs.put(output, output);
                 return;
@@ -143,10 +143,8 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
                     collector.getReturnType(), collectorCall.isNullable());
             collectors.put(state, collectorCall);
             List<ScalarOperator> arguments = new ArrayList<>();
-            arguments.add(state);
-            arguments.add(call.getChild(descriptor.instructionArgument()));
-            if (descriptor.optionsArgument() >= 0) {
-                arguments.add(call.getChild(descriptor.optionsArgument()));
+            for (int i = 0; i < call.getFunction().getNumArgs(); i++) {
+                arguments.add(i == descriptor.textArgument() ? state : call.getChild(i));
             }
             ScalarFunction reducer = AIInternalFunctions.createReducer((AggregateFunction) call.getFunction(),
                     arguments.stream().map(ScalarOperator::getType).toList());
@@ -168,7 +166,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         if (aggregate.getPredicate() != null) {
             root = derived(OptExpression.create(new LogicalFilterOperator(aggregate.getPredicate()), root));
         }
-        root = AiFunctionExtractor.applyProjection(root, aggregate.getProjection());
+        root = AIFunctionExtractor.applyProjection(root, aggregate.getProjection());
         if (aggregate.hasLimit()) {
             root = derived(OptExpression.create(LogicalLimitOperator.init(aggregate.getLimit()), root));
         }
@@ -179,7 +177,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
                                        OptimizerContext context) {
         List<Map.Entry<ColumnRefOperator, ScalarOperator>> entries =
                 new ArrayList<>(project.getColumnRefMap().entrySet());
-        AiFunctionExtractor.Result result = AiFunctionExtractor.extract(input.inputAt(0),
+        AIFunctionExtractor.Result result = AIFunctionExtractor.extract(input.inputAt(0),
                 entries.stream().map(Map.Entry::getValue).toList(), context);
 
         Map<ColumnRefOperator, ScalarOperator> rewrittenMap = new LinkedHashMap<>();
@@ -193,7 +191,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
     private OptExpression lowerFilter(OptExpression input, LogicalFilterOperator filter,
                                       OptimizerContext context) {
         ColumnRefSet originalOutputs = input.getOutputColumns();
-        AiFunctionExtractor.Result result = AiFunctionExtractor.extract(
+        AIFunctionExtractor.Result result = AIFunctionExtractor.extract(
                 input.inputAt(0), List.of(filter.getPredicate()), context);
         LogicalFilterOperator rewrittenFilter = new LogicalFilterOperator.Builder()
                 .withOperator(filter)
@@ -201,7 +199,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
                 .build();
         OptExpression root = derived(OptExpression.create(rewrittenFilter, result.root()));
         if (filter.getProjection() == null) {
-            root = AiFunctionExtractor.retainOutputs(root, originalOutputs, context);
+            root = AIFunctionExtractor.retainOutputs(root, originalOutputs, context);
         }
         return root;
     }
@@ -239,7 +237,7 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         if (values.getPredicate() != null) {
             root = derived(OptExpression.create(new LogicalFilterOperator(values.getPredicate()), root));
         }
-        root = AiFunctionExtractor.applyProjection(root, values.getProjection());
+        root = AIFunctionExtractor.applyProjection(root, values.getProjection());
         if (values.hasLimit()) {
             root = derived(OptExpression.create(LogicalLimitOperator.init(values.getLimit()), root));
         }
@@ -259,9 +257,9 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         ColumnRefSet originalOutputs = input.getOutputColumns();
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(join.getOnPredicate());
         List<ScalarOperator> aiConjuncts = conjuncts.stream()
-                .filter(AiFunctionExtractor::containsAI).toList();
+                .filter(AIFunctionExtractor::containsAI).toList();
         List<ScalarOperator> localConjuncts = conjuncts.stream()
-                .filter(predicate -> !AiFunctionExtractor.containsAI(predicate)).toList();
+                .filter(predicate -> !AIFunctionExtractor.containsAI(predicate)).toList();
         ScalarOperator localOnPredicate = Utils.compoundAnd(localConjuncts);
 
         LogicalJoinOperator rewrittenJoin = LogicalJoinOperator.builder()
@@ -279,14 +277,14 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         if (join.getPredicate() != null) {
             movedPredicate = Utils.compoundAnd(movedPredicate, join.getPredicate());
         }
-        AiFunctionExtractor.Result result = AiFunctionExtractor.extract(
+        AIFunctionExtractor.Result result = AIFunctionExtractor.extract(
                 rawJoin, List.of(movedPredicate), context);
         OptExpression root = derived(OptExpression.create(
                 new LogicalFilterOperator(result.expressions().get(0)), result.root()));
         if (join.getProjection() != null) {
-            root = AiFunctionExtractor.applyProjection(root, join.getProjection());
+            root = AIFunctionExtractor.applyProjection(root, join.getProjection());
         } else {
-            root = AiFunctionExtractor.retainOutputs(root, originalOutputs, context);
+            root = AIFunctionExtractor.retainOutputs(root, originalOutputs, context);
         }
         if (join.hasLimit()) {
             root = derived(OptExpression.create(LogicalLimitOperator.init(join.getLimit()), root));
@@ -318,11 +316,11 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         int aiOperandIndex;
         ScalarOperator aiOperand;
         ScalarOperator rawValuesOperand;
-        if (AiFunctionExtractor.containsAI(leftOperand) && !AiFunctionExtractor.containsAI(rightOperand)) {
+        if (AIFunctionExtractor.containsAI(leftOperand) && !AIFunctionExtractor.containsAI(rightOperand)) {
             aiOperandIndex = 0;
             aiOperand = leftOperand;
             rawValuesOperand = rightOperand;
-        } else if (AiFunctionExtractor.containsAI(rightOperand) && !AiFunctionExtractor.containsAI(leftOperand)) {
+        } else if (AIFunctionExtractor.containsAI(rightOperand) && !AIFunctionExtractor.containsAI(leftOperand)) {
             aiOperandIndex = 1;
             aiOperand = rightOperand;
             rawValuesOperand = leftOperand;
@@ -337,8 +335,8 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         }
 
         ColumnRefSet originalOutputs = input.getOutputColumns();
-        AiFunctionExtractor.Result result =
-                AiFunctionExtractor.extract(input.inputAt(0), List.of(aiOperand), context);
+        AIFunctionExtractor.Result result =
+                AIFunctionExtractor.extract(input.inputAt(0), List.of(aiOperand), context);
         ScalarOperator rewrittenOperand = result.expressions().get(0);
         BinaryPredicateOperator rewrittenPredicate = aiOperandIndex == 0
                 ? new BinaryPredicateOperator(binaryPredicate.getBinaryType(), rewrittenOperand, rawValuesOperand)
@@ -353,9 +351,9 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         OptExpression root = derived(OptExpression.create(
                 rewrittenJoin, result.root(), input.inputAt(1)));
         if (join.getProjection() != null) {
-            root = AiFunctionExtractor.applyProjection(root, join.getProjection());
+            root = AIFunctionExtractor.applyProjection(root, join.getProjection());
         } else {
-            root = AiFunctionExtractor.retainOutputs(root, originalOutputs, context);
+            root = AIFunctionExtractor.retainOutputs(root, originalOutputs, context);
         }
         if (join.hasLimit()) {
             root = derived(OptExpression.create(LogicalLimitOperator.init(join.getLimit()), root));

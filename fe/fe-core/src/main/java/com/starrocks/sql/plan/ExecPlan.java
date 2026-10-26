@@ -34,15 +34,12 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -50,7 +47,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
@@ -98,11 +94,6 @@ public class ExecPlan {
     private long useBaseline = -1;
 
     private Set<Long> duplicatedLakeScanTableIds;
-    // Captured lazily only for plans containing an AIProject.
-    private SystemChatConfig systemChatConfig;
-    private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
-    private Map<AIModelConfigs.ProviderSelection, String> aiProviderConfigIds;
-    private Map<String, String> aiProviderUuidConfigIds;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -141,69 +132,26 @@ public class ExecPlan {
         return scanNodes;
     }
 
-    SystemChatConfig getOrCreateSystemChatConfig() {
-        if (systemChatConfig == null) {
-            systemChatConfig = AIModelConfigs.systemChatSnapshot(
-                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
-        }
-        return systemChatConfig;
-    }
-
-    // Bind only physical AIProject calls. Rebuilt plans independently capture the current metadata.
-    Map<String, AIModelConfigs.ModelConfig> bindAIModelConfigs(Map<SlotId, Expr> projectMap) {
-        if (aiModelConfigs == null) {
-            aiModelConfigs = new HashMap<>();
-        }
-        Map<String, AIModelConfigs.ModelConfig> usedConfigs = new HashMap<>();
+    // Bind only physical AIProject calls. Rebuilt plans independently capture current metadata.
+    Map<String, AIProvider> bindAIProviders(Map<SlotId, Expr> projectMap) {
+        Map<String, AIProvider> usedConfigs = new HashMap<>();
         for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
             if (!(entry.getValue() instanceof FunctionCallExpr call)
-                    || call.getFn() == null || !call.getFn().isAi()) {
+                    || call.getFn() == null || !call.getFn().isAI()) {
+                // ignore none AI functions
                 continue;
             }
-            String id;
-            AIModelConfigs.ModelConfig config;
-            if (call.getFn().getAiModelSource() == TAIModelSource.PROVIDER) {
-                AIModelConfigs.ProviderSelection selection = AIModelConfigs.providerSelection(call);
-                id = aiProviderConfigIds == null ? null : aiProviderConfigIds.get(selection);
-                AIProvider provider = null;
-                if (id == null) {
-                    provider = AIModelConfigs.resolveProvider(selection,
-                            GlobalStateMgr.getCurrentState().getAIProviderMgr());
-                    try {
-                        Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(),
-                                "AI PROVIDER", provider.getName());
-                    }
-                    id = aiProviderUuidConfigIds == null ? null : aiProviderUuidConfigIds.get(provider.getId());
-                }
-                config = id == null ? AIModelConfigs.fromProvider(provider) : aiModelConfigs.get(id);
-                if (!AIModelConfigs.capability(call.getFn()).name().equals(config.capability())) {
-                    throw new SemanticException(selection.description() + " requires type "
-                            + AIModelConfigs.providerType(call.getFn()), call.getPos());
-                }
-                if (id == null) {
-                    if (aiProviderUuidConfigIds == null) {
-                        aiProviderUuidConfigIds = new HashMap<>();
-                    }
-                    // The wire only needs a plan-local correlation key, never a name or registry identity.
-                    id = "provider:" + aiProviderUuidConfigIds.size();
-                    aiProviderUuidConfigIds.put(provider.getId(), id);
-                    aiModelConfigs.put(id, config);
-                }
-                if (aiProviderConfigIds == null) {
-                    aiProviderConfigIds = new HashMap<>();
-                }
-                aiProviderConfigIds.put(selection, id);
-                entry.setValue(call.withAiModelConfigId(id));
-            } else {
-                id = AIModelConfigs.systemConfigId(call.getFn());
-                config = aiModelConfigs.computeIfAbsent(id, key -> AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(key)
-                        ? AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig())
-                        : AIModelConfigs.systemEmbeddingSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL));
+            AIProvider provider = AIModelConfigs.resolveProvider(connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
+
+            try {
+                Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
             }
-            usedConfigs.put(id, config);
+            AIModelConfigs.validateProvider(provider);
+            usedConfigs.put(provider.getId(), new AIProvider(provider));
+            entry.setValue(call.withAIProviderId(provider.getId()));
         }
         return Map.copyOf(usedConfigs);
     }

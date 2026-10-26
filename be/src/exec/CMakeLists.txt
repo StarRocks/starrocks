@@ -108,6 +108,7 @@ set(PIPELINE_ADAPTERS_SRCS
 
 set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/ai/ai_chunk_buffer.cpp
+    pipeline/ai/ai_provider_config_parser.cpp
     pipeline/ai/ai_project_factory.cpp
     pipeline/ai/ai_project_operator.cpp
     pipeline/ai/ai_project_processor.cpp

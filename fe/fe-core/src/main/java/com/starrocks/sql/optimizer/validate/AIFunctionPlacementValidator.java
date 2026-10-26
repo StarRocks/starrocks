@@ -51,7 +51,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
+import com.starrocks.sql.optimizer.rule.transformation.AIFunctionExtractor;
 
 import java.util.List;
 import java.util.Map;
@@ -175,7 +175,7 @@ public final class AIFunctionPlacementValidator {
 
     private static void validateDirectOutputs(Map<?, ? extends ScalarOperator> outputs) {
         for (ScalarOperator expression : outputs.values()) {
-            if (AiFunctionExtractor.isExecutableAICall(expression)) {
+            if (AIFunctionExtractor.isExecutableAICall(expression)) {
                 validateNoAI(expression.getChildren());
             } else {
                 validateNoAI(expression);
@@ -225,6 +225,6 @@ public final class AIFunctionPlacementValidator {
     private static boolean isAICall(ScalarOperator expression) {
         return expression instanceof CallOperator call
                 && call.getFunction() != null
-                && call.getFunction().isAi();
+                && call.getFunction().isAI();
     }
 }

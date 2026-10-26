@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -49,8 +48,8 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
-import com.starrocks.thrift.TAIModelConfiguration;
-import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -184,8 +183,9 @@ public class InsertOverwriteJobRunnerTest {
                         context.setQueryId(UUIDUtil.genUUID());
                         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
                         context.getSessionVariable().setOptimizerExecuteTimeout(300000000);
-                        String sql = "insert overwrite " + tableName + " select k1, ai_custom_query('"
-                                + providerName + "', cast(k2 as varchar)) from t2";
+                        String sql = "insert overwrite " + tableName + " select k1, ai_complete(provider => '"
+                                + providerName + "', model => 'explicit-model', prompt => cast(k2 as "
+                                + "varchar)) from t2";
                         InsertStmt statement = (InsertStmt) SqlParser.parseSingleStatement(
                                 sql, context.getSessionVariable().getSqlMode());
                         AtomicReference<ExecPlan> originalPlan = new AtomicReference<>();
@@ -227,7 +227,8 @@ public class InsertOverwriteJobRunnerTest {
                         Assertions.assertTrue(table.getTempPartitions().isEmpty());
                         Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().getJobNum());
 
-                        String nextSql = "select ai_custom_query('" + providerName + "', cast(k2 as varchar)) from t2";
+                        String nextSql = "select ai_complete(provider => '" + providerName
+                                + "', model => 'explicit-model', prompt => cast(k2 as varchar)) from t2";
                         if (change.equals("drop")) {
                             Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
                             Assertions.assertTrue(context.getState().getErrorMessage()
@@ -260,22 +261,21 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     private static void assertProviderConfiguration(ExecPlan plan, String version) {
-        List<Map<String, TAIModelConfiguration>> configurations = plan.getFragments().stream()
+        List<Map<String, TAIProvider>> configurations = plan.getFragments().stream()
                 .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
                 .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
-                .map(node -> node.getAi_project_node().getAi_model_configs())
+                .map(node -> node.getAi_project_node().getAi_provider_mapping())
                 .toList();
         Assertions.assertFalse(configurations.isEmpty());
         configurations.forEach(configs -> {
-            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
-            TAIModelConfiguration configuration = configs.get("provider:0");
-            Assertions.assertEquals(TAIModelSource.PROVIDER, configuration.getSource());
-            Assertions.assertEquals(version + "-model", configuration.getChat().getModel());
-            Assertions.assertEquals(version + "-test-key", configuration.getChat().getApi_key());
+            Assertions.assertEquals(Set.of(configs.values().iterator().next().getId()), configs.keySet());
+            TAIProvider configuration = configs.values().iterator().next();
+            Assertions.assertEquals(version + "-model", configuration.getParams().get("model"));
+            Assertions.assertEquals(version + "-test-key", configuration.getParams().get("api_key"));
             Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
-                    configuration.getChat().getEndpoint());
-            Assertions.assertEquals("openai_compatible", configuration.getChat().getProvider());
-            Assertions.assertEquals(1200, configuration.getChat().getTimeout_ms());
+                    configuration.getParams().get("endpoint"));
+            Assertions.assertEquals(TAIProviderProtocol.OPENAI, configuration.getProtocol());
+            Assertions.assertEquals("1200", configuration.getParams().get("timeout_ms"));
         });
     }
 

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "デフォルト CHAT AI プロバイダーを使用し、指示に従ってグループのテキストを集約します。"
+description: "CHAT AI Provider を使用し、指示に従ってグループのテキストを集約します。"
 sidebar_position: 24
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 24
 
 `ai_agg` は、指示に従って各 SQL グループのテキストを要約し、グループごとに NULL 許容の VARCHAR を返します。`count` や `sum` などの通常の集約と併用できます。
 
-`ai_agg` は、`openai` プロトコルのデフォルト `chat` AI プロバイダーを使用します。エンドポイント、リモートモデル、API キー、任意の `timeout_ms` はプロバイダーから取得し、SYSTEM Chat 設定や BE ローカル認証情報にはフォールバックしません。使用前にすべての FE と BE をアップグレードしてください。
+`ai_agg` は `openai` プロトコルの `chat` AI Provider を使用します。エンドポイント、デフォルトモデル、API キー、任意の `timeout_ms` は Provider から取得します。使用前にすべての FE と BE をアップグレードしてください。
 
 :::warning
 入力テキスト、中間要約、指示は設定済みのモデルサービスへ送信されます。1 グループで複数のリクエストと再試行が発生し、課金される場合があります。他の AI 関数と同じデータ取り扱いとエンドポイント承認の方針を適用してください。
@@ -17,13 +17,15 @@ sidebar_position: 24
 ## 構文
 
 ```sql
-ai_agg(expr, instruction)
-ai_agg(expr, instruction, options)
+ai_agg(input, instruction[, provider[, model[, options]]])
 ```
 
-- `expr`: VARCHAR 式。NULL はスキップし、空文字列と重複値は保持します。FILE 入力はサポートしません。
+- `input`: VARCHAR 式。NULL はスキップし、空文字列と重複値は保持します。FILE 入力はサポートしません。
 - `instruction`: 求める結果を記述する、非 NULL、空白以外の定数 VARCHAR 式。
-- `options`: [ai_complete のオプション規則](ai_complete.md#options-map-のルール) に従うオプションの定数 MAP。MAP 型の NULL は空 MAP として扱います。`response_format` は最終リクエストにのみ適用します。1 回のリクエストだけで処理する場合も同様です。その他のオプションは各リクエストに適用します。`max_tokens` などは各リクエストの上限であり、グループ全体のトークン上限ではありません。
+- `provider` と `model`: 任意の定数 VARCHAR 式。`provider` の省略、空文字列、SQL NULL はデフォルト CHAT Provider を選択します。`model` の同じ値は Provider のデフォルトモデルを選択し、明示値はそのモデルを上書きします。空白のみの値は無効です。明示的な Provider の指定ではクラスターのデフォルトは不要です。
+- `options`: [JSON オプション規則](ai_text_functions.md#json-options)に従う任意の定数 JSON オブジェクト。省略または SQL NULL は追加オプションなしを意味します。`response_format` は、1 回で処理するグループを含め、最終リクエストにのみ適用します。他のオプションは各リクエストに適用します。`max_tokens` はリクエストごとの上限であり、グループ全体のトークン上限ではありません。
+
+[共通の呼び出し規則](ai_text_functions.md#共通の呼び出しルール)に従い、位置引数と名前付き引数を使用できます。
 
 `DISTINCT`、集約内の `ORDER BY`、ウィンドウ実行、集約状態コンビネータはサポートしません。正確なフィルタリング、重複排除、件数、計算が必要な場合は、AI 集約の前に SQL で処理してください。入力順序は保証されず、モデル出力は非決定的です。階層的な要約では詳細が失われることがあるため、正確な計算や網羅的な抽出は保証しません。
 
@@ -49,7 +51,7 @@ ai_agg(expr, instruction, options)
 
 ## 権限と例
 
-テーブル権限に加え、`USAGE ON AI FUNCTION ai_agg`（または `USAGE ON ALL AI FUNCTIONS`）と、選択されたデフォルト CHAT プロバイダーの `USAGE ON AI PROVIDER` の両方が必要です。[AI 関数の権限](ai_functions.mdx#ai-function-privileges)を参照してください。プロバイダーの選択と認可は、空入力でも最適化前に検査します。実行設定は、物理プランに残る AI 呼び出しをバインドする際に検証します。
+テーブル権限に加え、`USAGE ON AI FUNCTION ai_agg`（または `USAGE ON ALL AI FUNCTIONS`）と選択された CHAT Provider の `USAGE ON AI PROVIDER` が必要です。[AI 関数の権限](ai_functions.mdx#ai-function-privileges)を参照してください。Provider 設定と認可は、空入力を含め、共通の最適化前チェックに従います。
 
 管理者は [CHAT プロバイダー](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)を登録し、デフォルトに設定して既存のロールに権限を付与します。
 
@@ -65,7 +67,7 @@ GRANT USAGE ON AI FUNCTION ai_agg TO ROLE review_reader;
 GRANT USAGE ON AI PROVIDER review_chat TO ROLE review_reader;
 ```
 
-プランは最初のデフォルト CHAT 選択を固定し、各グループと縮約ラウンドで同じ Provider UUID の不変スナップショットを再利用します。同じ UUID を使用する他の Provider 呼び出しも共有します。後のメタデータやデフォルト変更は、新しく構築されたプランに適用されます。認証情報の保存・転送と認可については [Provider 設定とスナップショット](ai_custom_functions.md#query-snapshots-and-system-compatibility)を参照してください。
+実行プランは選択された Provider 設定を保存し、各グループと縮約ラウンドで使用します。メタデータとデフォルトの変更は、新しく計画するクエリに適用されます。認証情報の保存と設定は [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) を参照してください。
 
 `reviews(category, review_text)` テーブルがある場合:
 
@@ -80,8 +82,10 @@ GROUP BY category;
 
 ```sql
 SELECT category,
-       ai_agg(review_text, 'Summarize the recurring issues.',
-              map{'temperature': 0.0}) AS summary
+       ai_agg(input => review_text,
+              instruction => 'Summarize the recurring issues.',
+              provider => 'review_chat',
+              options => json_object('temperature', 0.0)) AS summary
 FROM reviews
 WHERE review_text IS NOT NULL
 GROUP BY category;

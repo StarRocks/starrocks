@@ -121,8 +121,20 @@ public class LockManager {
                 try {
                     locker.wait(Math.max(1, deadLockDetectionDelayTimeMs));
                 } catch (InterruptedException ie) {
-                    removeFromWaiterList(rid, locker, lockType);
-                    throw new LockInterruptException(ie);
+                    // The interrupt can land after another thread has already promoted this locker
+                    // to owner. removeFromWaiterList says which happened -- false means "it owns the
+                    // lock now" -- and the timeout path below already honours that. Throwing here
+                    // regardless would tell the caller it holds nothing while it does, so nobody
+                    // would ever release it.
+                    if (removeFromWaiterList(rid, locker, lockType)) {
+                        throw new LockInterruptException(ie);
+                    }
+                    // Owns the lock. The interrupt cannot be delivered as an exception without
+                    // leaking it, so re-arm the flag and let the caller notice at its next
+                    // interruptible point.
+                    Thread.currentThread().interrupt();
+                    locker.clearWaitingFor();
+                    return;
                 }
 
                 if (isOwner(rid, locker, lockType)) {
@@ -191,8 +203,14 @@ public class LockManager {
                             locker.wait(Math.max(1, timeRemain(timeout, startTime)));
                         }
                     } catch (InterruptedException ie) {
-                        removeFromWaiterList(rid, locker, lockType);
-                        throw new LockInterruptException(ie);
+                        // Same race as above: an interrupt that arrives after the grant must not be
+                        // reported as a failed acquisition, or the lock is held by a caller that
+                        // believes it is not.
+                        if (removeFromWaiterList(rid, locker, lockType)) {
+                            throw new LockInterruptException(ie);
+                        }
+                        Thread.currentThread().interrupt();
+                        break;
                     }
 
                     //locker is wakeup normally and becomes the owner
@@ -281,8 +299,14 @@ public class LockManager {
             try {
                 Thread.sleep(1);
             } catch (InterruptedException e) {
-                removeFromWaiterList(rid, currentLocker, lockType);
-                throw new LockInterruptException(e);
+                // The same race as the two wait() handlers, and for the same reason: the victim
+                // may already have released and promoted this locker before the interrupt landed.
+                // The check four lines below does exactly this for the non-interrupt path.
+                if (removeFromWaiterList(rid, currentLocker, lockType)) {
+                    throw new LockInterruptException(e);
+                }
+                Thread.currentThread().interrupt();
+                return true;
             }
 
             /* If currentLocker is the owner, the deadlock was broken. */

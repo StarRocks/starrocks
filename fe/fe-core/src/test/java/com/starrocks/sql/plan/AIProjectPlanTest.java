@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Stopwatch;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorProperties;
@@ -25,6 +24,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.ExchangeNode;
@@ -46,8 +46,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -68,9 +66,9 @@ import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
-import com.starrocks.thrift.TAIEndpointConfig;
-import com.starrocks.thrift.TAIModelConfiguration;
 import com.starrocks.thrift.TAIProjectNode;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
@@ -79,10 +77,10 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
-import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -106,10 +104,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -117,7 +112,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class AIProjectPlanTest extends PlanTestBase {
     private static String oldEndpoint;
@@ -126,42 +120,39 @@ public class AIProjectPlanTest extends PlanTestBase {
 
     @BeforeAll
     public static void setUpAIConfiguration() {
-        oldEndpoint = Config.ai_default_chat_endpoint;
-        oldModel = Config.ai_default_chat_model;
-        oldProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-        Config.ai_default_chat_model = "unit-test-model";
-        Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
+        oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        oldModel = AIProviderTestUtil.chatProperty("model");
+        oldProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://unit.test.example/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "unit-test-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterAll
     public static void restoreAIConfiguration() {
-        Config.ai_default_chat_endpoint = oldEndpoint;
-        Config.ai_default_chat_model = oldModel;
-        Config.ai_default_chat_provider = oldProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+        AIProviderTestUtil.setChatProperty("model", oldModel);
+        AIProviderTestUtil.setChatProperty("protocol", oldProvider);
     }
 
     @Test
-    public void testSameNameNonAICommonExpressionUsesResolvedIdentity() throws Exception {
-        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
-        AIProjectNode project = findOnlyAIProjectNode(plan);
-        TupleDescriptor tuple = plan.getDescTbl().getTupleDesc(project.getTupleIds().get(0));
-        ScalarFunction function = ScalarFunction.createVectorizedBuiltin(900001, "ai_agg",
-                List.of(VarcharType.VARCHAR), false, VarcharType.VARCHAR);
-        function.setBinaryType(TFunctionBinaryType.SRJAR);
-        FunctionCallExpr expression = new FunctionCallExpr("ai_agg", List.of(new StringLiteral("text")));
-        expression.setFn(function);
-        expression.setType(VarcharType.VARCHAR);
-        Assertions.assertDoesNotThrow(() -> new AIProjectNode(plan.getNextNodeId(), tuple, project.getChild(0),
-                project.getSlotMap(), Map.of(new SlotId(900001), expression), plan.getOrCreateSystemChatConfig()));
+    public void testAITranslateAutoDetectSourceLanguagePreservesInvocation() throws Exception {
+        for (String suffix : List.of("", ", '', 'explicit-model'", ", 'test_default_chat', 'explicit-model'")) {
+            for (String source : List.of("''", "NULL", "cast(NULL as varchar)")) {
+                ExecPlan plan = getExecPlan("select ai_translate('hello', " + source + ", 'zh'" + suffix + ")");
+                TAIProjectNode node = findOnlyAIProjectThriftNode(plan).getAi_project_node();
+                Assertions.assertEquals("ai_translate",
+                        findOnlyAIExpression(node.getSlot_map()).getNodes().get(0).getFn().getName().getFunction_name());
+            }
+        }
     }
 
     @Test
-    public void testAITranslateNullSourceLanguagePreservesInvocation() throws Exception {
-        for (String arguments : List.of("'hello', NULL, 'zh'", "'explicit-model', 'hello', NULL, 'zh'")) {
-            ExecPlan plan = getExecPlan("select ai_translate(" + arguments + ")");
+    public void testAICompleteNullOptionsPreserveInvocation() throws Exception {
+        for (String provider : List.of("NULL", "''", "'test_default_chat'")) {
+            ExecPlan plan = getExecPlan("select ai_complete('hello', " + provider + ", 'explicit-model', cast(NULL as json))");
             TAIProjectNode node = findOnlyAIProjectThriftNode(plan).getAi_project_node();
-            Assertions.assertEquals("ai_translate",
+            Assertions.assertEquals("ai_complete",
                     findOnlyAIExpression(node.getSlot_map()).getNodes().get(0).getFn().getName().getFunction_name());
         }
     }
@@ -180,18 +171,17 @@ public class AIProjectPlanTest extends PlanTestBase {
         Assertions.assertNotNull(project.getCommon_slot_map());
         TExpr aiExpression = findOnlyAIExpression(project.getSlot_map());
         TExprNode call = aiExpression.getNodes().get(0);
-        Assertions.assertEquals(1, call.getNum_children());
-        Assertions.assertEquals(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, call.getAi_model_config_id());
+        Assertions.assertEquals(4, call.getNum_children());
+        Assertions.assertTrue(project.getAi_provider_mapping().containsKey(call.getAi_provider_id()));
         Assertions.assertTrue(aiExpression.getNodes().stream()
                 .noneMatch(node -> node.getNode_type() == TExprNodeType.INT_LITERAL));
 
-        Map<String, TAIModelConfiguration> configs = project.getAi_model_configs();
+        Map<String, TAIProvider> configs = project.getAi_provider_mapping();
         Assertions.assertEquals(1, configs.size());
-        TAIEndpointConfig chat = configs.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID).getChat();
-        Assertions.assertEquals("https://unit.test.example/v1/chat/completions", chat.getEndpoint());
-        Assertions.assertEquals("unit-test-model", chat.getModel());
-        Assertions.assertEquals(AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER, chat.getProvider());
-        Assertions.assertFalse(aiNode.toString().contains("AI_FUNCTION_MODEL_API_KEY"));
+        TAIProvider chat = configs.get(call.getAi_provider_id());
+        Assertions.assertEquals("https://unit.test.example/v1/chat/completions", chat.getParams().get("endpoint"));
+        Assertions.assertEquals("unit-test-model", chat.getParams().get("model"));
+        Assertions.assertEquals(TAIProviderProtocol.OPENAI, chat.getProtocol());
     }
 
     @Test
@@ -199,10 +189,10 @@ public class AIProjectPlanTest extends PlanTestBase {
         String catalogName = "ai_file_plan";
         GlobalStateMgr state = connectContext.getGlobalStateMgr();
         MetadataMgr previousMetadata = state.getMetadataMgr();
-        String previousChatProvider = Config.ai_default_chat_provider;
-        String previousEmbeddingEndpoint = Config.ai_default_embedding_endpoint;
-        String previousEmbeddingModel = Config.ai_default_embedding_model;
-        String previousEmbeddingProvider = Config.ai_default_embedding_provider;
+        String previousChatProvider = AIProviderTestUtil.chatProperty("protocol");
+        String previousEmbeddingEndpoint = AIProviderTestUtil.embeddingProperty("endpoint");
+        String previousEmbeddingModel = AIProviderTestUtil.embeddingProperty("model");
+        String previousEmbeddingProvider = AIProviderTestUtil.embeddingProperty("protocol");
         boolean catalogCreated = false;
         Options options = new Options();
         options.set(CatalogOptions.WAREHOUSE, warehouse.toUri().toString());
@@ -226,10 +216,10 @@ public class AIProjectPlanTest extends PlanTestBase {
             metadata.registerMockedMetadata(catalogName, new PaimonMetadata(catalogName, new HdfsEnvironment(),
                     nativeCatalog, new ConnectorProperties(ConnectorType.PAIMON, properties)));
             state.setMetadataMgr(metadata);
-            Config.ai_default_chat_provider = AIModelConfigs.QWEN_COMPATIBLE_PROVIDER;
-            Config.ai_default_embedding_endpoint = "https://unit.test.example/multimodal-embedding";
-            Config.ai_default_embedding_model = "unit-test-embedding";
-            Config.ai_default_embedding_provider = AIModelConfigs.DASHSCOPE_MULTIMODAL_PROVIDER;
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
+            AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://unit.test.example/multimodal-embedding");
+            AIProviderTestUtil.setEmbeddingProperty("model", "unit-test-embedding");
+            AIProviderTestUtil.setEmbeddingProperty("protocol", "openai");
 
             for (boolean embedding : List.of(false, true)) {
                 ExecPlan plan = getExecPlan("select " + (embedding ? "ai_embed(media)" :
@@ -241,26 +231,23 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
-                Assertions.assertEquals(embedding ? 200134 : 200104, call.getFn().getId());
-                Assertions.assertEquals(embedding ? 1 : 2, call.getNum_children());
-                String configId = embedding ? AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID :
-                        AIModelConfigs.SYSTEM_CHAT_CONFIG_ID;
-                Assertions.assertEquals(configId, call.getAi_model_config_id());
+                Assertions.assertEquals(embedding ? 200004 : 200002, call.getFn().getId());
+                Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
+                String configId = call.getAi_provider_id();
+                Assertions.assertEquals(configId, call.getAi_provider_id());
                 TExprNode fileArgument = expression.getNodes().get(embedding ? 1 : 2);
                 Assertions.assertEquals(TExprNodeType.SLOT_REF, fileArgument.getNode_type());
                 Assertions.assertEquals(TPrimitiveType.FILE,
                         fileArgument.getType().getTypes().get(0).getScalar_type().getType());
-                TAIModelConfiguration model = project.getAi_model_configs().get(configId);
-                Assertions.assertEquals(embedding ? AIModelConfigs.DASHSCOPE_MULTIMODAL_PROVIDER :
-                                AIModelConfigs.QWEN_COMPATIBLE_PROVIDER,
-                        (embedding ? model.getEmbedding() : model.getChat()).getProvider());
+                TAIProvider model = project.getAi_provider_mapping().get(configId);
+                Assertions.assertEquals(TAIProviderProtocol.OPENAI, model.getProtocol());
             }
         } finally {
             state.setMetadataMgr(previousMetadata);
-            Config.ai_default_chat_provider = previousChatProvider;
-            Config.ai_default_embedding_endpoint = previousEmbeddingEndpoint;
-            Config.ai_default_embedding_model = previousEmbeddingModel;
-            Config.ai_default_embedding_provider = previousEmbeddingProvider;
+            AIProviderTestUtil.setChatProperty("protocol", previousChatProvider);
+            AIProviderTestUtil.setEmbeddingProperty("endpoint", previousEmbeddingEndpoint);
+            AIProviderTestUtil.setEmbeddingProperty("model", previousEmbeddingModel);
+            AIProviderTestUtil.setEmbeddingProperty("protocol", previousEmbeddingProvider);
             if (catalogCreated) {
                 state.getCatalogMgr().dropCatalog(new DropCatalogStmt(catalogName));
             }
@@ -270,11 +257,11 @@ public class AIProjectPlanTest extends PlanTestBase {
     @Test
     public void testEveryAICompleteOverloadHasSemanticWireArityAndFixedConfiguration() throws Exception {
         Map<String, Integer> overloads = new LinkedHashMap<>();
-        overloads.put("select ai_complete(k1) from t7", 1);
-        overloads.put("select ai_complete(k1, map{'temperature': 0.5}) from t7", 2);
-        overloads.put("select ai_complete('prompt', cast(null as map<varchar, json>))", 2);
-        overloads.put("select ai_complete('explicit-model', k1) from t7", 2);
-        overloads.put("select ai_complete('explicit-model', k1, map{'temperature': 0.5}) from t7", 3);
+        overloads.put("select ai_complete(k1) from t7", 4);
+        overloads.put("select ai_complete(prompt => k1, options => json_object('temperature', 0.5)) from t7", 4);
+        overloads.put("select ai_complete(prompt => 'prompt', options => json_object())", 4);
+        overloads.put("select ai_complete(k1, '', 'explicit-model') from t7", 4);
+        overloads.put("select ai_complete(k1, '', 'explicit-model', json_object('temperature', 0.5)) from t7", 4);
 
         overloads.forEach((sql, expectedArity) -> {
             ExecPlan execPlan = Assertions.assertDoesNotThrow(() -> getExecPlan(sql));
@@ -282,7 +269,8 @@ public class AIProjectPlanTest extends PlanTestBase {
                     findOnlyAIProjectThriftNode(execPlan).getAi_project_node().getSlot_map());
             TExprNode call = expression.getNodes().get(0);
             Assertions.assertEquals(expectedArity, call.getNum_children(), sql);
-            Assertions.assertEquals(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, call.getAi_model_config_id(), sql);
+            Assertions.assertTrue(findOnlyAIProjectThriftNode(execPlan).getAi_project_node()
+                    .getAi_provider_mapping().containsKey(call.getAi_provider_id()), sql);
             Assertions.assertTrue(expression.getNodes().stream()
                     .noneMatch(node -> node.getNode_type() == TExprNodeType.INT_LITERAL), sql);
         });
@@ -319,142 +307,68 @@ public class AIProjectPlanTest extends PlanTestBase {
     public void testAIProjectConfigurationIsConstructionSnapshot() throws Exception {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         AIProjectNode node = findOnlyAIProjectNode(execPlan);
-        TAIEndpointConfig first = findOnlyAIProjectThriftNode(node).getAi_project_node()
-                .getAi_model_configs().get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID).getChat();
+        TAIProvider first = findOnlyAIProjectThriftNode(node).getAi_project_node()
+                .getAi_provider_mapping().values().iterator().next();
 
-        Config.ai_default_chat_endpoint = "https://changed.example/v1/chat/completions";
-        Config.ai_default_chat_model = "changed-model";
-        Config.ai_default_chat_provider = "changed-provider";
+        AIProviderTestUtil.setChatProperty("endpoint", "https://changed.example/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "changed-model");
+        AIProviderTestUtil.setChatProperty("protocol", "changed-provider");
         try {
-            TAIEndpointConfig second = findOnlyAIProjectThriftNode(node).getAi_project_node()
-                    .getAi_model_configs().get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID).getChat();
+            TAIProvider second = findOnlyAIProjectThriftNode(node).getAi_project_node()
+                    .getAi_provider_mapping().values().iterator().next();
             Assertions.assertEquals(first, second);
-            Assertions.assertEquals("https://unit.test.example/v1/chat/completions", second.getEndpoint());
-            Assertions.assertEquals("unit-test-model", second.getModel());
-            Assertions.assertEquals(AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER, second.getProvider());
+            Assertions.assertEquals("https://unit.test.example/v1/chat/completions", second.getParams().get("endpoint"));
+            Assertions.assertEquals("unit-test-model", second.getParams().get("model"));
+            Assertions.assertEquals(TAIProviderProtocol.OPENAI, second.getProtocol());
         } finally {
-            Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-            Config.ai_default_chat_model = "unit-test-model";
-            Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
+            AIProviderTestUtil.setChatProperty("endpoint", "https://unit.test.example/v1/chat/completions");
+            AIProviderTestUtil.setChatProperty("model", "unit-test-model");
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
         }
     }
 
     @Test
-    public void testExecPlanCachesSystemChatConfigurationPerPlan() {
-        ExecPlan firstPlan = new ExecPlan();
-        AIModelConfigs.SystemChatConfig first = firstPlan.getOrCreateSystemChatConfig();
-
-        Config.ai_default_chat_endpoint = "https://changed.example/v1/chat/completions";
-        Config.ai_default_chat_model = "changed-model";
-        Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
-        try {
-            AIModelConfigs.SystemChatConfig second = firstPlan.getOrCreateSystemChatConfig();
-            Assertions.assertSame(first, second);
-            Assertions.assertEquals("https://unit.test.example/v1/chat/completions", second.endpoint());
-            Assertions.assertEquals("unit-test-model", second.model());
-
-            ExecPlan secondPlan = new ExecPlan();
-            AIModelConfigs.SystemChatConfig changed = secondPlan.getOrCreateSystemChatConfig();
-            Assertions.assertEquals("https://changed.example/v1/chat/completions", changed.endpoint());
-            Assertions.assertEquals("changed-model", changed.model());
-
-            Config.ai_default_chat_endpoint = "";
-            Config.ai_default_chat_model = "";
-            Config.ai_default_chat_provider = "";
-            Assertions.assertSame(first, firstPlan.getOrCreateSystemChatConfig());
-            Assertions.assertSame(changed, secondPlan.getOrCreateSystemChatConfig());
-        } finally {
-            Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-            Config.ai_default_chat_model = "unit-test-model";
-            Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
-        }
-    }
-
-    @Test
-    public void testOrdinaryPlanDoesNotCaptureSystemChatConfiguration() {
-        String configuredEndpoint = Config.ai_default_chat_endpoint;
-        String configuredModel = Config.ai_default_chat_model;
-        String configuredProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "";
-        Config.ai_default_chat_model = "";
-        Config.ai_default_chat_provider = "";
+    public void testOrdinaryPlanDoesNotCaptureAIConfiguration() {
+        String configuredEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        String configuredModel = AIProviderTestUtil.chatProperty("model");
+        String configuredProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "");
+        AIProviderTestUtil.setChatProperty("model", "");
+        AIProviderTestUtil.setChatProperty("protocol", "");
         try {
             Assertions.assertDoesNotThrow(() -> getExecPlan("select k1 from t7"));
         } finally {
-            Config.ai_default_chat_endpoint = configuredEndpoint;
-            Config.ai_default_chat_model = configuredModel;
-            Config.ai_default_chat_provider = configuredProvider;
+            AIProviderTestUtil.setChatProperty("endpoint", configuredEndpoint);
+            AIProviderTestUtil.setChatProperty("model", configuredModel);
+            AIProviderTestUtil.setChatProperty("protocol", configuredProvider);
         }
     }
 
     @Test
-    public void testOrdinaryPlansDoNotAllocateAIModelConfigurationCache() throws Exception {
-        Field cache = ExecPlan.class.getDeclaredField("aiModelConfigs");
-        cache.setAccessible(true);
-        Assertions.assertNull(cache.get(new ExecPlan()));
-        Assertions.assertNull(cache.get(getExecPlan("select 1")));
-        Assertions.assertNull(cache.get(getExecPlan("select k1 from t7")));
-    }
-
-    @Test
-    public void testAIPlansInitializeAndRetainModelConfigurationCache() throws Exception {
+    public void testRepeatedBindingsCaptureIndependentProviders() throws Exception {
         ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
-        Field cache = ExecPlan.class.getDeclaredField("aiModelConfigs");
-        cache.setAccessible(true);
-        Object capturedCache = cache.get(plan);
-        Assertions.assertNotNull(capturedCache);
-
         AIProjectNode node = findOnlyAIProjectNode(plan);
-        Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
-        Map<String, AIModelConfigs.ModelConfig> second = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
-        Assertions.assertSame(capturedCache, cache.get(plan));
-        Assertions.assertEquals(Set.of(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID), first.keySet());
-        Assertions.assertSame(first.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID),
-                second.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID));
+        Map<String, AIProvider> first = plan.bindAIProviders(new LinkedHashMap<>(node.getSlotMap()));
+        Map<String, AIProvider> second = plan.bindAIProviders(new LinkedHashMap<>(node.getSlotMap()));
+        Assertions.assertEquals(first.keySet(), second.keySet());
+        String id = first.keySet().iterator().next();
+        Assertions.assertNotSame(first.get(id), second.get(id));
+        Assertions.assertEquals(first.get(id).toThrift(), second.get(id).toThrift());
         Assertions.assertThrows(UnsupportedOperationException.class, first::clear);
     }
 
     @Test
-    public void testNestedAIProjectsCaptureSystemChatConfigurationOncePerPlan() throws Exception {
-        ExecPlan template = getExecPlan("select ai_complete(ai_complete(k1)) from t7");
-        AtomicInteger captureCount = new AtomicInteger();
-
-        try (MockedStatic<AIModelConfigs> configs = Mockito.mockStatic(
-                AIModelConfigs.class, Mockito.CALLS_REAL_METHODS)) {
-            configs.when(() -> AIModelConfigs.systemChatSnapshot(
-                            Mockito.any(AIModelConfigs.DefaultModelRequirement.class)))
-                    .thenAnswer(invocation -> {
-                        AIModelConfigs.SystemChatConfig snapshot =
-                                (AIModelConfigs.SystemChatConfig) invocation.callRealMethod();
-                        if (captureCount.incrementAndGet() == 1) {
-                            Config.ai_default_chat_endpoint = "https://changed.example/v1/chat/completions";
-                            Config.ai_default_chat_model = "changed-model";
-                        }
-                        return snapshot;
-                    });
-
-            ExecPlan rebuilt = PlanFragmentBuilder.createPhysicalPlan(
-                    template.getPhysicalPlan(), connectContext, template.getOutputColumns(),
-                    template.getColumnRefFactory(), template.getColNames(), TResultSinkType.MYSQL_PROTOCAL, true);
-            List<TAIEndpointConfig> capturedConfigs = findAIProjectThriftNodes(rebuilt).stream()
-                    .map(TPlanNode::getAi_project_node)
-                    .map(TAIProjectNode::getAi_model_configs)
-                    .map(modelConfigs -> modelConfigs.get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID))
-                    .map(TAIModelConfiguration::getChat)
-                    .toList();
-
-            Assertions.assertEquals(2, capturedConfigs.size());
-            Assertions.assertEquals(1, captureCount.get());
-            Assertions.assertEquals(capturedConfigs.get(0), capturedConfigs.get(1));
-            capturedConfigs.forEach(config -> {
-                Assertions.assertEquals("https://unit.test.example/v1/chat/completions", config.getEndpoint());
-                Assertions.assertEquals("unit-test-model", config.getModel());
-            });
-        } finally {
-            Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-            Config.ai_default_chat_model = "unit-test-model";
-            Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
-        }
+    public void testNestedAIProjectsEachCarryProviderMetadata() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(ai_complete(k1)) from t7");
+        List<TAIProvider> providers = findAIProjectThriftNodes(plan).stream()
+                .map(TPlanNode::getAi_project_node)
+                .map(TAIProjectNode::getAi_provider_mapping)
+                .map(mapping -> mapping.values().iterator().next())
+                .toList();
+        Assertions.assertEquals(2, providers.size());
+        Assertions.assertEquals(providers.get(0), providers.get(1));
+        Assertions.assertNotSame(providers.get(0), providers.get(1));
+        Assertions.assertEquals("unit-test-model", providers.get(0).getParams().get("model"));
     }
 
     @Test
@@ -527,47 +441,24 @@ public class AIProjectPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testExplicitModelDoesNotRequireConfiguredDefaultModel() throws Exception {
-        String configuredModel = Config.ai_default_chat_model;
-        Config.ai_default_chat_model = "";
+    public void testProviderAlwaysRequiresADefaultModel() throws Exception {
+        String configuredModel = AIProviderTestUtil.chatProperty("model");
+        AIProviderTestUtil.setChatProperty("model", "");
         try {
-            ExecPlan explicitModelPlan = getExecPlan("select ai_complete('explicit-model', k1) from t7");
-            TAIEndpointConfig chat = findOnlyAIProjectThriftNode(explicitModelPlan).getAi_project_node()
-                    .getAi_model_configs().get(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID).getChat();
-            Assertions.assertEquals("", chat.getModel());
+            Assertions.assertThrows(SemanticException.class,
+                    () -> getExecPlan("select ai_complete('explicit-model', k1) from t7"));
             Assertions.assertThrows(SemanticException.class,
                     () -> getExecPlan("select ai_complete(k1) from t7"));
         } finally {
-            Config.ai_default_chat_model = configuredModel;
+            AIProviderTestUtil.setChatProperty("model", configuredModel);
         }
-    }
-
-    @Test
-    public void testAIProjectValidatesRequirementAgainstPassedSnapshot() throws Exception {
-        AIModelConfigs.SystemChatConfig snapshotWithoutDefault = new AIModelConfigs.SystemChatConfig(
-                "https://captured.example/v1/chat/completions", "", AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER);
-
-        ExecPlan explicitPlan = getExecPlan("select ai_complete('explicit-model', k1) from t7");
-        AIProjectNode explicitProject = findOnlyAIProjectNode(explicitPlan);
-        TupleDescriptor explicitTuple = explicitPlan.getDescTbl().getTupleDesc(explicitProject.getTupleIds().get(0));
-        Assertions.assertDoesNotThrow(() -> new AIProjectNode(
-                explicitPlan.getNextNodeId(), explicitTuple, explicitProject.getChild(0),
-                explicitProject.getSlotMap(), explicitProject.getCommonSlotMap(), snapshotWithoutDefault));
-
-        ExecPlan promptPlan = getExecPlan("select ai_complete(k1) from t7");
-        AIProjectNode promptProject = findOnlyAIProjectNode(promptPlan);
-        TupleDescriptor promptTuple = promptPlan.getDescTbl().getTupleDesc(promptProject.getTupleIds().get(0));
-        StarRocksPlannerException failure = Assertions.assertThrows(StarRocksPlannerException.class,
-                () -> new AIProjectNode(promptPlan.getNextNodeId(), promptTuple, promptProject.getChild(0),
-                        promptProject.getSlotMap(), promptProject.getCommonSlotMap(), snapshotWithoutDefault));
-        Assertions.assertTrue(failure.getMessage().contains("ai_default_chat_model"));
     }
 
     @Test
     public void testExplainContainsOnlySemanticArgumentsAndNoConfiguration() throws Exception {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         String optimizerExplain = Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
-        assertUnaryAIComplete(optimizerExplain);
+        assertNormalizedAIComplete(optimizerExplain);
         List<String> explains = List.of(
                 optimizerExplain,
                 execPlan.getExplainString(TExplainLevel.NORMAL),
@@ -576,11 +467,10 @@ public class AIProjectPlanTest extends PlanTestBase {
 
         for (String explain : explains) {
             Assertions.assertTrue(explain.contains("ai_complete"), explain);
-            Assertions.assertFalse(explain.contains(Config.ai_default_chat_endpoint), explain);
-            Assertions.assertFalse(explain.contains(Config.ai_default_chat_model), explain);
-            Assertions.assertFalse(explain.contains(Config.ai_default_chat_provider), explain);
-            Assertions.assertFalse(explain.contains(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID), explain);
-            Assertions.assertFalse(explain.contains("AI_FUNCTION_MODEL_API_KEY"), explain);
+            Assertions.assertFalse(explain.contains(AIProviderTestUtil.chatProperty("endpoint")), explain);
+            Assertions.assertFalse(explain.contains(AIProviderTestUtil.chatProperty("model")), explain);
+            Assertions.assertFalse(explain.contains(AIProviderTestUtil.chatProperty("protocol")), explain);
+            Assertions.assertFalse(explain.contains("provider:0"), explain);
         }
     }
 
@@ -629,7 +519,8 @@ public class AIProjectPlanTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         AIProjectNode original = findOnlyAIProjectNode(execPlan);
         TupleDescriptor tupleDescriptor = execPlan.getDescTbl().getTupleDesc(original.getTupleIds().get(0));
-        AIModelConfigs.SystemChatConfig systemChatConfig = execPlan.getOrCreateSystemChatConfig();
+        Map<String, AIProvider> modelConfigs = execPlan.bindAIProviders(
+                new LinkedHashMap<>(original.getSlotMap()));
         Map.Entry<SlotId, Expr> aiEntry = original.getSlotMap().entrySet().stream()
                 .filter(entry -> containsFunction(entry.getValue(), "ai_complete"))
                 .findFirst().orElseThrow();
@@ -638,22 +529,22 @@ public class AIProjectPlanTest extends PlanTestBase {
         FunctionCallExpr missingIdCall = copyAIPlannerCall(aiCall, null);
         Assertions.assertThrows(IllegalStateException.class,
                 () -> new AIProjectNode(execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0),
-                        Map.of(aiEntry.getKey(), missingIdCall), Map.of(), systemChatConfig));
+                        Map.of(aiEntry.getKey(), missingIdCall), Map.of(), modelConfigs));
 
         List<String> untrustedIds = List.of(
-                "", "arbitrary-config", "AI_FUNCTION_MODEL_API_KEY", "credential-looking-value");
+                "", "arbitrary-config", "provider-api-key", "credential-looking-value");
         for (String untrustedId : untrustedIds) {
             FunctionCallExpr untrustedCall = copyAIPlannerCall(aiCall, untrustedId);
             IllegalStateException failure = Assertions.assertThrows(IllegalStateException.class,
                     () -> new AIProjectNode(execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0),
-                            Map.of(aiEntry.getKey(), untrustedCall), Map.of(), systemChatConfig));
+                            Map.of(aiEntry.getKey(), untrustedCall), Map.of(), modelConfigs));
             if (!untrustedId.isEmpty()) {
                 Assertions.assertFalse(failure.getMessage().contains(untrustedId));
             }
         }
 
         FunctionCallExpr cloned = (FunctionCallExpr) aiCall.clone();
-        Assertions.assertEquals(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, cloned.getAiModelConfigId());
+        Assertions.assertEquals(aiCall.getAIProviderId(), cloned.getAIProviderId());
     }
 
     @Test
@@ -661,11 +552,12 @@ public class AIProjectPlanTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         AIProjectNode original = findOnlyAIProjectNode(execPlan);
         TupleDescriptor tupleDescriptor = execPlan.getDescTbl().getTupleDesc(original.getTupleIds().get(0));
-        AIModelConfigs.SystemChatConfig systemChatConfig = execPlan.getOrCreateSystemChatConfig();
+        Map<String, AIProvider> modelConfigs = execPlan.bindAIProviders(
+                new LinkedHashMap<>(original.getSlotMap()));
         Map<SlotId, Expr> callerSlotMap = deepCloneExpressions(original.getSlotMap());
         Map<SlotId, Expr> callerCommonMap = deepCloneExpressions(original.getCommonSlotMap());
         AIProjectNode isolated = new AIProjectNode(execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0),
-                callerSlotMap, callerCommonMap, systemChatConfig);
+                callerSlotMap, callerCommonMap, modelConfigs);
         String beforeMutation = findOnlyAIProjectThriftNode(isolated).toString();
 
         FunctionCallExpr callerCall = (FunctionCallExpr) callerSlotMap.values().stream()
@@ -684,7 +576,8 @@ public class AIProjectPlanTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         AIProjectNode original = findOnlyAIProjectNode(execPlan);
         TupleDescriptor tupleDescriptor = execPlan.getDescTbl().getTupleDesc(original.getTupleIds().get(0));
-        AIModelConfigs.SystemChatConfig systemChatConfig = execPlan.getOrCreateSystemChatConfig();
+        Map<String, AIProvider> modelConfigs = execPlan.bindAIProviders(
+                new LinkedHashMap<>(original.getSlotMap()));
         Map.Entry<SlotId, Expr> aiEntry = original.getSlotMap().entrySet().stream()
                 .filter(entry -> containsFunction(entry.getValue(), "ai_complete"))
                 .findFirst().orElseThrow();
@@ -693,7 +586,7 @@ public class AIProjectPlanTest extends PlanTestBase {
         nonAIOutput.put(new SlotId(10_000), findOnlyFunctionCall(getExecPlan("select rand() from t7"), "rand"));
         Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                 execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0), nonAIOutput, Map.of(),
-                systemChatConfig));
+                modelConfigs));
 
         FunctionCallExpr aiCall = (FunctionCallExpr) aiEntry.getValue();
         SlotRef inputSlot = (SlotRef) aiCall.getChild(0);
@@ -703,21 +596,21 @@ public class AIProjectPlanTest extends PlanTestBase {
         Assertions.assertAll(
                 () -> Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                         execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0),
-                        Map.of(aiEntry.getKey(), nestedAICall), Map.of(), systemChatConfig)),
+                        Map.of(aiEntry.getKey(), nestedAICall), Map.of(), modelConfigs)),
                 () -> Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                         execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0), original.getSlotMap(),
-                        Map.of(aiEntry.getKey(), inputSlot.clone()), systemChatConfig)));
+                        Map.of(aiEntry.getKey(), inputSlot.clone()), modelConfigs)));
 
         Map<SlotId, Expr> mismatchedIdentity = deepCloneExpressions(original.getSlotMap());
         mismatchedIdentity.put(new SlotId(10_001), inputSlot.clone());
         Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                 execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0), mismatchedIdentity, Map.of(),
-                systemChatConfig));
+                modelConfigs));
 
         SlotRef aiOutputReference = new SlotRef(aiEntry.getKey());
         Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                 execPlan.getNextNodeId(), tupleDescriptor, original.getChild(0), original.getSlotMap(),
-                Map.of(new SlotId(10_002), aiOutputReference), systemChatConfig));
+                Map.of(new SlotId(10_002), aiOutputReference), modelConfigs));
     }
 
     @Test
@@ -739,19 +632,20 @@ public class AIProjectPlanTest extends PlanTestBase {
         ExecPlan aiPlan = getExecPlan("select ai_complete(k1) from t7");
         AIProjectNode aiProject = findOnlyAIProjectNode(aiPlan);
         TupleDescriptor tupleDescriptor = aiPlan.getDescTbl().getTupleDesc(aiProject.getTupleIds().get(0));
-        AIModelConfigs.SystemChatConfig systemChatConfig = aiPlan.getOrCreateSystemChatConfig();
+        Map<String, AIProvider> modelConfigs = aiPlan.bindAIProviders(
+                new LinkedHashMap<>(aiProject.getSlotMap()));
         Map.Entry<SlotId, Expr> aiExpression = aiProject.getSlotMap().entrySet().stream()
                 .filter(entry -> containsFunction(entry.getValue(), "ai_complete"))
                 .findFirst().orElseThrow();
 
         Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                 aiPlan.getNextNodeId(), tupleDescriptor, aiProject.getChild(0), aiProject.getSlotMap(),
-                Map.of(aiExpression.getKey(), aiExpression.getValue()), systemChatConfig));
+                Map.of(aiExpression.getKey(), aiExpression.getValue()), modelConfigs));
 
         FunctionCallExpr rand = findOnlyFunctionCall(getExecPlan("select rand() from t7"), "rand");
         Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(
                 aiPlan.getNextNodeId(), tupleDescriptor, aiProject.getChild(0), aiProject.getSlotMap(),
-                Map.of(aiExpression.getKey(), rand), systemChatConfig));
+                Map.of(aiExpression.getKey(), rand), modelConfigs));
     }
 
     @Test
@@ -829,6 +723,36 @@ public class AIProjectPlanTest extends PlanTestBase {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTopNProjectionDependenciesForTextAndEmbedding(boolean enabled) throws Exception {
+        boolean oldEnabled = connectContext.getSessionVariable().isEnableAITopnPushdown();
+        String oldEmbeddingEndpoint = AIProviderTestUtil.embeddingProperty("endpoint");
+        String oldEmbeddingModel = AIProviderTestUtil.embeddingProperty("model");
+        AIProviderTestUtil.setEmbeddingProperty("endpoint", "https://models.example.test/v1/embeddings");
+        AIProviderTestUtil.setEmbeddingProperty("model", "embedding-model");
+        try {
+            connectContext.getSessionVariable().setEnableAITopnPushdown(enabled);
+            for (String sql : List.of(
+                    "select k1, ai_embed(k2) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(k2) from t7 order by k1 desc limit 1 offset 1",
+                    "select k1, ai_sentiment(k2) from t7 order by k1 limit 1",
+                    "select k1, array_length(ai_embed(k2)) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(ai_complete(k2)) from t7 order by k1 limit 1",
+                    "select k1, ai_embed(concat(k2, 'x')), ai_embed(concat(k2, 'x')) from t7 order by k1 limit 1")) {
+                ExecPlan plan = getExecPlan(sql);
+                Assertions.assertFalse(findPhysicalOperators(plan.getPhysicalPlan(),
+                        OperatorType.PHYSICAL_AI_PROJECT).isEmpty(), sql);
+                com.starrocks.sql.optimizer.validate.InputDependenciesChecker.getInstance()
+                        .validate(plan.getPhysicalPlan(), null);
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableAITopnPushdown(oldEnabled);
+            AIProviderTestUtil.setEmbeddingProperty("model", oldEmbeddingModel);
+            AIProviderTestUtil.setEmbeddingProperty("endpoint", oldEmbeddingEndpoint);
+        }
+    }
+
+    @ParameterizedTest
     @CsvSource({"asc, first", "desc, last", "asc, last", "desc, first"})
     public void testTopNReducesAIInputByPassthroughKey(String direction, String nullOrder) throws Exception {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7 order by k1 "
@@ -889,12 +813,12 @@ public class AIProjectPlanTest extends PlanTestBase {
     @CsvSource({"true, 1, false", "true, 1, true", "true, 4, false", "true, 4, true",
             "false, 1, false", "false, 1, true", "false, 4, false", "false, 4, true"})
     public void testWindowConsumesPreservedAIInputOrdering(boolean enabled, int dop, boolean parallelMerge) throws Exception {
-        boolean oldEnable = connectContext.getSessionVariable().isEnableAiTopnPushdown();
+        boolean oldEnable = connectContext.getSessionVariable().isEnableAITopnPushdown();
         int oldDop = connectContext.getSessionVariable().getPipelineDop();
         boolean oldParallelMerge = connectContext.getSessionVariable().isEnableParallelMerge();
         UtFrameUtils.addMockBackend(10002);
         try {
-            connectContext.getSessionVariable().setEnableAiTopnPushdown(enabled);
+            connectContext.getSessionVariable().setEnableAITopnPushdown(enabled);
             connectContext.getSessionVariable().setPipelineDop(dop);
             connectContext.getSessionVariable().setEnableParallelMerge(parallelMerge);
             ExecPlan execPlan = getExecPlan("select a, row_number() over (order by k1) rn "
@@ -932,7 +856,7 @@ public class AIProjectPlanTest extends PlanTestBase {
             Assertions.assertSame(aiProject, windowInput,
                     "Window must consume AI output without an intervening Sort or Exchange");
         } finally {
-            connectContext.getSessionVariable().setEnableAiTopnPushdown(oldEnable);
+            connectContext.getSessionVariable().setEnableAITopnPushdown(oldEnable);
             connectContext.getSessionVariable().setPipelineDop(oldDop);
             connectContext.getSessionVariable().setEnableParallelMerge(oldParallelMerge);
             UtFrameUtils.dropMockBackend(10002);
@@ -978,7 +902,7 @@ public class AIProjectPlanTest extends PlanTestBase {
     @CsvSource({"0, 5, false", "4, 5, false", "5, 5, true", "6, 5, true",
             "1000, 1000, true", "1000, 1001, false"})
     public void testTopNThresholdHint(long threshold, long limit, boolean global) throws Exception {
-        long oldThreshold = connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit();
+        long oldThreshold = connectContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit();
         ExecPlan execPlan = getExecPlan("select /*+ SET_VAR(ai_topn_pushdown_max_global_limit=" + threshold
                 + ") */ ai_complete(k1) from t7 order by k1 limit " + limit);
         if (global) {
@@ -986,21 +910,21 @@ public class AIProjectPlanTest extends PlanTestBase {
         } else {
             assertLocalTopNBoundsAIInput(execPlan, limit);
         }
-        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit());
         assertTopNBoundsAIInput(getExecPlan("select ai_complete(k1) from t7 order by k1 limit 5"), 5);
     }
 
     @ParameterizedTest
     @ValueSource(longs = {5, 50000})
     public void testTopNSwitchHintRestoresSession(long limit) throws Exception {
-        boolean oldEnable = connectContext.getSessionVariable().isEnableAiTopnPushdown();
+        boolean oldEnable = connectContext.getSessionVariable().isEnableAITopnPushdown();
         ExecPlan execPlan = getExecPlan("select /*+ SET_VAR(enable_ai_topn_pushdown=false) */ "
                 + "ai_complete(k1) from t7 order by k1 limit " + limit);
         OptExpression aiProject = findPhysicalOperators(
                 execPlan.getPhysicalPlan(), OperatorType.PHYSICAL_AI_PROJECT).get(0);
         Assertions.assertTrue(findPhysicalOperators(aiProject.inputAt(0), OperatorType.PHYSICAL_TOPN).isEmpty());
         Assertions.assertEquals(Operator.DEFAULT_LIMIT, findOnlyAIProjectNode(execPlan).getLimit());
-        Assertions.assertEquals(oldEnable, connectContext.getSessionVariable().isEnableAiTopnPushdown());
+        Assertions.assertEquals(oldEnable, connectContext.getSessionVariable().isEnableAITopnPushdown());
         assertTopNBoundsAIInput(getExecPlan("select ai_complete(k1) from t7 order by k1 limit 5"), 5);
     }
 
@@ -1041,11 +965,11 @@ public class AIProjectPlanTest extends PlanTestBase {
     @ParameterizedTest
     @ValueSource(strings = {"-1", "9223372036854775808", "invalid"})
     public void testInvalidTopNThresholdHintDoesNotChangeSession(String value) {
-        long oldThreshold = connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit();
+        long oldThreshold = connectContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit();
         Assertions.assertThrows(DdlException.class, () -> getExecPlan(
                 "select /*+ SET_VAR(ai_topn_pushdown_max_global_limit='" + value
                         + "') */ ai_complete(k1) from t7 order by k1 limit 5"));
-        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(oldThreshold, connectContext.getSessionVariable().getAITopnPushdownMaxGlobalLimit());
     }
 
     @Test
@@ -1211,13 +1135,13 @@ public class AIProjectPlanTest extends PlanTestBase {
         return aiExpressions.get(0);
     }
 
-    private static void assertUnaryAIComplete(String explain) {
+    private static void assertNormalizedAIComplete(String explain) {
         int start = explain.indexOf("ai_complete(");
         Assertions.assertTrue(start >= 0, explain);
         while (start >= 0) {
             int end = explain.indexOf(')', start);
             Assertions.assertTrue(end > start, explain);
-            Assertions.assertFalse(explain.substring(start, end).contains(","), explain);
+            Assertions.assertTrue(explain.substring(start, end).contains(", '', '', json_object("), explain);
             start = explain.indexOf("ai_complete(", end);
         }
     }
@@ -1340,4 +1264,20 @@ public class AIProjectPlanTest extends PlanTestBase {
                 .filter(planNode -> planNode.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
                 .findFirst().orElseThrow();
     }
+    @Test
+    public void testSameNameNonAICommonExpressionUsesResolvedIdentity() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
+        AIProjectNode project = findOnlyAIProjectNode(plan);
+        TupleDescriptor tuple = plan.getDescTbl().getTupleDesc(project.getTupleIds().get(0));
+        ScalarFunction function = ScalarFunction.createVectorizedBuiltin(900001, "ai_agg",
+                List.of(VarcharType.VARCHAR), false, VarcharType.VARCHAR);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        FunctionCallExpr expression = new FunctionCallExpr("ai_agg", List.of(new StringLiteral("text")));
+        expression.setFn(function);
+        expression.setType(VarcharType.VARCHAR);
+        Assertions.assertDoesNotThrow(() -> new AIProjectNode(plan.getNextNodeId(), tuple, project.getChild(0),
+                project.getSlotMap(), Map.of(new SlotId(900001), expression),
+                plan.bindAIProviders(new LinkedHashMap<>(project.getSlotMap()))));
+    }
+
 }

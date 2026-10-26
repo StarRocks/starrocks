@@ -43,11 +43,10 @@ public final class AIInternalFunctions {
 
     public static ScalarFunction createReducer(AggregateFunction publicFunction, List<Type> argumentTypes) {
         var descriptor = VectorizedBuiltinFunctions.getAIAggregateLoweringDescriptor(publicFunction.getFunctionId());
-        Preconditions.checkState(publicFunction.isAi() && descriptor != null, "Expected semantic AI aggregate");
+        Preconditions.checkState(publicFunction.isAI() && descriptor != null, "Expected semantic AI aggregate");
         ScalarFunction fn = ScalarFunction.createVectorizedBuiltin(descriptor.reducerFunctionId(),
                 descriptor.reducerFunctionName(), argumentTypes, false, publicFunction.getReturnType());
         fn.setBinaryType(TFunctionBinaryType.AI);
-        fn.setAiModelSource(publicFunction.getAiModelSource());
         fn.setUserVisible(false);
         fn.setIsNullable(true);
         return fn;
