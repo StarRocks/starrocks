@@ -73,6 +73,9 @@ void redact_plan_credentials(TPlanNode& node) {
         if (config.__isset.embedding && config.embedding.__isset.api_key) {
             config.embedding.__set_api_key(std::string(kCredentialMask));
         }
+        if (config.__isset.decision && config.decision.__isset.api_key) {
+            config.decision.__set_api_key(std::string(kCredentialMask));
+        }
     }
 }
 

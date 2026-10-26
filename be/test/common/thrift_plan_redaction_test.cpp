@@ -28,6 +28,7 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         TAIModelConfiguration config;
         config.__set_chat(endpoint);
         config.__set_embedding(endpoint);
+        config.__set_decision(endpoint);
         TAIProjectNode ai;
         ai.__set_ai_model_configs({{"provider:test-id", config}});
         TPlanNode node;
@@ -45,6 +46,7 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         auto& masked = masked_node.ai_project_node.ai_model_configs.at("provider:test-id");
         masked.chat.__set_api_key("******");
         masked.embedding.__set_api_key("******");
+        masked.decision.__set_api_key("******");
         TPlanFragment masked_fragment(fragment);
         masked_fragment.plan.nodes[0] = masked_node;
         TExecPlanFragmentParams masked_request(request);
@@ -62,6 +64,9 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         EXPECT_EQ(secret, info.plan_fragment.plan.nodes[0]
                                   .ai_project_node.ai_model_configs.at("provider:test-id")
                                   .embedding.api_key);
+        EXPECT_EQ(secret, request.fragment.plan.nodes[0]
+                                  .ai_project_node.ai_model_configs.at("provider:test-id")
+                                  .decision.api_key);
     }
 }
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.starrocks.builtins.VectorizedBuiltinFunctions.AICapability;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
@@ -60,6 +61,9 @@ public class AIModelConfigsTest {
         Config.ai_default_embedding_endpoint = "";
         Config.ai_default_embedding_model = "";
         Config.ai_default_embedding_provider = "";
+        Config.ai_default_decision_endpoint = "";
+        Config.ai_default_decision_model = "";
+        Config.ai_default_decision_provider = "";
     }
 
     @Test
@@ -67,7 +71,7 @@ public class AIModelConfigsTest {
         FunctionSet functions = new FunctionSet();
         functions.init();
         Set<Long> explicitModelIds = Set.of(200102L, 200103L, 200106L, 200107L, 200111L, 200113L, 200115L, 200117L,
-                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L, 200136L, 200137L);
+                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L, 200136L, 200137L, 200162L, 200163L);
         Set<Long> observedExplicitModelIds = functions.getBuiltinFunctions().stream()
                 .filter(Function::isAi)
                 .filter(AIModelConfigs::hasExplicitModel)
@@ -78,8 +82,10 @@ public class AIModelConfigsTest {
         Set<Long> namedModelIds = Set.of(200140L, 200141L, 200142L, 200143L);
         functions.getBuiltinFunctions().stream().filter(Function::isAi).forEach(function -> {
             long id = function.getFunctionId();
-            Assertions.assertEquals(explicitModelIds.contains(id) ? 0 : -1, AIModelConfigs.getModelArgument(function));
-            Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function));
+            Assertions.assertEquals(explicitModelIds.contains(id) ? 0 : -1, AIModelConfigs.getModelArgument(function),
+                    () -> function.signatureString() + " (function ID " + id + ")");
+            Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function),
+                    () -> function.signatureString() + " (function ID " + id + ")");
             int providerArgument = AIModelConfigs.getProviderArgument(function);
             Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.PROVIDER, providerArgument >= 0);
             if (providerArgument >= 0) {
@@ -95,6 +101,7 @@ public class AIModelConfigsTest {
                 VarcharType.VARCHAR, false);
         Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.hasExplicitModel(function));
         Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.isTextEmbedding(function));
+        Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.capability(function));
     }
 
     @Test
@@ -108,34 +115,64 @@ public class AIModelConfigsTest {
                 .collect(Collectors.toSet());
         Assertions.assertEquals(Set.of(200130L, 200131L, 200132L, 200133L, 200134L, 200135L,
                 200136L, 200137L, 200142L, 200143L), embeddingIds);
+        Set<Long> decisionIds = functions.getBuiltinFunctions().stream()
+                .filter(Function::isAi)
+                .filter(function -> AIModelConfigs.capability(function) == AICapability.DECISION)
+                .peek(function -> {
+                    Assertions.assertFalse(AIModelConfigs.isTextEmbedding(function));
+                    Assertions.assertEquals(TAIModelSource.SYSTEM, function.getAiModelSource());
+                    Assertions.assertEquals(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID,
+                            AIModelConfigs.systemConfigId(function));
+                })
+                .map(Function::getFunctionId)
+                .collect(Collectors.toSet());
+        Assertions.assertEquals(Set.of(200160L, 200161L, 200162L, 200163L), decisionIds);
     }
 
     @ParameterizedTest
     @CsvSource({"CHAT, openai_compatible", "CHAT, qwen_compatible",
-            "TEXT_EMBEDDING, openai_compatible", "TEXT_EMBEDDING, dashscope_multimodal"})
+            "TEXT_EMBEDDING, openai_compatible", "TEXT_EMBEDDING, dashscope_multimodal", "DECISION, bailian_decision"})
     public void testSystemProtocolsPreserveImmutableWireSnapshot(String capability, String protocol) {
         Config.ai_default_chat_provider = protocol;
         Config.ai_default_embedding_endpoint = "https://models.example.test/v1/inference";
         Config.ai_default_embedding_model = "embedding-model";
         Config.ai_default_embedding_provider = protocol;
-        boolean embedding = capability.equals("TEXT_EMBEDDING");
-        AIModelConfigs.ModelConfig snapshot = embedding ? AIModelConfigs.systemEmbeddingSnapshot(REQUIRED)
-                : AIModelConfigs.fromSystemChat(AIModelConfigs.systemChatSnapshot(REQUIRED));
+        Config.ai_default_decision_endpoint = "https://models.example.test/v1/systemone";
+        Config.ai_default_decision_model = "decision-model";
+        Config.ai_default_decision_provider = protocol;
+        AIModelConfigs.ModelConfig snapshot = switch (capability) {
+            case "TEXT_EMBEDDING" -> AIModelConfigs.systemEmbeddingSnapshot(REQUIRED);
+            case "DECISION" -> AIModelConfigs.systemDecisionSnapshot(REQUIRED);
+            default -> AIModelConfigs.fromSystemChat(AIModelConfigs.systemChatSnapshot(REQUIRED));
+        };
         Config.ai_default_chat_provider = "changed-provider";
         Config.ai_default_embedding_provider = "changed-provider";
+        Config.ai_default_decision_provider = "changed-provider";
         TAIModelConfiguration thrift = snapshot.toThrift();
-        Assertions.assertEquals(protocol, (embedding ? thrift.getEmbedding() : thrift.getChat()).getProvider());
+        Assertions.assertEquals(capability.equals("CHAT"), thrift.isSetChat());
+        Assertions.assertEquals(capability.equals("TEXT_EMBEDDING"), thrift.isSetEmbedding());
+        Assertions.assertEquals(capability.equals("DECISION"), thrift.isSetDecision());
+        TAIEndpointConfig endpoint = switch (capability) {
+            case "TEXT_EMBEDDING" -> thrift.getEmbedding();
+            case "DECISION" -> thrift.getDecision();
+            default -> thrift.getChat();
+        };
+        Assertions.assertEquals(protocol, endpoint.getProvider());
+        Assertions.assertFalse(endpoint.isSetApi_key());
         Assertions.assertEquals(capability, snapshot.capability());
         Assertions.assertFalse(thrift.isSetSource());
     }
 
     @ParameterizedTest
     @CsvSource({"CHAT, dashscope_multimodal", "TEXT_EMBEDDING, qwen_compatible", "CHAT, QWEN_COMPATIBLE",
-            "TEXT_EMBEDDING, DASHSCOPE_MULTIMODAL"})
+            "TEXT_EMBEDDING, DASHSCOPE_MULTIMODAL", "DECISION, openai_compatible", "DECISION, BAILIAN_DECISION"})
     public void testSystemProtocolsRejectUnsupportedCapability(String capability, String protocol) {
         AIModelConfigs.ModelConfig config = new AIModelConfigs.ModelConfig(capability,
                 "https://models.example.test/v1/inference", "model", protocol);
-        if (capability.equals("TEXT_EMBEDDING")) {
+        if (capability.equals("DECISION")) {
+            Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> AIModelConfigs.validateSystem(config, REQUIRED));
+        } else if (capability.equals("TEXT_EMBEDDING")) {
             Assertions.assertThrows(StarRocksPlannerException.class,
                     () -> AIModelConfigs.validateSystemEmbedding(config, REQUIRED));
         } else {
@@ -245,7 +282,7 @@ public class AIModelConfigsTest {
                 Arrays.stream(TAIEndpointConfig._Fields.values())
                         .map(TAIEndpointConfig._Fields::getFieldName)
                         .collect(Collectors.toSet()));
-        Assertions.assertEquals(Set.of("chat", "embedding", "source"),
+        Assertions.assertEquals(Set.of("chat", "embedding", "source", "decision"),
                 Arrays.stream(TAIModelConfiguration._Fields.values())
                         .map(TAIModelConfiguration._Fields::getFieldName)
                         .collect(Collectors.toSet()));
@@ -259,6 +296,7 @@ public class AIModelConfigsTest {
         Assertions.assertEquals(1, TAIModelConfiguration._Fields.CHAT.getThriftFieldId());
         Assertions.assertEquals(2, TAIModelConfiguration._Fields.EMBEDDING.getThriftFieldId());
         Assertions.assertEquals(3, TAIModelConfiguration._Fields.SOURCE.getThriftFieldId());
+        Assertions.assertEquals(4, TAIModelConfiguration._Fields.DECISION.getThriftFieldId());
         Assertions.assertEquals(0, TAIModelSource.SYSTEM.getValue());
         Assertions.assertEquals(1, TAIModelSource.PROVIDER.getValue());
     }
@@ -275,6 +313,21 @@ public class AIModelConfigsTest {
         Config.ai_default_embedding_endpoint = "";
         Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateSystemEmbedding(snapshot, OPTIONAL));
         Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemEmbeddingSnapshot(OPTIONAL));
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.systemChatSnapshot(REQUIRED));
+    }
+
+    @Test
+    public void testDecisionConfigurationNormalizesMissingDefaultAndRemainsIndependent() {
+        Config.ai_default_decision_endpoint = "https://models.example.test/v1/systemone";
+        Config.ai_default_decision_model = null;
+        Config.ai_default_decision_provider = "bailian_decision";
+        AIModelConfigs.ModelConfig snapshot = AIModelConfigs.systemDecisionSnapshot(OPTIONAL);
+        Assertions.assertEquals("", snapshot.model());
+        Assertions.assertNull(snapshot.apiKey());
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemDecisionSnapshot(REQUIRED));
+        Config.ai_default_decision_endpoint = "";
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateSystem(snapshot, OPTIONAL));
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemDecisionSnapshot(OPTIONAL));
         Assertions.assertDoesNotThrow(() -> AIModelConfigs.systemChatSnapshot(REQUIRED));
     }
 
