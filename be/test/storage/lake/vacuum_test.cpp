@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <ctime>
 #include <optional>
 #include <set>
@@ -44,7 +45,7 @@
 #include "test_util.h"
 
 #if defined(ADDRESS_SANITIZER)
-#include <sanitizer/allocator_interface.h>
+extern "C" std::size_t __sanitizer_get_current_allocated_bytes(void);
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
 #endif

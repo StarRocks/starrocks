@@ -99,7 +99,18 @@ jobs:
             rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
             read branch all_linux IS_ARM < <(python3 scripts/inspection_params.py "${{ github.event.schedule }}")
             
-            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=rocky9
+            if (( $(date +%e) % 2 == 1 )); then
+              if [[ "${branch}" == "main" ]]; then
+                BE_UT_LINUX=rocky9
+              else
+                ver=${branch#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+                if (( major > 4 || (major == 4 && minor >= 2) )); then
+                  BE_UT_LINUX=rocky9
+                else
+                  BE_UT_LINUX=centos7
+                fi
+              fi
+            fi
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
             echo "::notice::${branch}(${BE_UT_LINUX} ${base_sha})"
             [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
