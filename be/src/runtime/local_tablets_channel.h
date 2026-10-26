@@ -18,6 +18,15 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+<<<<<<< HEAD:be/src/runtime/local_tablets_channel.h
+=======
+#include <ctime>
+#include <memory>
+
+#include "base/brpc/reusable_closure.h"
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
+>>>>>>> 8a311ef ([BugFix] Bound segment lock waits to break cross-BE load stalls (#80707)):be/src/data_workflows/load/tablet_writer/local_tablets_channel.h
 #include "common/compiler_util.h"
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
@@ -57,7 +66,8 @@ public:
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                     const timespec& deadline) const;
 
     void cancel(const std::string& reason) override;
 

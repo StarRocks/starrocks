@@ -50,6 +50,7 @@
 #include "service/brpc.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/local_tablet_reader.h"
+#include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/uid_util.h"
 
@@ -182,11 +183,16 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
                                                               const PTabletWriterAddSegmentRequest* request,
                                                               PTabletWriterAddSegmentResult* response,
                                                               google::protobuf::Closure* done) {
+    const auto deadline = add_segment_lock_deadline();
     VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
              << ", index_id=" << request->index_id() << ", tablet_id=" << request->tablet_id()
              << ", eos=" << request->eos();
+<<<<<<< HEAD
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
+=======
+    _load_channel_mgr->add_segment(static_cast<brpc::Controller*>(controller), request, response, done, deadline);
+>>>>>>> 8a311ef ([BugFix] Bound segment lock waits to break cross-BE load stalls (#80707))
 }
 
 template <typename T>
