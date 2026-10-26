@@ -284,12 +284,7 @@ bool TypeDescriptor::support_join() const {
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
-<<<<<<< HEAD
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT && type != TYPE_FILE;
-=======
-    return !is_object_type(type);
->>>>>>> 8e3ee463784... [Refactor] Name the two axes of BE type predicates in logical_type.h (#63053)
+    return !is_object_type(type) && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_orderby() const {
@@ -302,12 +297,7 @@ bool TypeDescriptor::support_orderby() const {
                                        [](const TypeDescriptor& t) { return t.support_orderby(); });
         return all_support;
     }
-<<<<<<< HEAD
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_VARIANT && type != TYPE_FILE;
-=======
-    return !is_object_type(type) && type != TYPE_MAP;
->>>>>>> 8e3ee463784... [Refactor] Name the two axes of BE type predicates in logical_type.h (#63053)
+    return !is_object_type(type) && type != TYPE_MAP && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -316,12 +306,7 @@ bool TypeDescriptor::support_groupby() const {
         return std::all_of(children.begin(), children.end(),
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
     }
-<<<<<<< HEAD
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT && type != TYPE_FILE;
-=======
-    return !is_object_type(type);
->>>>>>> 8e3ee463784... [Refactor] Name the two axes of BE type predicates in logical_type.h (#63053)
+    return !is_object_type(type) && type != TYPE_FILE;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
