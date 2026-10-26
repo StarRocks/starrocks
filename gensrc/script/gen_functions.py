@@ -292,16 +292,16 @@ def add_ai_aggregate_function(fn_data):
     validate_ai_routing(fn_data, metadata)
     args = fn_data[5]
     roles = [metadata['text_argument'], metadata['instruction_argument']]
-    if metadata['provider_argument'] >= 0:
-        roles.append(metadata['provider_argument'])
     options = [i for i, arg in enumerate(args) if arg == 'ANY_MAP']
-    if (fn_data[4] != 'VARCHAR' or metadata['capability'] != 'CHAT' or metadata['model_argument'] != -1
+    if (fn_data[4] != 'VARCHAR' or metadata['capability'] != 'CHAT'
+            or metadata['model_source'] != 'SYSTEM' or metadata['provider_argument'] != -1
+            or metadata['model_argument'] != -1
             or len(options) > 1 or (options and options[0] != len(args) - 1)
             or sorted(roles + options) != list(range(len(args)))
             or any(args[i] != 'VARCHAR' for i in roles)):
         raise ValueError(f"Invalid AI aggregate signature: {fn_data[0]}")
     reducer = next((fn for fn in function_list if fn['id'] == metadata['reducer_function_id']), None)
-    expected_args = ['VARBINARY'] + (['VARCHAR'] if metadata['provider_argument'] >= 0 else []) + ['VARCHAR']
+    expected_args = ['VARBINARY', 'VARCHAR']
     if options:
         expected_args.append('ANY_MAP')
     if (reducer is None or reducer.get('ai', {}).get('execution_kind') != 'AGGREGATE_REDUCE'

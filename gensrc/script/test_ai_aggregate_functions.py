@@ -24,13 +24,17 @@ class AIAggregateFunctionsTest(unittest.TestCase):
             java = pathlib.Path(output, 'com/starrocks/builtins/VectorizedBuiltinFunctions.java').read_text()
             cpp = pathlib.Path(output, 'opcode/AIFunctionDescriptors.inc').read_text()
             self.assertIn('addVectorizedAIAggregateBuiltin(200150, "ai_agg"', java)
+            self.assertIn('addVectorizedAIAggregateBuiltin(200151, "ai_agg"', java)
             self.assertIn('.put(200150L, new AIFunctionDescriptor', java)
             self.assertIn('.put(200150L, new AIAggregateLoweringDescriptor', java)
-            for name in ('__ai_collect_text', '__ai_agg_reduce', '__ai_custom_agg_reduce'):
+            for name in ('__ai_collect_text', '__ai_agg_reduce'):
                 self.assertNotRegex(java, r'functionSet\.\w+\([^\n]*"' + name + '"')
             self.assertNotIn('.fid = 200150,', cpp)
-            self.assertNotIn('.fid = 200152,', cpp)
+            for removed_id in (200152, 200153, 200157, 200158):
+                self.assertNotRegex(java, rf'\b{removed_id}L?\b')
+                self.assertNotRegex(cpp, rf'\b{removed_id}\b')
             self.assertIn('.fid = 200155,', cpp)
+            self.assertIn('.fid = 200156,', cpp)
             self.assertIn('AIArgumentType::AGG_STATE', cpp)
             self.assertIn('AIExecutionKind::AGGREGATE_REDUCE', cpp)
             self.assertIn('AIExecutionKind::SINGLE_REQUEST', cpp)
@@ -77,11 +81,28 @@ class AIAggregateMetadataValidationTest(unittest.TestCase):
             gen_functions.add_ai_aggregate_function(public)
         for fn in functions.ai_vectorized_functions:
             gen_functions.add_ai_function(fn)
-        public[7]['reducer_function_id'] = 200157
+        public[7]['reducer_function_id'] = 200156
         with self.assertRaises(ValueError):
             gen_functions.add_ai_aggregate_function(public)
         public[7]['reducer_function_id'] = 200155
         public[7]['instruction_argument'] = 0
+        with self.assertRaises(ValueError):
+            gen_functions.add_ai_aggregate_function(public)
+
+    def test_public_aggregate_rejects_provider_routing(self):
+        import copy
+        import functions
+        import gen_functions
+        gen_functions.function_list.clear()
+        gen_functions.function_set.clear()
+        gen_functions.function_signature_set.clear()
+        reducer = copy.deepcopy(next(fn for fn in functions.ai_vectorized_functions if fn[0] == 200155))
+        reducer[5].insert(1, 'VARCHAR')
+        reducer[7].update(model_source='PROVIDER', provider_argument=1, input_arguments=[0, 2])
+        gen_functions.add_ai_function(reducer)
+        public = copy.deepcopy(functions.ai_aggregate_functions[0])
+        public[5].insert(0, 'VARCHAR')
+        public[7].update(model_source='PROVIDER', provider_argument=0, text_argument=1, instruction_argument=2)
         with self.assertRaises(ValueError):
             gen_functions.add_ai_aggregate_function(public)
 

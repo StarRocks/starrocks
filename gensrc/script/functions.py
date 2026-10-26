@@ -1870,12 +1870,12 @@ ai_vectorized_functions = [
 ai_text_collector = [200154, '__ai_collect_text', True, False, 'VARBINARY', ['VARCHAR'], 'nullptr']
 
 
-def ai_aggregate_metadata(text_argument, instruction_argument, reducer_function_id, provider_argument=-1):
+def ai_aggregate_metadata(text_argument, instruction_argument, reducer_function_id):
     return {
-        'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
+        'model_source': 'SYSTEM',
         'capability': 'CHAT',
         'model_argument': -1,
-        'provider_argument': provider_argument,
+        'provider_argument': -1,
         'text_argument': text_argument,
         'instruction_argument': instruction_argument,
         'reducer_function_id': reducer_function_id,
@@ -1887,16 +1887,11 @@ ai_aggregate_functions = [
      ai_aggregate_metadata(0, 1, 200155)],
     [200151, 'ai_agg', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'], 'nullptr',
      ai_aggregate_metadata(0, 1, 200156)],
-    [200152, 'ai_custom_agg', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'nullptr',
-     ai_aggregate_metadata(1, 2, 200157, provider_argument=0)],
-    [200153, 'ai_custom_agg', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'ANY_MAP'], 'nullptr',
-     ai_aggregate_metadata(1, 2, 200158, provider_argument=0)],
 ]
 
 
-def ai_reducer_metadata(instruction_argument, provider_argument=-1):
-    return dict(ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0, instruction_argument],
-                            provider_argument=provider_argument),
+def ai_reducer_metadata(instruction_argument):
+    return dict(ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0, instruction_argument]),
                 execution_kind='AGGREGATE_REDUCE', internal=True)
 
 
@@ -1905,8 +1900,4 @@ ai_vectorized_functions += [
      ai_reducer_metadata(1)],
     [200156, '__ai_agg_reduce', True, False, 'VARCHAR', ['VARBINARY', 'VARCHAR', 'ANY_MAP'], 'nullptr',
      ai_reducer_metadata(1)],
-    [200157, '__ai_custom_agg_reduce', True, False, 'VARCHAR', ['VARBINARY', 'VARCHAR', 'VARCHAR'], 'nullptr',
-     ai_reducer_metadata(2, provider_argument=1)],
-    [200158, '__ai_custom_agg_reduce', True, False, 'VARCHAR', ['VARBINARY', 'VARCHAR', 'VARCHAR', 'ANY_MAP'], 'nullptr',
-     ai_reducer_metadata(2, provider_argument=1)],
 ]

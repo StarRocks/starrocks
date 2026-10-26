@@ -1,14 +1,14 @@
 ---
 displayed_sidebar: docs
-description: "Summarize groups of text with SYSTEM or named-provider AI aggregate functions."
+description: "Aggregate groups of text with instructions using the SYSTEM chat model."
 sidebar_position: 24
 ---
 
-# AI aggregate functions
+# ai_agg
 
-`ai_agg` and `ai_custom_agg` produce one nullable VARCHAR result per SQL group by applying an instruction to the group's text. They can appear alongside ordinary aggregates such as `count` and `sum`.
+`ai_agg` produces one nullable VARCHAR result per SQL group by applying an instruction to the group's text. It can appear alongside ordinary aggregates such as `count` and `sum`.
 
-`ai_agg` uses the SYSTEM chat configuration and BE-local credentials described in [ai_complete](ai_complete.md#configuration). `ai_custom_agg` uses a named `chat` provider with the `openai` protocol, following the configuration and snapshot rules of [AI provider functions](ai_custom_functions.md). Upgrade all FE and BE nodes before using these functions.
+`ai_agg` uses the SYSTEM chat configuration and BE-local credentials described in [ai_complete](ai_complete.md#configuration). Upgrade all FE and BE nodes before using this function.
 
 :::warning
 Input text, intermediate summaries, and instructions are sent to the configured model service. One group can require multiple requests and retries, with corresponding provider charges. Apply the same data-handling and endpoint approval policies as other AI functions.
@@ -17,18 +17,15 @@ Input text, intermediate summaries, and instructions are sent to the configured 
 ## Syntax
 
 ```sql
-ai_agg(text, instruction)
-ai_agg(text, instruction, options)
-ai_custom_agg(provider_name, text, instruction)
-ai_custom_agg(provider_name, text, instruction, options)
+ai_agg(expr, instruction)
+ai_agg(expr, instruction, options)
 ```
 
-- `text`: A VARCHAR expression. NULL values are skipped; empty strings and duplicate values are retained. FILE inputs are not supported.
+- `expr`: A VARCHAR expression. NULL values are skipped; empty strings and duplicate values are retained. FILE inputs are not supported.
 - `instruction`: A constant, non-NULL, nonblank VARCHAR expression describing the desired result.
-- `provider_name`: A constant, non-NULL, nonblank VARCHAR expression with an exact, case-sensitive provider name.
 - `options`: An optional constant MAP with the same [options rules as ai_complete](ai_complete.md#options-map-rules). A typed NULL MAP is empty. `response_format` applies only to the final request, including a group that needs only one request. Other options apply to every request. Options such as `max_tokens` limit each request, not the group's total token usage.
 
-The functions do not support `DISTINCT`, aggregate `ORDER BY`, window execution, or aggregate-state combinators. Apply exact filtering, deduplication, counting, and arithmetic in SQL before AI aggregation when the task requires them. Input order is not guaranteed. Model output is nondeterministic and hierarchical summarization can lose details; the functions do not provide exact arithmetic or exhaustive extraction guarantees.
+The function does not support `DISTINCT`, aggregate `ORDER BY`, window execution, or aggregate-state combinators. Apply exact filtering, deduplication, counting, and arithmetic in SQL before AI aggregation when the task requires them. Input order is not guaranteed. Model output is nondeterministic and hierarchical summarization can lose details; the function does not provide exact arithmetic or exhaustive extraction guarantees.
 
 ## Return values and errors
 
@@ -52,7 +49,7 @@ A record that cannot fit a prompt is rejected instead of truncated. Oversized su
 
 ## Privileges and examples
 
-Execution requires `USAGE ON AI FUNCTION ai_agg` or `ai_custom_agg`, respectively, or `USAGE ON ALL AI FUNCTIONS`. Named-provider calls additionally require `USAGE ON AI PROVIDER <provider_name>`. See [AI function privileges](ai_functions.mdx#ai-function-privileges) for the existing authorization and execution-context rules.
+Execution requires `USAGE ON AI FUNCTION ai_agg` or `USAGE ON ALL AI FUNCTIONS`. See [AI function privileges](ai_functions.mdx#ai-function-privileges) for the existing authorization and execution-context rules.
 
 Given a table `reviews(category, review_text)` and a configured SYSTEM chat model:
 
@@ -63,12 +60,12 @@ FROM reviews
 GROUP BY category;
 ```
 
-For a registered `support_chat` provider:
+With per-request options:
 
 ```sql
 SELECT category,
-       ai_custom_agg('support_chat', review_text,
-                     'Summarize the recurring issues.', map{'temperature': 0.0}) AS summary
+       ai_agg(review_text, 'Summarize the recurring issues.',
+              map{'temperature': 0.0}) AS summary
 FROM reviews
 WHERE review_text IS NOT NULL
 GROUP BY category;

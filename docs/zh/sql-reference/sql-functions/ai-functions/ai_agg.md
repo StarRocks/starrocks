@@ -1,14 +1,14 @@
 ---
 displayed_sidebar: docs
-description: "使用 SYSTEM 或指定 Provider 的 AI 聚合函数汇总分组文本。"
+description: "使用 SYSTEM Chat 模型，按指令聚合分组文本。"
 sidebar_position: 24
 ---
 
-# AI 聚合函数
+# ai_agg
 
-`ai_agg` 和 `ai_custom_agg` 根据指令汇总每个 SQL 分组中的文本，每组返回一个可为 NULL 的 VARCHAR 结果，可以与 `count`、`sum` 等普通聚合同时使用。
+`ai_agg` 根据指令汇总每个 SQL 分组中的文本，每组返回一个可为 NULL 的 VARCHAR 结果，可以与 `count`、`sum` 等普通聚合同时使用。
 
-`ai_agg` 使用 [ai_complete](ai_complete.md#配置) 的 SYSTEM Chat 配置及 BE 本地凭证。`ai_custom_agg` 使用指定的 `chat` 类型、`openai` 协议 Provider，遵循 [AI Provider 函数](ai_custom_functions.md) 的配置与快照规则。使用前需升级全部 FE 和 BE。
+`ai_agg` 使用 [ai_complete](ai_complete.md#配置) 的 SYSTEM Chat 配置及 BE 本地凭证。使用前需升级全部 FE 和 BE。
 
 :::warning
 输入文本、中间摘要和指令会发送到配置的模型服务。每组可能产生多次请求和重试，并产生相应费用。请遵循与其他 AI 函数相同的数据处理及服务端点审批要求。
@@ -17,15 +17,12 @@ sidebar_position: 24
 ## 语法
 
 ```sql
-ai_agg(text, instruction)
-ai_agg(text, instruction, options)
-ai_custom_agg(provider_name, text, instruction)
-ai_custom_agg(provider_name, text, instruction, options)
+ai_agg(expr, instruction)
+ai_agg(expr, instruction, options)
 ```
 
-- `text`：VARCHAR 表达式。跳过 NULL，保留空字符串和重复值。不支持 FILE 输入。
+- `expr`：VARCHAR 表达式。跳过 NULL，保留空字符串和重复值。不支持 FILE 输入。
 - `instruction`：非 NULL、非空白的常量 VARCHAR 表达式，用于描述目标结果。
-- `provider_name`：非 NULL、非空白的常量 VARCHAR 表达式，按大小写精确匹配 Provider 名称。
 - `options`：可选常量 MAP，遵循 [ai_complete 的选项规则](ai_complete.md#options-map-规则)。具有 MAP 类型的 NULL 视为空 MAP。`response_format` 只用于最终请求，包括仅需一次请求的分组。其他选项用于每次请求。`max_tokens` 等限制单次请求，不限制整组 Token 总量。
 
 不支持 `DISTINCT`、聚合内 `ORDER BY`、窗口执行和聚合状态组合器。需要精确过滤、去重、计数或数值计算时，应在 AI 聚合前使用 SQL 完成。输入顺序不保证，模型输出不确定，分层摘要也可能丢失细节，因此不能用于保证精确算术或无遗漏提取。
@@ -52,7 +49,7 @@ ai_custom_agg(provider_name, text, instruction, options)
 
 ## 权限与示例
 
-执行需要对应的 `USAGE ON AI FUNCTION ai_agg` 或 `ai_custom_agg`，也可使用 `USAGE ON ALL AI FUNCTIONS`。指定 Provider 的调用额外需要 `USAGE ON AI PROVIDER <provider_name>`。其他授权及执行身份规则参见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+执行需要 `USAGE ON AI FUNCTION ai_agg`，也可使用 `USAGE ON ALL AI FUNCTIONS`。其他授权及执行身份规则参见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
 
 假设存在 `reviews(category, review_text)` 表，且已配置 SYSTEM Chat 模型：
 
@@ -63,12 +60,12 @@ FROM reviews
 GROUP BY category;
 ```
 
-使用已注册的 `support_chat` Provider：
+为每次请求指定选项：
 
 ```sql
 SELECT category,
-       ai_custom_agg('support_chat', review_text,
-                     'Summarize the recurring issues.', map{'temperature': 0.0}) AS summary
+       ai_agg(review_text, 'Summarize the recurring issues.',
+              map{'temperature': 0.0}) AS summary
 FROM reviews
 WHERE review_text IS NOT NULL
 GROUP BY category;

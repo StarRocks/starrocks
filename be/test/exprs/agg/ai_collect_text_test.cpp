@@ -25,12 +25,33 @@
 #include "column/binary_column.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "common/memory/mem_hook_allocator.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/ai/ai_aggregate_state.h"
-#include "runtime/memory/counting_allocator.h"
 
 namespace starrocks {
 namespace {
+// AggregateStateAllocator uses checked_alloc/free. Count that pair directly because
+// the malloc hook used by CountingAllocatorWithHook is not enabled in expr_test.
+class TrackingAggregateStateAllocator final : public MemHookAllocator {
+public:
+    void* checked_alloc(size_t size) override {
+        void* ptr = MemHookAllocator::checked_alloc(size);
+        ++_outstanding_allocations;
+        return ptr;
+    }
+
+    void free(void* ptr) override {
+        if (ptr != nullptr) --_outstanding_allocations;
+        MemHookAllocator::free(ptr);
+    }
+
+    int64_t outstanding_allocations() const { return _outstanding_allocations; }
+
+private:
+    int64_t _outstanding_allocations = 0;
+};
+
 class ScopedCollectState {
 public:
     ScopedCollectState(const AggregateFunction* function, FunctionContext* context)
@@ -66,11 +87,11 @@ public:
         setter = std::make_unique<ThreadLocalAggregateStateAllocatorSetter>(&allocator);
     }
     void TearDown() override {
-        EXPECT_EQ(0, allocator.memory_usage());
+        EXPECT_EQ(0, allocator.outstanding_allocations());
         setter.reset();
     }
     std::unique_ptr<FunctionContext> ctx;
-    CountingAllocatorWithHook allocator;
+    TrackingAggregateStateAllocator allocator;
     std::unique_ptr<ThreadLocalAggregateStateAllocatorSetter> setter;
 };
 
@@ -87,24 +108,29 @@ TEST_F(AiCollectTextTest, FactoryRegistersOnlyNativeSignature) {
 TEST_F(AiCollectTextTest, OwnsRawRecordsAndFinalizedBytes) {
     AICollectTextAggregateFunction function;
     auto result = BinaryColumn::create();
+    const std::vector<std::string> expected = {"", "same", "same", std::string("a\0b", 3)};
     {
         ScopedCollectState state(&function, ctx.get());
         auto input = BinaryColumn::create();
-        const std::vector<std::string> expected = {"", "same", "same", std::string("a\0b", 3)};
         for (const auto& value : expected) input->append(Slice(value));
         const Column* columns[] = {input.get()};
         function.update_batch_single_state(ctx.get(), input->size(), columns, state.data);
         input->reset_column();
-        EXPECT_GT(allocator.memory_usage(), 0);
+        EXPECT_GT(allocator.outstanding_allocations(), 0);
         EXPECT_EQ(0, ctx->mem_usage());
         function.finalize_to_column(ctx.get(), state.data, result.get());
         EXPECT_EQ(expected, read_records(result->get_slice(0)));
         function.reset(ctx.get(), {}, state.data);
-        EXPECT_EQ(0, allocator.memory_usage());
+        EXPECT_EQ(0, allocator.outstanding_allocations());
         function.serialize_to_column(ctx.get(), state.data, result.get());
         EXPECT_TRUE(read_records(result->get_slice(1)).empty());
+        // Refill the reset state so destruction also releases a live allocation.
+        input->append(Slice("destroyed"));
+        function.update(ctx.get(), columns, state.data, 0);
+        EXPECT_GT(allocator.outstanding_allocations(), 0);
     }
-    EXPECT_EQ(4, read_records(result->get_slice(0)).size());
+    EXPECT_EQ(0, allocator.outstanding_allocations());
+    EXPECT_EQ(expected, read_records(result->get_slice(0)));
     EXPECT_FALSE(ctx->has_error());
 }
 
@@ -207,7 +233,7 @@ TEST_F(AiCollectTextTest, EmptyPartialAddsNoRecord) {
     auto output = BinaryColumn::create();
     function.finalize_to_column(ctx.get(), result.data, output.get());
     EXPECT_TRUE(read_records(output->get_slice(0)).empty());
-    EXPECT_EQ(0, allocator.memory_usage());
+    EXPECT_EQ(0, allocator.outstanding_allocations());
     EXPECT_FALSE(ctx->has_error());
 }
 

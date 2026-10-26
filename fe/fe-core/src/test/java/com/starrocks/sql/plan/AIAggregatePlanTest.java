@@ -16,9 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.common.Config;
-import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.planner.AggregationNode;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -78,28 +76,17 @@ public class AIAggregatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testProviderAndInstructionGroupingConstantsBindNormally() throws Exception {
-        String name = "ai_aggregate_grouping_provider";
-        GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider(name, AIProviderType.CHAT,
-                Map.of("endpoint", "https://unit.test.example/v1/chat/completions", "model", "provider-model"), "");
-        try {
-            for (String keys : List.of("(('" + name + "'), ())", "(('summarize'), ())")) {
-                ExecPlan plan = getExecPlan("select ai_custom_agg('" + name
-                        + "', cast(v2 as varchar), 'summarize', map{'temperature': 0.1}), sum(v2) from t0 "
-                        + "group by grouping sets " + keys);
-                TPlanNode project = aiProjects(plan).get(0);
-                Assertions.assertEquals(1, project.getAi_project_node().getAi_model_configsSize());
-                Assertions.assertEquals("provider-model", project.getAi_project_node().getAi_model_configs()
-                        .values().iterator().next().getChat().getModel());
-                TExpr reducer = project.getAi_project_node().getSlot_map().values().stream()
-                        .filter(expr -> expr.getNodes().get(0).isSetFn()).findFirst().orElseThrow();
-                Assertions.assertEquals(4, reducer.getNodes().get(0).getNum_children());
-                Assertions.assertEquals("__ai_custom_agg_reduce",
-                        reducer.getNodes().get(0).getFn().getName().getFunction_name());
-            }
-        } finally {
-            GlobalStateMgr.getCurrentState().getAIProviderMgr().dropProvider(name, true);
-        }
+    public void testInstructionGroupingConstantsBindNormally() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_agg(cast(v2 as varchar), 'summarize', map{'temperature': 0.1}), "
+                + "sum(v2) from t0 group by grouping sets (('summarize'), ())");
+        TPlanNode project = aiProjects(plan).get(0);
+        Assertions.assertEquals(1, project.getAi_project_node().getAi_model_configsSize());
+        Assertions.assertEquals("unit-test-model", project.getAi_project_node().getAi_model_configs()
+                .values().iterator().next().getChat().getModel());
+        TExpr reducer = project.getAi_project_node().getSlot_map().values().stream()
+                .filter(expr -> expr.getNodes().get(0).isSetFn()).findFirst().orElseThrow();
+        Assertions.assertEquals(3, reducer.getNodes().get(0).getNum_children());
+        Assertions.assertEquals("__ai_agg_reduce", reducer.getNodes().get(0).getFn().getName().getFunction_name());
     }
 
     @Test

@@ -1,14 +1,14 @@
 ---
 displayed_sidebar: docs
-description: "SYSTEM または名前付き Provider の AI 集約関数でグループのテキストを要約します。"
+description: "SYSTEM Chat モデルを使用し、指示に従ってグループのテキストを集約します。"
 sidebar_position: 24
 ---
 
-# AI 集約関数
+# ai_agg
 
-`ai_agg` と `ai_custom_agg` は、指示に従って各 SQL グループのテキストを要約し、グループごとに NULL 許容の VARCHAR を返します。`count` や `sum` などの通常の集約と併用できます。
+`ai_agg` は、指示に従って各 SQL グループのテキストを要約し、グループごとに NULL 許容の VARCHAR を返します。`count` や `sum` などの通常の集約と併用できます。
 
-`ai_agg` は [ai_complete](ai_complete.md#設定) の SYSTEM Chat 設定と BE ローカル認証情報を使用します。`ai_custom_agg` は `chat` 型かつ `openai` プロトコルの名前付き Provider を使用し、[AI Provider 関数](ai_custom_functions.md) の設定およびスナップショット規則に従います。使用前にすべての FE と BE をアップグレードしてください。
+`ai_agg` は [ai_complete](ai_complete.md#設定) の SYSTEM Chat 設定と BE ローカル認証情報を使用します。使用前にすべての FE と BE をアップグレードしてください。
 
 :::warning
 入力テキスト、中間要約、指示は設定済みのモデルサービスへ送信されます。1 グループで複数のリクエストと再試行が発生し、課金される場合があります。他の AI 関数と同じデータ取り扱いとエンドポイント承認の方針を適用してください。
@@ -17,15 +17,12 @@ sidebar_position: 24
 ## 構文
 
 ```sql
-ai_agg(text, instruction)
-ai_agg(text, instruction, options)
-ai_custom_agg(provider_name, text, instruction)
-ai_custom_agg(provider_name, text, instruction, options)
+ai_agg(expr, instruction)
+ai_agg(expr, instruction, options)
 ```
 
-- `text`: VARCHAR 式。NULL はスキップし、空文字列と重複値は保持します。FILE 入力はサポートしません。
+- `expr`: VARCHAR 式。NULL はスキップし、空文字列と重複値は保持します。FILE 入力はサポートしません。
 - `instruction`: 求める結果を記述する、非 NULL、空白以外の定数 VARCHAR 式。
-- `provider_name`: 大文字小文字を区別して Provider 名と完全一致する、非 NULL、空白以外の定数 VARCHAR 式。
 - `options`: [ai_complete のオプション規則](ai_complete.md#options-map-のルール) に従うオプションの定数 MAP。MAP 型の NULL は空 MAP として扱います。`response_format` は最終リクエストにのみ適用します。1 回のリクエストだけで処理する場合も同様です。その他のオプションは各リクエストに適用します。`max_tokens` などは各リクエストの上限であり、グループ全体のトークン上限ではありません。
 
 `DISTINCT`、集約内の `ORDER BY`、ウィンドウ実行、集約状態コンビネータはサポートしません。正確なフィルタリング、重複排除、件数、計算が必要な場合は、AI 集約の前に SQL で処理してください。入力順序は保証されず、モデル出力は非決定的です。階層的な要約では詳細が失われることがあるため、正確な計算や網羅的な抽出は保証しません。
@@ -52,7 +49,7 @@ ai_custom_agg(provider_name, text, instruction, options)
 
 ## 権限と例
 
-対応する `USAGE ON AI FUNCTION ai_agg` または `ai_custom_agg`、あるいは `USAGE ON ALL AI FUNCTIONS` が必要です。名前付き Provider では `USAGE ON AI PROVIDER <provider_name>` も必要です。その他の認可と実行コンテキストについては [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+`USAGE ON AI FUNCTION ai_agg` または `USAGE ON ALL AI FUNCTIONS` が必要です。その他の認可と実行コンテキストについては [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
 
 `reviews(category, review_text)` テーブルと SYSTEM Chat モデルがある場合:
 
@@ -63,12 +60,12 @@ FROM reviews
 GROUP BY category;
 ```
 
-登録済みの `support_chat` Provider を使用する場合:
+リクエストごとにオプションを指定する場合:
 
 ```sql
 SELECT category,
-       ai_custom_agg('support_chat', review_text,
-                     'Summarize the recurring issues.', map{'temperature': 0.0}) AS summary
+       ai_agg(review_text, 'Summarize the recurring issues.',
+              map{'temperature': 0.0}) AS summary
 FROM reviews
 WHERE review_text IS NOT NULL
 GROUP BY category;

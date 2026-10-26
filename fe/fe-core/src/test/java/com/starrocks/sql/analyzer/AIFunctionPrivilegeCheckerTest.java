@@ -143,18 +143,11 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testAggregatePublicFamilyAndProviderUsage() throws Exception {
+    public void testAggregatePublicFamilyUsage() throws Exception {
         String system = "SELECT ai_agg(prompt, 'summarize') FROM prompts";
-        String custom = "SELECT ai_custom_agg('ai_rbac_provider', prompt, 'summarize') FROM prompts";
         assertDenied(system);
-        assertDenied(custom);
         executeAsRoot("GRANT USAGE ON AI FUNCTION ai_agg TO '" + user + "'");
         authorize(system);
-        assertDenied(custom);
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_agg TO '" + user + "'");
-        assertDenied(custom, "AI PROVIDER");
-        executeAsRoot("GRANT USAGE ON AI PROVIDER ai_rbac_provider TO '" + user + "'");
-        authorize(custom);
     }
 
     @Test

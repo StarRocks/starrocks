@@ -79,7 +79,8 @@ public class AIModelConfigsTest {
         functions.getBuiltinFunctions().stream().filter(Function::isAi).forEach(function -> {
             long id = function.getFunctionId();
             Assertions.assertEquals(explicitModelIds.contains(id) ? 0 : -1, AIModelConfigs.getModelArgument(function));
-            Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function));
+            Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function),
+                    () -> function.signatureString() + " (function ID " + id + ")");
             int providerArgument = AIModelConfigs.getProviderArgument(function);
             Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.PROVIDER, providerArgument >= 0);
             if (providerArgument >= 0) {

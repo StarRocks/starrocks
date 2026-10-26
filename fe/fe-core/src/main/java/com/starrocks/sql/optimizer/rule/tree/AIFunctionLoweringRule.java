@@ -144,11 +144,6 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
             collectors.put(state, collectorCall);
             List<ScalarOperator> arguments = new ArrayList<>();
             arguments.add(state);
-            int providerArgument = VectorizedBuiltinFunctions.getAIFunctionDescriptor(
-                    call.getFunction().getFunctionId()).providerArgument();
-            if (providerArgument >= 0) {
-                arguments.add(call.getChild(providerArgument));
-            }
             arguments.add(call.getChild(descriptor.instructionArgument()));
             if (descriptor.optionsArgument() >= 0) {
                 arguments.add(call.getChild(descriptor.optionsArgument()));
