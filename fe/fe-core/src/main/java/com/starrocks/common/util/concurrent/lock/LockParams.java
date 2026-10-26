@@ -33,7 +33,13 @@ public class LockParams {
     public LockParams() {
     }
 
+    /**
+     * The most valuable place to check a lock target: it is handed the {@link Database} object
+     * itself rather than a bare id, and the whole MV-refresh path funnels through it -- which is
+     * how the shared {@code -1} base-table id used to reach the lock manager in the first place.
+     */
     public void add(Database db, long tableId) {
+        LockTargetValidator.validateTableInDatabase(db, tableId);
         dbs.put(db.getId(), db);
         tables.computeIfAbsent(db.getId(), k -> Sets.newHashSet()).add(tableId);
     }

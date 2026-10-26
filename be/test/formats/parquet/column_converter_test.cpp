@@ -17,7 +17,11 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <limits>
+#include <random>
 
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -836,8 +840,6 @@ TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
     // Default (Hive/Spark INT96): shifted into the local timezone (+8h for Asia/Shanghai).
     EXPECT_EQ(timestamp::add<TimeUnit::SECOND>(packed, 8 * 3600), read_back(false));
 }
-<<<<<<< HEAD
-=======
 
 namespace {
 
@@ -1104,5 +1106,4 @@ TEST_F(ColumnConverterTest, Int32DaysToDateTimeMatchesReference) {
     }
 }
 
->>>>>>> af09b1ee3ce... [Enhancement][RB-513] Share time zone offset tables across timestamp readers and functions (#66439)
 } // namespace starrocks::parquet
