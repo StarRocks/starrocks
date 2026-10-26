@@ -26,6 +26,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class ExternalDbsProcDir implements ProcDirInterface {
@@ -40,13 +41,14 @@ public class ExternalDbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcResult fetchResult() {
+        ConnectContext context = Optional.ofNullable(ConnectContext.get()).orElseGet(ConnectContext::new);
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Preconditions.checkNotNull(metadataMgr);
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
         List<String> dbNames;
-        dbNames = metadataMgr.listDbNames(new ConnectContext(), catalogName);
+        dbNames = metadataMgr.listDbNames(context, catalogName);
 
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
@@ -59,7 +61,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
         if (Config.enable_check_db_state) {
             // if a large number of db under the catalog, this operation is very slow
             dbNames = dbNames.stream().filter(dbName -> {
-                Database db = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
+                Database db = metadataMgr.getDb(context, catalogName, dbName);
                 return db != null;
             }).collect(Collectors.toList());
         }
@@ -80,7 +82,8 @@ public class ExternalDbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String name) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(), catalogName, name);
+        ConnectContext context = Optional.ofNullable(ConnectContext.get()).orElseGet(ConnectContext::new);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, name);
         if (db == null) {
             throw new SemanticException("Database[" + name + "] does not exist.");
         }

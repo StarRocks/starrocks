@@ -1,35 +1,29 @@
--- name: test_ai_complete @sequential
--- A secure BE-local AI_FUNCTION_MODEL_API_KEY is required before an AI fragment opens,
--- so this case deliberately fixes only the FE analyzer/planner SQL contract with EXPLAIN.
--- Existing loopback HTTP/provider and AIProject pipeline BE UTs cover the execution contract.
+-- name: test_ai_complete
+-- EXPLAIN only; explicit Providers avoid mutating cluster defaults.
 
-ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "https://models.example.test/v1/chat/completions");
-ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "integration-test-model");
-ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "openai_compatible");
+CREATE AI PROVIDER ai_complete_${uuid0} TYPE chat
+PROPERTIES ('endpoint' = 'https://models.example.test/v1/chat/completions',
+'model' = 'integration-test-model', 'protocol' = 'openai');
 
--- All four overloads must analyze and construct an AIProject plan.
-EXPLAIN SELECT ai_complete('prompt-overload');
-EXPLAIN SELECT ai_complete(
-    'prompt-options-overload',
-    CAST(NULL AS MAP<VARCHAR, JSON>)
+EXPLAIN SELECT ai_complete(prompt => 'prompt-overload', provider => 'ai_complete_${uuid0}', model => 'integration-test-model');
+EXPLAIN SELECT ai_complete(prompt => 'prompt-options-overload', provider => 'ai_complete_${uuid0}', model => 'integration-test-model',
+    options => json_object()
 );
-EXPLAIN SELECT ai_complete('explicit-model', 'model-prompt-overload');
-EXPLAIN SELECT ai_complete(
-    'explicit-model',
-    'model-prompt-options-overload',
-    map{'temperature': 0.0}
+EXPLAIN SELECT ai_complete(prompt => 'model-prompt-overload', provider => 'ai_complete_${uuid0}', model => 'explicit-model');
+EXPLAIN SELECT ai_complete(prompt => 'model-prompt-options-overload', provider => 'ai_complete_${uuid0}', model => 'explicit-model',
+    options => json_object('temperature', 0.0)
 );
 
--- NULL prompts and multi-row VALUES/UNION inputs must remain plannable.
-EXPLAIN SELECT ai_complete(CAST(NULL AS VARCHAR));
-EXPLAIN SELECT id, ai_complete(prompt)
+-- Typed NULL and nullable VALUES/UNION columns remain plannable.
+EXPLAIN SELECT ai_complete(prompt => CAST(NULL AS VARCHAR), provider => 'ai_complete_${uuid0}', model => 'integration-test-model');
+EXPLAIN SELECT id, ai_complete(prompt => prompt, provider => 'ai_complete_${uuid0}', model => 'integration-test-model')
 FROM (VALUES
     (1, 'values-first'),
     (2, CAST(NULL AS VARCHAR)),
     (3, 'values-third')
 ) AS v(id, prompt)
 ORDER BY id;
-EXPLAIN SELECT id, ai_complete('explicit-model', prompt)
+EXPLAIN SELECT id, ai_complete(prompt => prompt, provider => 'ai_complete_${uuid0}', model => 'explicit-model')
 FROM (
     SELECT 4 AS id, 'union-first' AS prompt
     UNION ALL
@@ -39,19 +33,15 @@ FROM (
 ) AS u
 ORDER BY id;
 
--- Analyzer failures are part of the public SQL contract.
-EXPLAIN SELECT ai_complete('reserved-option', map{'model': 'forbidden'});
-EXPLAIN SELECT ai_complete('nonconstant-options', map{'temperature': temperature})
+-- JSON contents are validated during execution; EXPLAIN only checks type and constancy.
+EXPLAIN SELECT ai_complete(prompt => 'reserved-option', provider => 'ai_complete_${uuid0}', model => 'integration-test-model', options => json_object('model', 'forbidden'));
+EXPLAIN SELECT ai_complete(prompt => 'nonconstant-options', provider => 'ai_complete_${uuid0}', model => 'integration-test-model', options => json_object('temperature', temperature))
 FROM (VALUES (0.1)) AS v(temperature);
-EXPLAIN SELECT DISTINCT ai_complete('forbidden-distinct');
+EXPLAIN SELECT DISTINCT ai_complete(prompt => 'forbidden-distinct', provider => 'ai_complete_${uuid0}', model => 'integration-test-model');
 
--- Prompt-only calls require a default model; explicit-model calls do not.
-ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
-EXPLAIN SELECT ai_complete('missing-default-model');
-EXPLAIN SELECT ai_complete('explicit-model', 'plans-without-default-model');
+EXPLAIN SELECT ai_complete(prompt => NULL, provider => 'ai_complete_${uuid0}', model => 'm');
+EXPLAIN SELECT ai_complete(prompt => 'prompt', provider => 'ai_complete_${uuid0}', model => 'm', options => CAST(NULL AS JSON));
 
 CLEANUP {
-    ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "");
-    ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
-    ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "");
+    DROP AI PROVIDER IF EXISTS ai_complete_${uuid0};
 } END CLEANUP

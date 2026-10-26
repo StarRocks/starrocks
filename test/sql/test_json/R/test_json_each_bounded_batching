@@ -1,0 +1,104 @@
+-- name: test_json_each_bounded_batching
+CREATE TABLE jeb_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `j` json NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO jeb_${uuid0} VALUES
+    (1, parse_json('{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10}')),
+    (2, parse_json('[10,11,12,13,14,15,16,17,18,19]')),
+    (3, parse_json('null')),
+    (4, parse_json('{}')),
+    (5, parse_json('[]'));
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT count(1) FROM jeb_${uuid0}, json_each(j);
+-- result:
+20
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 10;
+-- result:
+1
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1) FROM jeb_${uuid0}, json_each(j) WHERE id = 2;
+-- result:
+10
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+-- result:
+1
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT id, `key`, `value` FROM jeb_${uuid0}, json_each(j) ORDER BY id, `key`;
+-- result:
+1	a	1
+1	b	2
+1	c	3
+1	d	4
+1	e	5
+1	f	6
+1	g	7
+1	h	8
+1	i	9
+1	j	10
+2	0	10
+2	1	11
+2	2	12
+2	3	13
+2	4	14
+2	5	15
+2	6	16
+2	7	17
+2	8	18
+2	9	19
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT id, `key`, `value` FROM jeb_${uuid0}, json_each(j) ORDER BY id, `key`;
+-- result:
+1	a	1
+1	b	2
+1	c	3
+1	d	4
+1	e	5
+1	f	6
+1	g	7
+1	h	8
+1	i	9
+1	j	10
+2	0	10
+2	1	11
+2	2	12
+2	3	13
+2	4	14
+2	5	15
+2	6	16
+2	7	17
+2	8	18
+2	9	19
+-- !result
+DROP TABLE jeb_${uuid0};
+-- result:
+-- !result

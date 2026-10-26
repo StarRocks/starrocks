@@ -157,11 +157,6 @@ enum class AIHttpValidationResult : uint8_t {
     URL_MEMORY_LIMIT,
 };
 
-enum class AIHttpSchemePolicy : uint8_t {
-    HTTP_OR_HTTPS,
-    HTTPS_ONLY,
-};
-
 Status validation_status(AIHttpValidationResult result) {
     switch (result) {
     case AIHttpValidationResult::OK:
@@ -178,8 +173,7 @@ Status validation_status(AIHttpValidationResult result) {
     return Status::InvalidArgument(kInvalidRequestStatus);
 }
 
-AIHttpValidationResult validate_url_impl(const std::string& value,
-                                         AIHttpSchemePolicy scheme_policy = AIHttpSchemePolicy::HTTP_OR_HTTPS) {
+AIHttpValidationResult validate_url_impl(const std::string& value) {
     if (value.empty() || value.size() > kMaxUrlBytes || has_control_character(value)) {
         return AIHttpValidationResult::INVALID_URL;
     }
@@ -213,9 +207,7 @@ AIHttpValidationResult validate_url_impl(const std::string& value,
     if (get_part(CURLUPART_SCHEME, &scheme) != CURLUE_OK || get_part(CURLUPART_HOST, &host) != CURLUE_OK) {
         return AIHttpValidationResult::INVALID_URL;
     }
-    const bool scheme_is_allowed =
-            ascii_case_equal(scheme, "https") ||
-            (scheme_policy == AIHttpSchemePolicy::HTTP_OR_HTTPS && ascii_case_equal(scheme, "http"));
+    const bool scheme_is_allowed = ascii_case_equal(scheme, "https") || ascii_case_equal(scheme, "http");
     if (host.empty() || !scheme_is_allowed) {
         return AIHttpValidationResult::INVALID_URL;
     }
@@ -421,10 +413,6 @@ bool is_valid_retry_after(std::string_view value) {
 
 Status validate_ai_http_url(const std::string& url) {
     return validation_status(validate_url_impl(url));
-}
-
-Status validate_ai_https_url(const std::string& url) {
-    return validation_status(validate_url_impl(url, AIHttpSchemePolicy::HTTPS_ONLY));
 }
 
 AIHttpResponseBody::AIHttpResponseBody(std::string data, AIMemoryContext memory, size_t reserved_bytes) noexcept

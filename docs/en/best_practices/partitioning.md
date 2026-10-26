@@ -29,7 +29,7 @@ Understanding the distinction between partitioning and bucketing is fundamental 
 | **Lifecycle ops** | DROP PARTITION is metadata‑only—ideal for GDPR deletes, monthly roll‑off. | Buckets can’t be dropped; they change only with `ALTER TABLE … MODIFY DISTRIBUTED BY`. |
 | **Typical count** | 10^2–10^4 per table (days, weeks, tenants). | 10–120 per partition; StarRocks `BUCKETS xxx` tunes this. |
 | **Skew handling** | Merge or split partitions; consider composite/hybrid scheme. | Raise bucket count, hash on compound key, isolate “whales”, or use random bucketing |
-| **Red flags** | >100 k partitions can introduce significant memory footprint for FE | >200 k tablets per BE; tablets exceeding 10 GB may encounter compaction issues. |
+| **Red flags** | >100 k partitions can introduce significant memory footprint for FE | >200 k tablets per BE; tablets exceeding 10 GB (100 GB for shared-data clusters of v4.1 or later) may encounter compaction issues. |
 
 ## When should I partition?
 

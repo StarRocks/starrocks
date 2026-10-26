@@ -31,6 +31,15 @@ public:
                                            const std::vector<bool>& null_pages, const TypeDescriptor& type,
                                            const ParquetField* field, const std::string& timezone);
 
+    // Decodes paired min/max values (min_values[i] and max_values[i] bound the same values) so that every value
+    // between them stays between the decoded bounds, also for a conversion that does not keep the order (see
+    // ColumnConverter::convert_min_max).
+    static Status decode_min_max_into_columns(const MutableColumnPtr& min_column, const MutableColumnPtr& max_column,
+                                              const std::vector<std::string>& min_values,
+                                              const std::vector<std::string>& max_values,
+                                              const std::vector<bool>& null_pages, const TypeDescriptor& type,
+                                              const ParquetField* field, const std::string& timezone);
+
     // get min/max value from row group stats
     static Status get_min_max_value(const FileMetaData* file_meta_data, const TypeDescriptor& type,
                                     const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
