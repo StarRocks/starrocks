@@ -427,23 +427,20 @@ Status OptionalStoredColumnReader::_skip_deferred_levels() {
         _reader->def_level_decoder().get_levels(&levels, &num_levels);
         DCHECK(num_levels == 0);
     }
-<<<<<<< HEAD
 #endif
-    size_t level_skipped = 0;
-    while (level_skipped < _levels_to_skip) {
-=======
-    size_t values_to_skip = 0;
     auto& def_level_decoder = _reader->def_level_decoder();
     if (!_need_parse_levels && def_level_decoder.can_decode_nulls()) {
         // 1-bit levels nobody reads back: count the non-null values without materializing them
-        if (UNLIKELY(!def_level_decoder.skip_count_non_null(row_to_skip, &values_to_skip))) {
-            return Status::InternalError(fmt::format("def levels need to skip: {}", row_to_skip));
+        size_t num_non_null = 0;
+        if (UNLIKELY(!def_level_decoder.skip_count_non_null(_levels_to_skip, &num_non_null))) {
+            return Status::InternalError(fmt::format("def levels need to skip: {}", _levels_to_skip));
         }
-        return _reader->skip_values(values_to_skip);
+        _values_to_skip += num_non_null;
+        _levels_to_skip = 0;
+        return Status::OK();
     }
-    size_t row_skipped = 0;
-    while (row_skipped < row_to_skip) {
->>>>>>> 0cfa81bbd1b... [Enhancement] Cut parquet scan CPU: batch nullable PLAIN/BOOLEAN decoding, vectorized def-level nulls, zero-copy cached pages, cheaper timestamp converters (#64021)
+    size_t level_skipped = 0;
+    while (level_skipped < _levels_to_skip) {
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
         // skip batch by batch to avoid big memory alloc

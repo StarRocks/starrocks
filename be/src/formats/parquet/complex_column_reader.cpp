@@ -20,11 +20,8 @@
 #include <optional>
 #include <string_view>
 
-<<<<<<< HEAD
-#include "base/simd/simd.h"
-=======
 #include "base/container/raw_container.h"
->>>>>>> 0cfa81bbd1b... [Enhancement] Cut parquet scan CPU: batch nullable PLAIN/BOOLEAN decoding, vectorized def-level nulls, zero-copy cached pages, cheaper timestamp converters (#64021)
+#include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"

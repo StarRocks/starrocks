@@ -96,10 +96,6 @@ public:
         return _levels_decoded - _levels_parsed;
     }
 
-<<<<<<< HEAD
-    // Append `level_nums` default levels to the parsed levels. Levels decoded but not consumed yet (look-ahead)
-    // are kept behind the appended ones, so the decoder position in the page does not change.
-=======
     // Whether decode_nulls() can decode this page's levels: RLE levels of a column whose max level is 1.
     bool can_decode_nulls() const { return _encoding == tparquet::Encoding::RLE && _bit_width == 1; }
 
@@ -114,7 +110,8 @@ public:
     // Same buffer handling and requirement as decode_nulls().
     bool skip_count_non_null(size_t n, size_t* num_non_null);
 
->>>>>>> 0cfa81bbd1b... [Enhancement] Cut parquet scan CPU: batch nullable PLAIN/BOOLEAN decoding, vectorized def-level nulls, zero-copy cached pages, cheaper timestamp converters (#64021)
+    // Append `level_nums` default levels to the parsed levels. Levels decoded but not consumed yet (look-ahead)
+    // are kept behind the appended ones, so the decoder position in the page does not change.
     void append_default_levels(size_t level_nums) {
         size_t num_lookahead = _levels_decoded - _levels_parsed;
         size_t new_capacity = _levels_decoded + level_nums;
