@@ -340,15 +340,30 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     latest_offsets->reserve(partition_ids->size());
     MonotonicStopWatch watch;
     watch.start();
+    bool metadata_refreshed = false;
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        auto left_ms = timeout - watch.elapsed_time() / 1000 / 1000;
+        // elapsed_time() is unsigned. Keep the difference signed, so running past the timeout makes it negative.
+        int64_t left_ms = timeout - static_cast<int64_t>(watch.elapsed_time() / 1000 / 1000);
         if (left_ms <= 0) {
             return Status::TimedOut("get kafka partition offset timeout");
         }
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
+        if (err == RdKafka::ERR__UNKNOWN_PARTITION && !metadata_refreshed) {
+            // A pooled consumer knows the partitions of the topic as of its last metadata refresh, which librdkafka
+            // repeats only every topic.metadata.refresh.interval.ms, so a partition added since is unknown to it until
+            // then. Refresh the metadata of the topic once and query again.
+            metadata_refreshed = true;
+            std::vector<int32_t> refreshed_partition_ids;
+            RETURN_IF_ERROR(get_partition_meta(&refreshed_partition_ids, left_ms));
+            left_ms = timeout - static_cast<int64_t>(watch.elapsed_time() / 1000 / 1000);
+            if (left_ms <= 0) {
+                return Status::TimedOut("get kafka partition offset timeout");
+            }
+            err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
+        }
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to get offset of partition: " << p_id << " in topic: " << _topic
                          << ", err: " << RdKafka::err2str(err);
@@ -365,14 +380,13 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
     DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
-    // create topic conf
-    RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
-    auto conf_deleter = [tconf]() { delete tconf; };
-    DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
-
-    // create topic
+    // Create the topic with the consumer's default topic configuration, not a new one. librdkafka keeps one topic
+    // object per name, configured by whoever creates it first, and consuming the topic later uses that object too. A
+    // new configuration carries the default auto.offset.reset (largest) instead of the consumer's "error", so a pooled
+    // consumer that queried the metadata before consuming would jump to the end of a partition whose offset is out of
+    // range, skipping what is there, instead of failing.
     std::string errstr;
-    RdKafka::Topic* topic = RdKafka::Topic::create(_k_consumer, _topic, tconf, errstr);
+    RdKafka::Topic* topic = RdKafka::Topic::create(_k_consumer, _topic, nullptr, errstr);
     if (topic == nullptr) {
         std::stringstream ss;
         ss << "failed to create topic: " << errstr;
