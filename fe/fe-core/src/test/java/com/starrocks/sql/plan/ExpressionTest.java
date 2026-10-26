@@ -310,6 +310,22 @@ public class ExpressionTest extends PlanTestBase {
                 () -> getFragmentPlan("select timestampadd(second, 0.0000001 + 0, id_datetime) from test_all_type"));
     }
 
+    // A literal amount is checked when the expression is analyzed, so a definition that uses it is refused when it is
+    // created, rather than each time it is used
+    @Test
+    public void testDefinitionWithSecondsFinerThanMicroseconds() {
+        Exception e = assertThrows(Exception.class, () -> starRocksAssert.withTable("CREATE TABLE t_interval_generated (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  ts DATETIME NOT NULL,\n" +
+                "  ts2 DATETIME NULL AS ts + INTERVAL 0.1234567 SECOND\n" +
+                ") DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+
+        e = assertThrows(Exception.class, () -> starRocksAssert.withView(
+                "create view v_interval_finer as select id_datetime + interval '0.1234567' second from test_all_type"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+    }
+
     // An exponent describes a huge number in a few characters. Such amounts are refused or left to the INT cast,
     // without spelling the number out.
     @Test

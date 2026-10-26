@@ -24,6 +24,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.IntervalSeconds;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -109,6 +110,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FunctionType;
 import com.starrocks.type.IntegerType;
@@ -568,7 +570,7 @@ public final class SqlToScalarOperatorTranslator {
             Function fn = ExprUtils.getTimestampArithmeticFunction(node);
             Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
             String fnName = fn.getFunctionName().getFunction();
-            ScalarOperator fractionalSeconds = splitFractionalSeconds(fnName, node.getType(), arguments);
+            ScalarOperator fractionalSeconds = splitFractionalSeconds(fnName, node.getType(), arguments, node.getPos());
             if (fractionalSeconds != null) {
                 return fractionalSeconds;
             }
@@ -581,15 +583,15 @@ public final class SqlToScalarOperatorTranslator {
         // `ts + INTERVAL 1.5 SECOND` is `microseconds_add(seconds_add(ts, 1), 500000)`.
         // Returns null if the call is not such an interval, and then it is built as it is.
         private static ScalarOperator splitFractionalSeconds(String fnName, Type returnType,
-                                                             List<ScalarOperator> arguments) {
+                                                             List<ScalarOperator> arguments, NodePosition pos) {
             boolean add = FunctionSet.SECONDS_ADD.equals(fnName);
             if (!add && !FunctionSet.SECONDS_SUB.equals(fnName)) {
                 return null;
             }
             ScalarOperator amount = arguments.get(1);
             if (!amount.isConstantRef() && amount.isConstant()) {
-                // A constant expression, as in `INTERVAL (0.25 + 0.25) SECOND`, is folded here. Later on the amount is
-                // cast to INT before constants are folded, which would drop the fraction.
+                // A constant expression, as in `TIMESTAMPADD(SECOND, 0.25 + 0.25, ts)`, is folded here. Later on the
+                // amount is cast to INT before constants are folded, which would drop the fraction.
                 ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
                 amount = rewriter.rewrite(rewriter.rewrite(amount, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE),
                         ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
@@ -598,28 +600,12 @@ public final class SqlToScalarOperatorTranslator {
             if (seconds == null) {
                 return null;
             }
-            // An INT holds at most 10 digits before the point, so a larger amount is left to the INT cast. This also
-            // keeps the arithmetic below away from the huge numbers a short exponent can describe, as in '1e100000000'.
-            if ((long) seconds.precision() - seconds.scale() > 10) {
+            int[] wholeSecondsAndMicroseconds = IntervalSeconds.split(seconds, pos);
+            if (wholeSecondsAndMicroseconds == null) {
                 return null;
             }
-            BigDecimal exact = seconds.stripTrailingZeros();
-            if (exact.scale() > 6) {
-                // BigDecimal.toString() writes a long fraction such as '1e-100000000' with an exponent, so the message
-                // stays short
-                throw new SemanticException("The amount of an INTERVAL in SECOND can have at most 6 decimals "
-                        + "because a datetime has no digits below microseconds: " + seconds);
-            }
-            BigDecimal[] wholeAndFraction = exact.divideAndRemainder(BigDecimal.ONE);
-            int wholeSeconds;
-            int wholeMicroseconds;
-            try {
-                wholeSeconds = wholeAndFraction[0].intValueExact();
-                wholeMicroseconds = wholeAndFraction[1].movePointRight(6).intValueExact();
-            } catch (ArithmeticException e) {
-                // doesn't fit in an INT, which is what the function takes
-                return null;
-            }
+            int wholeSeconds = wholeSecondsAndMicroseconds[0];
+            int wholeMicroseconds = wholeSecondsAndMicroseconds[1];
 
             String microsecondsFn = add ? FunctionSet.MICROSECONDS_ADD : FunctionSet.MICROSECONDS_SUB;
             Type[] argTypes = {DateType.DATETIME, IntegerType.INT};
