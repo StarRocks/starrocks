@@ -581,6 +581,8 @@ public final class PaimonReaderSelector {
                     .filter(entry -> entry.getKey().startsWith("fields.") && entry.getKey().endsWith(".aggregate-function"))
                     .sorted(Map.Entry.comparingByKey()).limit(16).toList();
             details += ", merge-engine=" + schema.options().getOrDefault("merge-engine", "deduplicate") +
+                    ", fields.default-aggregate-function=" +
+                    schema.options().getOrDefault("fields.default-aggregate-function", "") +
                     ", aggregate-functions(first 16)=" + aggregates;
         }
         return details;

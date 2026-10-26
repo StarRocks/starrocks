@@ -116,6 +116,19 @@ class PaimonReaderSelectorTest {
     }
 
     @Test
+    void nativeErrorsDescribeDefaultAggregateFunction() {
+        var selector = selector(schema(1, DataTypes.INT(), true,
+                Map.of("merge-engine", "aggregation", "fields.default-aggregate-function", "product")), "v");
+        var data = split("parquet", false, 1, false);
+        assertAuto(selector, data, JNI, MERGE_FUNCTION);
+        var error = assertThrows(StarRocksConnectorException.class,
+                () -> selector.select(data, PaimonReaderMode.NATIVE));
+        assertTrue(error.getMessage().contains("MERGE_FUNCTION"));
+        assertTrue(error.getMessage().contains("merge-engine=aggregation"));
+        assertTrue(error.getMessage().contains("fields.default-aggregate-function=product"));
+    }
+
+    @Test
     void nativeErrorsPreserveReasonWhenDiagnosticsFail() {
         var selector = selector(schema(1, DataTypes.INT(), false, Map.of("file.format", "json")), "v");
         var data = org.mockito.Mockito.spy(split("json", false, 1, false));
