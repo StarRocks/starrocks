@@ -212,7 +212,6 @@ public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
     private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
-<<<<<<< HEAD
     // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
     private static final int MIN_UT_PORT = 10000;
     private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
@@ -220,11 +219,9 @@ public class UtFrameUtils {
     // RESERVED_PORTS check, and the second tryLock() on its file would throw OverlappingFileLockException.
     // A dedicated lock rather than the class monitor, which createMinStarRocksCluster() holds while the FE starts.
     private static final Object PORT_LOCK = new Object();
-=======
     // Replay mocks min(this, be_number) backends. The existing dump tests' expectations were produced with 3; a
     // corpus whose plans must match the source cluster (e.g. IcebergTPCDS1TReplayTest) raises it to the real count.
     public static int replayMaxBackendNum = 3;
->>>>>>> 2f437cdb8c9... [Enhancement] Add iceberg TPC-DS 1T query dumps with a replay test (#64255)
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
