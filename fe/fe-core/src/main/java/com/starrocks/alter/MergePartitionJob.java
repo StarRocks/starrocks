@@ -793,7 +793,8 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             Map<Long, List<Long>> conflictingTxnIdsByPartition = getConflictingTxnIds(allSourcePartitions);
             Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
             tempPartitionNameToSourcePartitionNames.asMap().forEach((tempPartitionName, sourcePartitionNames) -> {
-                List<Long> conflictingTxnIds = Lists.newArrayList();
+                // a load into several source partitions of the group blocks it once
+                Set<Long> conflictingTxnIds = Sets.newLinkedHashSet();
                 for (String sourcePartitionName : sourcePartitionNames) {
                     Partition sourcePartition = targetTable.getPartition(sourcePartitionName);
                     if (sourcePartition != null) {
@@ -801,7 +802,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                                 Collections.emptyList()));
                     }
                 }
-                partitionConflictingTxnIds.put(tempPartitionName, conflictingTxnIds);
+                partitionConflictingTxnIds.put(tempPartitionName, Lists.newArrayList(conflictingTxnIds));
             });
 
             boolean hasFailedTask = false;

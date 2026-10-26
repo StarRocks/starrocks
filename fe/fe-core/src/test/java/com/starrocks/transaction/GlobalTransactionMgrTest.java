@@ -1881,20 +1881,26 @@ public class GlobalTransactionMgrTest {
         }
     }
 
-    // Nothing aborts an explicit transaction on timeout before it joined the database transaction manager, so a
-    // statement that was planned but never got to write must not block a replacement past that timeout.
+    // Before an explicit transaction joins the database transaction manager only its session ends it, by clearing it.
+    // Its deadline does not: a statement planned before it can still join and write after it, so the transaction
+    // keeps blocking a replacement until the session clears it.
     @Test
-    public void testGetConflictingTxnIdsSkipsTimedOutExplicitTxnThatNeverWrote() {
+    public void testGetConflictingTxnIdsKeepsExplicitTxnThatNeverWroteUntilCleared() {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        Set<Long> replacedPartitionIds = Sets.newHashSet(physicalPartitionId);
 
         TransactionState explicitTxn = beginExplicitTxnPlannedOn(physicalPartitionId,
                 System.currentTimeMillis() - Config.stream_load_default_timeout_second * 1000L - 1000L);
+        Assertions.assertTrue(explicitTxn.isTimeout(System.currentTimeMillis()));
 
-        Assertions.assertTrue(explicitTxn.isRunning());
-        Assertions.assertTrue(masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
-                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)).isEmpty());
+        Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(explicitTxn.getTransactionId())),
+                masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
+                        GlobalStateMgrTestUtil.testTableId1, replacedPartitionIds));
+
         masterTransMgr.clearExplicitTxnState(explicitTxn.getTransactionId());
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, replacedPartitionIds).isEmpty());
     }
 
     /**

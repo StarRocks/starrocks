@@ -917,17 +917,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         Map<Long, List<Long>> conflictingTxnIds = dbTransactionMgr == null ? Maps.newHashMap()
                 : Maps.newHashMap(dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds));
-        long now = System.currentTimeMillis();
         for (TransactionState plannedTxn : getExplicitTxnsPlannedOn(dbId, tableId)) {
             // Once the transaction has joined the database transaction manager, the state there is the current one:
             // a transition such as an abort replaces it with a copy, while the explicit transaction keeps the state
-            // it began with. Before that, the session is the only one that ends it, so stop at its timeout.
+            // it began with. Before that, only its session ends it, by clearing it. A deadline that has passed does
+            // not: nothing rejects the statement joining late, and the timeout cleaner only runs every so often, so
+            // the statement may still join and write after the partition was replaced.
             TransactionState txn = dbTransactionMgr == null ? null
                     : dbTransactionMgr.getTransactionState(plannedTxn.getTransactionId());
-            if (txn == null && !plannedTxn.isTimeout(now)) {
+            if (txn == null) {
                 txn = plannedTxn;
             }
-            if (txn == null || !txn.isRunning()) {
+            if (!txn.isRunning()) {
                 continue;
             }
             for (Long physicalPartitionId : DatabaseTransactionMgr.getTouchedPartitions(txn, tableId, physicalPartitionIds)) {

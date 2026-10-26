@@ -179,6 +179,33 @@ public class MergePartitionJobTest extends DDLTestBase {
         assertMerged(table);
     }
 
+    /**
+     * A load into several source partitions of one merge group blocks that group once. The job error lists each
+     * blocking transaction once, so that a duplicate neither crowds another blocker out of the reported sample nor
+     * inflates the total.
+     */
+    @Test
+    public void testLoadIntoSeveralSourcePartitionsOfAGroupIsReportedOnce() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_blocker_reported_once");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+
+        // one load into two of the daily partitions that merge into the same monthly one
+        long txnId = 4242L;
+        Map<Long, List<Long>> conflictingTxnIds = Maps.newHashMap();
+        table.getPartitions().stream().limit(2)
+                .forEach(partition -> conflictingTxnIds.put(partition.getId(), List.of(txnId)));
+        Mockito.doReturn(conflictingTxnIds).when(job).getConflictingTxnIds(Mockito.any());
+        for (OptimizeTask task : job.getOptimizeTasks()) {
+            task.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        }
+        job.run();
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("has ingestion during merge partitions (txn: " + txnId + ")"),
+                job.errMsg);
+    }
+
     // ---- pruning the per-partition data of a done job -------------------------------------------
 
     @Test
