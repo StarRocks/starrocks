@@ -116,12 +116,8 @@ protected:
                                                           PlatformEnv::GetInstance()->store_path_registry())) {
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
-<<<<<<< HEAD
             _primary_key_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
-=======
-            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
             _previous_parallel_compact_tablet_mgr = parallel_compact_mgr->TEST_tablet_mgr();
->>>>>>> 10f5cb8e7c3... [BugFix] Make BE unit tests pass under ASAN (#63287)
             parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
         }
         PFailPointTriggerMode trigger_mode;
