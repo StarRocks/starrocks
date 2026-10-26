@@ -212,9 +212,6 @@ public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
     private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
-    // Replay mocks min(this, be_number) backends. The existing dump tests' expectations were produced with 3; a
-    // corpus whose plans must match the source cluster (e.g. IcebergTPCDS1TUnknownStatsReplayTest) raises it.
-    public static int replayMaxBackendNum = 3;
     // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
     private static final int MIN_UT_PORT = 10000;
     private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
