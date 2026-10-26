@@ -18,6 +18,8 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -43,6 +45,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
@@ -51,6 +54,49 @@
 #include "storage/storage_env.h"
 
 namespace starrocks::lake {
+
+// Serves the anchor tablet from the real partition directory and every other tablet from a directory
+// that does not exist, standing in for a tablet this node does not hold and could only resolve through
+// a StarMgr GetShard RPC. Records every real_location() argument so a test can tell whether any read
+// resolved a non-anchor tablet's location.
+class AnchorOnlyLocationProvider final : public LocationProvider {
+public:
+    AnchorOnlyLocationProvider(std::string partition_dir, std::string unreachable_dir, int64_t anchor_tablet_id)
+            : _partition_dir(std::move(partition_dir)),
+              _unreachable_dir(std::move(unreachable_dir)),
+              _anchor_tablet_id(anchor_tablet_id) {}
+
+    std::string root_location(int64_t tablet_id) const override {
+        if (tablet_id == _anchor_tablet_id) {
+            return _partition_dir;
+        }
+        return join_path(_unreachable_dir, std::to_string(tablet_id));
+    }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        std::lock_guard l(_mtx);
+        _resolved.push_back(virtual_path);
+        return virtual_path;
+    }
+
+    std::vector<std::string> resolved_outside_partition() const {
+        std::lock_guard l(_mtx);
+        std::vector<std::string> outside;
+        for (const auto& path : _resolved) {
+            if (path.starts_with(_unreachable_dir)) {
+                outside.push_back(path);
+            }
+        }
+        return outside;
+    }
+
+private:
+    const std::string _partition_dir;
+    const std::string _unreachable_dir;
+    const int64_t _anchor_tablet_id;
+    mutable std::mutex _mtx;
+    mutable std::vector<std::string> _resolved;
+};
 
 StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
                                                         int64_t new_version, int64_t txn_id,
