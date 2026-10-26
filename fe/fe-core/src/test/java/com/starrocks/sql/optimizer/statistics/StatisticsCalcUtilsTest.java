@@ -249,8 +249,8 @@ public class StatisticsCalcUtilsTest {
     }
 
     /**
-     * A scan reads exactly one index, so the row count must come from the selected index only and not from the
-     * sum of the base index and its rollups / sync MVs.
+     * A scan reads exactly one index, so the row count should come from the selected index only and not from the
+     * sum of the base index and its rollups.
      */
     @Test
     public void testGetTableRowCountUsesSelectedIndex() throws Exception {

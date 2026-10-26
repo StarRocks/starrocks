@@ -180,7 +180,8 @@ public class StatisticsCalcUtils {
         }
 
         // partition rows
-        Map<Long, Long> partitionRows = getPartitionRows(table, basicStatsMeta, selectedPartitions, node);
+        Map<Long, Long> partitionRows =
+                getPartitionRows(table, basicStatsMeta, selectedPartitions, getSelectedIndexMetaId(node));
 
         Map<Long, Statistics> result = Maps.newHashMap();
         Map<String, ColumnRefOperator> columnNameMap =
@@ -218,7 +219,8 @@ public class StatisticsCalcUtils {
     }
 
     private static Map<Long, Long> getPartitionRows(Table table, BasicStatsMeta basicStatsMeta,
-                                                    Collection<Partition> selectedPartitions, Operator node) {
+                                                    Collection<Partition> selectedPartitions,
+                                                    long selectedIndexMetaId) {
         // The basicStatsMeta.getUpdateRows() interface can get the number of
         // loaded rows in the table since the last statistics update. But this number is at the table level.
         // So here we can count the number of partitions that have changed since the last statistics update,
@@ -235,7 +237,6 @@ public class StatisticsCalcUtils {
         // This avoids expensive iteration over all table partitions (e.g., 36000 partitions)
         // when statistics are up-to-date.
         Long deltaRows = null;
-        long selectedIndexMetaId = getSelectedIndexMetaId(node);
 
         Map<Long, Long> result = Maps.newHashMap();
         for (Partition partition : selectedPartitions) {
@@ -283,9 +284,10 @@ public class StatisticsCalcUtils {
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
             LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
+            long selectedIndexMetaId = getSelectedIndexMetaId(node);
             if (StatsConstants.AnalyzeType.FULL == analyzeType) {
                 Map<Long, Long> partitionRows =
-                        getPartitionRows(table, basicStatsMeta, selectedPartitions, node);
+                        getPartitionRows(table, basicStatsMeta, selectedPartitions, selectedIndexMetaId);
                 for (var partition : selectedPartitions) {
                     long partitionRowCount = partitionRows.get(partition.getId());
                     updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
@@ -294,7 +296,6 @@ public class StatisticsCalcUtils {
                 return Math.max(rowCount, 1);
             }
 
-            long selectedIndexMetaId = getSelectedIndexMetaId(node);
             for (Partition partition : selectedPartitions) {
                 long partitionRowCount = getSelectedIndexRowCount(partition, selectedIndexMetaId);
                 rowCount += partitionRowCount;

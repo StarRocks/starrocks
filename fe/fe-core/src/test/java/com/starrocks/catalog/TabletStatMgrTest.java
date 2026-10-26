@@ -1370,7 +1370,6 @@ public class TabletStatMgrTest {
             ((LakeTablet) tablet).setRowCount(100);
         }
 
-        // attached the same way RollupJobV2.addRollupIndexToCatalog does
         MaterializedIndex rollupIndex = new MaterializedIndex(INDEX_ID + 100, MaterializedIndex.IndexState.NORMAL);
         LakeTablet rollupTablet = new LakeTablet(30L);
         rollupTablet.setRowCount(7);
