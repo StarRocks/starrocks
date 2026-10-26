@@ -109,9 +109,10 @@ static void remove_duplicate_points(std::vector<S2Point>* points) {
 
 static GeoParseStatus to_s2loop_points(const GeoCoordinateList& coords, std::vector<S2Point>* output) {
     // 1. covnert all coordinates to points
-    std::vector<S2Point> points(coords.list.size());
+    auto& points = *output;
+    points.resize(coords.list.size());
     for (int i = 0; i < coords.list.size(); ++i) {
-        auto res = to_s2point(coords.list[i], &points[i]);
+        auto res = to_s2point(coords.list[i].x, coords.list[i].y, &points[i]);
         if (res != GEO_PARSE_OK) {
             return res;
         }
@@ -128,7 +129,6 @@ static GeoParseStatus to_s2loop_points(const GeoCoordinateList& coords, std::vec
     if (points.size() < 3) {
         return GEO_PARSE_LOOP_LACK_VERTICES;
     }
-    *output = std::move(points);
     return GEO_PARSE_OK;
 }
 
@@ -379,10 +379,9 @@ bool GeoLine::decode(const void* data, size_t size) {
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
 
-bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
-    std::vector<S2Point> points;
-    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+constexpr double kBoundaryToleranceRadians = 1e-15;
 
+static bool is_valid_s2loop_points(const std::vector<S2Point>& points, bool direct) {
     // Match S2Loop::FindValidationErrorNoIndex before using its robust crossing
     // validator. The original loop construction normalizes only after validity
     // succeeds; this predicate does not construct or normalize a polygon.
@@ -393,29 +392,13 @@ bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
         const auto& next = points[(i + 1) % points.size()];
         if (points[i] == next || points[i] == -next) return false;
     }
-    MutableS2ShapeIndex index;
-    index.Add(std::make_unique<S2LaxLoopShape>(points));
-    S2Error error;
-    return !s2shapeutil::FindSelfIntersection(index, &error);
-}
-
-bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
-    // A paired sweep over 4..512 vertices favored direct checks at every tested size.
-    constexpr size_t kMaxDirectVertices = 512;
-    // Raw size bounds the converted size; retain the old path without converting twice.
-    if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
-
-    std::vector<S2Point> points;
-    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
-    // Preserve the existing non-index checks without changing the H3 validity path.
-    for (const auto& point : points) {
-        if (!S2::IsUnitLength(point)) return false;
+    if (!direct) {
+        MutableS2ShapeIndex index;
+        index.Add(std::make_unique<S2LaxLoopShape>(points));
+        S2Error error;
+        return !s2shapeutil::FindSelfIntersection(index, &error);
     }
     const size_t n = points.size();
-    for (size_t i = 0; i < n; ++i) {
-        const auto& next = points[(i + 1) % n];
-        if (points[i] == next || points[i] == -next) return false;
-    }
     // FindCrossingError for one chain rejects interior crossings and repeated end vertices.
     // Adjacent edges share an endpoint, so their CrossingSign is zero; their ends differ.
     for (size_t i = 0; i + 2 < n; ++i) {
@@ -426,6 +409,49 @@ bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
             if (points[i + 1] == next || crosser.CrossingSign(&next) > 0) return false;
         }
     }
+    return true;
+}
+
+bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
+    std::vector<S2Point> points;
+    return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && is_valid_s2loop_points(points, false);
+}
+
+bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
+    // A paired sweep over 4..512 vertices favored direct checks at every tested size.
+    if (coordinates.list.size() > kMaxDirectVertices + 1) return is_valid_ring(coordinates);
+    std::vector<S2Point> points;
+    return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && is_valid_s2loop_points(points, true);
+}
+
+bool GeoPolygon::point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                                       GeoPointPolygonRelation* relation) {
+    if (coordinates.list.size() > kMaxDirectVertices + 1) return false;
+    auto& points = _ring_points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+    // A 60-degree cap is convex and strictly smaller than a hemisphere. Its
+    // complement contains -points[0], outside the region selected by Normalize().
+    for (const auto& vertex : points) {
+        if (points[0].DotProd(vertex) < 0.5) return false;
+    }
+    if (!is_valid_s2loop_points(points, true)) return false;
+    S1ChordAngle distance = S1ChordAngle::Infinity();
+    const auto& p = *point.point();
+    for (size_t i = 0; i < points.size(); ++i) {
+        S2::UpdateMinDistance(p, points[i], points[(i + 1) % points.size()], &distance);
+    }
+    // Let the existing query decide the boundary, including distance rounding
+    // after Normalize reverses edges. Account for both rounded distance queries.
+    if (distance.PlusError(-2 * S2::GetUpdateMinDistanceMaxError(distance)).ToAngle().radians() <=
+        kBoundaryToleranceRadians)
+        return false;
+    const S2Point outside = -points[0];
+    S2EdgeCrosser crosser(&outside, &p, &points[0]);
+    bool inside = false;
+    for (size_t i = 1; i <= points.size(); ++i) {
+        inside ^= crosser.EdgeOrVertexCrossing(&points[i == points.size() ? 0 : i]);
+    }
+    *relation = inside ? GeoPointPolygonRelation::INSIDE : GeoPointPolygonRelation::OUTSIDE;
     return true;
 }
 
@@ -541,7 +567,6 @@ bool GeoPolygon::intersects_inclusive(const GeoPolygon& rhs) const {
 
     // S2Polygon::Intersects follows S2's semi-open boundary model, so polygons
     // that only touch at an edge or vertex need an explicit boundary check.
-    constexpr double kBoundaryToleranceRadians = 1e-15;
     for (int i = 0; i < _polygon->num_loops(); ++i) {
         const auto* loop = _polygon->loop(i);
         for (int j = 0; j < loop->num_vertices(); ++j) {
@@ -562,7 +587,6 @@ bool GeoPolygon::intersects_inclusive(const GeoPolygon& rhs) const {
 }
 
 GeoPointPolygonRelation GeoPolygon::point_relation(const GeoPoint& point) const {
-    constexpr double kBoundaryToleranceRadians = 1e-15;
     if (_polygon->GetDistanceToBoundary(*point.point()).radians() <= kBoundaryToleranceRadians) {
         return GeoPointPolygonRelation::BOUNDARY;
     }

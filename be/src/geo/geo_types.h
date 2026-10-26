@@ -171,6 +171,13 @@ public:
     // Check small rings directly with the same S2 predicates; large rings use is_valid_ring.
     static bool is_valid_ring_direct(const GeoCoordinateList& coordinates);
 
+    // Bounds both direct O(V^2) checks; chosen by a paired sweep over 4..512 vertices.
+    static constexpr size_t kMaxDirectVertices = 512;
+
+    // False means not applicable; the caller must use point_relation on a full polygon.
+    bool point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                               GeoPointPolygonRelation* relation);
+
     GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
     const S2Polygon* polygon() const { return _polygon.get(); }
 
@@ -189,6 +196,8 @@ protected:
 
 private:
     std::unique_ptr<S2Polygon> _polygon;
+    // Keep S2 scratch here: including S2 types in exprs conflicts with gutil typedefs.
+    std::vector<S2Point> _ring_points;
 };
 
 class GeoCircle : public GeoShape {

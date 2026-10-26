@@ -142,6 +142,11 @@ bool decode_canonical_xy_point(Slice wkb, WkbCoordinate* point) {
     return std::isfinite(point->x) && std::isfinite(point->y);
 }
 
+bool decode_native_xy_point(Slice wkb, WkbCoordinate* point, WkbCoordinateSemantics semantics) {
+    return decode_canonical_xy_point(wkb, point) &&
+           (semantics == WkbCoordinateSemantics::GEOMETRY_CARTESIAN || is_valid_crs84_coordinate(point->x, point->y));
+}
+
 template <LogicalType Type, bool X>
 StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
@@ -283,8 +288,9 @@ bool distance_point_coordinates(const GeoInput& input, size_t row, const NativeG
         *point = geometry.coordinates[0];
         return true;
     }
-    return decode_canonical_xy_point(input.wkb(row), point) &&
-           (Type != TYPE_GEOGRAPHY || is_valid_crs84_coordinate(point->x, point->y));
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    return decode_native_xy_point(input.wkb(row), point, semantics);
 }
 
 template <LogicalType Type>
@@ -838,7 +844,18 @@ Status prepare_spherical_polygon(const WkbGeometry& polygon, GeoPolygon* native_
 }
 
 StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& polygon, const GeoPoint& point,
-                                                          std::unique_ptr<GeoPolygon>* prepared) {
+                                                          std::unique_ptr<GeoPolygon>* prepared, GeoPolygon* direct,
+                                                          GeoCoordinateList* ring) {
+    if (prepared == nullptr && polygon.rings.size() == 1 &&
+        polygon.rings[0].size() <= GeoPolygon::kMaxDirectVertices + 1) {
+        ring->list.clear();
+        for (const auto& coordinate : polygon.rings[0]) ring->add({coordinate.x, coordinate.y});
+        GeoPointPolygonRelation relation;
+        if (direct->point_relation_direct(*ring, point, &relation)) {
+            return relation == GeoPointPolygonRelation::INSIDE ? PointPolygonRelation::INSIDE
+                                                               : PointPolygonRelation::OUTSIDE;
+        }
+    }
     GeoPolygon local;
     GeoPolygon* native_polygon = &local;
     if (prepared != nullptr) {
@@ -882,7 +899,8 @@ struct NativeGeoContainmentThreadState final : FunctionThreadState {
 };
 
 StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeometry& polygon, const GeoPoint& point,
-                                                                 SphericalPolygonFamilyCache* cache) {
+                                                                 SphericalPolygonFamilyCache* cache, GeoPolygon* direct,
+                                                                 GeoCoordinateList* ring) {
     const size_t component_count = polygon.type == WkbGeometryType::POLYGON ? 1 : polygon.children.size();
     if (cache != nullptr && cache->components.empty()) cache->components.resize(component_count);
     PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
@@ -890,7 +908,7 @@ StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeomet
         const auto& component = polygon.type == WkbGeometryType::POLYGON ? polygon : polygon.children[i];
         if (component.empty) continue;
         auto* prepared = cache == nullptr ? nullptr : &cache->components[i];
-        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(component, point, prepared));
+        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(component, point, prepared, direct, ring));
         if (relation == PointPolygonRelation::BOUNDARY) return relation;
         if (relation == PointPolygonRelation::INSIDE) result = relation;
     }
@@ -939,7 +957,7 @@ StatusOr<bool> spherical_polygon_family_intersects(const WkbGeometry& lhs, const
 StatusOr<const WkbGeometry*> containment_geometry(const GeoInput& input, size_t row, WkbCoordinateSemantics semantics,
                                                   const NativeGeoContainmentArgumentState* prepared,
                                                   std::optional<WkbGeometry>* constant_geometry,
-                                                  WkbGeometry* varying_geometry) {
+                                                  WkbGeometry* varying_geometry, bool point_argument = false) {
     if (prepared != nullptr && prepared->constant) {
         RETURN_IF_ERROR(prepared->parse_status);
         return &prepared->geometry.value();
@@ -951,6 +969,15 @@ StatusOr<const WkbGeometry*> containment_geometry(const GeoInput& input, size_t 
             constant_geometry->emplace(std::move(parsed));
         }
         return &constant_geometry->value();
+    }
+    WkbCoordinate coordinate;
+    if (point_argument && decode_native_xy_point(input.wkb(row), &coordinate, semantics)) {
+        varying_geometry->type = WkbGeometryType::POINT;
+        varying_geometry->empty = false;
+        varying_geometry->coordinates.assign(1, coordinate);
+        varying_geometry->rings.clear();
+        varying_geometry->children.clear();
+        return varying_geometry;
     }
     RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), varying_geometry, semantics));
     return varying_geometry;
@@ -1008,19 +1035,22 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
     std::optional<WkbGeometry> constant_right;
     std::optional<GeoPoint> constant_spherical_point;
     SphericalPolygonFamilyCache constant_spherical_polygon;
+    GeoPolygon direct_polygon;
+    GeoCoordinateList direct_ring;
+    std::optional<GeoPoint> varying_spherical_point;
+    WkbGeometry varying_left;
+    WkbGeometry varying_right;
     for (size_t row = 0; row < rows; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             result.append_null();
             continue;
         }
-        WkbGeometry varying_left;
-        WkbGeometry varying_right;
         const auto* prepared_left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
         const auto* prepared_right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
-        ASSIGN_OR_RETURN(const auto* left,
-                         containment_geometry(lhs, row, semantics, prepared_left, &constant_left, &varying_left));
-        ASSIGN_OR_RETURN(const auto* right,
-                         containment_geometry(rhs, row, semantics, prepared_right, &constant_right, &varying_right));
+        ASSIGN_OR_RETURN(const auto* left, containment_geometry(lhs, row, semantics, prepared_left, &constant_left,
+                                                                &varying_left, !PolygonFirst));
+        ASSIGN_OR_RETURN(const auto* right, containment_geometry(rhs, row, semantics, prepared_right, &constant_right,
+                                                                 &varying_right, PolygonFirst));
         const auto& polygon = PolygonFirst ? *left : *right;
         const auto& point = PolygonFirst ? *right : *left;
         if (point.type != WkbGeometryType::POINT ||
@@ -1036,8 +1066,8 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
         if constexpr (Type == TYPE_GEOGRAPHY) {
             constexpr size_t point_argument = PolygonFirst ? 1 : 0;
             constexpr size_t polygon_argument = PolygonFirst ? 0 : 1;
-            GeoPoint local_point;
-            GeoPoint* native_point = &local_point;
+            if (!varying_spherical_point.has_value()) varying_spherical_point.emplace();
+            GeoPoint* native_point = &varying_spherical_point.value();
             if (PolygonFirst ? rhs.constant : lhs.constant) {
                 const bool prepared_point =
                         prepared_state != nullptr && prepared_state->arguments[point_argument].constant;
@@ -1059,7 +1089,8 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
                                           ? (prepared_polygon ? &thread_state->polygons[polygon_argument]
                                                               : &constant_spherical_polygon)
                                           : nullptr;
-            ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, *native_point, polygon_cache));
+            ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, *native_point, polygon_cache,
+                                                                         &direct_polygon, &direct_ring));
         } else {
             relation = planar_polygon_family_relation(polygon, point.coordinates[0]);
         }
