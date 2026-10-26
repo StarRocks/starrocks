@@ -3110,6 +3110,188 @@ TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset_with_persistent_index) {
     test_snapshot_with_empty_rowset(true);
 }
 
+// A full clone must not pick up primary key meta that the store still holds under the same tablet id,
+// e.g. from a replica that failed to load at startup with ignore_load_tablet_failure=true.
+void TabletUpdatesTest::test_clone_clears_stale_primary_key_meta(bool enable_persistent_index) {
+    srand(GetCurrentTimeMicros());
+    auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+    auto tablet0 = create_tablet(rand(), rand());
+    tablet0->set_enable_persistent_index(enable_persistent_index);
+    DeferOp defer([&]() {
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+    });
+    std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(tablet0->rowset_commit(i + 2, create_rowset(tablet0, keys0)).ok());
+    }
+    ASSERT_EQ(4, tablet0->updates()->max_version());
+
+    // An old replica with the target tablet id, in the same store and with more versions than the source.
+    const int64_t new_tablet_id = tablet0->tablet_id() + 1;
+    auto stale = create_tablet(new_tablet_id, tablet0->schema_hash());
+    stale->set_enable_persistent_index(enable_persistent_index);
+    std::vector<int64_t> stale_keys{0, 1, 2, 3, 4};
+    for (int i = 0; i < 5; i++) {
+        ASSERT_TRUE(stale->rowset_commit(i + 2, create_rowset(stale, stale_keys)).ok());
+    }
+    ASSERT_EQ(6, stale->updates()->max_version());
+    // A pending rowset, version 7 is missing.
+    ASSERT_TRUE(stale->rowset_commit(8, create_rowset(stale, stale_keys)).ok());
+    ASSERT_EQ(1, stale->updates()->num_pending());
+    auto store = stale->data_dir();
+    ASSERT_EQ(store, tablet0->data_dir());
+    auto meta = store->get_meta();
+    // A delta column group, the source has none.
+    {
+        DeltaColumnGroupList dcgs;
+        auto dcg = std::make_shared<DeltaColumnGroup>();
+        dcg->init(6, {{1}}, {"stale.cols"});
+        dcgs.push_back(std::move(dcg));
+        WriteBatch wb;
+        ASSERT_OK(TabletMetaManager::put_delta_column_group(store, &wb, new_tablet_id, 0, dcgs));
+        ASSERT_OK(meta->write_batch(&wb));
+    }
+
+    auto count_meta_logs = [&]() {
+        int n = 0;
+        CHECK(TabletMetaManager::traverse_meta_logs(store, new_tablet_id, [&](uint64_t, const TabletMetaLogPB&) {
+                  ++n;
+                  return true;
+              }).ok());
+        return n;
+    };
+    auto count_rowset_metas = [&]() {
+        int n = 0;
+        CHECK(TabletMetaManager::rowset_iterate(store, new_tablet_id, [&](const RowsetMetaSharedPtr&) {
+                  ++n;
+                  return true;
+              }).ok());
+        return n;
+    };
+    auto count_pending_rowsets = [&]() {
+        int n = 0;
+        CHECK(TabletMetaManager::pending_rowset_iterate(store, new_tablet_id,
+                                                        [&](int64_t, std::string_view) -> StatusOr<bool> {
+                                                            ++n;
+                                                            return true;
+                                                        })
+                      .ok());
+        return n;
+    };
+    auto count_dcgs = [&]() {
+        DeltaColumnGroupList dcgs;
+        CHECK(TabletMetaManager::scan_tablet_delta_column_group(meta, new_tablet_id, &dcgs).ok());
+        return dcgs.size();
+    };
+    auto count_delvecs = [&]() {
+        auto delvecs = TabletMetaManager::list_del_vector(meta, new_tablet_id, INT64_MAX);
+        CHECK(delvecs.ok()) << delvecs.status();
+        return delvecs->size();
+    };
+
+    // Drop it with kKeepMetaAndFiles and remove its files: the tablet is gone from the tablet map, but all its
+    // primary key meta stays in the meta store, as with a replica that failed to load. The tablet header also
+    // stays here, unlike after `meta_tool --operation=delete_meta --schema_hash=...`; the clone overwrites it
+    // either way.
+    ASSERT_OK(tablet_mgr->drop_tablet(new_tablet_id, kKeepMetaAndFiles));
+    ASSERT_OK(fs::remove_all(stale->tablet_id_path()));
+    stale.reset();
+    ASSERT_GT(count_meta_logs(), 0);
+    ASSERT_GT(count_rowset_metas(), 0);
+    ASSERT_EQ(1, count_pending_rowsets());
+    ASSERT_EQ(1, count_dcgs());
+    ASSERT_GT(count_delvecs(), 0);
+    PersistentIndexMetaPB stale_index_meta;
+    if (enable_persistent_index) {
+        ASSERT_OK(TabletMetaManager::get_persistent_index_meta(store, new_tablet_id, &stale_index_meta));
+        ASSERT_EQ(6, stale_index_meta.version().major_number());
+    }
+
+    auto res = clone_a_new_replica(tablet0, new_tablet_id);
+    ASSERT_TRUE(res.ok()) << res.status();
+    ASSERT_TRUE(*res != nullptr);
+    auto tablet1 = std::move(res).value();
+    DeferOp defer2([&]() {
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
+        (void)fs::remove_all(tablet1->schema_hash_path());
+    });
+
+    // The new replica must have exactly the source's meta, version and data.
+    EXPECT_EQ(0, count_meta_logs());
+    EXPECT_EQ(tablet0->updates()->num_rowsets(), count_rowset_metas());
+    EXPECT_EQ(0, count_pending_rowsets());
+    EXPECT_EQ(0, count_dcgs());
+    EXPECT_EQ(0, tablet1->updates()->num_pending());
+    PersistentIndexMetaPB index_meta;
+    auto st = TabletMetaManager::get_persistent_index_meta(store, new_tablet_id, &index_meta);
+    ASSERT_TRUE(st.ok() || st.is_not_found()) << st;
+    if (st.ok()) {
+        EXPECT_LE(index_meta.version().major_number(), 4);
+    }
+    ASSERT_EQ(4, tablet1->updates()->max_version());
+    ASSERT_EQ(1, tablet1->updates()->version_history_count());
+    EXPECT_EQ(keys0.size(), read_tablet(tablet1, 4));
+    EXPECT_EQ(tablet0->updates()->num_rowsets(), tablet1->updates()->num_rowsets());
+}
+
+// NOLINTNEXTLINE
+TEST_F(TabletUpdatesTest, clone_clears_stale_primary_key_meta) {
+    test_clone_clears_stale_primary_key_meta(false);
+}
+
+// NOLINTNEXTLINE
+TEST_F(TabletUpdatesTest, clone_clears_stale_primary_key_meta_with_persistent_index) {
+    test_clone_clears_stale_primary_key_meta(true);
+}
+
+// Creating a tablet from a snapshot must not touch the meta of a live tablet with the same id in the same store.
+// NOLINTNEXTLINE
+TEST_F(TabletUpdatesTest, create_tablet_from_snapshot_refuses_live_tablet) {
+    srand(GetCurrentTimeMicros());
+    auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+    auto tablet0 = create_tablet(rand(), rand());
+    DeferOp defer([&]() {
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+    });
+    std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(tablet0->rowset_commit(i + 2, create_rowset(tablet0, keys0)).ok());
+    }
+    ASSERT_EQ(4, tablet0->updates()->max_version());
+    auto store = tablet0->data_dir();
+    std::string header_before;
+    ASSERT_OK(TabletMetaManager::get_json_meta(store, tablet0->tablet_id(), tablet0->schema_hash(), &header_before));
+
+    auto snapshot_dir = SnapshotManager::instance()->snapshot_full(tablet0, 4, 3600);
+    ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
+    // create_tablet_from_meta_snapshot() takes the shard from the snapshot path, so lay the snapshot out under the
+    // live tablet's shard, outside the data dir.
+    auto clone_dir = path_util::join_path_segments(
+            *snapshot_dir, strings::Substitute("clone/$0/$1/$2", tablet0->shard_id(), tablet0->tablet_id(),
+                                               tablet0->schema_hash()));
+    ASSERT_TRUE(std::filesystem::create_directories(clone_dir));
+    std::set<std::string> files;
+    ASSERT_OK(fs::list_dirs_files(meta_dir, nullptr, &files));
+    for (const auto& f : files) {
+        ASSERT_OK(FileSystem::Default()->link_file(meta_dir + "/" + f, clone_dir + "/" + f));
+    }
+
+    auto st = tablet_mgr->create_tablet_from_meta_snapshot(store, tablet0->tablet_id(), tablet0->schema_hash(),
+                                                           clone_dir);
+    ASSERT_TRUE(st.is_already_exist()) << st;
+
+    std::string header_after;
+    ASSERT_OK(TabletMetaManager::get_json_meta(store, tablet0->tablet_id(), tablet0->schema_hash(), &header_after));
+    EXPECT_EQ(header_before, header_after);
+    ASSERT_EQ(tablet0.get(), tablet_mgr->get_tablet(tablet0->tablet_id()).get());
+    ASSERT_EQ(4, tablet0->updates()->max_version());
+    EXPECT_EQ(keys0.size(), read_tablet(tablet0, 4));
+}
+
 void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet = create_tablet(rand(), rand());
