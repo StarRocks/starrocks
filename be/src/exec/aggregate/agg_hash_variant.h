@@ -255,6 +255,36 @@ struct CompressedFixedSizeKey<AggHashSetCompressedFixedSize<HashSet>> {
 template <typename HashMapOrSetWithKey>
 inline constexpr bool is_compressed_fixed_size_key = CompressedFixedSizeKey<HashMapOrSetWithKey>::value;
 
+// Aggregator::_init_agg_hash_variant()/_build_hash_variant() configure a few fields on the
+// hash map/set wrapper right after it is constructed. They live outside the hash table, so a
+// conversion that builds a fresh wrapper and only moves the entries across (convert_to_two_level)
+// has to carry them over by hand. Losing them is silent rather than fatal: a combined fixed-size
+// key that drops has_null_column stops writing the null byte into the key and returns wrong
+// groups. Keep every such field here so a new conversion picks it up for free.
+template <class SrcWithKey, class DstWithKey>
+void copy_agg_key_state(const SrcWithKey& src, DstWithKey& dst) {
+    if constexpr (is_combined_fixed_size_key<SrcWithKey> && is_combined_fixed_size_key<DstWithKey>) {
+        dst.has_null_column = src.has_null_column;
+        dst.fixed_byte_size = src.fixed_byte_size;
+    }
+    if constexpr (is_compressed_fixed_size_key<SrcWithKey> && is_compressed_fixed_size_key<DstWithKey>) {
+        dst.used_bits = src.used_bits;
+        dst.offsets = src.offsets;
+        dst.bases = src.bases;
+    }
+}
+
+// copy_agg_key_state() can only carry a field the destination also owns, and the visitor it runs
+// under is instantiated for every alternative sharing the key type, so it cannot reject a bad
+// pairing itself. Assert this on the declared (src, dst) pair instead: converting into a wrapper
+// that cannot hold the source's out-of-table state must be a build failure, not a wrong result.
+template <class SrcWithKey, class DstWithKey>
+inline constexpr bool agg_key_state_is_convertible =
+        (!SrcWithKey::has_single_null_key || DstWithKey::has_single_null_key) &&
+        (is_combined_fixed_size_key<SrcWithKey> ==
+         is_combined_fixed_size_key<DstWithKey>)&&(is_compressed_fixed_size_key<SrcWithKey> ==
+                                                   is_compressed_fixed_size_key<DstWithKey>);
+
 // 1) For different group by columns type, size, cardinality, volume, we should choose different
 // hash functions and different hashmaps.
 // When runtime, we will only have one hashmap.
