@@ -34,6 +34,16 @@
 
 namespace starrocks {
 
+// True when some null row still spans a non-empty range, i.e. empty_null_in_complex_column() has work to do.
+static bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (nulls[i] && offsets[i + 1] != offsets[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
 // for tests
@@ -74,12 +84,18 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             auto nullable = down_cast<const NullableColumn*>(child_col.get());
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
-            // empty null map with non-empty elements
-            auto data_mut = data_column->clone();
-            data_mut->empty_null_in_complex_column(
-                    nullable->null_column()->immutable_data(),
-                    down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
-            data_column = std::move(data_mut);
+            // empty null map with non-empty elements. Ask whether there is anything to empty before
+            // cloning: the clone is a full deep copy of the map, and it is paid once per call - a
+            // CASE whose branches all filter the same map pays it once per branch. On the common
+            // shape (no null rows, or null rows that already span an empty range) it is pure waste.
+            const auto& null_data = nullable->null_column()->immutable_data();
+            const auto& src_offsets = down_cast<const MapColumn*>(data_column.get())->offsets().immutable_data();
+            if (has_payload_under_null_rows(null_data.data(), src_offsets.data(), data_column->size())) {
+                auto data_mut = data_column->clone();
+                data_mut->empty_null_in_complex_column(
+                        null_data, down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
+                data_column = std::move(data_mut);
+            }
             if (input_null_map) {
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
