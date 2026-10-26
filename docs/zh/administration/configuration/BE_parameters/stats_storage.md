@@ -1342,6 +1342,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
 - 引入版本：v3.5.16, v4.0.9
 
+### tablet_writer_add_segment_lock_timeout_ms
+
+- 默认值：0
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算一体集群中，从副本 BE 接收 segment 复制请求时的总等锁预算。小于或等于 `0` 表示使用 `be_exit_after_disk_write_hang_second` 换算成毫秒后的值；正值直接覆盖该预算。LoadChannel 互斥锁和 LocalTabletsChannel 读锁共用一个截止时间，在 BRPC 请求处理函数入口统一计算一次。任一锁等待超时，RPC 都会在提交本次 segment 写入前返回超时错误。此预算与 RPC 超时独立，不限制后续 segment flush 或 commit 的执行时间，仅作用于 segment 复制接收路径。writer 挂起退出的计时起点不同，因此不能保证等锁超时一定早于 BE 退出。
+- 引入版本：-
+
 ### tablet_writer_open_rpc_timeout_sec
 
 - 默认值：300

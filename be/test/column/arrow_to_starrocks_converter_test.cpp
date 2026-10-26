@@ -24,6 +24,7 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <random>
 #include <type_traits>
 #include <utility>
 
@@ -31,6 +32,7 @@
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/variant_column.h"
@@ -1403,6 +1405,81 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
         auto type = std::make_shared<arrow::TimestampType>(unit, tz);
         test_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
         test_nullable_datetime<ArrowTypeId::TIMESTAMP, TYPE_DATETIME, arrow::TimestampType>(type, test_cases);
+    }
+}
+
+// Timestamps with a time zone convert to DATETIME / DATE with the zone's offset at each instant, matching the cctz
+// conversion row by row, for every unit, nullable or not, across DST changes and in any order.
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_dst_zone_matches_cctz) {
+    std::mt19937_64 rng(17);
+    std::vector<int64_t> seconds = {0, -1, 1711846800 - 1, 1711846800, 1729990800 - 1, 1729990800};
+    for (int i = 0; i < 2000; i++) {
+        seconds.push_back(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL);
+    }
+    struct Unit {
+        arrow::TimeUnit::type unit;
+        int64_t per_second;
+    };
+    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai"}) {
+        cctz::time_zone ctz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, ctz));
+        for (Unit u : {Unit{arrow::TimeUnit::SECOND, 1}, Unit{arrow::TimeUnit::MILLI, 1000},
+                       Unit{arrow::TimeUnit::MICRO, 1000000}, Unit{arrow::TimeUnit::NANO, 1000000000}}) {
+            auto type = std::make_shared<arrow::TimestampType>(u.unit, zone);
+            for (bool nullable : {false, true}) {
+                SCOPED_TRACE(fmt::format("zone={} unit={} nullable={}", zone, u.per_second, nullable));
+                arrow::TimestampBuilder builder(type, arrow::default_memory_pool());
+                std::vector<int64_t> values;
+                for (size_t i = 0; i < seconds.size(); i++) {
+                    const int64_t sub = u.per_second > 1 ? static_cast<int64_t>(rng() % u.per_second) : 0;
+                    values.push_back(seconds[i] * u.per_second + (seconds[i] < 0 ? -sub : sub));
+                    if (nullable && i % 3 == 1) {
+                        ASSERT_TRUE(builder.AppendNull().ok());
+                    } else {
+                        ASSERT_TRUE(builder.Append(values.back()).ok());
+                    }
+                }
+                std::shared_ptr<arrow::Array> array;
+                ASSERT_TRUE(builder.Finish(&array).ok());
+
+                auto check = [&]<LogicalType LT>() {
+                    using ColumnType = RunTimeColumnType<LT>;
+                    auto conv_func = get_arrow_converter(ArrowTypeId::TIMESTAMP, LT, nullable, false);
+                    ASSERT_TRUE(conv_func != nullptr);
+                    auto column = ColumnType::create();
+                    NullColumn::MutablePtr null_column = NullColumn::create();
+                    uint8_t* null_data = nullptr;
+                    if (nullable) {
+                        fill_null_column(array.get(), 0, array->length(), null_column.get(), 0);
+                        null_data = null_column->get_data().data();
+                    }
+                    Filter filter(array->length(), 1);
+                    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), 0, null_data, &filter,
+                                               nullptr, nullptr));
+                    ASSERT_EQ(array->length(), column->size());
+                    for (size_t i = 0; i < values.size(); i++) {
+                        if (nullable && i % 3 == 1) {
+                            ASSERT_EQ(DATUM_NULL, null_data[i]);
+                            continue;
+                        }
+                        DateTimeValue dtv;
+                        ASSERT_TRUE(dtv.from_unixtime(values[i] / u.per_second,
+                                                      values[i] % u.per_second * 1000000 / u.per_second, ctz));
+                        if constexpr (lt_is_date<LT>) {
+                            ASSERT_EQ(DateValue::create(dtv.year(), dtv.month(), dtv.day()), column->get_data()[i])
+                                    << "value " << values[i];
+                        } else {
+                            TimestampValue want;
+                            want.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(),
+                                                dtv.second(), dtv.microsecond());
+                            ASSERT_EQ(want, column->get_data()[i]) << "value " << values[i];
+                        }
+                    }
+                };
+                check.template operator()<TYPE_DATETIME>();
+                check.template operator()<TYPE_DATE>();
+            }
+        }
     }
 }
 

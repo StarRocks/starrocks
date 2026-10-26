@@ -14,12 +14,10 @@
 
 #pragma once
 
-#if defined(__has_include)
-#if __has_include(<arrow/util/bpacking.h>)
-#define STARROCKS_HAVE_ARROW_BITPACKING_HEADERS 1
-#endif
-#endif
-
+// STARROCKS_HAVE_ARROW_BITPACKING_HEADERS is defined by be/CMakeLists.txt when the thirdparty
+// Arrow ships the (Arrow-internal) bpacking headers. Do not probe with __has_include here: it also
+// searches the default system prefixes, so an unrelated Arrow installed under e.g. /usr/local would
+// enable this path even though the thirdparty libarrow.a we link defines no unpack32/unpack64.
 #ifdef STARROCKS_HAVE_ARROW_BITPACKING_HEADERS
 #include <arrow/util/bpacking.h>
 #ifdef __ARM_NEON
