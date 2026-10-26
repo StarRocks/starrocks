@@ -15,8 +15,11 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <thread>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -26,6 +29,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
@@ -78,7 +82,7 @@ public:
         _txn_mgr->add_in_writing_data_size(_tablet->partition_id(), _tablet, txn_id, bytes);
     }
 
-    RowsetSharedPtr commit(int64_t txn_id, bool with_data = false) {
+    RowsetSharedPtr build_rowset(int64_t txn_id, bool with_data = false) {
         RowsetWriterContext context;
         context.rowset_id = StorageEngine::instance()->next_rowset_id();
         context.tablet_id = _tablet->tablet_id();
@@ -105,6 +109,11 @@ public:
         if (with_data) {
             add(txn_id, rowset->data_disk_size());
         }
+        return rowset;
+    }
+
+    RowsetSharedPtr commit(int64_t txn_id, bool with_data = false) {
+        auto rowset = build_rowset(txn_id, with_data);
         CHECK_OK(_txn_mgr->commit_txn(_tablet->partition_id(), _tablet, txn_id, _load_id, rowset, false, false));
         return rowset;
     }
@@ -113,6 +122,88 @@ public:
         EXPECT_EQ(0, _tablet->in_writing_data_size());
         // A zero byte entry still allocates a map node; checking only the sum misses this leak.
         EXPECT_TRUE(_tablet->_in_writing_txn_size.empty());
+    }
+
+    enum class Cleanup { CLEAR, ROLLBACK, FORCE_ROLLBACK };
+
+    void cleanup_during_commit(Cleanup cleanup, const std::string& cleanup_point) {
+        int64_t txn_id = 0;
+        // Cover both the metadata I/O window and the gap between persistence and map update.
+        for (const auto* commit_point : {"TxnManager::commit_txn::before_save", "TxnManager::commit_txn::after_save"}) {
+            ++txn_id;
+            SCOPED_TRACE(commit_point);
+            prepare(txn_id);
+            auto rowset = build_rowset(txn_id, true);
+            const auto bytes = rowset->data_disk_size();
+            ASSERT_GT(bytes, 0);
+            const auto initial_data_size = _tablet->data_size();
+            CountDownLatch commit_paused(1), resume_commit(1), cleanup_started(1);
+            auto* sync = SyncPoint::GetInstance();
+            std::future<Status> committing, cleaning;
+            // Release and join workers before destroying their callbacks, including on ASSERT failure.
+            DeferOp finish([&] {
+                resume_commit.count_down();
+                if (committing.valid()) committing.wait();
+                if (cleaning.valid()) cleaning.wait();
+                sync->DisableProcessing();
+                sync->ClearAllCallBacks();
+            });
+            sync->SetCallBack(commit_point, [&](void*) {
+                commit_paused.count_down();
+                EXPECT_TRUE(resume_commit.wait_for(std::chrono::seconds(30)));
+            });
+            sync->SetCallBack(cleanup_point, [&](void*) { cleanup_started.count_down(); });
+            sync->EnableProcessing();
+            committing = std::async(std::launch::async, [&] {
+                return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, txn_id, _load_id, rowset, false, false);
+            });
+            ASSERT_TRUE(commit_paused.wait_for(std::chrono::seconds(10)));
+            // A deterministic lock check complements the bounded wait on the cleanup result.
+            {
+                std::unique_lock lock(_txn_mgr->_get_tablet_txn_lock(_tablet->tablet_id()), std::try_to_lock);
+                EXPECT_FALSE(lock.owns_lock());
+            }
+            cleaning = std::async(std::launch::async, [&] {
+                switch (cleanup) {
+                case Cleanup::CLEAR:
+                    StorageEngine::instance()->clear_transaction_task(txn_id, {_tablet->partition_id()});
+                    return Status::OK();
+                case Cleanup::ROLLBACK:
+                    return _txn_mgr->rollback_txn(_tablet->partition_id(), _tablet, txn_id);
+                case Cleanup::FORCE_ROLLBACK:
+                    _txn_mgr->force_rollback_tablet_related_txns(_tablet->data_dir()->get_meta(), _tablet->tablet_id(),
+                                                                 _tablet->schema_hash(), _tablet->tablet_uid());
+                    return Status::OK();
+                }
+                return Status::InternalError("Unexpected cleanup action");
+            });
+            ASSERT_TRUE(cleanup_started.wait_for(std::chrono::seconds(10)));
+            EXPECT_EQ(std::future_status::timeout, cleaning.wait_for(std::chrono::milliseconds(100)));
+            EXPECT_EQ(initial_data_size, _tablet->data_size());
+            EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+            resume_commit.count_down();
+            ASSERT_OK(committing.get());
+            auto status = cleaning.get();
+            auto has_meta = [&] {
+                return RowsetMetaManager::check_rowset_meta(_tablet->data_dir()->get_meta(), _tablet->tablet_uid(),
+                                                            rowset->rowset_id());
+            };
+            if (cleanup == Cleanup::ROLLBACK) {
+                // The writer must not garbage-collect a rowset that finished committing.
+                ASSERT_TRUE(status.is_already_exist()) << status;
+                EXPECT_TRUE(has_meta());
+                EXPECT_EQ(bytes, _tablet->in_writing_data_size());
+                ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, txn_id));
+            } else {
+                ASSERT_OK(status);
+            }
+            EXPECT_FALSE(has_meta());
+            EXPECT_FALSE(_txn_mgr->has_txn(_tablet->partition_id(), txn_id, _tablet->tablet_id(),
+                                           _tablet->schema_hash(), _tablet->tablet_uid()));
+            expect_empty();
+            add(txn_id, 100); // Late callbacks cannot recreate an estimate after cleanup.
+            expect_empty();
+        }
     }
 
 protected:
@@ -351,6 +442,55 @@ TEST_P(TxnManagerWritingSizeTest, ConcurrentFlushAndClearCannotRecreateEntry) {
     ASSERT_OK(status);
     expect_empty();
     add(1, 100);
+    expect_empty();
+}
+
+TEST_P(TxnManagerWritingSizeTest, ClearWaitsForInFlightCommit) {
+    cleanup_during_commit(Cleanup::CLEAR, "TxnManager::delete_txn::before_lock");
+}
+
+TEST_P(TxnManagerWritingSizeTest, RollbackWaitsForInFlightCommit) {
+    cleanup_during_commit(Cleanup::ROLLBACK, "TxnManager::rollback_txn::before_lock");
+}
+
+TEST_P(TxnManagerWritingSizeTest, ForceRollbackWaitsForInFlightCommit) {
+    cleanup_during_commit(Cleanup::FORCE_ROLLBACK, "TxnManager::force_rollback_tablet_related_txns::before_lock");
+}
+
+TEST_P(TxnManagerWritingSizeTest, CommitsOnTheSameTabletCanPersistConcurrently) {
+    prepare(1);
+    prepare(2);
+    auto first = build_rowset(1, true);
+    auto second = build_rowset(2, true);
+    CountDownLatch commits_paused(2), resume_commits(1);
+    auto* sync = SyncPoint::GetInstance();
+    std::future<Status> first_commit, second_commit;
+    DeferOp finish([&] {
+        resume_commits.count_down();
+        if (first_commit.valid()) first_commit.wait();
+        if (second_commit.valid()) second_commit.wait();
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    sync->SetCallBack("TxnManager::commit_txn::after_save", [&](void*) {
+        commits_paused.count_down();
+        EXPECT_TRUE(resume_commits.wait_for(std::chrono::seconds(30)));
+    });
+    sync->EnableProcessing();
+    first_commit = std::async(std::launch::async, [&] {
+        return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 1, _load_id, first, false, false);
+    });
+    second_commit = std::async(std::launch::async, [&] {
+        return _txn_mgr->commit_txn(_tablet->partition_id(), _tablet, 2, _load_id, second, false, false);
+    });
+    ASSERT_TRUE(commits_paused.wait_for(std::chrono::seconds(10)));
+    EXPECT_EQ(first->data_disk_size() + second->data_disk_size(), _tablet->in_writing_data_size());
+    resume_commits.count_down();
+    ASSERT_OK(first_commit.get());
+    ASSERT_OK(second_commit.get());
+    ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 1));
+    EXPECT_EQ(second->data_disk_size(), _tablet->in_writing_data_size());
+    ASSERT_OK(_txn_mgr->delete_txn(_tablet->partition_id(), _tablet, 2));
     expect_empty();
 }
 

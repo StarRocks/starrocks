@@ -41,6 +41,7 @@
 #include <queue>
 #include <set>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_storage_fwd.h"
@@ -125,6 +126,7 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint3
     DCHECK_EQ(_txn_map_shard_size & (_txn_map_shard_size - 1), 0);
     DCHECK_EQ(_txn_shard_size & (_txn_shard_size - 1), 0);
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
+    _tablet_txn_locks = std::make_unique<std::shared_mutex[]>(_txn_shard_size);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
     // we will get "store_num = 0" if it acts as cn, just ignore flush pool
@@ -240,6 +242,7 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
         return Status::InternalError(msg);
     }
 
+    std::shared_lock commit_guard(_get_tablet_txn_lock(tablet_id));
     {
         // get tx
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
@@ -276,7 +279,8 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
 
     // if not in recovery mode, then should persist the meta to meta env
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
+    // The shared tablet txn lock keeps cleanup out without serializing concurrent commits.
+    TEST_SYNC_POINT("TxnManager::commit_txn::before_save");
     if (!is_recovery) {
         Status st;
         RowsetMetaPB rowset_meta_pb;
@@ -312,6 +316,7 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
         }
     }
 
+    TEST_SYNC_POINT("TxnManager::commit_txn::after_save");
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
@@ -534,6 +539,8 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
 // BE has to wait for fe call clear txn api
 Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                                 SchemaHash schema_hash, const TabletUid& tablet_uid, bool with_log) {
+    TEST_SYNC_POINT("TxnManager::rollback_txn::before_lock");
+    std::unique_lock cleanup_guard(_get_tablet_txn_lock(tablet_id));
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -573,6 +580,8 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
 // could not delete the rowset if it already has a valid version
 Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid) {
+    TEST_SYNC_POINT("TxnManager::delete_txn::before_lock");
+    std::unique_lock cleanup_guard(_get_tablet_txn_lock(tablet_id));
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock txn_wrlock(_get_txn_map_lock(transaction_id));
@@ -647,9 +656,10 @@ void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_
 }
 
 // force drop all txns related with the tablet
-// maybe lock error, because not get txn lock before remove from meta
 void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tablet_id, SchemaHash schema_hash,
                                                     const TabletUid& tablet_uid) {
+    TEST_SYNC_POINT("TxnManager::force_rollback_tablet_related_txns::before_lock");
+    std::unique_lock cleanup_guard(_get_tablet_txn_lock(tablet_id));
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     for (int32_t i = 0; i < _txn_map_shard_size; i++) {
         std::unique_lock txn_wrlock(_txn_map_locks[i]);
