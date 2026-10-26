@@ -188,6 +188,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -211,6 +212,9 @@ public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
     private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
+    // Replay mocks min(this, be_number) backends. The existing dump tests' expectations were produced with 3; a
+    // corpus whose plans must match the source cluster (e.g. IcebergTPCDS1TUnknownStatsReplayTest) raises it.
+    public static int replayMaxBackendNum = 3;
     // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
     private static final int MIN_UT_PORT = 10000;
     private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
@@ -1139,7 +1143,7 @@ public class UtFrameUtils {
 
         // mock be num
         backendId = 10002;
-        int beNumToAdd = Math.min(3, replayDumpInfo.getBeNum());
+        int beNumToAdd = Math.min(replayMaxBackendNum, replayDumpInfo.getBeNum());
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);
@@ -1484,8 +1488,11 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+        String prevCatalog = connectContext.getCurrentCatalog();
+        String prevDb = connectContext.getDatabase();
 
         try {
+            useDumpedExternalDatabase(connectContext, replayDumpInfo);
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
                 statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
@@ -1513,6 +1520,8 @@ public class UtFrameUtils {
             }
         } finally {
             unLock(dbs);
+            connectContext.setCurrentCatalog(prevCatalog);
+            connectContext.setDatabase(prevDb);
             tearMockEnv();
             StarRocksTestBase.unRegisterTrace(connectContext);
         }
@@ -1534,6 +1543,27 @@ public class UtFrameUtils {
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
             }
         }
+    }
+
+    // A dump captured with /api/query_dump?db=<catalog>.<db> keeps the query text as written, so its external tables
+    // may be referenced unqualified, but the dump does not record that current catalog/db and replay would resolve
+    // them in whatever database initMockEnv used last. When every dumped external table lives in one catalog.db
+    // (external_table_catalog), replay in that catalog.db, as QueryDumper did when it captured the dump.
+    private static void useDumpedExternalDatabase(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) {
+        Set<String> catalogDbs = new HashSet<>();
+        for (Map.Entry<String, String> entry : replayDumpInfo.getExternalTableCatalogMap().entrySet()) {
+            int dot = entry.getKey().indexOf('.');
+            if (dot > 0) {
+                catalogDbs.add(entry.getValue() + "." + entry.getKey().substring(0, dot));
+            }
+        }
+        if (catalogDbs.size() != 1) {
+            return;
+        }
+        String catalogDb = catalogDbs.iterator().next();
+        int dot = catalogDb.indexOf('.');
+        connectContext.setCurrentCatalog(catalogDb.substring(0, dot));
+        connectContext.setDatabase(catalogDb.substring(dot + 1));
     }
 
     private static String getThriftString(List<PlanFragment> fragments) {
