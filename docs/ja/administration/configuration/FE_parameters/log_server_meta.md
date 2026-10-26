@@ -1078,6 +1078,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   3. グローバル変数 `version` の値 (`show variables like 'version';`)
 - 導入時期：-
 
+### `mysql_service_compression_enabled`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が接続ハンドシェイクで MySQL 圧縮プロトコル (zlib および zstd) を提供するかどうか。圧縮を要求したクライアントのみが圧縮された通信を使用します (例: `mysql --compression-algorithms=zstd` や JDBC `useCompression=true`)。その他のクライアントには影響しません。`false` に設定すると、FE は圧縮を提供しなくなります。変更は新しい接続にのみ適用されます。
+- 導入時期：-
+
 ### `mysql_service_io_threads_num`
 
 - デフォルト：4

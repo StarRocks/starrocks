@@ -1087,6 +1087,15 @@ This topic introduces the following types of FE configurations:
   3. Value of the global variable `version` (`show variables like 'version';`)
 - Introduced in: -
 
+### `mysql_service_compression_enabled`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE offers the MySQL compressed protocol (zlib and zstd) in the connection handshake. Only clients that request compression get compressed traffic, for example `mysql --compression-algorithms=zstd` or JDBC `useCompression=true`; other clients are unaffected. When set to `false`, the FE stops offering compression. A change applies to new connections only.
+- Introduced in: -
+
 ### `mysql_service_io_threads_num`
 
 - Default: 4
