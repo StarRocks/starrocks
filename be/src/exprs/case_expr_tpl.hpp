@@ -851,6 +851,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL256, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
+        CASE_WHEN_RESULT_TYPE(TYPE_VARIANT, RESULT_TYPE);                                 \
         CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
         CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \
         CASE_WHEN_RESULT_TYPE(TYPE_STRUCT, RESULT_TYPE);                                  \
