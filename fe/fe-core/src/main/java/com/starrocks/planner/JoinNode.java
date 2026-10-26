@@ -58,6 +58,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -436,7 +437,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this, context)) {
+            // The probe side needs every partition-by expr to locate a row's partition of a partitioned
+            // global filter; if one is only produced above this join, leave the filter to that ancestor.
+            Function<Expr, Boolean> partitionExprBound = couldBoundForPartitionExpr(context.getDescTbl());
+            if (partitionByExprs.stream().allMatch(partitionExprBound::apply)
+                    && description.canProbeUse(this, context)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
