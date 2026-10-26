@@ -24,7 +24,6 @@ const MOVED_DOCS = [
   { from: "/docs/introduction/feature_difference/", to: "/docs/introduction/Architecture/" },
   { from: "/docs/introduction/maturity/", to: "/docs/maturity/features/" },
   { from: "/docs/introduction/versioning/", to: "/docs/maturity/release_numbering/" },
-  { from: "/docs/sql-reference/sql-functions/scalar-functions/ai_complete/", to: "/docs/sql-reference/sql-functions/ai-functions/ai_complete/" },
   // Former `generated-index` category pages, replaced by real DocCardList
   // nav pages so the URL and breadcrumbs follow the directory structure.
   { from: "/docs/category/aggregate/", to: "/docs/sql-reference/sql-functions/aggregate-functions/" },

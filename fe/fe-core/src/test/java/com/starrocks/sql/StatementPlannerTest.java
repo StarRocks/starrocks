@@ -18,7 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -85,7 +84,7 @@ class StatementPlannerTest extends PlanTestBase {
         try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
             authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+                    "select ai_complete('missing_authorization_order_provider', 'explicit-model', 'prompt')", connectContext);
 
             Assertions.assertSame(denied,
                     Assertions.assertThrows(RuntimeException.class,
@@ -664,50 +663,4 @@ class StatementPlannerTest extends PlanTestBase {
             }
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testOptimisticRetryValidatesTablesCopiedByReanalysis() throws Exception {
-        QueryStatement queryStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                "select * from t0", connectContext);
-        Analyzer.analyze(queryStmt, connectContext);
-        OlapTable original = assertInstanceOf(OlapTable.class,
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(connectContext.getDatabase(), "t0"));
-        OlapTable replacement = new OlapTable(original.getType());
-        LockTestUtils.copyUnderReadLock(original, replacement);
-        List<OlapTable> validatedTables = new ArrayList<>();
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public com.starrocks.catalog.Table getTable(
-                    Invocation invocation, ConnectContext context, String catalog, String db, String table) {
-                // t0 is replaced after the first plan is built, so only the retry's reanalysis resolves the replacement.
-                if (!validatedTables.isEmpty() && "t0".equalsIgnoreCase(table)) {
-                    return replacement;
-                }
-                return invocation.proceed();
-            }
-        };
-        new MockUp<OptimisticVersion>() {
-            @Mock
-            public boolean validateTableUpdate(OlapTable table, long candidateVersion) {
-                validatedTables.add(table);
-                return validatedTables.size() > 1;
-            }
-        };
-
-        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
-        long planStartTime = OptimisticVersion.generate();
-        Set<OlapTable> originalOlapTables = collectOriginalOlapTablesUnderLock(queryStmt, plannerMetaLocker);
-        ExecPlan result = StatementPlanner.createQueryPlanWithReTry(
-                queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
-                plannerMetaLocker, planStartTime, originalOlapTables);
-
-        assertNotNull(result);
-        // Table.equals compares IDs, and the replacement keeps the original ID.
-        assertEquals(2, validatedTables.size());
-        assertSame(original, validatedTables.get(0));
-        assertSame(replacement, validatedTables.get(1));
-    }
->>>>>>> a5eb9dd865f... [Enhancement][RB-374] Fail planning copies of a published table taken without its lock (#65716)
 }

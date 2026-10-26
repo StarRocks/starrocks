@@ -62,7 +62,6 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -94,7 +93,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -557,7 +555,7 @@ public class ScalarOperatorToExpr {
                 default:
                     Preconditions.checkNotNull(call.getFunction());
                     List<ScalarOperator> semanticChildren = call.getChildren();
-                    if (call.getFunction().isAi()) {
+                    if (call.getFunction().isAI()) {
                         Preconditions.checkState(!call.getFunction().hasVarArgs(),
                                 "AI functions must have fixed semantic arity");
                         int semanticArity = call.getFunction().getNumArgs();
@@ -570,11 +568,6 @@ public class ScalarOperatorToExpr {
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
                         callExpr = new FunctionCallExpr(call.getFnName(), FunctionParams.createStarParam());
-                    } else if (call.getFunction().isAi()) {
-                        callExpr = new FunctionCallExpr(call.getFnName(),
-                                new FunctionParams(call.isDistinct(), arg),
-                                call.getFunction().getAiModelSource() == TAIModelSource.SYSTEM
-                                        ? AIModelConfigs.systemConfigId(call.getFunction()) : null);
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }

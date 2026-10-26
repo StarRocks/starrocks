@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -66,14 +67,49 @@ public abstract class StatisticsCollectJob {
 
     // Backend conditions that say nothing about the statement that ran into them and stop being true on
     // their own, so a statistics job waits them out instead of failing. Matched as text because that is
-    // all the backend sends back; both strings are stable and come from:
+    // all the backend sends back; the strings are stable and come from:
     //   - "Too many versions": the storage engine rejecting writes until compaction catches up.
-    //   - "Memory of process exceed limit": MemTracker::err_msg in be/src/runtime/mem_tracker.cpp, naming
-    //     the tracker that was exceeded. "process" means the whole backend is out of memory because of
-    //     other work - as opposed to "query", which means this statement is too large for its own limit
-    //     and would fail the same way however often it is retried.
+    //   - SHARED_MEMORY_EXHAUSTED_MARKERS: see isSharedMemoryExhausted.
     protected static final String TOO_MANY_VERSIONS_MARKER = "Too many versions";
-    protected static final String PROCESS_MEMORY_EXHAUSTED_MARKER = "Memory of process exceed limit";
+
+    // MemTracker::err_msg in be/src/runtime/mem_tracker.cpp ends every memory-limit error with a sentence
+    // fixed by the type of the tracker that was exceeded. These are the trackers whose budget is shared with
+    // other queries - the whole backend, the query pool (which default_wg reports as well), a resource group
+    // and a resource group's shared memory pool - so running into one says the neighbours are using it, and
+    // stops being true once they finish. The leading "Memory of <label>" names the tracker, but resource
+    // groups carry user-chosen labels, so only "process" is matched there, for messages that lack the
+    // closing sentence.
+    //
+    // A tracker that belongs to this statement alone - the single-query limit, or a resource group's
+    // big-query limit ("exceed the big query limit of the resource group", deliberately not matched by
+    // "exceed the limit of the resource group [") - means the statement is too large for its own budget and
+    // would fail the same way however often it is retried. So would anything unrecognised: this is an
+    // allowlist, and a message matching none of these fails immediately.
+    private static final List<String> SHARED_MEMORY_EXHAUSTED_MARKERS = List.of(
+            "Memory of process exceed limit",
+            "exceed the limit of BE",
+            "exceed the limit of query pool",
+            "exceed the limit of the resource group [",
+            "exceed the limit of resource group memory pool [");
+
+    // Exhausting a shared memory budget is transient, so a rejected statistics statement is retried after a
+    // pause instead of being counted as a failure. Short first, since the spike this was written for cleared
+    // in about a second; the later step covers a longer-running neighbour without pinning the job to a
+    // backend that is genuinely saturated - once these are exhausted the statement counts as failed and the
+    // job's usual tolerance rules apply.
+    //
+    // Only the external-table jobs wait: the native paths keep failing immediately, as they always have.
+    private static final long[] SHARED_MEMORY_RETRY_BACKOFF_MS = {10_000L, 30_000L};
+
+    // Total time this job has already spent waiting for a backend to free memory, charged against
+    // Config.connector_table_analyze_memory_backoff_budget_second. Waiting is only worth it while the
+    // shortage is a passing spike. Under a sustained one every statement is rejected, so an unbounded
+    // per-statement retry turns into a job that sleeps for its entire deadline while occupying one of the
+    // few analyze slots (connector_table_query_trigger_analyze_max_running_task_num) - starving every other
+    // table of statistics to keep retrying the one table the cluster currently has no memory for. Past the
+    // budget the job stops waiting and degrades to the pre-retry behaviour: failures count, tolerance
+    // decides, and the job ends soon enough to be re-triggered when the cluster has recovered.
+    private long sharedMemoryBackoffSpentMs = 0;
 
     protected final Database db;
     protected final Table table;
@@ -248,6 +284,63 @@ public abstract class StatisticsCollectJob {
         context.getSessionVariable().setQueryTimeoutS((int) remainingSeconds);
         context.getSessionVariable().setInsertTimeoutS((int) remainingSeconds);
         return (int) remainingSeconds;
+    }
+
+    // True when the failure is a memory budget shared with other queries running out (see
+    // SHARED_MEMORY_EXHAUSTED_MARKERS), which says nothing about the statement that hit it and will stop
+    // being true on its own. A limit that belongs to the statement alone is not matched: a retry would
+    // reproduce it exactly.
+    static boolean isSharedMemoryExhausted(Throwable failure) {
+        for (Throwable t = failure; t != null && t != t.getCause(); t = t.getCause()) {
+            if (isSharedMemoryExhausted(t.getMessage())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static boolean isSharedMemoryExhausted(String errorMessage) {
+        if (errorMessage == null) {
+            return false;
+        }
+        for (String marker : SHARED_MEMORY_EXHAUSTED_MARKERS) {
+            if (errorMessage.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How many times one statement may be retried while a shared memory budget is exhausted. */
+    protected int maxSharedMemoryRetries() {
+        return SHARED_MEMORY_RETRY_BACKOFF_MS.length;
+    }
+
+    // Overridable so tests do not have to sleep through the real backoff.
+    protected long retryBackoffMillis(int attempt) {
+        return SHARED_MEMORY_RETRY_BACKOFF_MS[Math.min(attempt, SHARED_MEMORY_RETRY_BACKOFF_MS.length - 1)];
+    }
+
+    /**
+     * Waits for a backend to free memory, and reports whether the job could still afford to. Returns false
+     * without sleeping once the job has used up its waiting budget (see sharedMemoryBackoffSpentMs), which
+     * the caller should treat as "stop retrying and let this statement fail".
+     */
+    protected boolean awaitBackendMemory(long backoffMs) throws InterruptedException {
+        long budgetMs = Config.connector_table_analyze_memory_backoff_budget_second * 1000L;
+        if (budgetMs > 0 && sharedMemoryBackoffSpentMs + backoffMs > budgetMs) {
+            LOG.warn("[ExternalStats] memory backoff budget exhausted, no longer waiting | spentMs={} budgetMs={} " +
+                    "job={}", sharedMemoryBackoffSpentMs, budgetMs, this);
+            return false;
+        }
+        Thread.sleep(backoffMs);
+        sharedMemoryBackoffSpentMs += backoffMs;
+        return true;
+    }
+
+    @VisibleForTesting
+    long getSharedMemoryBackoffSpentMs() {
+        return sharedMemoryBackoffSpentMs;
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
