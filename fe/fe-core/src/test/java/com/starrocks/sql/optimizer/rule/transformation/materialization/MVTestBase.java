@@ -454,6 +454,14 @@ public abstract class MVTestBase extends StarRocksTestBase {
         taskRun.executeTaskRun();
     }
 
+    /** Runs {@code taskRun} and every batch it hands on; the task must set {@link TaskRun#IS_TEST}. */
+    protected static void executeAllBatches(TaskRun taskRun) throws Exception {
+        while (taskRun != null) {
+            initAndExecuteTaskRun(taskRun);
+            taskRun = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getNextTaskRun();
+        }
+    }
+
     protected String toPartitionVal(String val) {
         return val == null ? "NULL" : String.format("'%s'", val);
     }

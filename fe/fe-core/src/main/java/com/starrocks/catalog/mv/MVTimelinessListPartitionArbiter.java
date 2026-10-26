@@ -127,6 +127,8 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
+        mvToRefreshPartitionNames.addAll(getMvPartitionNamesWithUntrackedRows(refBaseTablePartitionColumns.keySet(),
+                mvToBaseNameRef));
 
         return mvTimelinessInfo;
     }

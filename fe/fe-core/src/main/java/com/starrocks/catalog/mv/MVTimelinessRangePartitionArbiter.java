@@ -145,6 +145,8 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
+        mvToRefreshPartitionNames.addAll(getMvPartitionNamesWithUntrackedRows(refBaseTablePartitionColumns.keySet(),
+                mvToBaseNameRef));
 
         // handle mv's partition expr is function call expr
         if (partitionExpr instanceof FunctionCallExpr) {
