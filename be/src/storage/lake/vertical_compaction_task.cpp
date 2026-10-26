@@ -255,7 +255,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
             for (auto column_index : column_group) {
                 auto uid = _tablet_schema->column(column_index).unique_id();
-                const auto* column_reader = segment->column_with_uid(uid);
+                ASSIGN_OR_RETURN(const auto* column_reader, segment->column_with_uid(uid));
                 if (column_reader == nullptr) {
                     continue;
                 }
@@ -265,10 +265,11 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
     }
     // The held input set stays resident across every column-group pass, so it comes out of the same
     // per-worker budget the read buffers are sized from; charging it is what keeps the chunk sizing
-    // honest. mem_usage() covers the whole segment (all columns), which is exactly what stays
-    // resident regardless of this group's width -- and it grows as later passes touch more column
-    // indexes, so this re-decides every pass: once holding would starve the budget the task stops
-    // holding, for this pass and every later one. See there.
+    // honest. mem_usage() covers the whole segment (every column reader built so far), which is
+    // exactly what stays resident regardless of this group's width -- and it grows as later passes
+    // build the readers and load the indexes of more columns, so this re-decides every pass: once
+    // holding would starve the budget the task stops holding, for this pass and every later one.
+    // See there.
     return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs,
                                          num_streams * _stream_buffer_size);
 }

@@ -338,7 +338,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
             }
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();
-                const auto* column_reader = segment->column_with_uid(uid);
+                ASSIGN_OR_RETURN(const auto* column_reader, segment->column_with_uid(uid));
                 if (column_reader == nullptr) {
                     continue;
                 }

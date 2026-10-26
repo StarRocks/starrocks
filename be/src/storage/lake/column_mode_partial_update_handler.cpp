@@ -167,7 +167,8 @@ StatusOr<int64_t> ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row
         // columns. This intentionally retains the conservative shared-nothing accounting even when
         // the source segment is processed one update-column group at a time.
         for (size_t cid = 0; cid < tablet_schema.num_columns(); ++cid) {
-            const auto* column_reader = segment->column_with_uid(tablet_schema.column(cid).unique_id());
+            ASSIGN_OR_RETURN(const auto* column_reader,
+                             segment->column_with_uid(tablet_schema.column(cid).unique_id()));
             if (column_reader == nullptr) {
                 continue;
             }

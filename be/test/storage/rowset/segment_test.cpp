@@ -36,8 +36,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <cstring>
 #include <functional>
 #include <iostream>
+#include <thread>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
@@ -193,7 +196,7 @@ TEST_F(SegmentReaderWriterTest, per_column_zstd_page_size_changes_the_pages_writ
         iter_opts.stats = &stats;
         iter_opts.read_file = rfile.get();
         ASSERT_OK(iter->init(iter_opts));
-        *value_pages = segment->column(1)->num_data_pages();
+        *value_pages = segment->column(1).value()->num_data_pages();
     };
 
     int32_t default_pages = 0;
@@ -262,13 +265,13 @@ TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
     SegmentWriterOptions opts1;
     shared_ptr<Segment> seg1;
     build_segment(opts1, schema, schema, 100, DefaultIntGenerator, &seg1);
-    ASSERT_TRUE(seg1->column(3)->has_bloom_filter_index());
+    ASSERT_TRUE(seg1->column(3).value()->has_bloom_filter_index());
 
     // for base segment
     SegmentWriterOptions opts2;
     shared_ptr<Segment> seg2;
     build_segment(opts2, schema, schema, 100, DefaultIntGenerator, &seg2);
-    ASSERT_TRUE(seg2->column(3)->has_bloom_filter_index());
+    ASSERT_TRUE(seg2->column(3).value()->has_bloom_filter_index());
 }
 
 TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
@@ -770,6 +773,121 @@ TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
             << "Expected InternalError, got: " << st.code() << ", message: " << st.message();
     EXPECT_EQ(st.message(), "Duplicate column id found in tablet schema")
             << "Error message should indicate duplicate column id in tablet schema.";
+}
+
+static size_t num_built_column_readers(const Segment& segment) {
+    size_t n = 0;
+    for (const auto& column : segment._column_readers) {
+        n += column.reader.load() != nullptr;
+    }
+    return n;
+}
+
+// A segment of a wide table is shared by queries that each read a few of its columns, so opening it must
+// not build a ColumnReader for every column. A reader is built when its column is first used.
+TEST_F(SegmentReaderWriterTest, TestColumnReadersAreBuiltOnFirstUse) {
+    std::shared_ptr<TabletSchema> schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    shared_ptr<Segment> segment;
+    build_segment(opts, schema, schema, 20, DefaultIntGenerator, &segment);
+
+    ASSERT_EQ(4, segment->num_columns());
+    EXPECT_EQ(0, num_built_column_readers(*segment));
+    const size_t opened_mem_usage = segment->mem_usage();
+
+    // Neither a presence check nor a column the segment lacks builds anything.
+    EXPECT_FALSE(segment->is_default_column(schema->column(2)));
+    ASSIGN_OR_ABORT(auto missing, segment->column_with_uid(99));
+    EXPECT_EQ(nullptr, missing);
+    EXPECT_EQ(0, num_built_column_readers(*segment));
+
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
+    iter_opts.read_file = read_file.get();
+    ASSIGN_OR_ABORT(auto iter, segment->new_column_iterator_or_default(schema->column(2), nullptr));
+    ASSERT_OK(iter->init(iter_opts));
+    auto read_schema = ChunkHelper::convert_schema(schema, std::vector<ColumnId>{2});
+    auto values = ChunkFactory::column_from_field(*read_schema.field(0))->clone_empty();
+    const std::vector<rowid_t> rowids{0, 1, 19};
+    ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
+    EXPECT_EQ(2, values->get(0).get_int32());
+    EXPECT_EQ(12, values->get(1).get_int32());
+    EXPECT_EQ(192, values->get(2).get_int32());
+    EXPECT_EQ(1, num_built_column_readers(*segment));
+
+    // The built reader is the one every later user gets, and the segment's memory now covers it.
+    ASSIGN_OR_ABORT(auto reader, segment->column(2));
+    ASSERT_NE(nullptr, reader);
+    ASSIGN_OR_ABORT(auto same_reader, segment->column_with_uid(3));
+    EXPECT_EQ(reader, same_reader);
+    EXPECT_EQ(opened_mem_usage + reader->mem_usage(), segment->mem_usage());
+
+    for (size_t i = 0; i < schema->num_columns(); ++i) {
+        ASSIGN_OR_ABORT(auto r, segment->column(i));
+        EXPECT_NE(nullptr, r);
+    }
+    EXPECT_EQ(4, num_built_column_readers(*segment));
+}
+
+// Concurrent first users of a column all get the same, single reader.
+TEST_F(SegmentReaderWriterTest, TestConcurrentFirstUseBuildsOneReader) {
+    std::shared_ptr<TabletSchema> schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> segment;
+    build_segment(opts, schema, schema, 100, DefaultIntGenerator, &segment);
+
+    constexpr int kThreads = 16;
+    std::vector<const ColumnReader*> readers(kThreads, nullptr);
+    std::atomic<int> ready{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&, i] {
+            ready.fetch_add(1);
+            while (ready.load() < kThreads) {
+            }
+            auto res = segment->column_with_uid(3);
+            CHECK(res.ok()) << res.status();
+            readers[i] = res.value();
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+    ASSERT_NE(nullptr, readers[0]);
+    for (const auto* r : readers) {
+        EXPECT_EQ(readers[0], r);
+    }
+    EXPECT_EQ(1, num_built_column_readers(*segment));
+}
+
+// A column whose meta cannot be read must fail its reads, not fall back to the default value as if the
+// segment had no data for it.
+TEST_F(SegmentReaderWriterTest, TestBadColumnMetaFailsOnFirstUse) {
+    std::shared_ptr<TabletSchema> schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(2, "SUM", true, "77"), create_int_value_pb(3)});
+    SegmentWriterOptions opts;
+    shared_ptr<Segment> segment;
+    build_segment(opts, schema, schema, 100, DefaultIntGenerator, &segment);
+
+    const auto* column = segment->_find_column(2);
+    ASSERT_NE(nullptr, column);
+    const auto meta = segment->_column_meta(*column);
+    memset(segment->_column_metas.data() + column->meta_offset, 0xff, meta.size());
+
+    auto reader = segment->column_with_uid(2);
+    ASSERT_FALSE(reader.ok());
+    EXPECT_TRUE(reader.status().is_corruption()) << reader.status();
+    EXPECT_FALSE(segment->new_column_iterator_or_default(schema->column(1), nullptr).ok());
+    EXPECT_FALSE(segment->new_column_iterator(schema->column(1), nullptr).ok());
+
+    // The other columns are not affected.
+    ASSIGN_OR_ABORT(auto other, segment->column_with_uid(3));
+    EXPECT_NE(nullptr, other);
 }
 
 } // namespace starrocks

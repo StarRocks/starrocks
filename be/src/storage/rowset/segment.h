@@ -34,9 +34,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "base/concurrency/once.h"
 #include "cache/mem_cache/page_handle.h"
@@ -179,14 +183,14 @@ public:
 
     size_t num_columns() const { return _column_readers.size(); }
 
-    const ColumnReader* column(size_t i) const {
-        auto unique_id = _tablet_schema->column(i).unique_id();
-        return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
+    // Returns the ColumnReader of the |i|-th column of the tablet schema, or nullptr if this segment
+    // has no data for that column. The reader is built on the first call for the column.
+    StatusOr<const ColumnReader*> column(size_t i) const {
+        return column_with_uid(_tablet_schema->column(i).unique_id());
     }
 
-    const ColumnReader* column_with_uid(size_t uid) const {
-        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
-    }
+    // Same as above, but looks the column up by its unique id.
+    StatusOr<const ColumnReader*> column_with_uid(int32_t uid) const;
 
     FileSystem* file_system() const { return _fs.get(); }
 
@@ -240,7 +244,7 @@ public:
     // mark the segment dirty when its memory usage may have changed.
     void update_cache_size();
 
-    bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
+    bool is_default_column(const TabletColumn& column) const { return _find_column(column.unique_id()) == nullptr; }
 
     const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
 
@@ -310,12 +314,27 @@ private:
 
     size_t _column_index_mem_usage() const;
 
+    // A column this segment stores. Its ColumnReader is built from its serialized ColumnMetaPB, which
+    // starts at |meta_offset| in _column_metas, the first time the column is used.
+    struct LazyColumnReader {
+        int32_t unique_id = 0;
+        uint32_t meta_offset = 0;
+        // Published once fully built and owned by the segment. Never reset before the segment dies.
+        mutable std::atomic<ColumnReader*> reader{nullptr};
+    };
+
+    const LazyColumnReader* _find_column(int32_t uid) const;
+    std::string_view _column_meta(const LazyColumnReader& column) const;
+    StatusOr<ColumnReader*> _get_or_create_column_reader(const LazyColumnReader& column) const;
+
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                  const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
-    Status _create_column_readers(SegmentFooterPB* footer);
+    // Records, for each column of the tablet schema that the segment stores, where its serialized
+    // ColumnMetaPB is. |column_metas| are the serialized `columns` entries of the footer.
+    Status _create_column_readers(const std::vector<std::string_view>& column_metas);
 
-    Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
+    Status _check_column_unique_id_uniqueness(const std::vector<std::string_view>& column_metas,
                                               std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -337,10 +356,19 @@ private:
     PagePointer _short_key_index_page;
     bool _skip_vector_index = false;
 
-    // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
-    // This means that this segment has no data for that column, which may be added
-    // after this segment is generated.
-    std::map<int32_t, std::unique_ptr<ColumnReader>> _column_readers;
+    // One entry, sorted by unique id, for each column of the tablet schema that this segment has data
+    // for. A column without an entry may have been added after this segment was generated.
+    //
+    // A segment in the metacache is shared by every query on its tablet, and a wide table is often read
+    // a few columns at a time, so the ColumnReaders (and the index metas they keep) are built on demand
+    // rather than for all columns when the segment is opened. Until then a column costs its entry and
+    // its serialized ColumnMetaPB in _column_metas, where the metas are in the order of the entries.
+    std::vector<LazyColumnReader> _column_readers;
+    std::string _column_metas;
+    // Serializes building the readers. A reader is built once and then read without the lock.
+    mutable std::mutex _column_readers_lock;
+    // Memory of _column_readers and _column_metas, charged to the segment metadata tracker.
+    size_t _column_meta_mem_usage = 0;
 
     // used to guarantee that short key index will be loaded at most once in a thread-safe way
     OnceFlag _load_index_once;

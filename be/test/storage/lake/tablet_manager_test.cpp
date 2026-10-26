@@ -2657,7 +2657,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
     size_t footer_hint = 16 * 1024;
     ASSIGN_OR_ABORT(auto cached, _tablet_manager->load_segment(data.file_info, 0, &footer_hint, options,
                                                                /*fill_meta_cache=*/true, data.narrow_schema));
-    ASSERT_EQ(nullptr, cached->column_with_uid(1));
+    ASSERT_EQ(nullptr, cached->column_with_uid(1).value());
     ASSIGN_OR_ABORT(auto hidden, read_segment_schema_cache_values(data, cached));
     EXPECT_EQ(std::vector<int32_t>({77, 77, 77}), hidden);
     for (bool fill_cache : {false, true}) {
@@ -2673,7 +2673,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
         EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
         EXPECT_EQ(fill_cache ? _tablet_manager : nullptr, reopened->lake_tablet_manager());
         EXPECT_EQ(1, open_stats.segments_opened);
-        EXPECT_NE(nullptr, reopened->column_with_uid(1));
+        EXPECT_NE(nullptr, reopened->column_with_uid(1).value());
         ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
         EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
         EXPECT_EQ(fill_cache ? reopened.get() : cached.get(),
@@ -2692,7 +2692,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
         EXPECT_EQ(rejected_before + (fill_cache ? 1 : 2), segment_cache_schema_reject_count());
 
         // Replacing the cache entry must not mutate a Segment held by an older reader.
-        EXPECT_EQ(nullptr, cached->column_with_uid(1));
+        EXPECT_EQ(nullptr, cached->column_with_uid(1).value());
         ASSIGN_OR_ABORT(auto old_values, read_segment_schema_cache_values(data, cached));
         EXPECT_EQ(std::vector<int32_t>({77, 77, 77}), old_values);
     }
@@ -2711,7 +2711,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_preserves_inflight_fu
         EXPECT_NE(cached.get(), narrowed.get());
         EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
         EXPECT_EQ(fill_cache ? _tablet_manager : nullptr, narrowed->lake_tablet_manager());
-        EXPECT_EQ(nullptr, narrowed->column_with_uid(1));
+        EXPECT_EQ(nullptr, narrowed->column_with_uid(1).value());
         EXPECT_EQ(fill_cache ? narrowed.get() : cached.get(),
                   _tablet_manager->metacache()->lookup_segment(cache_key).get());
         if (fill_cache) {
@@ -2780,11 +2780,11 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_checks_cache_insert_w
     EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
     EXPECT_NE(winner.get(), reopened.get());
     EXPECT_EQ(_tablet_manager, reopened->lake_tablet_manager());
-    EXPECT_NE(nullptr, reopened->column_with_uid(1));
+    EXPECT_NE(nullptr, reopened->column_with_uid(1).value());
     ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
     EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
     EXPECT_EQ(reopened.get(), _tablet_manager->metacache()->lookup_segment(cache_key).get());
-    EXPECT_EQ(nullptr, winner->column_with_uid(1));
+    EXPECT_EQ(nullptr, winner->column_with_uid(1).value());
     OlapReaderStatistics stats;
     ASSIGN_OR_ABORT(auto repeated, _tablet_manager->load_segment(data.file_info, 0, &footer_hint, LakeIOOptions{},
                                                                  /*fill_meta_cache=*/true, data.full_schema, &stats));
