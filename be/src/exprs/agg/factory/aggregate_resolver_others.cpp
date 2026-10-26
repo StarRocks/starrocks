@@ -48,6 +48,10 @@ struct LowCardPercentileDispatcher {
 };
 
 void AggregateFuncResolver::register_others() {
+    // Preserve the NULL bitmap for singleton serialization; masked text must not consume the group byte limit.
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARBINARY, AICollectTextState, AggregateFunctionPtr, false>(
+            "__ai_collect_text", false, AggregateFactory::MakeAICollectTextAggregateFunction());
+
     add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
             "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(

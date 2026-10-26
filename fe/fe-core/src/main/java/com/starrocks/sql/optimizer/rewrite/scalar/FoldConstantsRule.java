@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -71,6 +72,11 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     public FoldConstantsRule(boolean needMonotonicFunc) {
         this.needMonotonicFunc = needMonotonicFunc;
+    }
+
+    @Override
+    public ScalarOperator visitCloneOperator(CloneOperator operator, ScalarOperatorRewriteContext context) {
+        return operator.getChild(0) instanceof ConstantOperator ? operator.getChild(0) : operator;
     }
 
     private <T extends ScalarOperator> Optional<ScalarOperator> arrayScalarFun(

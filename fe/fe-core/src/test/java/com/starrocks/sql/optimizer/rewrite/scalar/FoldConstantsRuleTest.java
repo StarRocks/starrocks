@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -49,6 +50,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class FoldConstantsRuleTest {
     private final FoldConstantsRule rule = new FoldConstantsRule();
@@ -56,6 +58,19 @@ public class FoldConstantsRuleTest {
     private static final ConstantOperator OB_TRUE = ConstantOperator.createBoolean(true);
     private static final ConstantOperator OB_FALSE = ConstantOperator.createBoolean(false);
     private static final ConstantOperator OB_NULL = ConstantOperator.createNull(BooleanType.BOOLEAN);
+
+    @Test
+    public void testCloneOnlyFoldsLiteralConstants() {
+        for (ConstantOperator constant : List.of(ConstantOperator.createVarchar("provider"),
+                ConstantOperator.createNull(VarcharType.VARCHAR))) {
+            assertSame(constant, rule.apply(new CloneOperator(constant), null));
+        }
+        ColumnRefOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "value", true);
+        CloneOperator clone = new CloneOperator(column);
+        assertSame(clone, rule.apply(clone, null));
+        CloneOperator expression = new CloneOperator(new CallOperator("lower", VarcharType.VARCHAR, List.of(column)));
+        assertSame(expression, rule.apply(expression, null));
+    }
 
     @Test
     public void arrayElementAdaptationPreservesFullCharValues() {

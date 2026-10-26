@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -31,7 +32,6 @@ import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,6 +45,10 @@ public final class AiFunctionExtractor {
             return false;
         }
         return call.getFunction() != null && call.getFunction().isAi();
+    }
+
+    public static boolean isExecutableAICall(ScalarOperator expression) {
+        return isAICall(expression) && ((CallOperator) expression).getFunction() instanceof ScalarFunction;
     }
 
     public static boolean containsAI(ScalarOperator expression) {
@@ -123,8 +127,7 @@ public final class AiFunctionExtractor {
             return true;
         }
         if (expression instanceof CallOperator call
-                && FunctionSet.allNonDeterministicFunctions.contains(
-                        call.getFnName().toLowerCase(Locale.ROOT))) {
+                && FunctionSet.isNonDeterministicFunctionIncludingTime(call.getFunction(), call.getFnName())) {
             return true;
         }
         return expression.getChildren().stream()
@@ -138,6 +141,9 @@ public final class AiFunctionExtractor {
             return;
         }
         if (isAICall(expression)) {
+            if (!isExecutableAICall(expression)) {
+                throw new IllegalStateException("Semantic AI aggregate must be lowered before scalar extraction");
+            }
             CallOperator call = expression.cast();
             int semanticArity = Math.min(call.getFunction().getNumArgs(), call.getChildren().size());
             boolean hasNested = false;

@@ -111,6 +111,8 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/ai/ai_project_factory.cpp
     pipeline/ai/ai_project_operator.cpp
     pipeline/ai/ai_project_processor.cpp
+    pipeline/ai/ai_project_row_work.cpp
+    pipeline/ai/ai_aggregate_reduce_work.cpp
     pipeline/ai/ai_project_runtime.cpp
     pipeline/ai/ai_query_memory_account.cpp
     pipeline/capture_version_operator.cpp

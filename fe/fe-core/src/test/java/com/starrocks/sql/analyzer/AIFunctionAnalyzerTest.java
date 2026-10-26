@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
@@ -45,6 +46,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -71,6 +73,45 @@ public class AIFunctionAnalyzerTest {
         Config.ai_default_embedding_endpoint = "";
         Config.ai_default_embedding_model = "";
         Config.ai_default_embedding_provider = "";
+    }
+
+    @Test
+    public void testNondeterminismTraversalUsesResolvedFunctionIdentity() {
+        FunctionCallExpr expression = new FunctionCallExpr("ai_agg", List.of(new StringLiteral("text")));
+        Function function = new Function(new FunctionName("ai_agg"),
+                List.of(VarcharType.VARCHAR), VarcharType.VARCHAR, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        expression.setFn(function);
+        AnalyzerUtils.NonDeterministicAnalyzeVisitor visitor = new AnalyzerUtils.NonDeterministicAnalyzeVisitor();
+        visitor.visit(expression);
+        Assertions.assertFalse(visitor.getResult().first);
+    }
+
+    @Test
+    public void testMaterializedViewsRejectSemanticAggregateInQueryWrappers() {
+        for (String query : List.of(
+                "select ai_agg(ta, 'summarize') as answer from tall",
+                "with a as (select ai_agg(ta, 'summarize') as answer from tall) select answer from a",
+                "select answer from (select ai_agg(ta, 'summarize') as answer from tall) a",
+                "select ai_agg(ta, 'summarize') as answer from tall union all select ta from tall")) {
+            analyzeFail("create materialized view ai_agg_mv distributed by random as " + query,
+                    "nondeterministic function");
+        }
+    }
+
+    @Test
+    public void testAggregateArgumentsAndUnsupportedModifiers() {
+        analyzeSuccess("select ai_agg(ta, 'summarize') from tall");
+        analyzeSuccess("select ai_agg(ta, 'summarize', map{'temperature': 0.2}) from tall");
+        analyzeFail("select ai_agg(ta, ta) from tall", "constant instruction");
+        analyzeFail("select ai_agg(ta, '') from tall", "nonempty instruction");
+        analyzeFail("select ai_agg(ta, NULL) from tall", "nonempty instruction");
+        analyzeFail("select ai_agg(distinct ta, 'summarize') from tall");
+        analyzeFail("select ai_agg(ta, 'summarize') over () from tall");
+        analyzeFail("select __ai_collect_text(ta) from tall", "No matching function");
+        analyzeFail("select __ai_agg_reduce(ta, 'summarize') from tall", "No matching function");
+        analyzeFail("select ai_agg_state(ta, 'summarize') from tall", "No matching function");
+        analyzeFail("select ai_agg_if(ta, 'summarize', true) from tall", "No matching function");
     }
 
     @Test

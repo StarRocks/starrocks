@@ -741,7 +741,7 @@ public final class SqlToScalarOperatorTranslator {
 
             // for nonDeterministicFunctions, we need add an argument as its unique id to distinguish
             // the reusing behavior in common exprs
-            if (FunctionSet.nonDeterministicFunctions.contains(node.getFunctionName())) {
+            if (FunctionSet.isNonDeterministicFunction(node.getFn(), node.getFunctionName())) {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 

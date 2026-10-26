@@ -35,9 +35,17 @@ class RuntimeState;
 
 namespace pipeline {
 
+struct AIAggregateExecutionStatistics {
+    int64_t groups = 0;
+    int64_t empty_groups = 0;
+    int64_t leaf_requests = 0;
+    int64_t rounds = 0;
+    int64_t local_budget_errors = 0;
+};
+
 struct AIProjectPreparedOutput {
     SlotId slot_id = 0;
-    AIFunctionInputBatch input;
+    AIProjectInputBatch input;
     // Production projections insert an empty nullable placeholder in the
     // projected column order. Test projections may leave this false and let
     // materialization append the AI column.
@@ -114,8 +122,8 @@ public:
 // Fragment-shared state connecting AISink and AISource operators.
 //
 // At most one subchunk is active in each lane. A callback only publishes one
-// terminal row result and wakes the source; expression and column work remains
-// on the source driver.
+// terminal request result and wakes the source; row-work advancement, expression
+// evaluation, and column writes remain on the source driver.
 class AIProjectProcessor final {
 public:
     static StatusOr<std::shared_ptr<AIProjectProcessor>> create(std::shared_ptr<AIChunkBuffer> input_buffer,
@@ -141,6 +149,7 @@ public:
     StatusOr<bool> lane_finished(int32_t driver_sequence) const;
     bool pending_finish(int32_t driver_sequence) const;
     AIExecutionStatistics statistics(int32_t driver_sequence) const;
+    AIAggregateExecutionStatistics aggregate_statistics(int32_t driver_sequence) const;
     Status set_source_finished(int32_t driver_sequence);
 
     Status attach_source_observer(int32_t driver_sequence, RuntimeState* state, PipelineObserver* observer);
@@ -152,7 +161,7 @@ private:
     struct OutputState;
     struct ActiveSubchunk;
     struct Lane;
-    struct Submission;
+    struct RequestSlot;
     enum class TerminalKind : uint8_t;
 
     AIProjectProcessor(std::shared_ptr<AIChunkBuffer> input_buffer, std::shared_ptr<AIProjectProjection> projection,
@@ -161,21 +170,18 @@ private:
     StatusOr<std::shared_ptr<Lane>> _lane(int32_t driver_sequence) const;
     Status _prepare_and_submit(RuntimeState* state, int32_t driver_sequence, const std::shared_ptr<Lane>& lane,
                                ChunkPtr slice);
+    Status _advance(const std::shared_ptr<Lane>& lane, const std::shared_ptr<ActiveSubchunk>& subchunk);
     static void _complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                               size_t output_index, size_t row_index, AITaskResult result,
+                               size_t slot_index, AITaskResult result,
                                const AIExecutionStatistics& statistics) noexcept;
     static void _complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                                         size_t output_index, size_t row_index, const Status& status);
+                                         size_t slot_index, const Status& status);
     static StatusOr<ChunkPtr> _materialize(const std::shared_ptr<ActiveSubchunk>& subchunk, bool ignore_row_failures,
                                            AIExecutionStatistics* statistics);
 
     static Status _terminal_status(const Status& driver_status, TerminalKind terminal_kind);
     static Status _row_failure_status();
-    static void _dispose_subchunk_handles(const std::shared_ptr<Lane>& lane,
-                                          const std::shared_ptr<ActiveSubchunk>& subchunk,
-                                          bool cancel_unfinished) noexcept;
-    static void _release_subchunk_results(const std::shared_ptr<Lane>& lane,
-                                          const std::shared_ptr<ActiveSubchunk>& subchunk) noexcept;
+    static void _dispose_request_handles(const std::shared_ptr<Lane>& lane, bool cancel_unfinished) noexcept;
     static void _notify_source(PipeObservable* observable);
 
     std::shared_ptr<AIChunkBuffer> _input_buffer;

@@ -230,10 +230,21 @@ public:
 
     virtual void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
                                              size_t state_offset, const Filter& selection) const {
-        for (size_t i = 0; i < chunk_size; i++) {
-            if (selection[i] == 0) {
-                create(ctx, states[i] + state_offset);
+        size_t i = 0;
+        try {
+            for (; i < chunk_size; ++i) {
+                if (selection[i] == 0) {
+                    create(ctx, states[i] + state_offset);
+                }
             }
+        } catch (...) {
+            // A throwing create owns its own partial construction. Roll back only calls
+            // that returned successfully, excluding unselected rows and the throwing row.
+            SCOPED_SET_CATCHED(false);
+            for (size_t j = 0; j < i; ++j) {
+                if (selection[j] == 0) destroy(ctx, states[j] + state_offset);
+            }
+            throw;
         }
     }
 
@@ -473,10 +484,21 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
 public:
     void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
                                      size_t state_offset, const Filter& selection) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            if (selection[i] == 0) {
-                static_cast<const Derived*>(this)->create(ctx, states[i] + state_offset);
+        size_t i = 0;
+        try {
+            for (; i < chunk_size; ++i) {
+                if (selection[i] == 0) {
+                    static_cast<const Derived*>(this)->create(ctx, states[i] + state_offset);
+                }
             }
+        } catch (...) {
+            SCOPED_SET_CATCHED(false);
+            for (size_t j = 0; j < i; ++j) {
+                if (selection[j] == 0) {
+                    static_cast<const Derived*>(this)->destroy(ctx, states[j] + state_offset);
+                }
+            }
+            throw;
         }
     }
 

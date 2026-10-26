@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -23,6 +27,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -31,9 +36,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.AIInternalFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
@@ -81,6 +88,11 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
         if (root.getOp() instanceof LogicalAIProjectOperator) {
             return root;
         }
+        if (root.getOp() instanceof LogicalAggregationOperator aggregate
+                && aggregate.getAggregations().values().stream().anyMatch(AiFunctionExtractor::isAICall)) {
+            hasRewrite = true;
+            return rewriteBottomUp(lowerAggregate(root, aggregate, context), context);
+        }
         if (root.getOp() instanceof LogicalProjectOperator project
                 && project.getColumnRefMap().values().stream().anyMatch(AiFunctionExtractor::containsAI)) {
             hasRewrite = true;
@@ -100,6 +112,70 @@ public final class AIFunctionLoweringRule implements TreeRewriteRule {
                 && AiFunctionExtractor.containsAI(join.getOnPredicate())) {
             hasRewrite = true;
             return rewriteBottomUp(lowerJoin(root, join, context), context);
+        }
+        return root;
+    }
+
+    private OptExpression lowerAggregate(OptExpression input, LogicalAggregationOperator aggregate,
+                                         OptimizerContext context) {
+        Preconditions.checkState(aggregate.getType().isGlobal() && !aggregate.isSplit()
+                        && !aggregate.isTopNLocalAgg() && aggregate.getLocalLimit() == Operator.DEFAULT_LIMIT
+                        && aggregate.getAggTopnSortInfo() == null
+                        && (aggregate.getPredicateCommonOperators() == null
+                            || aggregate.getPredicateCommonOperators().isEmpty()),
+                "AI aggregates must be lowered before distributed aggregation rewrites");
+        Map<ColumnRefOperator, CallOperator> collectors = new LinkedHashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> outputs = new LinkedHashMap<>();
+        aggregate.getGroupingKeys().forEach(key -> outputs.put(key, key));
+        aggregate.getAggregations().forEach((output, call) -> {
+            if (!AiFunctionExtractor.isAICall(call)) {
+                collectors.put(output, call);
+                outputs.put(output, output);
+                return;
+            }
+            var descriptor = VectorizedBuiltinFunctions.getAIAggregateLoweringDescriptor(
+                    call.getFunction().getFunctionId());
+            Preconditions.checkState(descriptor != null && !call.isDistinct(), "Unsupported AI aggregate");
+            AggregateFunction collector = AIInternalFunctions.createTextCollector();
+            CallOperator collectorCall = new CallOperator(collector.functionName(), collector.getReturnType(),
+                    List.of(call.getChild(descriptor.textArgument())), collector);
+            ColumnRefOperator state = context.getColumnRefFactory().create("ai_aggregate_state",
+                    collector.getReturnType(), collectorCall.isNullable());
+            collectors.put(state, collectorCall);
+            List<ScalarOperator> arguments = new ArrayList<>();
+            arguments.add(state);
+            int providerArgument = VectorizedBuiltinFunctions.getAIFunctionDescriptor(
+                    call.getFunction().getFunctionId()).providerArgument();
+            if (providerArgument >= 0) {
+                arguments.add(call.getChild(providerArgument));
+            }
+            arguments.add(call.getChild(descriptor.instructionArgument()));
+            if (descriptor.optionsArgument() >= 0) {
+                arguments.add(call.getChild(descriptor.optionsArgument()));
+            }
+            ScalarFunction reducer = AIInternalFunctions.createReducer((AggregateFunction) call.getFunction(),
+                    arguments.stream().map(ScalarOperator::getType).toList());
+            // The optimizer's occurrence argument is identity only and never enters the executable signature.
+            Preconditions.checkState(call.getChildren().size() == call.getFunction().getNumArgs() + 1,
+                    "AI aggregate must retain its occurrence identity");
+            arguments.add(call.getChild(call.getFunction().getNumArgs()));
+            outputs.put(output, new CallOperator(reducer.functionName(), call.getType(), arguments, reducer));
+        });
+        LogicalAggregationOperator rewritten = new LogicalAggregationOperator.Builder()
+                .withOperator(aggregate)
+                .setAggregations(collectors)
+                .setPredicate(null)
+                .setProjection(null)
+                .setLimit(Operator.DEFAULT_LIMIT)
+                .build();
+        OptExpression root = derived(OptExpression.create(new LogicalAIProjectOperator(outputs),
+                derived(OptExpression.create(rewritten, input.getInputs()))));
+        if (aggregate.getPredicate() != null) {
+            root = derived(OptExpression.create(new LogicalFilterOperator(aggregate.getPredicate()), root));
+        }
+        root = AiFunctionExtractor.applyProjection(root, aggregate.getProjection());
+        if (aggregate.hasLimit()) {
+            root = derived(OptExpression.create(LogicalLimitOperator.init(aggregate.getLimit()), root));
         }
         return root;
     }

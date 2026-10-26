@@ -12,11 +12,13 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 AI 函数支持在 SQL 中调用已配置的模型服务。文本生成函数参见 [ai_complete](ai_complete.md)。
 
+分组文本汇总参见 [AI 聚合函数](ai_agg.md)。
+
 ## AI 函数权限 {/* #ai-function-privileges */}
 
 执行 AI 函数需要 `USAGE ON AI FUNCTION <function_name>` 或 `USAGE ON ALL AI FUNCTIONS`。使用 Provider 的调用还需要所选 AI PROVIDER 上的 `USAGE`，函数和 Provider 两类授权不能互相替代。
 
-这些授权覆盖 `ai_complete`、`ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter`、`ai_embed`、`ai_custom_query` 和 `ai_custom_embedding`。同一函数族的所有重载共用授权。
+这些授权覆盖 `ai_complete`、`ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter`、`ai_embed`、`ai_custom_query`、`ai_custom_embedding`、`ai_agg` 和 `ai_custom_agg`。同一函数族的所有重载共用授权。
 
 `ON ALL AI FUNCTIONS` 覆盖当前及未来的公开 AI 函数族。带有 `WITH GRANT OPTION` 时，可以转授单个函数族或全部函数族的使用权限。撤销单个函数族的授权不会抵消独立持有的全域授权；撤销全域授权也不会删除单独授予的函数族权限。
 

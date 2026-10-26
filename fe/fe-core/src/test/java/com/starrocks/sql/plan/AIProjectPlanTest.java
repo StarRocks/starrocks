@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.base.Stopwatch;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -81,6 +82,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -137,6 +139,21 @@ public class AIProjectPlanTest extends PlanTestBase {
         Config.ai_default_chat_endpoint = oldEndpoint;
         Config.ai_default_chat_model = oldModel;
         Config.ai_default_chat_provider = oldProvider;
+    }
+
+    @Test
+    public void testSameNameNonAICommonExpressionUsesResolvedIdentity() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
+        AIProjectNode project = findOnlyAIProjectNode(plan);
+        TupleDescriptor tuple = plan.getDescTbl().getTupleDesc(project.getTupleIds().get(0));
+        ScalarFunction function = ScalarFunction.createVectorizedBuiltin(900001, "ai_agg",
+                List.of(VarcharType.VARCHAR), false, VarcharType.VARCHAR);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        FunctionCallExpr expression = new FunctionCallExpr("ai_agg", List.of(new StringLiteral("text")));
+        expression.setFn(function);
+        expression.setType(VarcharType.VARCHAR);
+        Assertions.assertDoesNotThrow(() -> new AIProjectNode(plan.getNextNodeId(), tuple, project.getChild(0),
+                project.getSlotMap(), Map.of(new SlotId(900001), expression), plan.getOrCreateSystemChatConfig()));
     }
 
     @Test

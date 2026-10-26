@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/scoped_cleanup.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/array_column.h"
@@ -270,11 +271,30 @@ Status SortedStreamingAggregator::open(RuntimeState* state) {
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size, bool is_update_phase) {
     if (chunk_size == 0) {
+        RETURN_IF_ERROR(check_has_error());
         return std::make_shared<Chunk>();
     }
 
+    TRY_CATCH_ALLOC_SCOPE_START()
+    Filter selector;
+    bool batch_created = false;
+    auto cleanup = MakeScopedCleanup([&] {
+        SCOPED_SET_CATCHED(false);
+        if (batch_created) {
+            // selector marks one row per completed group, even when several rows share its state.
+            // The final group is deliberately excluded and is owned separately until success.
+            _close_group_by(chunk_size, selector);
+            _destroy_state(_tmp_agg_states[chunk_size - 1]);
+        } else if (_last_state != nullptr) {
+            _destroy_state(_last_state);
+        }
+        _last_state = nullptr;
+        _last_columns.clear();
+    });
+    RETURN_IF_ERROR(check_has_error());
     _tmp_agg_states.resize(chunk_size);
     _cmp_vector.resize(chunk_size);
+    selector.resize(chunk_size);
 
     if (_last_columns.empty()) {
         _last_columns.resize(_group_by_columns.size());
@@ -284,42 +304,36 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     }
 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
-
+    _init_selector(selector, chunk_size);
+    RETURN_IF_ERROR(_create_states(chunk_size));
+    batch_created = true;
+    RETURN_IF_ERROR(check_has_error());
     RETURN_IF_ERROR(_update_states(chunk_size, is_update_phase));
 
-    // selector[i] == 0 means selected
-    Filter selector(chunk_size);
-    _init_selector(selector, chunk_size);
-
-    // finalize state
-    // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
-    // get result from aggregate values. such as count(*), sum(col)
     bool use_intermediate = _use_intermediate_as_output();
     auto agg_result_columns = _create_agg_result_columns(chunk_size, use_intermediate);
     RETURN_IF_ERROR(_get_agg_result_columns(chunk_size, selector, agg_result_columns));
-
+    RETURN_IF_ERROR(check_has_error());
     DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
 
-    _close_group_by(chunk_size, selector);
-
-    // combine group by keys
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
     auto result_chunk =
             _build_output_chunk(std::move(res_group_by_columns), std::move(agg_result_columns), use_intermediate);
 
-    // prepare for next
+    // Keep all states owned by cleanup until output construction and next-group key copies succeed.
     for (size_t i = 0; i < _last_columns.size(); ++i) {
-        // last column should never be the same column with new input column
         DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
         _last_columns[i]->as_mutable_raw_ptr()->reset_column();
         _last_columns[i]->as_mutable_raw_ptr()->append(*_group_by_columns[i], chunk_size - 1, 1);
     }
+    _close_group_by(chunk_size, selector);
     _last_state = _tmp_agg_states[chunk_size - 1];
+    cleanup.cancel();
     DCHECK(!_group_by_columns[0]->empty());
     DCHECK(!_last_columns[0]->empty());
-
     return result_chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
 }
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t chunk_size) {
@@ -377,53 +391,58 @@ Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_update) {
+Status SortedStreamingAggregator::_create_states(size_t chunk_size) {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
-    // TODO: split the states
-    // allocate state stage
-    {
-        SCOPED_TIMER(_agg_stat->allocate_state_timer);
-        auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
-        AggDataPtr last_state = _last_state;
-        size_t cnt = 0;
-        //
-        for (size_t i = 0; i < _cmp_vector.size(); ++i) {
-            if (_cmp_vector[i] == 0) {
-                _tmp_agg_states[i] = last_state;
-            } else {
-                _tmp_agg_states[i] = batch_allocated_states + cnt++ * _agg_states_total_size;
-            }
-            last_state = _tmp_agg_states[i];
+    SCOPED_TIMER(_agg_stat->allocate_state_timer);
+    auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
+    AggDataPtr last_state = _last_state;
+    size_t count = 0;
+    Filter create_selector(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
+        if (_cmp_vector[i] == 0) {
+            _tmp_agg_states[i] = last_state;
+        } else {
+            _tmp_agg_states[i] = batch_allocated_states + count++ * _agg_states_total_size;
         }
-
-        // only create the state when selector == 0
-        Filter create_selector(chunk_size);
-        for (size_t i = 0; i < _cmp_vector.size(); ++i) {
-            create_selector[i] = _cmp_vector[i] == 0;
-        }
-
-        //
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            _agg_functions[i]->batch_create_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                           _agg_states_offsets[i], create_selector);
-        }
+        last_state = _tmp_agg_states[i];
+        // Existing tail and repeated rows never participate in construction rollback.
+        create_selector[i] = _cmp_vector[i] == 0;
     }
 
-    // prepare output column
-    // batch_update/merge stage
-    {
-        SCOPED_TIMER(_agg_stat->agg_compute_timer);
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            if (!_is_merge_funcs[i] && is_update) {
-                _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
-            } else {
-                DCHECK_GE(_agg_input_columns[i].size(), 1);
-                _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
-                                               _agg_states_offsets[i], _agg_input_columns[i][0].get(),
-                                               _tmp_agg_states.data());
-            }
+    size_t created_functions = 0;
+    try {
+        for (; created_functions < _agg_fn_ctxs.size(); ++created_functions) {
+            _agg_functions[created_functions]->batch_create_with_selection(
+                    _agg_fn_ctxs[created_functions], chunk_size, _tmp_agg_states,
+                    _agg_states_offsets[created_functions], create_selector);
         }
+    } catch (...) {
+        // The throwing function rolls back its own completed selected prefix. Earlier
+        // functions completed the whole batch and are the only ones owned here.
+        SCOPED_SET_CATCHED(false);
+        for (size_t i = 0; i < created_functions; ++i) {
+            _agg_functions[i]->batch_destroy_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
+                                                            _agg_states_offsets[i], create_selector);
+        }
+        throw;
+    }
+    return Status::OK();
+}
+
+Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_update) {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+    SCOPED_TIMER(_agg_stat->agg_compute_timer);
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        if (!_is_merge_funcs[i] && is_update) {
+            _agg_functions[i]->update_batch_exception_safe(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
+                                                           _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
+        } else {
+            DCHECK_GE(_agg_input_columns[i].size(), 1);
+            _agg_functions[i]->merge_batch_exception_safe(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
+                                                          _agg_states_offsets[i], _agg_input_columns[i][0].get(),
+                                                          _tmp_agg_states.data());
+        }
+        RETURN_IF_ERROR(check_has_error());
     }
     return Status::OK();
 }
@@ -440,6 +459,7 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
         } else {
             _finalize_to_chunk(_last_state, agg_result_columns);
         }
+        RETURN_IF_ERROR(check_has_error());
     }
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -452,6 +472,7 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
                                                              _agg_states_offsets[i], agg_result_columns[i].get(),
                                                              selector);
         }
+        RETURN_IF_ERROR(check_has_error());
     }
     TRY_CATCH_ALLOC_SCOPE_END();
     return Status::OK();
@@ -489,24 +510,39 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, con
 }
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+    auto cleanup = MakeScopedCleanup([&] {
+        SCOPED_SET_CATCHED(false);
+        if (_last_state != nullptr) _destroy_state(_last_state);
+        _last_state = nullptr;
+        _last_columns.clear();
+    });
+    RETURN_IF_ERROR(check_has_error());
     if (_last_state == nullptr && _last_columns.empty()) {
         return nullptr;
     }
-    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     bool use_intermediate = _use_intermediate_as_output();
     auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
-    auto group_by_columns = _last_columns;
     if (use_intermediate) {
-        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_last_state, agg_result_columns));
+        _serialize_to_chunk(_last_state, agg_result_columns);
     } else {
-        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
+        _finalize_to_chunk(_last_state, agg_result_columns);
     }
-    _destroy_state(_last_state);
-    _last_state = nullptr;
-    _last_columns.clear();
-
-    return _build_output_chunk(group_by_columns, ColumnHelper::to_columns(std::move(agg_result_columns)),
+    RETURN_IF_ERROR(check_has_error());
+    return _build_output_chunk(_last_columns, ColumnHelper::to_columns(std::move(agg_result_columns)),
                                use_intermediate);
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+void SortedStreamingAggregator::_destroy_aggregate_states() {
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+    if (_last_state != nullptr) {
+        _destroy_state(_last_state);
+        _last_state = nullptr;
+    }
+    _last_columns.clear();
+    Aggregator::_destroy_aggregate_states();
 }
 
 } // namespace starrocks

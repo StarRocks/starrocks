@@ -772,16 +772,8 @@ void Aggregator::close(RuntimeState* state) {
     auto agg_close = [this, state]() {
         // _mem_pool is nullptr means prepare phase failed
         if (_mem_pool != nullptr) {
-            // Note: we must free agg_states object before _mem_pool free_all;
-            if (_single_agg_state != nullptr) {
-                SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
-                for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
-                }
-            } else if (!_is_only_group_by_columns) {
-                _release_agg_memory();
-            }
-
+            // Keep every state owner's cleanup in the existing native/Java UDAF close domain.
+            _destroy_aggregate_states();
             _mem_pool->free_all();
         }
 
@@ -1919,6 +1911,18 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
     });
+}
+
+void Aggregator::_destroy_aggregate_states() {
+    // Note: aggregate objects must be destroyed before _mem_pool->free_all().
+    if (_single_agg_state != nullptr) {
+        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+        for (int i = 0; i < _agg_functions.size(); i++) {
+            _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+        }
+    } else if (!_is_only_group_by_columns) {
+        _release_agg_memory();
+    }
 }
 
 void Aggregator::_release_agg_memory() {

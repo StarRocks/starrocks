@@ -85,6 +85,21 @@ final class AIFunctionAnalyzer {
         if (modelArgument >= 0) {
             validateExplicitModel(node.getChild(modelArgument), node);
         }
+        VectorizedBuiltinFunctions.AIAggregateLoweringDescriptor aggregate =
+                VectorizedBuiltinFunctions.getAIAggregateLoweringDescriptor(node.getFn().getFunctionId());
+        if (aggregate != null) {
+            if (node.isDistinct() || node.getParams().getOrderByElemNum() != 0) {
+                throw new SemanticException(node.getFunctionName() + " does not support DISTINCT or ORDER BY", node.getPos());
+            }
+            Expr instruction = node.getChild(aggregate.instructionArgument());
+            if (!instruction.isConstant()) {
+                throw new SemanticException(node.getFunctionName() + " requires a constant instruction", node.getPos());
+            }
+            Expr folded = unwrapCasts(foldAIConstant(instruction));
+            if (!(folded instanceof StringLiteral literal) || literal.getValue().isBlank()) {
+                throw new SemanticException(node.getFunctionName() + " requires a nonempty instruction", node.getPos());
+            }
+        }
         // Function analysis precedes argument coercion, including VARCHAR/JSON to ARRAY casts.
         for (int i = 0; i < argumentCount; i++) {
             if (node.getFn().getArgs()[i].isArrayType()) {

@@ -97,6 +97,7 @@ private:
     Status _finish_status;
     bool _is_finished = false;
     std::array<RuntimeProfile::Counter*, 12> _ai_counters{};
+    std::array<RuntimeProfile::Counter*, 5> _aggregate_counters{};
 };
 
 class AISourceOperatorFactory final : public SourceOperatorFactory {

@@ -877,6 +877,24 @@ public class FunctionSet {
             .addAll(nonDeterministicTimeFunctions)
             .build();
 
+    public static boolean isNonDeterministicFunction(Function function, String name) {
+        return isNonDeterministicFunction(function, name, nonDeterministicFunctions);
+    }
+
+    public static boolean isNonDeterministicFunctionIncludingTime(Function function, String name) {
+        return isNonDeterministicFunction(function, name, allNonDeterministicFunctions);
+    }
+
+    private static boolean isNonDeterministicFunction(Function function, String name, Set<String> names) {
+        if (function != null && function.isAi()) {
+            return true;
+        }
+        String normalized = name.toLowerCase(Locale.ROOT);
+        // Names are conservative before resolution; an unrelated resolved UDF does not inherit AI semantics.
+        return names.contains(normalized)
+                && (function == null || !VectorizedBuiltinFunctions.AI_FUNCTION_NAMES.contains(normalized));
+    }
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.LEAD)
             .add(FunctionSet.LAG)
@@ -1298,6 +1316,18 @@ public class FunctionSet {
         fn.setBinaryType(TFunctionBinaryType.AI);
         fn.setAiModelSource(modelSource);
         addVectorizedBuiltin(fn);
+    }
+
+    public void addVectorizedAIAggregateBuiltin(long fid, String fnName, TAIModelSource modelSource,
+                                              Type retType, Type... args) {
+        AggregateFunction fn = AggregateFunction.createBuiltin(fnName, Arrays.asList(args), retType,
+                VarbinaryType.VARBINARY, false, false, false);
+        fn.setFunctionId(fid);
+        fn.setId(fid);
+        fn.setUserVisible(true);
+        fn.setBinaryType(TFunctionBinaryType.AI);
+        fn.setAiModelSource(modelSource);
+        addBuiltin(fn);
     }
 
     private void addVectorizedBuiltin(Function fn) {

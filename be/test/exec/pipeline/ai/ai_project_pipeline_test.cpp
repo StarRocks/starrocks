@@ -1412,12 +1412,15 @@ TEST_F(AIProjectPipelineTest, ProductionProjectionEvaluatesCommonBeforeAiAndPres
     ASSERT_EQ(1, prepared.ai_outputs.size());
     EXPECT_EQ(kAnswerSlotId, prepared.ai_outputs.front().slot_id);
     EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
-    ASSERT_EQ(3, prepared.ai_outputs.front().input.rows.size());
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[0].action);
-    EXPECT_EQ("prompt-0", prepared.ai_outputs.front().input.rows[0].prompt);
-    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, prepared.ai_outputs.front().input.rows[1].action);
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[2].action);
-    EXPECT_EQ("prompt-2", prepared.ai_outputs.front().input.rows[2].prompt);
+    ASSERT_EQ(3, std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[0].action);
+    EXPECT_EQ("prompt-0", std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[0].prompt);
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[1].action);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[2].action);
+    EXPECT_EQ("prompt-2", std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[2].prompt);
 
     EXPECT_EQ(71, prepared.output_chunk->owner_info().owner_id());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
@@ -1453,7 +1456,7 @@ TEST_F(AIProjectPipelineTest, ZeroRowLastChunkSkipsExpressionEvaluationAndProduc
     EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
     ASSERT_EQ(1, prepared.ai_outputs.size());
     EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
-    EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+    EXPECT_TRUE(std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.empty());
     EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
@@ -1495,7 +1498,7 @@ TEST_F(AIProjectPipelineTest, ValidConstantArrayPreservesZeroRowOutputAcrossDriv
         EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
         ASSERT_EQ(1, prepared.ai_outputs.size());
         EXPECT_EQ(TYPE_JSON, prepared.ai_outputs.front().result_type.type);
-        EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+        EXPECT_TRUE(std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.empty());
         EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
         EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
         EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
@@ -1712,24 +1715,23 @@ TEST_F(AIProjectPipelineTest, MixedSystemAndProviderRoutesKeepCredentialsAndType
         const bool embedding = request.url == embed_endpoint;
         const bool custom_chat = request.url == chat_endpoint;
         EXPECT_TRUE(embedding || custom_chat || request.url == kEndpointSentinel);
-        const std::string key = embedding ? "embed-provider-secret"
-                                          : custom_chat ? "chat-provider-secret" : std::string(kSecretSentinel);
+        const std::string key = embedding     ? "embed-provider-secret"
+                                : custom_chat ? "chat-provider-secret"
+                                              : std::string(kSecretSentinel);
         EXPECT_NE(request.headers.end(),
                   std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
                       return header.name == "Authorization" && header.value == "Bearer " + key;
                   }));
-        EXPECT_NE(std::string::npos,
-                  request.body.find(embedding ? "provider-embed-model"
-                                              : custom_chat ? "provider-chat-model" : kModelSentinel));
+        EXPECT_NE(std::string::npos, request.body.find(embedding     ? "provider-embed-model"
+                                                       : custom_chat ? "provider-chat-model"
+                                                                     : kModelSentinel));
         EXPECT_NE(std::string::npos, request.body.find(embedding ? "\"input\"" : "\"messages\""));
     }
     while (_http.pending_count() != 0) {
         const auto& url = _http.request().url;
-        _http.complete_next(url == embed_endpoint
-                                    ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
-                                    : url == chat_endpoint
-                                              ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
-                                              : R"({"choices":[{"message":{"content":"system answer"}}]})");
+        _http.complete_next(url == embed_endpoint  ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
+                            : url == chat_endpoint ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
+                                                   : R"({"choices":[{"message":{"content":"system answer"}}]})");
         _completion.run_until_idle();
         _control.run_until_idle();
     }
@@ -1866,12 +1868,12 @@ TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntime
     ASSERT_TRUE(rejected.ok()) << rejected.status();
     ASSERT_EQ(1, accepted->ai_outputs.size());
     ASSERT_EQ(1, rejected->ai_outputs.size());
-    const auto& accepted_row = accepted->ai_outputs.front().input.rows.front();
+    const auto& accepted_row = std::get<AIFunctionInputBatch>(accepted->ai_outputs.front().input).rows.front();
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, accepted_row.action);
     ASSERT_TRUE(accepted_row.media.has_value());
     input.reset();
     EXPECT_EQ(png, accepted_row.media->bytes);
-    const auto& rejected_row = rejected->ai_outputs.front().input.rows.front();
+    const auto& rejected_row = std::get<AIFunctionInputBatch>(rejected->ai_outputs.front().input).rows.front();
     EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rejected_row.action);
     EXPECT_FALSE(rejected_row.media.has_value());
     original.value()->close(_runtime_state.get());

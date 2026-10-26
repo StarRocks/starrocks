@@ -427,14 +427,11 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             if (ai_expression == nullptr) {
                 return invalid_projection();
             }
-            ASSIGN_OR_RETURN(AIFunctionInputBatch batch,
+            ASSIGN_OR_RETURN(AIProjectInputBatch batch,
                              ai_expression->build_input_batch(
                                      context, input.get(),
                                      _spec.model_configs().at(std::string(ai_expression->model_config_id())).model,
                                      _max_input_file_bytes));
-            if (batch.rows.size() != rows) {
-                return Status::InternalError("AI project expression returned an invalid input batch");
-            }
             RETURN_IF_ERROR(context->get_udf_error());
 
             MutableColumnPtr placeholder = ColumnHelper::create_column(context->root()->type(), true);

@@ -232,6 +232,7 @@ public class AggregateFunction extends Function {
         newFn.setFunctionId(this.getFunctionId());
         newFn.setChecksum(this.getChecksum());
         newFn.setBinaryType(this.getBinaryType());
+        newFn.setAiModelSource(this.getAiModelSource());
         newFn.setHasVarArgs(this.hasVarArgs());
         newFn.setId(this.getId());
         newFn.setUserVisible(this.isUserVisible());

@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.rule.transformation.AIInternalFunctions;
 import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -33,11 +34,13 @@ import com.starrocks.type.InvalidType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -57,6 +60,44 @@ public class FunctionSetTest {
     public void setUp() {
         functionSet = new FunctionSet();
         functionSet.init();
+    }
+
+    @Test
+    public void testAIAggregatesPreserveRoutingAndHideImplementation() {
+        for (String name : List.of("ai_agg", "ai_custom_agg")) {
+            boolean custom = name.equals("ai_custom_agg");
+            List<Type> args = new ArrayList<>(List.of(VarcharType.VARCHAR, VarcharType.VARCHAR));
+            if (custom) {
+                args.add(VarcharType.VARCHAR);
+            }
+            args.add(new MapType(VarcharType.VARCHAR, FloatType.DOUBLE));
+            Function description = new Function(new FunctionName(name), args, InvalidType.INVALID, false);
+            Function fn = functionSet.getFunction(description, Function.CompareMode.IS_SUPERTYPE_OF);
+            Assertions.assertInstanceOf(AggregateFunction.class, fn);
+            Assertions.assertTrue(fn.isAi());
+            TAIModelSource source = custom ? TAIModelSource.PROVIDER : TAIModelSource.SYSTEM;
+            Assertions.assertEquals(source, fn.getAiModelSource());
+            Assertions.assertEquals(source, fn.copy().getAiModelSource());
+            Assertions.assertEquals(source, fn.toThrift().getAi_model_source());
+            Assertions.assertFalse(((AggregateFunction) fn).isAnalyticFn());
+            Assertions.assertEquals(VarbinaryType.VARBINARY, ((AggregateFunction) fn).getIntermediateType());
+            for (String suffix : List.of("_state", "_merge", "_union", "_if")) {
+                Assertions.assertFalse(functionSet.isAggregateFunction(name + suffix));
+            }
+        }
+        for (String name : List.of("__ai_collect_text", "__ai_agg_reduce", "__ai_custom_agg_reduce")) {
+            List<Type> args = new ArrayList<>();
+            args.add(name.equals("__ai_collect_text") ? VarcharType.VARCHAR : VarbinaryType.VARBINARY);
+            if (!name.equals("__ai_collect_text")) {
+                args.add(VarcharType.VARCHAR);
+            }
+            if (name.equals("__ai_custom_agg_reduce")) {
+                args.add(VarcharType.VARCHAR);
+            }
+            Assertions.assertNull(functionSet.getFunction(new Function(new FunctionName(name),
+                    args, InvalidType.INVALID, false), Function.CompareMode.IS_SUPERTYPE_OF));
+        }
+        Assertions.assertNotSame(AIInternalFunctions.createTextCollector(), AIInternalFunctions.createTextCollector());
     }
 
     @Test

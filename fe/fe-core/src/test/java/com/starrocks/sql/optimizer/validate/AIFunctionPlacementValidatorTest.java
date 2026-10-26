@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.validate;
 
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,19 @@ import java.util.List;
 import java.util.Map;
 
 public class AIFunctionPlacementValidatorTest {
+    @Test
+    public void testSemanticAggregateCannotBeAnExecutableProjectOutput() {
+        ColumnRefOperator input = new ColumnRefOperator(1, VarcharType.VARCHAR, "input", true);
+        ColumnRefOperator output = new ColumnRefOperator(2, VarcharType.VARCHAR, "output", true);
+        AggregateFunction function = AggregateFunction.createBuiltin("ai_agg", List.of(VarcharType.VARCHAR),
+                VarcharType.VARCHAR, VarbinaryType.VARBINARY, false, false, false);
+        function.setBinaryType(TFunctionBinaryType.AI);
+        CallOperator call = new CallOperator("ai_agg", VarcharType.VARCHAR, List.of(input), function);
+        assertInvalid(OptExpression.create(new LogicalAIProjectOperator(Map.of(output, call)), values(input)));
+        assertInvalid(OptExpression.create(new PhysicalAIProjectOperator(Map.of(output, call), Map.of()),
+                physicalValues(input)));
+    }
+
     @Test
     public void testOnlyDirectAIProjectOutputsMayContainAIFunctions() {
         ColumnRefOperator input = new ColumnRefOperator(1, VarcharType.VARCHAR, "input", true);

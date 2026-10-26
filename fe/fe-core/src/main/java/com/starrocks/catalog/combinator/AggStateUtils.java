@@ -17,6 +17,7 @@ package com.starrocks.catalog.combinator;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
+import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -77,7 +78,8 @@ public class AggStateUtils {
      * @return true if the aggregate function is supported in the combinator
      */
     public static boolean isSupportedAggStateFunction(AggregateFunction aggFunc, boolean isAggIf) {
-        if (aggFunc == null) {
+        if (aggFunc == null || aggFunc.isAi()
+                && VectorizedBuiltinFunctions.getAIAggregateLoweringDescriptor(aggFunc.getFunctionId()) != null) {
             return false;
         }
         // unsupported functions or only used in analytic functions

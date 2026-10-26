@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -48,6 +50,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -103,6 +106,84 @@ public class AIProjectExtractionRuleTest {
         Config.ai_default_chat_endpoint = "";
         Config.ai_default_chat_model = "";
         Config.ai_default_chat_provider = "";
+    }
+
+    @Test
+    public void testOrdinaryRollupSumKeepsUnmodifiedInputThroughRepeat() {
+        RuleInput input = ruleInput("select tb, sum(tb) from tall group by rollup(tb)");
+        OptExpression root = input.logicalPlan.getRoot();
+        LogicalAggregationOperator aggregate = findOperators(root, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
+        LogicalRepeatOperator repeat = findOperators(root, OperatorType.LOGICAL_REPEAT).get(0).getOp().cast();
+        CallOperator sum = aggregate.getAggregations().values().iterator().next();
+        ColumnRefOperator sumInput = Assertions.assertInstanceOf(ColumnRefOperator.class, sum.getChild(0));
+        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
+                .noneMatch(sumInput::equals));
+        ScalarOperator clonedInput = findOperators(root, OperatorType.LOGICAL_PROJECT).stream()
+                .map(node -> (LogicalProjectOperator) node.getOp())
+                .map(project -> project.getColumnRefMap().get(sumInput)).filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        CloneOperator clone = Assertions.assertInstanceOf(CloneOperator.class, clonedInput);
+        Assertions.assertInstanceOf(ColumnRefOperator.class, clone.getChild(0));
+        Assertions.assertTrue(repeat.getRepeatColumnRef().stream().flatMap(List::stream)
+                .anyMatch(clone.getChild(0)::equals));
+    }
+
+    @Test
+    public void testAggregateDecorationsAreRestoredAfterReduction() {
+        RuleInput input = ruleInput("select ai_agg(ta, 'summarize') from tall");
+        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
+        LogicalAggregationOperator aggregate = aggregateExpression.getOp().cast();
+        ColumnRefOperator result = aggregate.getAggregations().keySet().iterator().next();
+        ColumnRefOperator projected = input.optimizerContext.getColumnRefFactory()
+                .create("projected", VarcharType.VARCHAR, true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.NE, result,
+                ConstantOperator.createVarchar(""));
+        LogicalAggregationOperator decorated = new LogicalAggregationOperator.Builder().withOperator(aggregate)
+                .setPredicate(predicate).setProjection(new Projection(Map.of(projected, result))).setLimit(5).build();
+        OptExpression lowered = lowerExpression(OptExpression.create(decorated, aggregateExpression.getInputs()),
+                input.optimizerContext);
+        Assertions.assertInstanceOf(LogicalLimitOperator.class, lowered.getOp());
+        Assertions.assertEquals(5, lowered.getOp().getLimit());
+        LogicalProjectOperator projection = lowered.inputAt(0).getOp().cast();
+        Assertions.assertEquals(Map.of(projected, result), projection.getColumnRefMap());
+        Assertions.assertSame(predicate, lowered.inputAt(0).inputAt(0).getOp().getPredicate());
+        LogicalAggregationOperator collector = findOperators(lowered, OperatorType.LOGICAL_AGGR).get(0).getOp().cast();
+        Assertions.assertNull(collector.getPredicate());
+        Assertions.assertNull(collector.getProjection());
+        Assertions.assertFalse(collector.hasLimit());
+        Assertions.assertEquals(new ColumnRefSet(List.of(projected)), lowered.getOutputColumns());
+        assertAIOnlyInAIProject(lowered);
+    }
+
+    @Test
+    public void testAggregateLoweringPreservesOutputAndOccurrenceIdentity() {
+        RuleInput input = ruleInput("select ta, count(*), ai_agg(cast(tb as varchar), 'summarize'), "
+                + "ai_agg(cast(tb as varchar), 'summarize') from tall group by ta");
+        OptExpression aggregateExpression = findOperators(input.logicalPlan.getRoot(), OperatorType.LOGICAL_AGGR).get(0);
+        LogicalAggregationOperator original = aggregateExpression.getOp().cast();
+        Assertions.assertEquals(3, original.getAggregations().size());
+        OptExpression lowered = lowerExpression(aggregateExpression, input.optimizerContext);
+        LogicalAIProjectOperator project = lowered.getOp().cast();
+        LogicalAggregationOperator collector = lowered.inputAt(0).getOp().cast();
+        Assertions.assertSame(aggregateExpression.inputAt(0), lowered.inputAt(0).inputAt(0));
+        Assertions.assertEquals(original.getGroupingKeys(), collector.getGroupingKeys());
+        Assertions.assertEquals(original.getPartitionByColumns(), collector.getPartitionByColumns());
+        Assertions.assertEquals(original.getOutputColumns(new com.starrocks.sql.optimizer.ExpressionContext(
+                aggregateExpression)), lowered.getOutputColumns());
+        original.getAggregations().forEach((output, call) -> {
+            if (call.getFunction().isAi()) {
+                CallOperator reducer = project.getColumnRefMap().get(output).cast();
+                Assertions.assertEquals("__ai_agg_reduce", reducer.getFnName());
+                Assertions.assertSame(call.getChild(2), reducer.getChild(2));
+                Assertions.assertEquals("__ai_collect_text",
+                        collector.getAggregations().get(reducer.getChild(0)).getFnName());
+                Assertions.assertFalse(project.getColumnRefMap().containsKey(reducer.getChild(0)));
+            } else {
+                Assertions.assertSame(call, collector.getAggregations().get(output));
+                Assertions.assertSame(output, project.getColumnRefMap().get(output));
+            }
+        });
+        assertAIOnlyInAIProject(lowered);
     }
 
     @Test

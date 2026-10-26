@@ -141,6 +141,22 @@ ${ai_descriptors}
         return AI_FUNCTION_DESCRIPTORS.get(functionId);
     }
 
+    public static final long AI_TEXT_COLLECTOR_ID = ${collector_id}L;
+    public static final String AI_TEXT_COLLECTOR_NAME = "${collector_name}";
+
+    public record AIAggregateLoweringDescriptor(int textArgument, int instructionArgument, int optionsArgument,
+                                                long reducerFunctionId, String reducerFunctionName) {
+    }
+
+    private static final Map<Long, AIAggregateLoweringDescriptor> AI_AGGREGATE_LOWERING_DESCRIPTORS =
+            ImmutableMap.<Long, AIAggregateLoweringDescriptor>builder()
+${ai_aggregate_descriptors}
+                    .build();
+
+    public static AIAggregateLoweringDescriptor getAIAggregateLoweringDescriptor(long functionId) {
+        return AI_AGGREGATE_LOWERING_DESCRIPTORS.get(functionId);
+    }
+
     public static void initBuiltins(FunctionSet functionSet) {
         ${functions}
   }
@@ -238,7 +254,63 @@ AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
 }
-AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE',
+                     'VARBINARY': 'AGG_STATE'}
+
+
+def validate_ai_routing(fn_data, metadata):
+    args = fn_data[5]
+    def invalid(message):
+        raise ValueError(f"Invalid AI function {fn_data[0]}: {message}")
+    if metadata.get('model_source') not in ('SYSTEM', 'PROVIDER'):
+        invalid('unsupported model source')
+    if metadata.get('capability') not in ('CHAT', 'TEXT_EMBEDDING'):
+        invalid('unsupported capability')
+    for field in ('model_argument', 'provider_argument'):
+        index = metadata.setdefault(field, -1)
+        if type(index) is not int or index < -1 or index >= len(args):
+            invalid(f'{field} is out of range')
+        if index >= 0 and args[index] != 'VARCHAR':
+            invalid(f'{field} must refer to a VARCHAR')
+    if (metadata['model_source'] == 'PROVIDER') != (metadata['provider_argument'] >= 0):
+        invalid('AI model source must have a Provider selector')
+    if metadata['provider_argument'] >= 0 and metadata['model_argument'] >= 0:
+        invalid('Provider selector is not an explicit provider model')
+
+
+def add_ai_aggregate_function(fn_data):
+    if len(fn_data) != 8 or not isinstance(fn_data[7], dict):
+        raise ValueError(f"Invalid AI aggregate metadata: {fn_data[0]}")
+    metadata = dict(fn_data[7])
+    required = {'model_source', 'capability', 'model_argument', 'provider_argument',
+                'text_argument', 'instruction_argument', 'reducer_function_id'}
+    if metadata.keys() != required:
+        raise ValueError(f"Missing or unknown AI aggregate metadata: {fn_data[0]}")
+    if any(type(metadata[field]) is not int for field in
+           ('text_argument', 'instruction_argument', 'reducer_function_id')):
+        raise ValueError(f"Invalid AI aggregate argument roles: {fn_data[0]}")
+    validate_ai_routing(fn_data, metadata)
+    args = fn_data[5]
+    roles = [metadata['text_argument'], metadata['instruction_argument']]
+    if metadata['provider_argument'] >= 0:
+        roles.append(metadata['provider_argument'])
+    options = [i for i, arg in enumerate(args) if arg == 'ANY_MAP']
+    if (fn_data[4] != 'VARCHAR' or metadata['capability'] != 'CHAT' or metadata['model_argument'] != -1
+            or len(options) > 1 or (options and options[0] != len(args) - 1)
+            or sorted(roles + options) != list(range(len(args)))
+            or any(args[i] != 'VARCHAR' for i in roles)):
+        raise ValueError(f"Invalid AI aggregate signature: {fn_data[0]}")
+    reducer = next((fn for fn in function_list if fn['id'] == metadata['reducer_function_id']), None)
+    expected_args = ['VARBINARY'] + (['VARCHAR'] if metadata['provider_argument'] >= 0 else []) + ['VARCHAR']
+    if options:
+        expected_args.append('ANY_MAP')
+    if (reducer is None or reducer.get('ai', {}).get('execution_kind') != 'AGGREGATE_REDUCE'
+            or reducer['args'] != expected_args or reducer['model_source'] != metadata['model_source']):
+        raise ValueError(f"Invalid AI aggregate reducer: {fn_data[0]}")
+    metadata['options_argument'] = options[0] if options else -1
+    metadata['reducer_function_name'] = reducer['name']
+    entry = add_function(fn_data[:7])
+    entry.update(binary_type='AI', model_source=metadata['model_source'], ai=metadata, aggregate=True)
 
 
 def validate_ai_metadata(fn_data):
@@ -250,13 +322,10 @@ def validate_ai_metadata(fn_data):
     metadata = dict(fn_data[7])
     required = {'model_source', 'capability', 'prompt_kind', 'result_kind', 'input_arguments'}
     optional = {'model_argument', 'provider_argument', 'file_argument',
-                'null_as_empty_arguments', 'blank_as_null_arguments'}
+                'null_as_empty_arguments', 'blank_as_null_arguments', 'execution_kind', 'internal'}
     if not required <= metadata.keys() or metadata.keys() - required - optional:
         invalid('missing or unknown semantic metadata fields')
-    if metadata['model_source'] not in ('SYSTEM', 'PROVIDER'):
-        invalid('unsupported model source')
-    if metadata['capability'] not in ('CHAT', 'TEXT_EMBEDDING'):
-        invalid('unsupported capability')
+    validate_ai_routing(fn_data, metadata)
     if metadata['prompt_kind'] not in AI_PROMPT_INPUT_TYPES:
         invalid('unsupported prompt kind')
     if AI_RESULT_TYPES.get(metadata['result_kind']) != fn_data[4]:
@@ -275,19 +344,7 @@ def validate_ai_metadata(fn_data):
     # Match the SQL analyzer's optional trailing-options contract.
     if options and options[0] != len(args) - 1:
         invalid('options must be the last SQL argument')
-    selectors = []
-    for field in ('model_argument', 'provider_argument'):
-        index = metadata.setdefault(field, -1)
-        if type(index) is not int or index < -1 or index >= len(args):
-            invalid(f'{field} is out of range')
-        if index >= 0:
-            if args[index] != 'VARCHAR':
-                invalid(f'{field} must refer to a VARCHAR')
-            selectors.append(index)
-    if (metadata['model_source'] == 'PROVIDER') != (metadata['provider_argument'] >= 0):
-        invalid('AI model source must have an Provider selector')
-    if metadata['provider_argument'] >= 0 and metadata['model_argument'] >= 0:
-        invalid('Provider selector is not an explicit provider model')
+    selectors = [metadata[field] for field in ('model_argument', 'provider_argument') if metadata[field] >= 0]
 
     file_argument = metadata.setdefault('file_argument', -1)
     if type(file_argument) is not int or file_argument < -1 or file_argument >= len(args):
@@ -302,7 +359,19 @@ def validate_ai_metadata(fn_data):
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
-    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+    execution_kind = metadata.setdefault('execution_kind', 'SINGLE_REQUEST')
+    if execution_kind not in ('SINGLE_REQUEST', 'AGGREGATE_REDUCE'):
+        invalid('unsupported execution kind')
+    expected_inputs = AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]
+    if execution_kind == 'AGGREGATE_REDUCE':
+        if not metadata.get('internal') or metadata['capability'] != 'CHAT' or metadata['result_kind'] != 'STRING':
+            invalid('aggregate reducers must be internal CHAT string functions')
+        if not inputs or inputs[0] != 0:
+            invalid('aggregate state must be argument zero')
+        expected_inputs = ['VARBINARY', 'VARCHAR']
+    elif 'VARBINARY' in args:
+        invalid('aggregate state requires aggregate reduction')
+    if [args[i] for i in inputs] != expected_inputs:
         invalid('input arguments must match the prompt builder contract')
     roles = selectors + options + inputs + ([file_argument] if file_argument >= 0 else [])
     if len(roles) != len(args) or sorted(roles) != list(range(len(args))):
@@ -326,6 +395,7 @@ def add_ai_function(fn_data):
     entry["binary_type"] = "AI"
     entry["model_source"] = metadata['model_source']
     entry['ai'] = metadata
+    entry['internal'] = metadata.get('internal', False)
 
 
 def generate_default_value(param, fn_id):
@@ -364,6 +434,11 @@ def generate_fe(path):
         'TAIModelSource.${model_source}, ${ret}${args_types});'
     )
 
+    ai_aggregate_template = Template(
+        'functionSet.addVectorizedAIAggregateBuiltin(${id}, "${name}", '
+        'TAIModelSource.${model_source}, ${ret}${args_types});'
+    )
+
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
             Function fn${id} = ScalarFunction.createVectorizedBuiltin(${id}L, "${name}", argTypes${id}, ${has_vargs}, ${ret});
@@ -380,6 +455,8 @@ ${default_values}
             [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
+        if fnm.get("aggregate"):
+            return ai_aggregate_template.substitute(fnm)
         if fnm.get("binary_type") == "AI":
             return ai_fn_template.substitute(fnm)
 
@@ -406,7 +483,7 @@ ${default_values}
 
     value = dict()
     value["license"] = license_string
-    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
+    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS and not i.get('internal')])
     ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
     value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
     value['ai_descriptors'] = '\n'.join(
@@ -414,6 +491,13 @@ ${default_values}
             fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'])
         for fn in function_list if fn.get('binary_type') == 'AI')
 
+    value['collector_id'] = functions.ai_text_collector[0]
+    value['collector_name'] = functions.ai_text_collector[1]
+    value['ai_aggregate_descriptors'] = '\n'.join(
+        '                    .put(%dL, new AIAggregateLoweringDescriptor(%d, %d, %d, %dL, "%s"))' % (
+            fn['id'], fn['ai']['text_argument'], fn['ai']['instruction_argument'], fn['ai']['options_argument'],
+            fn['ai']['reducer_function_id'], fn['ai']['reducer_function_name'])
+        for fn in function_list if fn.get('aggregate'))
     content = java_template.substitute(value)
 
     with open(path, mode="w+") as f:
@@ -421,7 +505,7 @@ ${default_values}
 
 
 def generate_ai_cpp(path):
-    ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI']
+    ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI' and not fn.get('aggregate')]
     max_arguments = max((len(fn['args']) for fn in ai_functions), default=0)
     max_inputs = max((len(fn['ai']['input_arguments']) for fn in ai_functions), default=0)
     content = license_string + '''
@@ -431,6 +515,7 @@ struct AIFunctionDescriptor {
     const char* name;
     TAIModelSource::type model_source;
     AICapability capability;
+    AIExecutionKind execution_kind;
     AIFunctionResultKind result_kind;
     AIPromptKind prompt_kind;
     size_t argument_count;
@@ -455,6 +540,7 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
             ('fid', str(fn['id'])), ('name', '"' + fn['name'] + '"'),
             ('model_source', 'TAIModelSource::' + metadata['model_source']),
             ('capability', 'AICapability::' + metadata['capability']),
+            ('execution_kind', 'AIExecutionKind::' + metadata['execution_kind']),
             ('result_kind', 'AIFunctionResultKind::' + metadata['result_kind']),
             ('prompt_kind', 'AIPromptKind::' + metadata['prompt_kind']),
             ('argument_count', str(len(fn['args']))),
@@ -506,7 +592,7 @@ def generate_cpp(path):
 
     value = dict()
     value["license"] = license_string
-    builtin_functions = [fn for fn in function_list if fn.get("binary_type") != "AI"]
+    builtin_functions = [fn for fn in function_list if fn.get("binary_type") != "AI" and not fn.get("native_aggregate")]
     value["functions"] = ", \n        ".join([gen_be_fn(i) for i in builtin_functions])
 
     modules = [
@@ -625,6 +711,11 @@ if __name__ == "__main__":
 
     for function in functions.ai_vectorized_functions:
         add_ai_function(function)
+
+    for function in functions.ai_aggregate_functions:
+        add_ai_aggregate_function(function)
+    collector = add_function(functions.ai_text_collector)
+    collector.update(internal=True, native_aggregate=True)
 
     generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
     generate_cpp(be_functions_dir + "/")

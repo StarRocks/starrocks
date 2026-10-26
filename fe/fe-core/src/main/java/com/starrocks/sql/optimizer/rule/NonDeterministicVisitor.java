@@ -39,7 +39,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     private final Predicate<CallOperator> callPredicate;
 
     public NonDeterministicVisitor() {
-        this(call -> FunctionSet.allNonDeterministicFunctions.contains(call.getFnName()));
+        this(call -> FunctionSet.isNonDeterministicFunctionIncludingTime(call.getFunction(), call.getFnName()));
     }
 
     public NonDeterministicVisitor(Predicate<CallOperator> callPredicate) {
@@ -77,12 +77,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     }
 
     private boolean checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations) {
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
-            if (entry.getValue().getChildren().stream().anyMatch(this::hasNonDeterministicFunc)) {
-                return true;
-            }
-        }
-        return false;
+        return aggregations.values().stream().anyMatch(this::hasNonDeterministicFunc);
     }
 
     private boolean checkProject(Projection projection) {

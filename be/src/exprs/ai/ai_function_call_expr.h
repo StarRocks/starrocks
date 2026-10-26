@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "exprs/ai/ai_function_result.h"
@@ -48,6 +49,16 @@ struct AIFunctionInputBatch {
     std::shared_ptr<const AIProviderOptions> options;
 };
 
+// The aggregate arm owns the evaluated state column; no borrowed Slice escapes
+// the expression boundary and no execution-layer type is needed here.
+struct AIAggregateReduceInputBatch {
+    ColumnPtr states;
+    std::string instruction;
+    std::string model;
+    std::shared_ptr<const AIProviderOptions> options;
+};
+using AIProjectInputBatch = std::variant<AIFunctionInputBatch, AIAggregateReduceInputBatch>;
+
 class AIFunctionCallExpr final : public Expr {
 public:
     static StatusOr<AIFunctionCallExpr*> create(ObjectPool* pool, const TExprNode& node);
@@ -64,8 +75,8 @@ public:
 
     bool is_constant() const override { return false; }
 
-    StatusOr<AIFunctionInputBatch> build_input_batch(ExprContext* context, Chunk* chunk, std::string_view default_model,
-                                                     size_t max_input_file_bytes = kDefaultAIMaxInputFileBytes) const;
+    StatusOr<AIProjectInputBatch> build_input_batch(ExprContext* context, Chunk* chunk, std::string_view default_model,
+                                                    size_t max_input_file_bytes = kDefaultAIMaxInputFileBytes) const;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override;
 
