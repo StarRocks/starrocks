@@ -438,13 +438,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 在持有元数据锁期间访问外部系统（例如 Hive Metastore、JDBC 数据源、Iceberg REST Catalog 或 Thrift 对端）时的处理方式。此时锁的持有时长等于该外部系统的往返时延，所有等待同一把锁的操作都要为此付出代价。该检查位于 FE 自身代码中发起网络请求之前的最后一层，因此缓存命中不会触发它，报出的每一条违规都是真实发出的请求。有效值：`off`（不检查）、`warn`（打印带违规调用方堆栈的日志，调用继续执行）、`error`（拒绝该调用）。无法识别的取值按 `warn` 处理。与 `lock_target_validation_mode` 不同，该检查在运行正常的集群上也会报出违规，因为它覆盖的调用点仍在迁移过程中；因此 `warn` 的作用是把这些调用点变成可按传输类型聚合的日志，只有在这些日志干净之后才适合收紧为 `error`。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=blocking_call_under_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
 ### `lock_invariant_violation_log_interval_ms`
 
 - 默认值: 10000
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode` 为 `warn` 时生效。
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode` 或 `lock_blocking_call_validation_mode` 为 `warn` 时生效。
 - 引入版本: v26.2
 
 ### `lock_target_validation_mode`

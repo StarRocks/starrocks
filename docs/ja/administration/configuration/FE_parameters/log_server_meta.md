@@ -429,13 +429,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：内部アペンダー (`fe.internal.log`) に対して保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大で `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によって管理されます)。値を小さくするとディスク使用量が減りますが、ログ履歴が短くなります。値を大きくすると、より多くの履歴内部ログが保持されます。この項目は、`internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`) と連携して機能します。
 - 導入時期：v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメタデータロックを保持したまま、Hive Metastore、JDBC データソース、Iceberg REST catalog、thrift のピアといった外部システムに接続したときの動作。この場合ロックの保持時間はその外部システムのラウンドトリップ時間となり、同じロックを待つすべての処理がその代償を払います。チェックは FE 自身のコードがネットワークリクエストを発行する直前の層に置かれているため、キャッシュヒットはここに到達せず、報告される違反はすべて実際に送信されたリクエストです。有効な値：`off`（チェックしない）、`warn`（違反した呼び出し元のスタックトレース付きでログに記録し、呼び出しはそのまま続行する）、`error`（その呼び出しを拒否する）。認識できない値は `warn` として扱われます。`lock_target_validation_mode` と異なり、このチェックは正常に動作しているクラスターでも違反を報告します。対象となる呼び出し箇所の移行が進行中であるためです。したがって `warn` はそれらをトランスポートごとに集計できるログに変えるためのものであり、`error` はそのログがクリーンになってから初めて適切になります。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=blocking_call_under_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
 ### `lock_invariant_violation_log_interval_ms`
 
 - デフォルト：10000
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode` が `warn` の場合にのみ有効です。
+- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode` または `lock_blocking_call_validation_mode` が `warn` の場合にのみ有効です。
 - 導入時期：v26.2
 
 ### `lock_target_validation_mode`
