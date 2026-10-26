@@ -119,12 +119,22 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
    :::
 
+   Ranger でビューおよびマテリアライズドビューに SELECT 権限を付与するには、.json ファイル内の `view` リソースと `materialized_view` リソースの `accessTypeRestrictions` に `"select"` が含まれている必要があります。含まれていない場合は、次の手順でサービス定義を追加または更新する前に追加してください。
+
 2. Ranger 管理者として次のコマンドを実行して StarRocks Service を追加します。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   Ranger に StarRocks のサービス定義がすでに登録されている場合（StarRocks のアップグレード時など）は、再度追加せずに更新します:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. `http://<ranger-ip>:<ranger-host>/login.jsp` にアクセスして Apache Ranger ページにログインします。ページに STARROCKS サービスが表示されます。
