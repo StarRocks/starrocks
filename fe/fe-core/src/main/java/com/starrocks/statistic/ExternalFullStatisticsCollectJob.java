@@ -1050,7 +1050,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 LOG.warn("Statistics collect fail | {} | Error Message [{}]", DebugUtil.printId(context.getQueryId()),
                         context.getState().getErrorMessage());
                 String errorMessage = context.getState().getErrorMessage();
-                if (StringUtils.contains(errorMessage, TOO_MANY_VERSIONS_MARKER)) {
+                if (StringUtils.containsIgnoreCase(errorMessage, TOO_MANY_VERSIONS_MARKER)) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
                 } else if (StringUtils.contains(errorMessage, PROCESS_MEMORY_EXHAUSTED_MARKER)) {
