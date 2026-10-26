@@ -117,12 +117,22 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    :::
 
+   如需通过 Ranger 授予视图和物化视图的 SELECT 权限，.json 文件中 `view` 和 `materialized_view` 两个资源的 `accessTypeRestrictions` 必须包含 `"select"`。如果没有，请先添加，再在下一步中添加或更新 service definition。
+
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   如果 Ranger 中已经注册过 StarRocks 的 service definition（例如升级 StarRocks 时），请改为更新，而不是重新添加：
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. 登录 Ranger 界面 `http://<ranger-ip>:<ranger-host>/login.jsp`。可以看到界面上出现了 STARROCKS 服务。
