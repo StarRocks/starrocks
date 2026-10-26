@@ -44,7 +44,9 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 
-// clear *.data cache for lake table
-CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted
+// recovers from remote storage. Test environments that need the corrupted copy to keep failing reads and
+// stay in the cache for root-causing set it to false.
+CONF_mBool(lake_clear_corrupted_cache_data, "true");
 
 } // namespace starrocks::config
