@@ -438,6 +438,24 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+### `lock_invariant_violation_log_interval_ms`
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_target_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a metadata lock is requested on an object the internal catalog does not own, such as a database from an external catalog or a placeholder table ID. Such an identifier names nothing the lock manager can protect: it either never collides with another lock, or collides with every other lock of its kind. Valid values: `off` (do not check), `warn` (log the violation with a stack trace and let the operation proceed), and `error` (refuse the operation). Any unrecognized value behaves as `warn`. Because this item is mutable, a cluster can run at `warn`, confirm that its logs stay clean, and then tighten to `error` without a restart. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION`, carrying the offending caller's stack trace; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - Default: 3
