@@ -79,6 +79,7 @@ struct AIProjectTaskRequest {
     std::string_view model_config_id = "__system_chat__";
     AICapability capability = AICapability::CHAT;
     const AIMediaInput* media = nullptr;
+    const AIDecisionInput* decision = nullptr;
 };
 
 class AIProjectTaskHandle {

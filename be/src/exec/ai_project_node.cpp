@@ -43,6 +43,7 @@ namespace {
 
 constexpr std::string_view kSystemChatConfigId = "__system_chat__";
 constexpr std::string_view kSystemEmbeddingConfigId = "__system_embedding__";
+constexpr std::string_view kSystemDecisionConfigId = "__system_decision__";
 constexpr std::string_view kOpenAICompatibleProvider = "openai_compatible";
 constexpr std::string_view kInvalidAIProjectPlan = "Invalid AI project plan";
 
@@ -120,11 +121,21 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     pipeline::AIProjectModelConfigs configs;
     for (const auto& [id, model_config] : thrift_project.ai_model_configs) {
         if (!is_non_blank(id) || contains_control_character(id) ||
-            model_config.__isset.chat == model_config.__isset.embedding) {
+            (model_config.__isset.chat + model_config.__isset.embedding + model_config.__isset.decision) != 1) {
             return invalid_ai_project_plan();
         }
-        const auto capability = model_config.__isset.chat ? AICapability::CHAT : AICapability::TEXT_EMBEDDING;
-        const TAIEndpointConfig& endpoint = model_config.__isset.chat ? model_config.chat : model_config.embedding;
+        const auto capability =
+                model_config.__isset.chat
+                        ? AICapability::CHAT
+                        : model_config.__isset.embedding ? AICapability::TEXT_EMBEDDING : AICapability::DECISION;
+        const TAIEndpointConfig& endpoint =
+                model_config.__isset.chat
+                        ? model_config.chat
+                        : model_config.__isset.embedding ? model_config.embedding : model_config.decision;
+        const auto system_id = capability == AICapability::CHAT
+                                       ? kSystemChatConfigId
+                                       : capability == AICapability::TEXT_EMBEDDING ? kSystemEmbeddingConfigId
+                                                                                    : kSystemDecisionConfigId;
         if (!endpoint.__isset.endpoint || !endpoint.__isset.model || !endpoint.__isset.provider ||
             !is_non_blank(endpoint.endpoint) || contains_control_character(endpoint.endpoint) ||
             !validate_ai_protocol(endpoint.provider, capability).ok() || contains_control_character(endpoint.model)) {
@@ -134,12 +145,13 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (source == TAIModelSource::SYSTEM) {
             // Preserve the legacy SYSTEM wire shape, never infer an object route from its key.
             if (endpoint.__isset.api_key || endpoint.__isset.timeout_ms || endpoint.__isset.dimensions ||
-                id != (capability == AICapability::CHAT ? kSystemChatConfigId : kSystemEmbeddingConfigId)) {
+                id != system_id) {
                 return invalid_ai_project_plan();
             }
         } else if (source == TAIModelSource::PROVIDER) {
             if (endpoint.provider != kOpenAICompatibleProvider || id == kSystemChatConfigId ||
-                id == kSystemEmbeddingConfigId || !is_non_blank(endpoint.model) ||
+                id == kSystemEmbeddingConfigId || id == kSystemDecisionConfigId ||
+                capability == AICapability::DECISION || !is_non_blank(endpoint.model) ||
                 (endpoint.__isset.api_key && contains_control_character(endpoint.api_key)) ||
                 (endpoint.__isset.timeout_ms && endpoint.timeout_ms <= 0) ||
                 (endpoint.__isset.dimensions &&

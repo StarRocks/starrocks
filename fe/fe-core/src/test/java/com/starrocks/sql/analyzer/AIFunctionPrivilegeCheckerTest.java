@@ -120,6 +120,30 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testDecisionRequiresItsOwnFunctionUsage() throws Exception {
+        String endpoint = Config.ai_default_decision_endpoint;
+        String model = Config.ai_default_decision_model;
+        String provider = Config.ai_default_decision_provider;
+        try {
+            Config.ai_default_decision_endpoint = "https://decision.example.test/systemone";
+            Config.ai_default_decision_model = "decision-model";
+            Config.ai_default_decision_provider = "bailian_decision";
+            String query = "SELECT ai_decide(prompt, parse_json('{\"q\":{\"type\":\"noul\"}}')) FROM prompts";
+            assertDenied(query);
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
+            assertDenied(query);
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_decide TO '" + user + "'");
+            authorize(query);
+            executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_decide FROM '" + user + "'");
+            assertDenied(query);
+        } finally {
+            Config.ai_default_decision_endpoint = endpoint;
+            Config.ai_default_decision_model = model;
+            Config.ai_default_decision_provider = provider;
+        }
+    }
+
+    @Test
     public void testPublicRoleDoesNotGrantAIUsage() throws Exception {
         assertDenied("SELECT ai_complete('prompt')");
     }

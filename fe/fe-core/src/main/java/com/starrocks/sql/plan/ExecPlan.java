@@ -196,9 +196,12 @@ public class ExecPlan {
                 entry.setValue(call.withAiModelConfigId(id));
             } else {
                 id = AIModelConfigs.systemConfigId(call.getFn());
-                config = aiModelConfigs.computeIfAbsent(id, key -> AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(key)
-                        ? AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig())
-                        : AIModelConfigs.systemEmbeddingSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL));
+                config = aiModelConfigs.computeIfAbsent(id, key -> switch (AIModelConfigs.capability(call.getFn())) {
+                    case CHAT -> AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig());
+                    case TEXT_EMBEDDING -> AIModelConfigs.systemEmbeddingSnapshot(
+                            AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+                    case DECISION -> AIModelConfigs.systemDecisionSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+                });
             }
             usedConfigs.put(id, config);
         }

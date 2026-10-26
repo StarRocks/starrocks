@@ -513,7 +513,7 @@ public class ScalarOperatorsReuse {
         @Override
         public CommonResult visitCall(CallOperator scalarOperator, CommonOperatorContext context) {
             CallOperator callOperator = scalarOperator.cast();
-            if (FunctionSet.nonDeterministicFunctions.contains(callOperator.getFnName())) {
+            if (FunctionSet.isNonDeterministicFunction(callOperator.getFunction(), callOperator.getFnName())) {
                 // try to reuse non deterministic function
                 // for example:
                 // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub

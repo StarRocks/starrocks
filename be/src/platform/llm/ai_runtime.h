@@ -41,6 +41,7 @@ struct AIRuntimeConfig {
     std::string on_error = "ignore";
     int32_t rate_limit_qps_chat = 128;
     int32_t rate_limit_qps_embedding = 128;
+    int32_t rate_limit_qps_decision = 20;
     int32_t max_inflight = 512;
 
     Status validate() const;

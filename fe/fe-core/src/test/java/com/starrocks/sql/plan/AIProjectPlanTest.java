@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.base.Stopwatch;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -81,6 +82,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -137,6 +139,78 @@ public class AIProjectPlanTest extends PlanTestBase {
         Config.ai_default_chat_endpoint = oldEndpoint;
         Config.ai_default_chat_model = oldModel;
         Config.ai_default_chat_provider = oldProvider;
+    }
+
+    @Test
+    public void testDecisionOccurrencesAndWireConfiguration() throws Exception {
+        String endpoint = Config.ai_default_decision_endpoint;
+        String model = Config.ai_default_decision_model;
+        String provider = Config.ai_default_decision_provider;
+        try {
+            Config.ai_default_decision_endpoint = "https://decision.example.test/compatible-mode/v1/systemone";
+            Config.ai_default_decision_model = "decision-model";
+            Config.ai_default_decision_provider = "bailian_decision";
+            String call = "ai_decide(k1, parse_json('{\"q\":{\"type\":\"noul\"}}'))";
+            ExecPlan plan = getExecPlan("select " + call + ", " + call + " from t7");
+            AIProjectNode node = findOnlyAIProjectNode(plan);
+            long calls = node.getSlotMap().values().stream().filter(expression -> expression instanceof FunctionCallExpr function
+                    && function.getFn().isAi()).count();
+            Assertions.assertEquals(2, calls);
+            TAIProjectNode wire = findAIProjectThriftNodes(plan).get(0).getAi_project_node();
+            Assertions.assertEquals(Set.of(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID), wire.getAi_model_configs().keySet());
+            TAIModelConfiguration config = wire.getAi_model_configs().get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID);
+            Assertions.assertTrue(config.isSetDecision());
+            Assertions.assertFalse(config.isSetChat());
+            Assertions.assertFalse(config.isSetEmbedding());
+            Assertions.assertFalse(config.getDecision().isSetApi_key());
+            Assertions.assertEquals(Config.ai_default_decision_endpoint, config.getDecision().getEndpoint());
+            wire.getSlot_map().values().stream().map(expr -> expr.getNodes().get(0))
+                    .filter(expr -> expr.isSetFn() && expr.getFn().getBinary_type() == TFunctionBinaryType.AI)
+                    .forEach(expr -> Assertions.assertEquals(2, expr.getNum_children()));
+
+            ExecPlan aliased = getExecPlan("select answer, answer from (select " + call + " as answer from t7) t");
+            Assertions.assertEquals(1, findOnlyAIProjectNode(aliased).getSlotMap().values().stream()
+                    .filter(expression -> expression instanceof FunctionCallExpr function && function.getFn().isAi()).count());
+            Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
+            Config.ai_default_decision_endpoint = "https://changed.example.test/systemone";
+            Config.ai_default_decision_model = "changed-model";
+            Map<String, AIModelConfigs.ModelConfig> second = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
+            Assertions.assertSame(first.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID),
+                    second.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID));
+            Assertions.assertEquals(config.getDecision().getEndpoint(),
+                    second.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID).endpoint());
+        } finally {
+            Config.ai_default_decision_endpoint = endpoint;
+            Config.ai_default_decision_model = model;
+            Config.ai_default_decision_provider = provider;
+        }
+    }
+
+    @Test
+    public void testSameNameUdfIsReusableInsideAIProject() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
+        AIProjectNode node = findOnlyAIProjectNode(plan);
+        TupleDescriptor tuple = plan.getDescTbl().getTupleDesc(node.getTupleIds().get(0));
+        ScalarFunction function = ScalarFunction.createVectorizedBuiltin(900001, "ai_decide",
+                List.of(VarcharType.VARCHAR), false, VarcharType.VARCHAR);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        FunctionCallExpr expression = new FunctionCallExpr("ai_decide", List.of(new StringLiteral("text")));
+        expression.setFn(function);
+        expression.setType(VarcharType.VARCHAR);
+        Assertions.assertDoesNotThrow(() -> new AIProjectNode(plan.getNextNodeId(), tuple, node.getChild(0),
+                node.getSlotMap(), Map.of(new SlotId(900001), expression), plan.getOrCreateSystemChatConfig()));
+    }
+
+    @Test
+    public void testDecisionConfigurationRejectsCapabilityMismatch() throws Exception {
+        ExecPlan plan = getExecPlan("select ai_complete(k1) from t7");
+        AIProjectNode node = findOnlyAIProjectNode(plan);
+        TupleDescriptor tuple = plan.getDescTbl().getTupleDesc(node.getTupleIds().get(0));
+        AIModelConfigs.ModelConfig decision = new AIModelConfigs.ModelConfig("DECISION",
+                "https://decision.example.test/systemone", "decision-model", "bailian_decision");
+        Assertions.assertThrows(IllegalStateException.class, () -> new AIProjectNode(plan.getNextNodeId(), tuple,
+                node.getChild(0), node.getSlotMap(), node.getCommonSlotMap(),
+                Map.of(AIModelConfigs.SYSTEM_CHAT_CONFIG_ID, decision)));
     }
 
     @Test

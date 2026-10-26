@@ -126,7 +126,7 @@ public class VectorizedBuiltinFunctions {
     public static final Set<String> AI_FUNCTION_NAMES = ImmutableSet.of(${ai_function_names});
 
     public enum AICapability {
-        CHAT, TEXT_EMBEDDING
+        CHAT, TEXT_EMBEDDING, DECISION
     }
 
     public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
@@ -238,7 +238,7 @@ AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
 }
-AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE', 'JSON': 'JSON'}
 
 
 def validate_ai_metadata(fn_data):
@@ -255,7 +255,7 @@ def validate_ai_metadata(fn_data):
         invalid('missing or unknown semantic metadata fields')
     if metadata['model_source'] not in ('SYSTEM', 'PROVIDER'):
         invalid('unsupported model source')
-    if metadata['capability'] not in ('CHAT', 'TEXT_EMBEDDING'):
+    if metadata['capability'] not in ('CHAT', 'TEXT_EMBEDDING', 'DECISION'):
         invalid('unsupported capability')
     if metadata['prompt_kind'] not in AI_PROMPT_INPUT_TYPES:
         invalid('unsupported prompt kind')
@@ -294,15 +294,22 @@ def validate_ai_metadata(fn_data):
         invalid('file_argument is out of range')
     if file_argument >= 0 and args[file_argument] != 'FILE':
         invalid('file_argument must refer to a FILE')
-    if metadata['prompt_kind'] == 'NONE' and (metadata['capability'] != 'TEXT_EMBEDDING' or file_argument < 0):
-        invalid('NONE prompt requires a FILE embedding input')
+    if metadata['prompt_kind'] == 'NONE' and metadata['capability'] != 'DECISION' and (
+            metadata['capability'] != 'TEXT_EMBEDDING' or file_argument < 0):
+        invalid('NONE prompt requires a FILE embedding or structured decision input')
     if metadata['capability'] == 'TEXT_EMBEDDING' and file_argument >= 0 and metadata['prompt_kind'] != 'NONE':
         invalid('FILE embedding input must not use a text prompt builder')
 
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
-    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+    if metadata['capability'] == 'DECISION':
+        if (metadata['model_source'] != 'SYSTEM' or metadata['prompt_kind'] != 'NONE'
+                or metadata['result_kind'] != 'JSON' or options or file_argument >= 0
+                or [args[i] for i in inputs] not in (['VARCHAR', 'JSON'], ['JSON', 'JSON'])
+                or metadata.get('null_as_empty_arguments') or metadata.get('blank_as_null_arguments')):
+            invalid('decision requires SYSTEM typed state/questions inputs and a JSON result')
+    elif [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
         invalid('input arguments must match the prompt builder contract')
     roles = selectors + options + inputs + ([file_argument] if file_argument >= 0 else [])
     if len(roles) != len(args) or sorted(roles) != list(range(len(args))):

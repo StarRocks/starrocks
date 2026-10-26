@@ -43,6 +43,7 @@ enum class AIArgumentType : uint8_t {
     OPTIONS,
     STRING_ARRAY,
     FILE,
+    JSON,
 };
 
 enum class AIPromptKind : uint8_t {
@@ -65,6 +66,19 @@ namespace {
 
 constexpr std::string_view kSystemConfigId = "__system_chat__";
 constexpr std::string_view kEmbeddingConfigId = "__system_embedding__";
+constexpr std::string_view kDecisionConfigId = "__system_decision__";
+
+std::string_view system_config_id(AICapability capability) {
+    switch (capability) {
+    case AICapability::CHAT:
+        return kSystemConfigId;
+    case AICapability::TEXT_EMBEDDING:
+        return kEmbeddingConfigId;
+    case AICapability::DECISION:
+        return kDecisionConfigId;
+    }
+    return {};
+}
 
 Status invalid_ai_expression() {
     return Status::InvalidArgument("Invalid AI function expression");
@@ -132,6 +146,10 @@ bool is_options_type(const TTypeDesc& type) {
 }
 
 bool matches_argument_type(const TTypeDesc& type, AIArgumentType expected) {
+    if (expected == AIArgumentType::JSON) {
+        return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
+               type.types[0].scalar_type.type == TPrimitiveType::JSON;
+    }
     if (expected == AIArgumentType::FILE) {
         return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
                type.types[0].scalar_type.type == TPrimitiveType::FILE;
@@ -209,6 +227,9 @@ bool matches_safe_map_type(const TypeDescriptor& declared, const TypeDescriptor&
 
 bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDescriptor& child,
                                    AIArgumentType expected) {
+    if (expected == AIArgumentType::JSON) {
+        return declared.type == TYPE_JSON && child.type == TYPE_JSON;
+    }
     if (expected == AIArgumentType::FILE) {
         return declared.type == TYPE_FILE && child.type == TYPE_FILE;
     }
@@ -408,7 +429,9 @@ AIFunctionCallExpr::AIFunctionCallExpr(const AIFunctionCallExpr& other)
         : Expr(other),
           _descriptor(other._descriptor),
           _model_config_id(other._model_config_id),
-          _argument_types(other._argument_types) {}
+          _argument_types(other._argument_types),
+          _decision_questions(other._decision_questions),
+          _decision_questions_is_null(other._decision_questions_is_null) {}
 
 StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const TExprNode& node) {
     if (pool == nullptr ||
@@ -434,11 +457,11 @@ StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const
     if (spec->model_source == TAIModelSource::PROVIDER) {
         const std::string& key = node.ai_model_config_id;
         if (contains_only_ascii_whitespace(Slice(key)) || key == kSystemConfigId || key == kEmbeddingConfigId ||
+            key == kDecisionConfigId ||
             std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
             return invalid_ai_expression();
         }
-    } else if (node.ai_model_config_id !=
-               (spec->capability == AICapability::CHAT ? kSystemConfigId : kEmbeddingConfigId)) {
+    } else if (node.ai_model_config_id != system_config_id(spec->capability)) {
         return invalid_ai_expression();
     }
     for (size_t i = 0; i < spec->argument_count; ++i) {
@@ -500,6 +523,25 @@ Status AIFunctionCallExpr::open(RuntimeState* state, ExprContext* context, Funct
         return Status::OK();
     }
 
+    if (_descriptor->capability == AICapability::DECISION) {
+        const size_t questions = _descriptor->input_arguments[1];
+        if (!_children[questions]->is_constant() ||
+            (_descriptor->model_argument >= 0 && !_children[_descriptor->model_argument]->is_constant())) {
+            return Status::InvalidArgument("AI decision questions and model must be constant");
+        }
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[questions]->evaluate_const(context));
+        if (column == nullptr || column->empty()) return invalid_ai_expression();
+        _decision_questions.reset();
+        _decision_questions_is_null = false;
+        if (column->is_null(0)) {
+            _decision_questions_is_null = true;
+        } else {
+            ASSIGN_OR_RETURN(auto json, column->get(0).get_json()->to_string());
+            ASSIGN_OR_RETURN(auto parsed, parse_ai_decision_questions(json));
+            _decision_questions = std::make_shared<const AIDecisionQuestions>(std::move(parsed));
+        }
+    }
+
     // Native constant evaluation preserves CAST semantics and validates arrays even when no input rows arrive.
     for (size_t index = 0; index < _descriptor->argument_count; ++index) {
         if (_descriptor->argument_types[index] != AIArgumentType::STRING_ARRAY) {
@@ -529,8 +571,14 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
 
     Columns columns;
     columns.reserve(_children.size());
-    for (Expr* child : _children) {
-        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(child, chunk));
+    for (size_t index = 0; index < _children.size(); ++index) {
+        // Constant questions were validated at fragment open, including empty input. Retain
+        // their immutable schema instead of reevaluating and parsing it per row or batch.
+        if (spec.capability == AICapability::DECISION && index == spec.input_arguments[1]) {
+            columns.emplace_back();
+            continue;
+        }
+        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(_children[index], chunk));
         if (column == nullptr || column->size() != chunk->num_rows()) {
             return invalid_ai_expression();
         }
@@ -562,6 +610,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             break;
         }
         case AIArgumentType::FILE:
+        case AIArgumentType::JSON:
             break;
         }
     }
@@ -571,6 +620,9 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             contains_only_ascii_whitespace(strings[index]->value(0))) {
             return invalid_ai_expression();
         }
+    }
+    if (spec.capability == AICapability::DECISION && !_decision_questions && !_decision_questions_is_null) {
+        return invalid_ai_expression();
     }
     batch.rows.reserve(chunk->num_rows());
     for (size_t row = 0; row < chunk->num_rows(); ++row) {
@@ -591,12 +643,38 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             file = columns[spec.file_argument]->get(row);
             is_null |= file.is_null();
         }
+        if (spec.capability == AICapability::DECISION) {
+            is_null |= _decision_questions_is_null || columns[spec.input_arguments[0]]->is_null(row);
+        }
         if (is_null) {
             batch.rows.emplace_back();
             continue;
         }
         if (spec.model_argument >= 0 && contains_only_ascii_whitespace(strings[spec.model_argument]->value(row))) {
             batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+            continue;
+        }
+        if (spec.capability == AICapability::DECISION) {
+            const size_t state_index = spec.input_arguments[0];
+            AIDecisionInput decision{.questions = _decision_questions};
+            if (spec.argument_types[state_index] == AIArgumentType::JSON) {
+                const auto* value = columns[state_index]->get(row).get_json();
+                if (value->get_type() != JsonType::JSON_STRING && value->get_type() != JsonType::JSON_OBJECT &&
+                    value->get_type() != JsonType::JSON_ARRAY) {
+                    batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+                    continue;
+                }
+                ASSIGN_OR_RETURN(decision.state, value->to_string());
+                decision.state_is_json = true;
+            } else {
+                decision.state = strings[state_index]->value(row).to_string();
+            }
+            batch.rows.emplace_back(AIFunctionRowInput{
+                    .action = AIFunctionRowAction::DISPATCH,
+                    .model = spec.model_argument >= 0 ? strings[spec.model_argument]->value(row).to_string()
+                                                      : std::string(default_model),
+                    .decision = std::move(decision),
+            });
             continue;
         }
         std::optional<AIMediaInput> media;

@@ -166,6 +166,33 @@ This topic introduces the following types of FE configurations:
 - Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible` for text or `dashscope_multimodal` for text and inline JPEG, PNG, or WebP image FILE inputs. The selected model must support the input modality. Video FILE embedding is unsupported. The empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused, and the protocol is not inferred from the endpoint or model name. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
+### `ai_default_decision_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Complete HTTPS POST URL for SYSTEM `ai_decide`, including the decision API path. Required independently of chat and embedding. The URL must contain a host and must not contain user information, a query string, a fragment, or control characters; an explicit port must be 1 through 65535. Every executing BE must set `AI_FUNCTION_DECISION_ENDPOINT` to exactly this URL and provision `AI_FUNCTION_DECISION_API_KEY` locally. Environment changes require a BE restart; SYSTEM credentials are not sent in query plans. Changes apply without an FE restart to newly planned queries; existing plans retain their captured snapshot.
+- Introduced in: -
+
+### `ai_default_decision_model`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Default model for the two-argument SYSTEM `ai_decide` overload. It must be nonblank for those calls and must not contain C0 control characters or DEL. It may remain empty when every call supplies an explicit constant model. There is no fallback to the chat or embedding model. Changes apply without an FE restart to newly planned queries; existing plans retain their captured snapshot.
+- Introduced in: -
+
+### `ai_default_decision_provider`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Provider protocol for SYSTEM `ai_decide`. The only supported value is `bailian_decision`; an empty or unsupported value prevents calls from being planned. The protocol is not inferred from the model or endpoint. Changes apply without an FE restart to newly planned queries; existing plans retain their captured snapshot.
+- Introduced in: -
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - Default: 60000

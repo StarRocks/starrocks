@@ -44,6 +44,7 @@ constexpr std::string_view kApiKeyEnvironment = "AI_FUNCTION_MODEL_API_KEY";
 constexpr std::string_view kEndpointEnvironment = "AI_FUNCTION_MODEL_ENDPOINT";
 constexpr std::string_view kSystemChatConfigId = "__system_chat__";
 constexpr std::string_view kSystemEmbeddingConfigId = "__system_embedding__";
+constexpr std::string_view kSystemDecisionConfigId = "__system_decision__";
 constexpr int64_t kNanosecondsPerMillisecond = 1'000'000;
 
 Status invalid_projection() {
@@ -504,7 +505,8 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
             if (model_config.capability != AICapability::CHAT &&
-                model_config.capability != AICapability::TEXT_EMBEDDING) {
+                model_config.capability != AICapability::TEXT_EMBEDDING &&
+                model_config.capability != AICapability::DECISION) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
@@ -522,6 +524,9 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 } else if (id == kSystemEmbeddingConfigId && model_config.capability == AICapability::TEXT_EMBEDDING) {
                     endpoint_environment = "AI_FUNCTION_EMBEDDING_ENDPOINT";
                     key_environment = "AI_FUNCTION_EMBEDDING_API_KEY";
+                } else if (id == kSystemDecisionConfigId && model_config.capability == AICapability::DECISION) {
+                    endpoint_environment = "AI_FUNCTION_DECISION_ENDPOINT";
+                    key_environment = "AI_FUNCTION_DECISION_API_KEY";
                 } else {
                     return Status::InvalidArgument("AI function model configuration is invalid");
                 }
@@ -537,7 +542,9 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 route.api_key = api_key;
             } else if (model_config.source == TAIModelSource::PROVIDER) {
                 if (model_config.protocol != "openai_compatible" || id == kSystemChatConfigId ||
-                    id == kSystemEmbeddingConfigId || contains_only_ascii_whitespace(model_config.model) ||
+                    id == kSystemEmbeddingConfigId || id == kSystemDecisionConfigId ||
+                    model_config.capability == AICapability::DECISION ||
+                    contains_only_ascii_whitespace(model_config.model) ||
                     contains_control_character(model_config.api_key) ||
                     (model_config.timeout_ms.has_value() &&
                      (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
@@ -650,6 +657,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                                     .options = options,
                                     .capability = route.capability,
                                     .media = request.media,
+                                    .decision = request.decision,
                             },
                     .request_deadline_ns = request_deadline_ns,
                     .attempt_timeout_ms = route.attempt_timeout_ms,

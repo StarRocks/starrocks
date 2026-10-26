@@ -101,7 +101,8 @@ bool same_runtime_config(const AIRuntimeConfig& lhs, const AIRuntimeConfig& rhs)
            lhs.worker_thread_num == rhs.worker_thread_num && lhs.sub_chunk_size == rhs.sub_chunk_size &&
            lhs.max_retries == rhs.max_retries && lhs.max_retries_on_throttle == rhs.max_retries_on_throttle &&
            lhs.on_error == rhs.on_error && lhs.rate_limit_qps_chat == rhs.rate_limit_qps_chat &&
-           lhs.rate_limit_qps_embedding == rhs.rate_limit_qps_embedding && lhs.max_inflight == rhs.max_inflight;
+           lhs.rate_limit_qps_embedding == rhs.rate_limit_qps_embedding &&
+           lhs.rate_limit_qps_decision == rhs.rate_limit_qps_decision && lhs.max_inflight == rhs.max_inflight;
 }
 
 TEST(AIRuntimeConfigSourceTest, EmbeddingRateLimitIsIndependentAndDynamicallyValidated) {
@@ -118,6 +119,24 @@ TEST(AIRuntimeConfigSourceTest, EmbeddingRateLimitIsIndependentAndDynamicallyVal
         candidate.rate_limit_qps_embedding = invalid;
         EXPECT_TRUE(source->update(candidate).is_invalid_argument());
         EXPECT_EQ(7, source->qps(AICapability::TEXT_EMBEDDING));
+    }
+}
+
+TEST(AIRuntimeConfigSourceTest, DecisionRateLimitIsIndependentAndDynamicallyValidated) {
+    auto source_or = AIRuntimeConfigSource::create();
+    ASSERT_TRUE(source_or.ok()) << source_or.status();
+    auto source = std::move(source_or).value();
+    EXPECT_EQ(20, source->qps(AICapability::DECISION));
+    AIRuntimeConfig candidate = source->snapshot();
+    candidate.rate_limit_qps_decision = 7;
+    ASSERT_TRUE(source->update(candidate).ok());
+    EXPECT_EQ(7, source->qps(AICapability::DECISION));
+    EXPECT_EQ(128, source->qps(AICapability::CHAT));
+    EXPECT_EQ(128, source->qps(AICapability::TEXT_EMBEDDING));
+    for (int invalid : {0, -1}) {
+        candidate.rate_limit_qps_decision = invalid;
+        EXPECT_TRUE(source->update(candidate).is_invalid_argument());
+        EXPECT_EQ(7, source->qps(AICapability::DECISION));
     }
 }
 

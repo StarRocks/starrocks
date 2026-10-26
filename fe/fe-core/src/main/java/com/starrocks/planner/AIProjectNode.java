@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -98,25 +97,20 @@ public final class AIProjectNode extends ProjectNode {
                     "AIProject model source does not match the AI function");
             if (config.source() == TAIModelSource.PROVIDER) {
                 Preconditions.checkState(!AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(configId)
-                                && !AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID.equals(configId),
+                                && !AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID.equals(configId)
+                                && !AIModelConfigs.SYSTEM_DECISION_CONFIG_ID.equals(configId),
                         "Named AI providers must not use SYSTEM configuration IDs");
             } else {
                 Preconditions.checkState(AIModelConfigs.systemConfigId(call.getFn()).equals(configId),
                         "AIProject AI call has an invalid SYSTEM configuration ID");
             }
             usedConfigIds.add(configId);
-            boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
-            Preconditions.checkState((embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability()),
+            Preconditions.checkState(AIModelConfigs.capability(call.getFn()).name().equals(config.capability()),
                     "AIProject model capability does not match the AI function");
             if (call.getFn().getAiModelSource() == TAIModelSource.SYSTEM) {
                 AIModelConfigs.DefaultModelRequirement requirement = AIModelConfigs.hasExplicitModel(call.getFn())
                         ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
-                if (embedding) {
-                    AIModelConfigs.validateSystemEmbedding(config, requirement);
-                } else {
-                    AIModelConfigs.validateSystemChat(
-                            new SystemChatConfig(config.endpoint(), config.model(), config.provider()), requirement);
-                }
+                AIModelConfigs.validateSystem(config, requirement);
             }
         }
         Preconditions.checkState(usedConfigIds.equals(this.modelConfigs.keySet()),
@@ -195,8 +189,7 @@ public final class AIProjectNode extends ProjectNode {
     private static boolean isNonReusableExpression(Expr expression) {
         if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
             Function function = call.getFn();
-            if (function.isAi() || FunctionSet.allNonDeterministicFunctions.contains(
-                    function.functionName().toLowerCase(Locale.ROOT))) {
+            if (FunctionSet.isNonDeterministicFunctionIncludingTime(function, function.functionName())) {
                 return true;
             }
         }

@@ -19,10 +19,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include "base/statusor.h"
+#include "platform/llm/ai_decision_input.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
@@ -39,12 +41,29 @@ struct AIChatRequest {
     AICapability capability = AICapability::CHAT;
     // Borrowed only for the synchronous build_request call.
     const AIMediaInput* media = nullptr;
+    const AIDecisionInput* decision = nullptr;
+};
+
+// Value-owned immutable response metadata. Shared providers never retain request state.
+class AIProviderResponseContext {
+public:
+    AIProviderResponseContext() = default;
+    explicit AIProviderResponseContext(AIDecisionResponseSchema schema) : _schema(std::move(schema)) {}
+    const AIDecisionResponseSchema* decision_schema() const { return std::get_if<AIDecisionResponseSchema>(&_schema); }
+    size_t retained_bytes() const {
+        const auto* schema = decision_schema();
+        return schema == nullptr ? 0 : schema->retained_bytes();
+    }
+
+private:
+    std::variant<std::monostate, AIDecisionResponseSchema> _schema;
 };
 
 struct AIProviderHttpRequest {
     std::string url;
     std::vector<AIHttpHeader> headers;
     std::string body;
+    AIProviderResponseContext response_context;
 };
 
 enum class AIProviderErrorCode : uint8_t {
@@ -100,8 +119,8 @@ public:
     virtual ~AIProvider() = default;
 
     virtual StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const = 0;
-    virtual AIProviderParseResult parse_response(std::string_view body,
-                                                 AICapability capability = AICapability::CHAT) const = 0;
+    virtual AIProviderParseResult parse_response(std::string_view body, AICapability capability = AICapability::CHAT,
+                                                 const AIProviderResponseContext& context = {}) const = 0;
 };
 
 Status validate_ai_protocol(std::string_view protocol, AICapability capability);

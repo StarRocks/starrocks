@@ -141,6 +141,7 @@ public:
             input_row.model = "model";
             input_row.prompt = prompts.get_slice(row).to_string();
             input_row.media = media;
+            input_row.decision = decision;
             output.input.rows.emplace_back(std::move(input_row));
         }
         prepared.ai_outputs.emplace_back(std::move(output));
@@ -156,6 +157,7 @@ public:
     bool output_chunk_contains_ai_slot = false;
     std::vector<AIFunctionRowAction> row_actions;
     std::optional<AIMediaInput> media;
+    std::optional<AIDecisionInput> decision;
     size_t prepare_calls = 0;
     std::vector<int32_t> observed_driver_sequences;
     std::vector<size_t> observed_rows;
@@ -270,6 +272,7 @@ public:
         if (request.media != nullptr) {
             submitted_media.emplace_back(*request.media);
         }
+        if (request.decision != nullptr) submitted_decisions.emplace_back(*request.decision);
 
         {
             std::unique_lock lock(block_mutex);
@@ -372,6 +375,7 @@ public:
     size_t submit_calls = 0;
     std::vector<std::string> submitted_prompts;
     std::vector<AIMediaInput> submitted_media;
+    std::vector<AIDecisionInput> submitted_decisions;
     std::vector<std::shared_ptr<ManualHandleState>> handle_states;
     std::unordered_map<uint64_t, Pending> pending;
 
@@ -1047,6 +1051,34 @@ TEST(AIProjectProcessorTest, MediaIsConsumedBeforeSourceFinishAndCancellationDra
     EXPECT_FALSE(processor->has_output(0));
     EXPECT_TRUE(processor->status(0).ok());
     EXPECT_TRUE(buffer->all_sources_finished());
+}
+
+TEST(AIProjectProcessorTest, DecisionInputIsConsumedSynchronouslyAndCancellationDrainsOnce) {
+    auto parsed = parse_ai_decision_questions(R"({"q":{"type":"noul"}})");
+    ASSERT_TRUE(parsed.ok()) << parsed.status();
+    auto questions = std::make_shared<const AIDecisionQuestions>(std::move(parsed).value());
+    std::weak_ptr<const AIDecisionQuestions> lifetime = questions;
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    projection->decision = AIDecisionInput{.state = "typed state", .questions = questions};
+    projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter);
+    put_and_finish(buffer, make_input_chunk(0, 2));
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_EQ(1, submitter->submitted_decisions.size());
+    EXPECT_EQ("typed state", submitter->submitted_decisions.front().state);
+    EXPECT_EQ(questions, submitter->submitted_decisions.front().questions);
+    questions.reset();
+    projection->decision.reset();
+    submitter->submitted_decisions.clear();
+    ASSERT_OK(processor->set_source_finished(0));
+    EXPECT_TRUE(lifetime.expired());
+    EXPECT_TRUE(processor->pending_finish(0));
+    EXPECT_EQ(1, submitter->cancel_calls("prompt-0"));
+    submitter->complete_remaining_as_cancelled();
+    EXPECT_FALSE(processor->pending_finish(0));
 }
 
 TEST(AIProjectProcessorTest, InlineCallbacksCannotLoseHandlesOrOutstandingDrainState) {

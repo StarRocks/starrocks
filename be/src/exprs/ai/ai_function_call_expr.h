@@ -23,6 +23,7 @@
 
 #include "exprs/ai/ai_function_result.h"
 #include "exprs/expr.h"
+#include "platform/llm/ai_decision_input.h"
 #include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
 
@@ -41,6 +42,7 @@ struct AIFunctionRowInput {
     std::string model;
     std::string prompt;
     std::optional<AIMediaInput> media;
+    std::optional<AIDecisionInput> decision;
 };
 
 struct AIFunctionInputBatch {
@@ -83,6 +85,9 @@ private:
     const AIFunctionDescriptor* const _descriptor;
     const std::string _model_config_id;
     const std::vector<TypeDescriptor> _argument_types;
+    // Initialized once during fragment open; driver clones share the immutable schema.
+    std::shared_ptr<const AIDecisionQuestions> _decision_questions;
+    bool _decision_questions_is_null = false;
 };
 
 } // namespace starrocks

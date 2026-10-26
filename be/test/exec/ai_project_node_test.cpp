@@ -42,6 +42,7 @@ constexpr int64_t kAICompletePromptFid = 200100;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
+constexpr TSlotId kDecisionSlotId = 4;
 constexpr std::string_view kSystemChatConfigId = "__system_chat__";
 constexpr std::string_view kEndpointSentinel = "https://unit.test.invalid/v1/chat/completions";
 constexpr std::string_view kModelSentinel = "unit-test-model";
@@ -176,6 +177,12 @@ protected:
                                .nullable(true)
                                .column_name("answer")
                                .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kDecisionSlotId)
+                               .type(TypeDescriptor(TYPE_JSON))
+                               .nullable(true)
+                               .column_name("decision")
+                               .build());
         tuple.build(&table);
 
         ASSERT_OK(DescriptorTbl::create(&_runtime_state, &_descriptor_pool, table.desc_tbl(), &_descriptors,
@@ -224,6 +231,52 @@ TEST_F(AIProjectNodeTest, ExecFactoryDeserializesExactThriftContract) {
     const std::string debug = root->debug_string();
     EXPECT_EQ(std::string::npos, debug.find(kSecretSentinel));
     EXPECT_EQ(std::string::npos, debug.find(kArbitraryCredentialEnvironment));
+    root->close(&_runtime_state);
+}
+
+TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndSystemConfiguration) {
+    TPlan plan = make_valid_ai_plan(_tuple_id);
+    auto expression = make_ai_complete(_tuple_id, kPromptSlotId, "__system_decision__");
+    auto& call = expression.nodes.front();
+    call.fn.__set_fid(200160);
+    call.fn.name.__set_function_name("ai_decide");
+    call.fn.__set_arg_types({varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+    call.fn.__set_ret_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    call.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    call.__set_num_children(2);
+    TExprNode cast;
+    cast.__set_node_type(TExprNodeType::CAST_EXPR);
+    cast.__set_opcode(TExprOpcode::CAST);
+    cast.__set_num_children(1);
+    cast.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    cast.__set_child_type_desc(varchar_type().to_thrift());
+    cast.__set_child_type(TPrimitiveType::VARCHAR);
+    cast.__set_is_nullable(true);
+    expression.nodes.push_back(cast);
+    TExprNode literal;
+    literal.__set_node_type(TExprNodeType::STRING_LITERAL);
+    literal.__set_num_children(0);
+    literal.__set_type(varchar_type().to_thrift());
+    literal.__set_is_nullable(false);
+    TStringLiteral value;
+    value.__set_value(R"({"q":{"type":"noul"}})");
+    literal.__set_string_literal(value);
+    expression.nodes.push_back(literal);
+    auto& project = plan.nodes.front().ai_project_node;
+    project.__set_slot_map({{kPromptSlotId, make_slot_ref(_tuple_id, kPromptSlotId)}, {kDecisionSlotId, expression}});
+    project.__set_common_slot_map({});
+    TAIEndpointConfig endpoint;
+    endpoint.__set_endpoint("https://127.0.0.1/compatible-mode/v1/systemone");
+    endpoint.__set_provider("bailian_decision");
+    endpoint.__set_model("decision-model");
+    TAIModelConfiguration config;
+    config.__set_decision(endpoint);
+    project.__set_ai_model_configs({{"__system_decision__", config}});
+    auto decoded = binary_round_trip(plan);
+    ObjectPool plan_pool;
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(&_runtime_state, &plan_pool, decoded, *_descriptors, &root));
+    ASSERT_NE(nullptr, root);
     root->close(&_runtime_state);
 }
 
@@ -370,6 +423,18 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
             {"chat config is missing",
              [](TPlanNode& node) {
                  node.ai_project_node.ai_model_configs[std::string(kSystemChatConfigId)] = TAIModelConfiguration{};
+             }},
+            {"chat and decision are both set",
+             [](TPlanNode& node) {
+                 auto& config = node.ai_project_node.ai_model_configs.at(std::string(kSystemChatConfigId));
+                 config.__set_decision(config.chat);
+             }},
+            {"embedding and decision are both set",
+             [](TPlanNode& node) {
+                 auto& config = node.ai_project_node.ai_model_configs.at(std::string(kSystemChatConfigId));
+                 config.__set_embedding(config.chat);
+                 config.__set_decision(config.chat);
+                 config.__isset.chat = false;
              }},
             {"provider is unsupported",
              [](TPlanNode& node) {

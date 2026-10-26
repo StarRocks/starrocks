@@ -1668,6 +1668,7 @@ struct TAIModelConfiguration {
   2: optional TAIEndpointConfig embedding
   // Missing source is accepted only for legacy SYSTEM configurations.
   3: optional Types.TAIModelSource source
+  4: optional TAIEndpointConfig decision
 }
 
 struct TAIProjectNode {

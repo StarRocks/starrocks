@@ -39,6 +39,8 @@ import java.util.Locale;
 public final class AIModelConfigs {
     public static final String SYSTEM_CHAT_CONFIG_ID = "__system_chat__";
     public static final String SYSTEM_EMBEDDING_CONFIG_ID = "__system_embedding__";
+    public static final String SYSTEM_DECISION_CONFIG_ID = "__system_decision__";
+    public static final String BAILIAN_DECISION_PROVIDER = "bailian_decision";
     public static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
     public static final String QWEN_COMPATIBLE_PROVIDER = "qwen_compatible";
     public static final String DASHSCOPE_MULTIMODAL_PROVIDER = "dashscope_multimodal";
@@ -51,8 +53,12 @@ public final class AIModelConfigs {
         OPTIONAL
     }
 
+    public static AICapability capability(Function function) {
+        return descriptor(function).capability();
+    }
+
     public static boolean isTextEmbedding(Function function) {
-        return descriptor(function).capability() == AICapability.TEXT_EMBEDDING;
+        return capability(function) == AICapability.TEXT_EMBEDDING;
     }
 
     public static boolean hasExplicitModel(Function function) {
@@ -86,7 +92,11 @@ public final class AIModelConfigs {
 
     public static String systemConfigId(Function function) {
         Preconditions.checkState(function.getAiModelSource() == TAIModelSource.SYSTEM, "Unsupported AI model source");
-        return isTextEmbedding(function) ? SYSTEM_EMBEDDING_CONFIG_ID : SYSTEM_CHAT_CONFIG_ID;
+        return switch (capability(function)) {
+            case CHAT -> SYSTEM_CHAT_CONFIG_ID;
+            case TEXT_EMBEDDING -> SYSTEM_EMBEDDING_CONFIG_ID;
+            case DECISION -> SYSTEM_DECISION_CONFIG_ID;
+        };
     }
 
     public static ModelConfig fromSystemChat(SystemChatConfig config) {
@@ -97,6 +107,13 @@ public final class AIModelConfigs {
         ModelConfig config = new ModelConfig("TEXT_EMBEDDING", Config.ai_default_embedding_endpoint,
                 Config.ai_default_embedding_model, Config.ai_default_embedding_provider);
         validateSystemEmbedding(config, requirement);
+        return config;
+    }
+
+    public static ModelConfig systemDecisionSnapshot(DefaultModelRequirement requirement) {
+        ModelConfig config = new ModelConfig("DECISION", Config.ai_default_decision_endpoint,
+                Config.ai_default_decision_model, Config.ai_default_decision_provider);
+        validateSystem(config, requirement);
         return config;
     }
 
@@ -158,18 +175,39 @@ public final class AIModelConfigs {
         validateSystem(fromSystemChat(config), defaultModelRequirement);
     }
 
-    private static void validateSystem(ModelConfig config, DefaultModelRequirement defaultModelRequirement) {
-        boolean embedding = "TEXT_EMBEDDING".equals(config.capability());
-        String prefix = embedding ? "ai_default_embedding_" : "ai_default_chat_";
-        String functionName = embedding ? "ai_embed" : "ai_complete";
+    public static void validateSystem(ModelConfig config, DefaultModelRequirement defaultModelRequirement) {
+        String prefix;
+        String functionName;
+        switch (config.capability()) {
+            case "CHAT" -> {
+                prefix = "ai_default_chat_";
+                functionName = "ai_complete";
+            }
+            case "TEXT_EMBEDDING" -> {
+                prefix = "ai_default_embedding_";
+                functionName = "ai_embed";
+            }
+            case "DECISION" -> {
+                prefix = "ai_default_decision_";
+                functionName = "ai_decide";
+            }
+            default -> throw invalidConfig("AI capability", "is unsupported");
+        }
         String endpoint = requireNonBlank(config.endpoint(), prefix + "endpoint", functionName);
         validateEndpoint(endpoint, prefix + "endpoint");
 
         String provider = requireNonBlank(config.provider(), prefix + "provider", functionName);
-        String multimodalProvider = embedding ? DASHSCOPE_MULTIMODAL_PROVIDER : QWEN_COMPATIBLE_PROVIDER;
-        if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider) && !multimodalProvider.equals(provider)) {
-            throw invalidConfig(prefix + "provider",
-                    "must be '" + OPENAI_COMPATIBLE_PROVIDER + "' or '" + multimodalProvider + "'");
+        if ("DECISION".equals(config.capability())) {
+            if (!BAILIAN_DECISION_PROVIDER.equals(provider)) {
+                throw invalidConfig(prefix + "provider", "must be '" + BAILIAN_DECISION_PROVIDER + "'");
+            }
+        } else {
+            String multimodalProvider = "TEXT_EMBEDDING".equals(config.capability())
+                    ? DASHSCOPE_MULTIMODAL_PROVIDER : QWEN_COMPATIBLE_PROVIDER;
+            if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider) && !multimodalProvider.equals(provider)) {
+                throw invalidConfig(prefix + "provider",
+                        "must be '" + OPENAI_COMPATIBLE_PROVIDER + "' or '" + multimodalProvider + "'");
+            }
         }
 
         String model = config.model();
@@ -275,10 +313,11 @@ public final class AIModelConfigs {
             if (source == TAIModelSource.PROVIDER) {
                 result.setSource(source);
             }
-            if ("TEXT_EMBEDDING".equals(capability)) {
-                result.setEmbedding(endpointConfig);
-            } else {
-                result.setChat(endpointConfig);
+            switch (capability) {
+                case "CHAT" -> result.setChat(endpointConfig);
+                case "TEXT_EMBEDDING" -> result.setEmbedding(endpointConfig);
+                case "DECISION" -> result.setDecision(endpointConfig);
+                default -> throw invalidConfig("AI capability", "is unsupported");
             }
             return result;
         }

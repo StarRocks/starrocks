@@ -111,6 +111,9 @@ Status AIRuntimeConfig::validate() const {
     if (rate_limit_qps_embedding <= 0) {
         return Status::InvalidArgument("ai_function_rate_limit_qps_embedding must be positive");
     }
+    if (rate_limit_qps_decision <= 0) {
+        return Status::InvalidArgument("ai_function_rate_limit_qps_decision must be positive");
+    }
     if (max_inflight <= 0) {
         return Status::InvalidArgument("ai_function_max_inflight must be positive");
     }
@@ -170,6 +173,8 @@ int64_t AIRuntimeConfigSource::qps(AICapability capability) const noexcept {
         return _load_snapshot()->rate_limit_qps_chat;
     case AICapability::TEXT_EMBEDDING:
         return _load_snapshot()->rate_limit_qps_embedding;
+    case AICapability::DECISION:
+        return _load_snapshot()->rate_limit_qps_decision;
     }
     return 0;
 }

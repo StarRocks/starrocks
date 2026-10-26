@@ -39,7 +39,7 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     private final Predicate<CallOperator> callPredicate;
 
     public NonDeterministicVisitor() {
-        this(call -> FunctionSet.allNonDeterministicFunctions.contains(call.getFnName()));
+        this(call -> FunctionSet.isNonDeterministicFunctionIncludingTime(call.getFunction(), call.getFnName()));
     }
 
     public NonDeterministicVisitor(Predicate<CallOperator> callPredicate) {

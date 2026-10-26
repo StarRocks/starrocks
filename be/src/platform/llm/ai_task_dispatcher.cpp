@@ -411,7 +411,8 @@ public:
             bytes += value;
             return true;
         };
-        if (!add_bytes(request.url.size()) || !add_bytes(request.body.size())) {
+        if (!add_bytes(request.url.size()) || !add_bytes(request.body.size()) ||
+            !add_bytes(request.response_context.retained_bytes())) {
             return Status::MemoryLimitExceeded("AI provider request template memory limit exceeded");
         }
         // Match AIHttpClient request accounting: each header contributes its stored strings plus ": " and CRLF.
@@ -438,6 +439,7 @@ public:
                 std::string().swap(_request.url);
                 std::vector<AIHttpHeader>().swap(_request.headers);
                 std::string().swap(_request.body);
+                _request.response_context = {};
                 _memory = {};
             });
         } catch (...) {
@@ -1292,7 +1294,8 @@ void AITaskState::_classify(AIHttpResult result, AIBucketResolutionGuard guard) 
     if ((response.status_code >= 200 && response.status_code < 300) || response.status_code == 400) {
         try {
             run_in_physical_scope(_memory, [&] {
-                provider_result = _core->provider->parse_response(response.body.data(), _rate_limit_key.capability());
+                provider_result = _core->provider->parse_response(response.body.data(), _rate_limit_key.capability(),
+                                                                  _request_template.request().response_context);
             });
         } catch (...) {
             clear_provider_result();

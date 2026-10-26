@@ -926,7 +926,7 @@ public class Utils {
         if (operator instanceof CallOperator) {
             CallOperator call = (CallOperator) operator;
             String fnName = call.getFnName();
-            if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+            if (FunctionSet.isNonDeterministicFunction(call.getFunction(), fnName)) {
                 return true;
             }
         }

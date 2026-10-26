@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -123,8 +122,7 @@ public final class AiFunctionExtractor {
             return true;
         }
         if (expression instanceof CallOperator call
-                && FunctionSet.allNonDeterministicFunctions.contains(
-                        call.getFnName().toLowerCase(Locale.ROOT))) {
+                && FunctionSet.isNonDeterministicFunctionIncludingTime(call.getFunction(), call.getFnName())) {
             return true;
         }
         return expression.getChildren().stream()

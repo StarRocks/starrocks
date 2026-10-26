@@ -147,6 +147,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
 - 引入版本：-
 
+### ai_function_rate_limit_qps_decision
+
+- 默认值: 20
+- 类型: Int (32-bit)
+- 单位: 请求/秒
+- 是否动态: 是
+- 描述: 按每个 BE、端点、凭证及决策能力限制决策 HTTP 尝试速率，包含重试，独立于 chat 和 embedding 限流。同时受进程级 `ai_function_max_inflight` 约束。动态更新立即生效并唤醒排队请求；零及负数会被拒绝。这不是集群级服务配额。
+- 引入版本: -
+
 ### ai_function_max_inflight
 
 - 默认值：512

@@ -1863,4 +1863,12 @@ ai_vectorized_functions = [
      'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
     [200143, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
+    [200160, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'JSON'], 'AiFunctions::ai_decide',
+     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1])],
+    [200161, 'ai_decide', True, False, 'JSON', ['JSON', 'JSON'], 'AiFunctions::ai_decide',
+     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1])],
+    [200162, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'JSON'], 'AiFunctions::ai_decide',
+     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], model_argument=0)],
+    [200163, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'JSON', 'JSON'], 'AiFunctions::ai_decide',
+     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], model_argument=0)],
 ]

@@ -877,6 +877,24 @@ public class FunctionSet {
             .addAll(nonDeterministicTimeFunctions)
             .build();
 
+    public static boolean isNonDeterministicFunction(Function function, String name) {
+        return isNonDeterministicFunction(function, name, nonDeterministicFunctions);
+    }
+
+    public static boolean isNonDeterministicFunctionIncludingTime(Function function, String name) {
+        return isNonDeterministicFunction(function, name, allNonDeterministicFunctions);
+    }
+
+    private static boolean isNonDeterministicFunction(Function function, String name, Set<String> names) {
+        if (function != null && function.isAi()) {
+            return true;
+        }
+        String normalized = name.toLowerCase(Locale.ROOT);
+        // Names are conservative before resolution; an unrelated resolved UDF does not inherit AI semantics.
+        return names.contains(normalized)
+                && (function == null || !VectorizedBuiltinFunctions.AI_FUNCTION_NAMES.contains(normalized));
+    }
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.LEAD)
             .add(FunctionSet.LAG)

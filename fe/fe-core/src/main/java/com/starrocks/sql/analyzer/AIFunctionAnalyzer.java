@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.builtins.VectorizedBuiltinFunctions.AICapability;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.ArrayExpr;
@@ -64,7 +65,7 @@ final class AIFunctionAnalyzer {
         int argumentCount = node.getChildren().size();
         boolean hasOptionMap = argumentCount > 1 && node.getChild(argumentCount - 1).getType().isMapType();
         int modelArgument = AIModelConfigs.getModelArgument(node.getFn());
-        boolean embedding = AIModelConfigs.isTextEmbedding(node.getFn());
+        AICapability capability = AIModelConfigs.capability(node.getFn());
         boolean namedProvider = node.getFn().getAiModelSource() == TAIModelSource.PROVIDER;
 
         try {
@@ -73,15 +74,20 @@ final class AIFunctionAnalyzer {
             if (namedProvider) {
                 // Only emitted physical AIProject calls capture metadata, independently for each execution plan.
                 AIModelConfigs.providerName(node.getChild(AIModelConfigs.getProviderArgument(node.getFn())));
-            } else if (embedding) {
-                AIModelConfigs.systemEmbeddingSnapshot(requirement);
             } else {
-                AIModelConfigs.validateSystemChat(requirement);
+                switch (capability) {
+                    case CHAT -> AIModelConfigs.validateSystemChat(requirement);
+                    case TEXT_EMBEDDING -> AIModelConfigs.systemEmbeddingSnapshot(requirement);
+                    case DECISION -> AIModelConfigs.systemDecisionSnapshot(requirement);
+                }
             }
         } catch (StarRocksPlannerException e) {
             throw new SemanticException(e.getMessage(), node.getPos());
         }
 
+        if (capability == AICapability.DECISION) {
+            validateDecisionInputs(node, modelArgument);
+        }
         if (modelArgument >= 0) {
             validateExplicitModel(node.getChild(modelArgument), node);
         }
@@ -94,6 +100,28 @@ final class AIFunctionAnalyzer {
         if (hasOptionMap) {
             validateAIOptionMap(node.getChild(argumentCount - 1), node);
         }
+    }
+
+    private static void validateDecisionInputs(FunctionCallExpr node, int modelArgument) {
+        if (modelArgument >= 0) {
+            Expr model = node.getChild(modelArgument);
+            if (!model.isConstant() || (!model.getType().isStringType() && !model.getType().isNull())) {
+                throw new SemanticException("ai_decide model must be a constant string", node.getPos());
+            }
+        }
+        Expr state = node.getChild(modelArgument >= 0 ? 1 : 0);
+        if (!state.getType().isStringType() && !state.getType().isJsonType() && !state.getType().isNull()) {
+            throw new SemanticException("ai_decide state must have VARCHAR or JSON type", node.getPos());
+        }
+        Expr questions = node.getChild(node.getChildren().size() - 1);
+        if (!questions.getType().isJsonType() && !questions.getType().isNull()) {
+            throw new SemanticException("ai_decide questions must have JSON type", node.getPos());
+        }
+        if (!questions.isConstant()) {
+            throw new SemanticException("ai_decide questions must be constant", node.getPos());
+        }
+        // JSON constants may be evaluated only by the BE. Fragment open validates the question schema,
+        // including empty inputs; SQL NULL remains distinct from a JSON null value.
     }
 
     private static void validateHelperArray(Expr expression, Type formalType, FunctionCallExpr node) {
