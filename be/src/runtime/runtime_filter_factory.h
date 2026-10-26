@@ -29,8 +29,10 @@ public:
     static RuntimeFilter* create_in_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* create_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type, LogicalType ltype,
                                         int8_t join_mode);
-    static RuntimeFilter* create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
-                                             const Columns& columns, size_t column_offset, size_t row_count);
+    // Returns a bitset filter when the key range of `columns` makes it no larger than a bloom filter of
+    // `row_count` rows; otherwise returns nullptr. Unlike a bloom filter, its size is bounded by the key range.
+    static RuntimeFilter* try_create_bitset_filter(ObjectPool* pool, LogicalType type, const Columns& columns,
+                                                   size_t column_offset, size_t row_count);
     static RuntimeFilter* to_empty_filter(ObjectPool* pool, RuntimeFilter* rf);
 };
 

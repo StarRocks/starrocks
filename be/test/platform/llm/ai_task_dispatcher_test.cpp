@@ -821,18 +821,18 @@ TEST_F(AITaskDispatcherTest, EmbeddingCapabilityUsesSeparateAdmissionBucketAndRe
     _provider.push_parse(AIProviderSuccess{.value = std::vector<float>{0.25f, -1.0f}});
     submit_and_run_control(request(1, UniqueId{8, 1}, 1));
     auto embedding = request(1, UniqueId{8, 1}, 2);
-    embedding.chat_request.capability = AICapability::TEXT_EMBEDDING;
+    embedding.chat_request.capability = AICapability::EMBEDDING;
     submit_and_run_control(std::move(embedding));
     ASSERT_EQ(2, _http.accepted_attempts);
     const auto embedding_key =
-            AIRateLimitKey::create("https://model.invalid/v1/chat", "secret-key", AICapability::TEXT_EMBEDDING);
+            AIRateLimitKey::create("https://model.invalid/v1/chat", "secret-key", AICapability::EMBEDDING);
     EXPECT_EQ(1, AIAdmissionControllerTestPeer::bucket_inflight(_controller, embedding_key));
     complete_next_transport_and_run_control();
     _completion.run_until_idle();
     complete_next_transport_and_run_control();
     _completion.run_until_idle();
     ASSERT_EQ(2, _results.size());
-    EXPECT_EQ(AICapability::TEXT_EMBEDDING, _provider.last_parse_capability);
+    EXPECT_EQ(AICapability::EMBEDDING, _provider.last_parse_capability);
     ASSERT_TRUE(std::holds_alternative<AITaskSuccess>(_results.back()));
     EXPECT_EQ((std::vector<float>{0.25f, -1.0f}), std::get<AITaskSuccess>(_results.back()).embedding());
     EXPECT_EQ(2, _metrics.ai_http_requests_total.value());
@@ -851,7 +851,7 @@ TEST_F(AITaskDispatcherTest, EmbeddingRetryPreservesResultMemoryAndCountsAttempt
     };
     _memory.on_release() = [&](size_t bytes) { released += bytes; };
     auto embedding = request(1, UniqueId{8, 2}, 1);
-    embedding.chat_request.capability = AICapability::TEXT_EMBEDDING;
+    embedding.chat_request.capability = AICapability::EMBEDDING;
     submit_and_run_control(std::move(embedding));
     complete_next_transport_and_run_control();
     _completion.run_until_idle();
@@ -879,7 +879,7 @@ TEST_F(AITaskDispatcherTest, EmbeddingCancellationBeforeLateResponseSkipsParsing
     };
     _memory.on_release() = [&](size_t bytes) { released += bytes; };
     auto embedding = request(1, UniqueId{8, 3}, 1);
-    embedding.chat_request.capability = AICapability::TEXT_EMBEDDING;
+    embedding.chat_request.capability = AICapability::EMBEDDING;
     submit_and_run_control(std::move(embedding));
     _handles.front().cancel();
     complete_next_transport_and_run_control();
@@ -913,7 +913,7 @@ TEST_F(AITaskDispatcherTest, EmbeddingReserveRejectionExceptionAndCancellationRe
         };
         memory.on_release() = [&](size_t bytes) { released += bytes; };
         auto embedding = request(1, UniqueId{8, 4}, outcome + 1);
-        embedding.chat_request.capability = AICapability::TEXT_EMBEDDING;
+        embedding.chat_request.capability = AICapability::EMBEDDING;
         embedding.memory = memory.context();
         submit_and_run_control(std::move(embedding));
         complete_next_transport_and_run_control();

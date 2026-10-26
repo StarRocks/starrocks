@@ -21,11 +21,13 @@
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/simd/expand.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "base/types/int256.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
@@ -142,6 +144,44 @@ public:
         auto n = dst->append_numbers(_data.data + _offset, max_fetch);
         DCHECK_EQ(count, n);
         _offset += max_fetch;
+        return Status::OK();
+    }
+
+    // Writes the null column once from `null_infos` and scatters the non-null values straight from the
+    // page buffer, instead of one append_nulls / append_numbers pair per null run. `filter` is ignored,
+    // as in next_batch: a plain value costs the same to copy whether or not the row is selected.
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override {
+        if (null_infos.num_ranges <= 2) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        DCHECK(dst->is_nullable());
+        size_t read_count = count - null_infos.num_nulls;
+        size_t read_bytes = read_count * SIZE_OF_TYPE;
+        if (read_bytes + _offset > _data.size) {
+            return Status::InternalError(strings::Substitute(
+                    "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, read_count, _data.size));
+        }
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        auto* data_column = down_cast<FixedLengthColumnBase<T>*>(nullable_column->data_column_raw_ptr());
+        size_t cur_size = data_column->size();
+        _next_null_column(count, null_infos, nullable_column);
+        data_column->resize_uninitialized(cur_size + count);
+
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        // expand_load reads src[k] where k is the number of non-nulls before the current row, so over trailing
+        // nulls it reads one element past the last value, which may be past the end of the page. Values at
+        // null rows are unspecified anyway, so stop at the last non-null row.
+        size_t expand_count = count;
+        while (expand_count > 0 && is_nulls[expand_count - 1]) {
+            --expand_count;
+        }
+        // The values start wherever the definition levels end, so they are not necessarily aligned for T;
+        // expand_load reads its source with unaligned loads.
+        const T* src = reinterpret_cast<const T*>(_data.data + _offset);
+        T* __restrict data = data_column->get_data().data() + cur_size;
+        SIMD::Expand::expand_load(data, src, is_nulls, expand_count);
+        _offset += read_bytes;
         return Status::OK();
     }
 
@@ -302,7 +342,7 @@ public:
                 num_decoded++;
             }
             CHECK_DECODING_BOUND
-        } else {
+        } else if (count > 0) {
             auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(count * sizeof(Slice));
             Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
             size_t max_size = 0;
@@ -407,6 +447,38 @@ public:
         return Status::OK();
     }
 
+    // Unpacks the non-null values once and expands them into place under the null flags, instead of one
+    // append_nulls / next_batch pair per null run.
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override {
+        if (null_infos.num_ranges <= 2) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        DCHECK(dst->is_nullable());
+        size_t read_count = count - null_infos.num_nulls;
+        raw::stl_vector_resize_uninitialized(&_values_buffer, read_count);
+        auto num_unpacked_values = unpack_batch(read_count, _values_buffer.data());
+        if (num_unpacked_values < read_count) {
+            return Status::InternalError(
+                    strings::Substitute("going to read out-of-bounds data, count=$0,num_unpacked_values=$1", read_count,
+                                        num_unpacked_values));
+        }
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        auto* data_column = down_cast<FixedLengthColumnBase<uint8_t>*>(nullable_column->data_column_raw_ptr());
+        size_t cur_size = data_column->size();
+        _next_null_column(count, null_infos, nullable_column);
+        data_column->resize_uninitialized(cur_size + count);
+        const uint8_t* is_nulls = null_infos.nulls_data();
+        // the expand reads one value past the last one over trailing nulls; stop at the last non-null row
+        size_t expand_count = count;
+        while (expand_count > 0 && is_nulls[expand_count - 1]) {
+            --expand_count;
+        }
+        SIMD::Expand::expand_load(data_column->get_data().data() + cur_size, _values_buffer.data(), is_nulls,
+                                  expand_count);
+        return Status::OK();
+    }
+
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
         // resize() — see encoding_bss.h: reserve() leaves storage uninitialised,
@@ -430,6 +502,8 @@ private:
 
     BatchedBitReader _batched_bit_reader;
     std::vector<uint8_t> _skip_buffer;
+    // the non-null values of one next_batch_with_nulls call
+    std::vector<uint8_t> _values_buffer;
 
     std::unique_ptr<uint8_t[]> _decoded_values_buffer;
     std::size_t _decoded_buffer_size;

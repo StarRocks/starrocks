@@ -816,6 +816,10 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
 CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
+// Combined lock-wait budget for receiving a replicated segment, in milliseconds.
+// The deadline is computed at the BRPC handler entry and shared by both channel locks.
+// Nonpositive values use be_exit_after_disk_write_hang_second converted to milliseconds; a positive value overrides it.
+CONF_mInt32(tablet_writer_add_segment_lock_timeout_ms, "0");
 // make_snapshot rpc timeout
 CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread

@@ -22,14 +22,13 @@ namespace starrocks {
 
 TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
     for (const std::string& secret : {std::string("test-key"), std::string("test\n\x01\"key")}) {
-        TAIEndpointConfig endpoint;
-        endpoint.__set_endpoint("https://models.example.test/v1/inference");
-        endpoint.__set_api_key(secret);
-        TAIModelConfiguration config;
-        config.__set_chat(endpoint);
-        config.__set_embedding(endpoint);
+        TAIProvider config;
+        config.__set_id("provider:test-id");
+        config.__set_type(TAIProviderType::CHAT);
+        config.__set_protocol(TAIProviderProtocol::OPENAI);
+        config.__set_params({{"endpoint", "https://models.example.test/v1/inference"}, {"api_key", secret}});
         TAIProjectNode ai;
-        ai.__set_ai_model_configs({{"provider:test-id", config}});
+        ai.__set_ai_provider_mapping({{"provider:test-id", config}});
         TPlanNode node;
         node.__set_ai_project_node(ai);
         TPlan plan;
@@ -42,9 +41,8 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         info.__set_plan_fragment(fragment);
 
         TPlanNode masked_node(node);
-        auto& masked = masked_node.ai_project_node.ai_model_configs.at("provider:test-id");
-        masked.chat.__set_api_key("******");
-        masked.embedding.__set_api_key("******");
+        auto& masked = masked_node.ai_project_node.ai_provider_mapping.at("provider:test-id");
+        masked.params["api_key"] = "******";
         TPlanFragment masked_fragment(fragment);
         masked_fragment.plan.nodes[0] = masked_node;
         TExecPlanFragmentParams masked_request(request);
@@ -57,11 +55,12 @@ TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_fragment), thrift_plan_debug_string(fragment));
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_request), thrift_plan_debug_string(request));
         EXPECT_EQ(apache::thrift::ThriftDebugString(masked_info), thrift_plan_debug_string(info));
-        EXPECT_EQ(secret,
-                  request.fragment.plan.nodes[0].ai_project_node.ai_model_configs.at("provider:test-id").chat.api_key);
+        EXPECT_EQ(secret, request.fragment.plan.nodes[0]
+                                  .ai_project_node.ai_provider_mapping.at("provider:test-id")
+                                  .params.at("api_key"));
         EXPECT_EQ(secret, info.plan_fragment.plan.nodes[0]
-                                  .ai_project_node.ai_model_configs.at("provider:test-id")
-                                  .embedding.api_key);
+                                  .ai_project_node.ai_provider_mapping.at("provider:test-id")
+                                  .params.at("api_key"));
     }
 }
 

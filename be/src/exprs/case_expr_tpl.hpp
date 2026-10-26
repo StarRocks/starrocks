@@ -359,7 +359,7 @@ private:
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
-        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType> || ResultType == TYPE_VARIANT) {
+        if constexpr (kRowWiseAppendResult || lt_is_collection<WhenType> || WhenType == TYPE_VARIANT) {
             // construct result column
             bool res_nullable = false;
             for (const auto& col : then_columns) {
@@ -852,6 +852,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL256, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
+        CASE_WHEN_RESULT_TYPE(TYPE_VARIANT, RESULT_TYPE);                                 \
         CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
         CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \
         CASE_WHEN_RESULT_TYPE(TYPE_STRUCT, RESULT_TYPE);                                  \
