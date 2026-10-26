@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
@@ -132,6 +133,9 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
                 currentFileReader = null;
 
                 if (scanFileIter.hasNext()) {
+                    // Guarded inside the branch, not at the method's entry: the last call of an iteration
+                    // comes here with no file left to open and waits on nothing.
+                    BlockingCallValidator.validateNotUnderLock("remote-storage");
                     try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "TraceDefaultJsonHandler.ReadJsonFile")) {
                         currentFile = scanFileIter.next();
                         Path filePath = new Path(currentFile.getPath());
