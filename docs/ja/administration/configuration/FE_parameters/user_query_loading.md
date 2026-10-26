@@ -69,7 +69,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
+- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。完了したタスク実行を `_statistics_.task_run_history` にアーカイブする前にも同じ編集が適用されるため、履歴テーブルに資格情報が平文で保存されることはありません。false の場合、生のタスク定義が返され、そのままアーカイブされます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
 - 導入時期：v3.5.6
 
 ### `privilege_max_role_depth`
@@ -90,6 +90,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーが持つことができるロールの最大数。
 - 導入時期：v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- デフォルト：false
+- タイプ：Boolean
+- Unit: -
+- 変更可能：Yes
+- 説明：Ranger Hive Service (`ranger.plugin.hive.service.name`) を使用する External Catalog のプロパティ `ranger.plugin.hive.catalog_prefix.enabled` のデフォルト値。有効値が `true` の場合、StarRocks は Ranger に送る `database` リソースとして素のデータベース名ではなく `<catalog_name><separator><database_name>` を使用し、1 つの Ranger Hive Service を共有する複数の Catalog が同名のデータベースで衝突しないようにします。Catalog 側でこのプロパティを明示的に設定した場合はそちらが優先されます。変更は、それを受け取ったすべての FE で即時に有効になります。
+- 導入時期：v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- デフォルト：_
+- タイプ：String
+- Unit: -
+- 変更可能：Yes
+- 説明：`ranger_hive_catalog_prefix_enabled` (または Catalog プロパティ `ranger.plugin.hive.catalog_prefix.enabled`) が `true` の場合に、Catalog 名とデータベース名の間に挿入する区切り文字。1 つの Ranger Hive Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+- 導入時期：v4.2
+
 ## クエリエンジン
 
 ### `ai_default_chat_endpoint`
@@ -107,7 +125,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：FILE オーバーロードを含む、モデルを明示しない SYSTEM `ai_complete` 呼び出しで使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_chat_provider`
@@ -115,9 +133,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`qwen_compatible`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。正確に `openai_compatible` または `qwen_compatible` を指定する必要があり、空または未対応の値は解析に失敗します。両方のプロトコルがテキストと inline 画像 FILE に対応し、inline MP4 動画は `qwen_compatible` のみが対応します。選択したモデルは入力のモダリティに対応している必要があります。プロトコルを endpoint やモデル名から推定することはありません。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +161,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`dashscope_multimodal`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。テキスト用の `openai_compatible`、またはテキストと inline JPEG、PNG、WebP 画像 FILE 用の `dashscope_multimodal` を正確に指定します。選択したモデルは入力のモダリティに対応している必要があります。動画 FILE の埋め込みは未対応です。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。プロトコルを endpoint やモデル名から推定することはありません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -191,6 +209,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：秒
 - 変更可能：Yes
 - 説明：外部テーブルの統計情報収集クエリ 1 本あたりの最大実行時間です。統計収集は (パーティション, 列グループ) ごとにクエリを発行し、各クエリは上記のスキャン予算の範囲で 1 パーティションを読み取って固定サイズのスケッチを生成するため、通常は 1 秒未満で返ります。この上限がない場合、各クエリは収集ジョブ全体の予算である `statistic_collect_query_timeout` の残り時間をそのまま引き継ぐため、過負荷の BE に詰まったクエリ 1 本が予算を使い切り、それ以降のパーティションがまったく収集されなくなる可能性があります。コールドストレージや遠隔のオブジェクトストレージで、制限付きスキャンでも時間がかかる場合はこの値を大きくしてください。`0` 以下の値は個別の上限を無効にし、クエリが再びジョブの残り予算全体を使用できるようになります。実際に適用されるタイムアウトは、常にこの値とジョブの残り予算のうち小さい方です。
+- 導入時期：v4.1
+
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- デフォルト：0.5
+- タイプ：Double
+- 変更可能：Yes
+- 説明：ある列の統計情報を記録するために必要な最低カバレッジ、すなわち外部テーブルの統計情報収集が要求したパーティションのうち実際に収集できた割合の下限です。途中で打ち切られた収集（一部のクエリが許容されてスキップされた場合や、ジョブが途中で失敗した場合）でも、読み取れたパーティションの行は書き込まれ、いくつのパーティションを要求したかも記録されるため、読み取り側は正しくスケールできます。しかしカバレッジが一定を下回ると、それは割に合わなくなります。行数は収集できたパーティションから外挿できますが、NDV は外挿されません。そして NDV こそ、結合カーディナリティ推定が最も敏感に反応する入力です。パーティションの 20 分の 1 しか収集できていない列は、実際の約 20 分の 1 の NDV を事実として optimizer に渡すことになります。この比率を下回る列にはメタデータを記録せず、optimizer はコネクタ自身のテーブルメタデータにフォールバックします。正確な行数と NDV なし、つまり自信を持った誤った値ではなくデフォルトの選択率が使われます。テーブル全体ではなく収集が要求した分を分母として測るため、サンプリングであるというだけでカバレッジ不足とは判定されません。`0` 以下の値は、収集できた分をそのまま記録します。
+- 導入時期：v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：外部テーブルの統計情報収集ジョブ 1 件が、BE のメモリ解放を待つために費やせる合計時間です。BE プロセス全体のメモリ超過によって収集クエリが拒否された場合、その不足は他の処理が原因で自然に解消するため、失敗したパーティションとして数えるのではなく、一定時間待ってから再試行します。ただしこれは短いスパイクに限って成立します。メモリ不足が継続している場合はすべてのクエリが拒否されるため、この上限がないとジョブは `statistic_collect_query_timeout` の予算全体をスリープに費やし、その間 `connector_table_query_trigger_analyze_max_running_task_num` のスロットを 1 つ占有し続けます。統計は何も収集されず、他のテーブルの収集も妨げられます。予算を使い切るとジョブは待機をやめ、失敗は再試行が導入される前と同様に `statistic_full_statistics_failure_tolerance_ratio` にカウントされ、クラスタが回復した後に再度トリガーできるよう早めに終了します。`0` 以下の値は待機時間を無制限にし、`statistic_collect_query_timeout` のみで制限されます。
+- 導入時期：v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- デフォルト：1800
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：クエリによってトリガーされる analyze が失敗し続けているテーブルを、再試行するまで最大どれだけ放置するかを指定します。失敗した収集はメタデータをまったくコミットしないため、収集しようとしていた統計は欠けたままとなり、次のクエリが再び収集を要求します。するとスケジューラは 1 tick 後、つまり `connector_table_query_trigger_task_schedule_interval` 秒ごとに同じジョブを実行し、失敗が続く限りこれが繰り返されます。上記の interval 系の設定はこれを防げません。それらは失敗したジョブが書き込まなかったメタデータと比較しているためです。連続して失敗するたびに放置時間は 2 倍になり、1 分から始まってこの上限で止まります。収集が 1 回成功すればリセットされます。手動の `ANALYZE` が抑制されることはありません。`0` 以下の値はバックオフを無効にし、スケジュールの tick ごとに再試行する動作に戻します。
 - 導入時期：v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -1176,7 +1220,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `history_job_keep_max_num`
 
-- デフォルト：1000
+- デフォルト：10000
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes

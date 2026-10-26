@@ -747,6 +747,7 @@ vectorized_functions = [
     [70117, 'if', True, False, 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70118, 'if', True, False, 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70119, 'if', True, False, 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+    [70120, 'if', True, False, 'VARIANT', ['BOOLEAN', 'VARIANT', 'VARIANT'], 'nullptr'],
 
     [70200, 'ifnull', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -771,6 +772,7 @@ vectorized_functions = [
     [70217, 'ifnull', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70218, 'ifnull', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70219, 'ifnull', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70220, 'ifnull', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70300, 'nullif', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -795,6 +797,7 @@ vectorized_functions = [
     [70317, 'nullif', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70318, 'nullif', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70319, 'nullif', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70320, 'nullif', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70400, 'coalesce', True, False, 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
@@ -819,6 +822,7 @@ vectorized_functions = [
     [70418, 'coalesce', True, False, 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
     [70419, 'coalesce', True, False, 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
     [70420, 'coalesce', True, False, 'JSON', ['JSON', '...'], 'nullptr'],
+    [70421, 'coalesce', True, False, 'VARIANT', ['VARIANT', '...'], 'nullptr'],
 
     [70415, 'esquery', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -1033,6 +1037,7 @@ vectorized_functions = [
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
     [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+    [120163, "encode_fingerprint_sha256_v2", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256_v2"],
 
 
     # geo function
@@ -1216,19 +1221,20 @@ vectorized_functions = [
     # Contract 5.6: H3 cells are signed SQL BIGINT values.
     # Start H3 IDs at 120500 to leave room for future ST_ functions.
     [120500, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
-     "GeoFunctions::h3_from_geo", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_from_geo"],
     [120501, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
-     "GeoFunctions::h3_grid_disk", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_grid_disk"],
     [120502, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
-     "GeoFunctions::h3_to_parent", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_to_parent"],
     [120503, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
-     "GeoFunctions::h3_to_children", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_to_children"],
     [120504, "H3_Resolution", False, False, "INT", ["BIGINT"],
-     "GeoFunctions::h3_resolution", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_resolution"],
     [120505, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
-     "GeoFunctions::h3_to_boundary", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_to_boundary"],
     [120506, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
-     "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
+     "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_polygon_to_cells_prepare",
+     "GeoFunctions::h3_polygon_to_cells_close"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
@@ -1766,7 +1772,7 @@ vectorized_functions = [
 # dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
 # BE builtin descriptor table.
 def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=()):
+                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1):
     # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
     return {
         'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
@@ -1776,6 +1782,7 @@ def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_arg
         'input_arguments': list(input_arguments),
         'model_argument': model_argument,
         'provider_argument': provider_argument,
+        'file_argument': file_argument,
         'null_as_empty_arguments': list(null_as_empty_arguments),
         'blank_as_null_arguments': list(blank_as_null_arguments),
     }
@@ -1790,6 +1797,14 @@ ai_vectorized_functions = [
      ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
     [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
+    [200104, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200105, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200106, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
+    [200107, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE', 'ANY_MAP'],
+     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
     [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
      'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
     [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
@@ -1836,6 +1851,14 @@ ai_vectorized_functions = [
      ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
     [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
+    [200134, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200135, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200136, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
+    [200137, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
     [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
      'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
     [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],

@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -21,12 +22,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
@@ -139,13 +142,6 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // (FullStatisticsCollectJob#collect).
     private static final int MIN_TASKS_TO_TOLERATE_FAILURE = 100;
 
-    // Backend-wide memory exhaustion is transient, so a rejected collection query is retried after a pause
-    // instead of being counted as a failed partition. Short first, since the spike that prompted this cleared
-    // in about a second; the later steps cover a longer-running neighbour without pinning the job to a
-    // backend that is genuinely saturated - once these are exhausted the query counts as failed and the usual
-    // tolerance rules apply.
-    private static final long[] PROCESS_MEMORY_RETRY_BACKOFF_MS = {10_000L, 30_000L};
-
     // Tolerating a failed query means the rows this job writes cover fewer partitions than it set out to
     // scan, so what actually landed has to be recorded per column rather than assumed to be `partitionNames`
     // (see ColumnStatsMeta#sampledPartitionsHashValue, which is the denominator every SAMPLE row count is
@@ -154,6 +150,13 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // second group failed still has durable, correct rows for the first group's columns and must stay in
     // those columns' denominator.
     private final Map<String, Set<String>> collectedPartitionsByColumn = Maps.newHashMap();
+    // Partitions an earlier, unfinished collection already covered, per column - only for columns whose
+    // recorded coverage is short. A query whose every column is in here for a given partition is skipped,
+    // so a resumed run spends its budget on what is actually missing instead of redoing the table from
+    // the start. Empty on an ordinary run, where nothing may be skipped. Built from committed metadata
+    // held in memory (see resolveResumableCollectedPartitions); no connector metadata is fetched for it.
+    private Map<String, Set<Long>> resumeAlreadyCollectedByColumn = Collections.emptyMap();
+    private int skippedResumedTasks = 0;
     private long failedSQLNum = 0;
     private long totalSQLNum = 0;
     private Exception lastFailure = null;
@@ -317,12 +320,44 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // discussion).
     protected void runCollectPhases(ConnectContext context, AnalyzeStatus analyzeStatus, long jobId) throws Exception {
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        resolveResumableCollectedPartitions();
         List<CollectTask> collectTasks = buildCollectSQLList(parallelism);
         totalSQLNum = collectTasks.size();
-        executeCollectSQLList(collectTasks, context, analyzeStatus, 0, collectTasks.size(), parallelism);
+        executeCollectPhase(collectTasks, context, analyzeStatus, 0, collectTasks.size(), parallelism);
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
         reportToleratedFailures(analyzeStatus, jobId);
+    }
+
+    // Runs one phase's queries and, however the phase ends, leaves what it managed to collect on disk.
+    //
+    // The buffered rows are the job's entire output so far, and when the job is about to fail they are all
+    // there is. Dropping them means the next attempt starts from nothing - and on a table where collection
+    // keeps being cut short, always starting from nothing is how it never finishes at all. Keeping them is
+    // only safe because the metadata committed alongside records the coverage they actually have (see
+    // StatisticExecutor#commitExternalColumnStatsMeta), so a partial result is used as a partial result
+    // instead of being mistaken for the whole table.
+    protected long executeCollectPhase(List<CollectTask> collectTasks, ConnectContext context,
+                                       AnalyzeStatus analyzeStatus, long finishedSQLNum, long totalCollectSQL,
+                                       int parallelism) throws Exception {
+        try {
+            return executeCollectSQLList(collectTasks, context, analyzeStatus, finishedSQLNum, totalCollectSQL,
+                    parallelism);
+        } catch (Exception e) {
+            try {
+                flushInsertStatisticsData(context, true);
+            } catch (Exception flushFailure) {
+                // Nothing reached storage, so there is nothing to commit metadata for either. The
+                // collection failure is what the job reports.
+                if (flushFailure != e) {
+                    e.addSuppressed(flushFailure);
+                }
+                LOG.warn("[ExternalStats] failed to persist partial results of a failed collection | jobId={} " +
+                        "catalog={} db={} table={}", analyzeStatus.getId(), catalogName, db.getOriginName(),
+                        table.getName(), flushFailure);
+            }
+            throw e;
+        }
     }
 
     // Runs every CTE query in `collectTasks` (in order). `finishedSQLNum`/`totalCollectSQL` let a
@@ -433,7 +468,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 checkCancelled(analyzeStatus);
                 calculateAndSetRemainingTimeout(context, analyzeStatus);
 
-                if (attempt >= PROCESS_MEMORY_RETRY_BACKOFF_MS.length || !isProcessMemoryExhausted(e)) {
+                if (attempt >= maxProcessMemoryRetries() || !isProcessMemoryExhausted(e)) {
                     return e;
                 }
                 long backoffMs = retryBackoffMillis(attempt);
@@ -441,25 +476,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                                 "partition={} attempt={} backoffMs={}",
                         analyzeStatus.getId(), catalogName, db.getOriginName(), table.getName(),
                         task.getPartitionName(), attempt + 1, backoffMs);
-                Thread.sleep(backoffMs);
+                // The job's waiting budget is shared by every query it runs: a shortage that outlasts the
+                // budget is not a spike, and continuing to wait it out would cost the whole job's deadline
+                // for nothing (see awaitBackendMemory).
+                if (!awaitBackendMemory(backoffMs)) {
+                    return e;
+                }
             }
         }
-    }
-
-    // Overridable so tests do not have to sleep through the real backoff.
-    protected long retryBackoffMillis(int attempt) {
-        return PROCESS_MEMORY_RETRY_BACKOFF_MS[attempt];
-    }
-
-    // True when the failure is the backend as a whole running out of memory, which says nothing about this
-    // query and will stop being true on its own.
-    static boolean isProcessMemoryExhausted(Throwable failure) {
-        for (Throwable t = failure; t != null && t != t.getCause(); t = t.getCause()) {
-            if (t.getMessage() != null && t.getMessage().contains(PROCESS_MEMORY_EXHAUSTED_MARKER)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Records a tolerated partial failure on the job so it is visible in SHOW ANALYZE STATUS. The job still
@@ -513,6 +537,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // of it, so a job that skipped them is not treated as having lost coverage.
     public int getRequestedPartitionCount() {
         return (int) partitionNames.stream().filter(p -> !DO_NOT_COLLECT_PARTITIONS.contains(p)).count();
+    }
+
+    // How many partitions this job set out to collect for each of its columns - the denominator a
+    // column's coverage is measured against, both when deciding whether what was collected is worth
+    // recording and when a later run asks whether the column is still short (see
+    // ColumnStatsMeta#isCoverageIncomplete). Every column of a full job asks for the same partitions,
+    // which is not true of the sample job (see its override). Derived from the partition list the job
+    // already holds: nothing here goes back to the connector for metadata.
+    public Map<String, Integer> getRequestedPartitionCountByColumn() {
+        int requested = getRequestedPartitionCount();
+        Map<String, Integer> result = Maps.newHashMap();
+        columnNames.forEach(column -> result.put(column, requested));
+        return result;
     }
 
     protected static Set<Long> hashPartitionNames(Collection<String> partitions) {
@@ -671,13 +708,64 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             for (int start = 0; start < scanColumnNames.size(); start += columnsPerScan) {
                 int end = Math.min(scanColumnNames.size(), start + columnsPerScan);
                 List<String> batchColumnNames = scanColumnNames.subList(start, end);
+                if (alreadyCollectedForEveryColumn(partitionName, batchColumnNames)) {
+                    skippedResumedTasks++;
+                    continue;
+                }
                 tasks.add(new CollectTask(partitionName, Lists.newArrayList(batchColumnNames),
                         buildPartitionCTESQL(table, partitionName,
                                 batchColumnNames, scanColumnTypes.subList(start, end))));
             }
         }
 
+        if (skippedResumedTasks > 0) {
+            LOG.info("[ExternalStats] resuming an incomplete collection | catalog={} db={} table={} " +
+                            "skippedQueries={} remainingQueries={}", catalogName, db.getOriginName(),
+                    table.getName(), skippedResumedTasks, tasks.size());
+        }
         return tasks;
+    }
+
+    // True when every column of this query already has this partition from an earlier run of a collection
+    // that never finished, so reading it again would spend the budget on work already done.
+    //
+    // Only columns whose recorded coverage is short are resumable (see resumeAlreadyCollectedByColumn):
+    // for any other column this run is a refresh and must read every partition it asked for, and one such
+    // column in the group is enough to keep the query. The rows the skipped partitions already have stay
+    // valid - the metadata committed at the end unions this run's partitions with the recorded ones, so
+    // the coverage it describes is the rows that exist, not just the rows this run wrote. A resumed column
+    // becomes complete once its missing partitions are filled in, after which the ordinary interval
+    // refresh re-reads all of them, so nothing stays stale indefinitely.
+    private boolean alreadyCollectedForEveryColumn(String partitionName, List<String> batchColumnNames) {
+        if (resumeAlreadyCollectedByColumn.isEmpty()) {
+            return false;
+        }
+        long partitionHash = Hashing.murmur3_128().hashUnencodedChars(partitionName).asLong();
+        for (String columnName : batchColumnNames) {
+            Set<Long> collected = resumeAlreadyCollectedByColumn.get(columnName);
+            if (collected == null || !collected.contains(partitionHash)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Reads the committed metadata - in memory, not from the connector - and works out which partitions
+    // this run may leave alone, per column. Called once, before the query list is built.
+    protected void resolveResumableCollectedPartitions() {
+        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(catalogName, db.getFullName(), table.getName());
+        if (basicStatsMeta == null) {
+            return;
+        }
+        Map<String, Set<Long>> resumable = Maps.newHashMap();
+        for (String columnName : columnNames) {
+            ColumnStatsMeta columnStatsMeta = basicStatsMeta.getColumnStatsMetaMap().get(columnName);
+            if (columnStatsMeta != null && columnStatsMeta.isCoverageIncomplete()) {
+                resumable.put(columnName, columnStatsMeta.getSampledPartitionsHashValue());
+            }
+        }
+        resumeAlreadyCollectedByColumn = resumable;
     }
 
     // Builds one CTE query that collects `batchColumnNames` of a single partition in a shared scan.
@@ -762,10 +850,53 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             if (nullValues.contains(partitionValue)) {
                 partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
             } else {
-                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                partitionPredicate.add(partitionEquals(table, partitionColumnName, partitionValue));
             }
         }
         return partitionPredicate;
+    }
+
+    // `col = value` for one partition column.
+    //
+    // An integer partition column gets an unquoted literal. Quoting it makes the comparison
+    // string-to-string, and where the implicit cast that resolves it lands decides whether the partition
+    // is pruned and whether the file's min/max can be used at all - and if it lands on the column, the
+    // query reads what it should have skipped, or aggregates over the wrong rows and stores the answer as
+    // this partition's statistics. Nothing about the collection would look wrong afterwards.
+    //
+    // Everything else stays a quoted literal, which is correct for strings and folds cleanly for dates.
+    // A partition value is data, so it is escaped: an unescaped quote in one would otherwise produce SQL
+    // that does not parse, or parses into something else.
+    private String partitionEquals(Table table, String partitionColumnName, String partitionValue) {
+        Column column = table.getColumn(partitionColumnName);
+        return StatisticUtils.quoting(partitionColumnName) + " = "
+                + partitionValueLiteral(column == null ? null : column.getType(), partitionValue);
+    }
+
+    @VisibleForTesting
+    static String partitionValueLiteral(Type columnType, String partitionValue) {
+        if (columnType != null && columnType.isIntegerType() && isDecimalInteger(partitionValue)) {
+            return partitionValue;
+        }
+        return "'" + SqlUtils.escapeSqlString(partitionValue) + "'";
+    }
+
+    // Only a plain decimal integer may be emitted unquoted; anything else - a hive null marker, a value
+    // that does not match its declared type - keeps the quoted form, which parses whatever it is.
+    private static boolean isDecimalInteger(String value) {
+        if (StringUtils.isEmpty(value)) {
+            return false;
+        }
+        int start = (value.charAt(0) == '-' || value.charAt(0) == '+') ? 1 : 0;
+        if (start == value.length()) {
+            return false;
+        }
+        for (int i = start; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private List<String> generatePartitionPredicatesForIcebergTable(IcebergTable table, String partitionName) {
@@ -799,7 +930,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 partitionPredicate.add(IcebergPartitionUtils.convertPartitionTransformToPredicate(table, field,
                         partitionColumnName, partitionValue));
             } else {
-                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+                partitionPredicate.add(partitionEquals(table, partitionColumnName, partitionValue));
             }
         }
         return partitionPredicate;
@@ -929,9 +1060,17 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                     // already been collected and is sitting in this buffer, so giving up throws away the whole
                     // job's work. The buffer is only cleared on success, so retrying resends exactly the same
                     // rows.
+                    // Same escalation as the collection queries: waiting the same short interval five times
+                    // over is not what a backend under memory pressure needs, and retryBackoffMillis holds
+                    // the last step once the attempts outrun the schedule.
+                    long backoffMs = retryBackoffMillis(count);
                     LOG.warn("[ExternalStats] backend out of memory on statistics insert, retrying | rows={} " +
-                            "attempt={} backoffMs={}", rowsBuffer.size(), count + 1, retryBackoffMillis(0));
-                    Thread.sleep(retryBackoffMillis(0));
+                            "attempt={} backoffMs={}", rowsBuffer.size(), count + 1, backoffMs);
+                    if (!awaitBackendMemory(backoffMs)) {
+                        // Out of waiting budget: the shortage is not passing, so stop here rather than
+                        // spend the job's remaining deadline on a write that keeps being rejected.
+                        throw new DdlException(errorMessage);
+                    }
                     count++;
                 } else {
                     throw new DdlException(errorMessage);

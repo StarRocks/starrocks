@@ -209,6 +209,8 @@ public class MergeIntoPlanner {
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
         icebergSinkExtra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
         // For MERGE, the plan has source LEFT JOIN target — there may be multiple
         // IcebergScanNodes (e.g., self-merge or USING another Iceberg table).

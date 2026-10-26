@@ -167,6 +167,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -1171,8 +1172,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
-            Partition partition =
-                    createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet, computeResource);
+            // Size buckets with this partition's replication_num (no-op if bucketNum already set).
+            DistributionInfo dist = copiedTable.getDefaultDistributionInfo().copy();
+            copiedTable.inferDistribution(dist, partitionDesc.getReplicationNum());
+            Partition partition = createPartition(db, copiedTable, partitionId, partitionName, version,
+                    tabletIdSet, dist, computeResource);
 
             partitionList.add(Pair.create(partition, partitionDesc));
             tabletIdSetForAll.addAll(tabletIdSet);
@@ -1395,10 +1399,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
-            olapTable.inferDistribution(distributionInfo);
-
-            // check colocation
-            checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            // Auto-bucket is filled per partition in createPartitionMap using that partition's
+            // replication_num. Colocate still needs a concrete bucket count before checkDistribution.
+            if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                olapTable.inferDistribution(distributionInfo);
+                checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            }
             // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
             // shards to; re-validated under the WRITE lock before commit.
             metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
@@ -1771,11 +1777,48 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    public void replayModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        Database db = getDb(info.getDbId());
+        if (db == null) {
+            return;
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
+            Table table = getTable(db.getId(), info.getTableId());
+            if (!(table instanceof OlapTable)) {
+                return;
+            }
+            PhysicalPartition partition = ((OlapTable) table).getPhysicalPartition(info.getPhysicalPartitionId());
+            if (partition != null) {
+                partition.setVacuumState(info.getVacuumState());
+                // lastSuccVacuumVersion has no dedicated edit log (image-only); it equals the completed pass
+                // floor, which is also carried here as VacuumState.minRetainedVersion. Restore it from the
+                // replayed state so a frequent FE restart/failover (before the next image) keeps the vacuum
+                // watermark and shouldVacuum's "already caught up" skip, instead of reverting to a stale image
+                // value and re-vacuuming every already-drained partition after each restart.
+                long replayedFloor = info.getVacuumState().getMinRetainedVersion();
+                if (replayedFloor > partition.getLastSuccVacuumVersion()) {
+                    partition.setLastSuccVacuumVersion(replayedFloor);
+                }
+                // The switch-clearing is image-only too: the SET (by the alter) is journaled but the CLEAR
+                // (setMetadataSwitchVersion(0) in the vacuum) is not, so a failover replays the alter's set
+                // and reverts the clear -- pinning min_retain at the switch forever, leaving everything above
+                // it un-vacuumable. Re-derive the clear from the durable pass floor: once the pass has drained
+                // down to (>=) the switch version, the switch has served its purpose and is cleared.
+                if (partition.getMetadataSwitchVersion() != 0
+                        && replayedFloor >= partition.getMetadataSwitchVersion()) {
+                    partition.setMetadataSwitchVersion(0);
+                }
+            }
+        }
+    }
+
     private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
                                                       Partition partition, ComputeResource computeResource) throws DdlException {
         long partitionId = partition.getId();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
-        olapTable.inferDistribution(distributionInfo);
+        olapTable.inferDistribution(distributionInfo, replicationNum);
         // create sub partition
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         // physical partitions in the same logical partition use the same shard_group_id,
@@ -1797,8 +1840,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
             MaterializedIndex index = entry.getValue();
@@ -2075,7 +2116,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet, ComputeResource computeResource) throws DdlException {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
-        table.inferDistribution(distributionInfo);
+        short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
+        table.inferDistribution(distributionInfo, replicationNum);
 
         return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo, computeResource);
     }
@@ -2182,14 +2224,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
-        // Enable `tablet_creation_optimization` creates only one shared tablet metadata for all tablets under a partition. 
-        // Enable `file_bundling` reuses the optimization logic.
-        // These two configure only use in shared-data mode
+        // A `file_bundling` table creates only one shared version-1 tablet metadata for all tablets under a
+        // partition; any other table creates one per tablet. `file_bundling` is the only switch: it is also what
+        // makes the shared object readable on the publish, vacuum and alter paths, which the retired
+        // Config.lake_enable_tablet_creation_optimization never set up.
         // The shared metadata carries a single tablet range, and the tablets of a range-distribution table each have
         // their own, so those tables always get per-tablet metadata.
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
                 && !table.isRangeDistribution()
-                && (Config.lake_enable_tablet_creation_optimization || table.isFileBundling()));
+                && table.isFileBundling());
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         option.setBackfill(backfill);
 
@@ -4470,6 +4513,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterEnableStatisticAutoCollect(OlapTable table,
+                                                 Map<String, String> properties,
+                                                 List<Runnable> appliers) {
+        boolean enable = PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, true);
+        appliers.add(() -> table.setEnableStatisticAutoCollect(enable));
+    }
+
     private void alterCloudNativeFastSchemaEvolutionV2(OlapTable table,
                                                        Map<String, String> properties,
                                                        List<Runnable> appliers) {
@@ -4646,6 +4697,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             alterEnableStatisticCollectOnFirstLoad(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            alterEnableStatisticAutoCollect(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             alterCloudNativeFastSchemaEvolutionV2(table, properties, appliers);

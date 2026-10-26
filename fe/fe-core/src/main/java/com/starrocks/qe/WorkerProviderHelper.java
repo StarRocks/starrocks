@@ -35,4 +35,28 @@ public class WorkerProviderHelper {
         }
         return workers.values().asList().get(index);
     }
+
+    /**
+     * The splitmix64 finalizer: a cheap bijective 64-bit mix in which every output bit depends on every input bit.
+     */
+    public static long mix64(long z) {
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
+    }
+
+    /**
+     * Folds two ids into one backup affinity key, e.g. (colocate group id, bucket seq).
+     */
+    public static long combineAffinityKey(long first, long second) {
+        return mix64(mix64(first) ^ second);
+    }
+
+    /**
+     * Rendezvous hashing weight of {@code nodeId} for {@code affinityKey}: the node with the highest weight among the
+     * candidates owns the key.
+     */
+    public static long rendezvousWeight(long affinityKey, long nodeId) {
+        return mix64(affinityKey ^ mix64(nodeId));
+    }
 }

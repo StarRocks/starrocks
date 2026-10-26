@@ -75,6 +75,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
+import com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -925,6 +926,9 @@ public class OlapTableSink extends DataSink {
                 }
 
                 Expr whereClause = indexMeta.getWhereClause().clone();
+                if (indexMeta.getSyncMvDefinition() != null) {
+                    whereClause = ExprUtils.rewriteStructFieldSlotRefs(whereClause);
+                }
                 List<SlotRef> slots = Lists.newArrayList();
                 whereClause.collect(SlotRef.class, slots);
 
@@ -1600,7 +1604,16 @@ public class OlapTableSink extends DataSink {
         // Double-check the tablet location backend alive info
         if (RunMode.isSharedDataMode()) {
             // NOTE: shared-nothing workerProvider.allowUsingBackupNode() == false, so don't bother to create it
-            WorkerProvider.Factory workerProviderFactory = new DefaultSharedDataWorkerProvider.Factory();
+            // Pick the provider as the scan does (CoordinatorPreprocessor): the session's routing policy, and with
+            // skip_black_list a blocklisted but alive node stays usable. A load without a session uses the defaults.
+            ConnectContext context = ConnectContext.get();
+            SessionVariable sessionVariable = context != null ? context.getSessionVariable() : null;
+            SessionVariableConstants.BlacklistBackupRoutingPolicy backupRoutingPolicy = sessionVariable != null
+                    ? sessionVariable.getBlacklistBackupRoutingPolicy()
+                    : SessionVariableConstants.BlacklistBackupRoutingPolicy.getDefault();
+            WorkerProvider.Factory workerProviderFactory = sessionVariable != null && sessionVariable.isSkipBlackList()
+                    ? new SkipBlacklistSharedDataWorkerProvider.Factory(backupRoutingPolicy)
+                    : new DefaultSharedDataWorkerProvider.Factory(backupRoutingPolicy);
             WorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false, 0,
                     SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES, computeResource);
@@ -1610,7 +1623,8 @@ public class OlapTableSink extends DataSink {
                     List<Long> nodeIds = location.getNode_ids();
                     for (long id : nodeIds) {
                         if (!workerProvider.isDataNodeAvailable(id)) {
-                            long backupId = workerProvider.selectBackupWorker(id);
+                            // The tablet is the affinity key, the same key the scan uses, so both agree on the backup.
+                            long backupId = workerProvider.selectBackupWorker(id, location.getTablet_id());
                             if (backupId == -1) {
                                 // error out
                                 workerProvider.reportWorkerNotFoundException();

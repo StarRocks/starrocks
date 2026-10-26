@@ -17,11 +17,13 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
+import org.apache.ranger.audit.provider.AuditProviderFactory;
 import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
 import org.apache.ranger.plugin.model.RangerPolicy;
@@ -34,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Properties;
 import java.util.Set;
 
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
@@ -41,18 +44,60 @@ import static java.util.Locale.ENGLISH;
 
 public abstract class RangerAccessController extends ExternalAccessController implements AccessTypeConverter {
     private static final Logger LOG = LoggerFactory.getLogger(RangerAccessController.class);
+    private static volatile boolean auditInitFailed = false;
     protected final RangerBasePlugin rangerPlugin;
+
+    // Row filters and masks come from Ranger, per user and resource: any table may have one.
+    @Override
+    public boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return true;
+    }
 
     public RangerAccessController(String serviceType, String serviceName) {
         RangerPluginConfig rangerPluginContext = buildRangerPluginContext(serviceType, serviceName);
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
         if (!isCheckpointThread()) {
+            // Audit first, so a broken audit config disables only audit; init() then skips it.
+            initAuditIfNeeded(rangerPlugin);
             rangerPlugin.init(); // this will initialize policy engine and policy refresher
         }
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
 
         LOG.info("Start Ranger plugin ({} - {}) success",
                 rangerPluginContext.getServiceType(), rangerPluginContext.getServiceName());
+    }
+
+    /**
+     * Initializes Ranger's process-wide audit factory so that a broken audit configuration
+     * disables only audit.
+     * <p>
+     * {@link RangerBasePlugin#init()} initializes the audit factory before building the policy
+     * engine, and the factory marks itself initialized before it creates any destination. A
+     * destination class that is not on the classpath (Solr on a build without
+     * ranger-audit-dest-solr, or log4j, hdfs and kafka, which are not shipped since Ranger 2.8)
+     * therefore failed the first catalog access after every FE start, and later accesses
+     * silently dropped every audit event. Retrying is pointless: the classpath and the audit
+     * file only change with a restart.
+     */
+    private static synchronized void initAuditIfNeeded(RangerBasePlugin plugin) {
+        AuditProviderFactory factory = AuditProviderFactory.getInstance();
+        Properties properties = plugin.getConfig().getProperties();
+        if (factory.isInitDone() || properties == null) {
+            return;
+        }
+        try {
+            factory.init(properties, plugin.getAppId());
+        } catch (Exception | LinkageError e) {
+            auditInitFailed = true;
+            LOG.error("Failed to initialize Ranger audit for service type {}. Authorization keeps working, but this FE "
+                    + "writes no Ranger audit event until it is restarted with a fixed audit configuration. Check the "
+                    + "enabled xasecure.audit.* destinations in ranger-{}-audit.xml: this FE ships only the 'file' and "
+                    + "'solr' Ranger audit destinations.", plugin.getServiceType(), plugin.getServiceType(), e);
+        }
+    }
+
+    public static boolean isAuditInitFailed() {
+        return auditInitFailed;
     }
 
     protected RangerPluginConfig buildRangerPluginContext(String serviceType, String serviceName) {

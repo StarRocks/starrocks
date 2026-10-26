@@ -37,47 +37,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
-### H3 资源限制
-
-以下可修改的 BE 正数配置限制单行 H3 函数。超过限制会报错，不返回部分结果。函数签名与中心填充模型参见 [H3 函数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md)。
-
-#### h3_max_cells_per_row
-
-- Default: 100000
-- Is mutable: Yes
-- Limit: cells / pre-deduplication expansion slots.
-
-#### h3_max_grid_disk_k
-
-- Default: 128
-- Is mutable: Yes
-- Limit: grid steps.
-
-#### h3_max_polygon_vertices
-
-- Default: 10000
-- Is mutable: Yes
-- Limit: coordinate positions including ring closure.
-
-#### h3_max_polygon_components
-
-- Default: 256
-- Is mutable: Yes
-- Limit: polygon components including empty components.
-
-#### h3_max_working_bytes
-
-- Default: 67108864
-- Is mutable: Yes
-- Limit: bytes of per-worker preparation and temporary buffers.
-
-#### h3_max_estimated_work_per_row
-
-- Default: 10000000
-- Is mutable: Yes
-- Limit: sum of estimated slots times (component positions + 1).
-
-
 ### ai_function_request_timeout_ms
 
 - 默认值：600000
@@ -106,6 +65,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 有效值：正整数
 - 是否动态：是
 - 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_input_file_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：传入 `ai_complete` 或 `ai_embed` 的每个 inline FILE 的原始字节数上限，在 AI 自身复制载荷和进行 Base64 编码前检查。默认值为 10 MiB。仅在所选提供商和模型支持更大输入时调高。该参数不控制扫描或 Chunk 物化；这些内存分配与 AI 载荷仍受查询内存跟踪约束。无效或超限的 inline 输入遵循 `ai_function_on_error`。新打开的 AI fragment/operator 将该值捕获到不可变运行时快照中；已打开的 fragment 继续使用原快照。修改无需重启 BE。
 - 引入版本：-
 
 ### ai_function_worker_thread_num
@@ -317,6 +286,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
+- 引入版本：-
+
+### exchange_sink_buffer_flush_threshold_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange Sink 中每个 Driver 在 Shuffle 时用于缓存待发送数据的最大内存。Shuffle 时，Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，Chunk 填满后才会发送。当这些 Chunk 的总大小超过该阈值时，会立即全部发送并清空；如果清空后仍占用超过阈值一半的内存，则会依次释放这些 Chunk，直到占用降至阈值的一半以下。设置为 `0` 或更小的值表示不限制。
 - 引入版本：-
 
 ### exchg_node_buffer_size_bytes
@@ -864,8 +842,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：60
 - 类型：Int
 - 单位：Percent
-- 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 是否动态：是
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。运行时修改该值后，会重新计算更新 `MemTracker` 的上限、primary index cache 的容量，以及由其派生的 update state、compaction state 和 primary index block cache 的上限。调小该值时，未被使用的 primary index cache 条目会被立即淘汰，但正在使用的内存要等正在执行的导入和 compaction 结束后才会释放。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
 ### enable_vector_index_block_cache
@@ -1127,6 +1105,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Hours
 - 是否动态：是
 - 描述：导入数据信息保留的时长。
+- 引入版本：-
+
+### load_sink_close_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
 - 引入版本：-
 
 ### enable_rejected_record_sync

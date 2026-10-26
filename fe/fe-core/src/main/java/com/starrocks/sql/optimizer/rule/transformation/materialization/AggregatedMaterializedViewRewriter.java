@@ -524,7 +524,9 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                                       List<ScalarOperator> queryGroupingKeys,
                                       ScalarOperator queryRangePredicate) {
         MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
-        if (mv.getRefreshScheme().isSync() && mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo) {
+        // Range synchronous indexes can contain the same group in different logical partitions.
+        if (mv.getRefreshScheme().isSync() &&
+                (mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo || mv.isRangeDistribution())) {
             return true;
         }
         return requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);

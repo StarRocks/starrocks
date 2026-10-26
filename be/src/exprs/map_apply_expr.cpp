@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -28,7 +30,7 @@
 #include "exprs/lambda_function.h"
 #include "exprs/map_expr.h"
 #include "glog/logging.h"
-#include "runtime/chunk_accumulator.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -133,12 +135,19 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             column = ColumnHelper::align_return_type(std::move(*tmp_column).mutate(), type(), cur_chunk->num_rows(),
                                                      false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
-            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
-            accumulator.finalize();
-            while (auto tmp_chunk = accumulator.pull()) {
-                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
-                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), tmp_chunk->num_rows(), false);
+            // One bounded slice at a time. The slicing used to go through ChunkAccumulator, which
+            // cuts a chunk that is already fully built into pieces and holds *all* of them until they
+            // are pulled - a second copy of the entire entry-level chunk (every lambda argument plus
+            // every replicated capture column, at sum(map sizes) rows) alive at the same time as the
+            // original. Cutting the pieces here keeps one of them alive instead.
+            const size_t entry_rows = cur_chunk->num_rows();
+            for (size_t start = 0; start < entry_rows; start += DEFAULT_CHUNK_SIZE) {
+                const size_t count = std::min<size_t>(DEFAULT_CHUNK_SIZE, entry_rows - start);
+                auto slice_chunk = cur_chunk->clone_empty(count);
+                TRY_CATCH_BAD_ALLOC(slice_chunk->append(*cur_chunk, start, count));
+                RETURN_IF_ERROR(slice_chunk->capacity_limit_reached());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], slice_chunk.get()));
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), count, false);
                 if (column == nullptr) {
                     column = std::move(*tmp_col).mutate();
                 } else {

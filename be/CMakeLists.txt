@@ -129,6 +129,21 @@ if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
     endif()
 endif()
 
+# arrow::internal::unpack32/unpack64 are an Arrow-internal API, and newer Arrow releases no longer
+# install the bpacking headers that declare them. Decide here whether they are usable instead of
+# letting bit_packing_arrow.h probe with __has_include: that probe also searches the default system
+# prefixes, so a stray Arrow under /usr/local/include makes the header take the Arrow path while the
+# thirdparty libarrow.a we actually link defines none of those symbols (undefined symbols at link
+# time). Only the thirdparty prefix counts, because that is the Arrow that gets linked.
+set(STARROCKS_ARROW_BPACKING_H "${THIRDPARTY_DIR}/include/arrow/util/bpacking.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_ARROW_BPACKING_H}")
+if (EXISTS "${STARROCKS_ARROW_BPACKING_H}")
+    add_compile_definitions(STARROCKS_HAVE_ARROW_BITPACKING_HEADERS=1)
+    message(STATUS "Arrow bit-unpacking kernels are available in ${THIRDPARTY_DIR}")
+else()
+    message(STATUS "Arrow bit-unpacking kernels are unavailable, falling back to bitpacking_default")
+endif()
+
 if (APPLE)
     find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
                  ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
@@ -210,15 +225,20 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(USE_ARM_CRC32 "Build with ARM CRC32 instruction" ON)
 
+option(USE_ARM_PMULL "Build with ARM PMULL instruction" ON)
+
 option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
-option(WITH_H3 "Enable native H3 functions" ON)
 
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
+endif()
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64" AND ${USE_ARM_PMULL})
+    add_definitions(-DUSE_ARM_PMULL)
 endif()
 
 # The StarRocks module enables dynamic linking. This is a developer option.
@@ -372,10 +392,6 @@ if (${USE_STAROS} STREQUAL "ON")
 endif()
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
-endif()
-if (WITH_H3)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_H3")
-    set(H3_LIBRARIES h3)
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -676,7 +692,7 @@ set(STARROCKS_DEPENDENCIES
     clucene-contribs-lib
     rocksdb
     libs2
-    ${H3_LIBRARIES}
+    h3
     snappy
     ${Boost_LIBRARIES}
     thrift
@@ -867,8 +883,15 @@ endif()
 
 if (APPLE)
     set(WRAP_LINKER_FLAGS "")
+    set(WRAP_FORCE_UNDEFINED_FLAGS "")
 else()
     set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+    # -wrap adds the __wrap_* reference as a WEAK undefined symbol, and a weak reference never
+    # pulls the defining member out of a static archive. Without this, a binary that links
+    # Runtime as an archive can end up with __wrap___cxa_throw resolved to address 0, and then
+    # every throw from its own objects jumps to null. Force the reference so the definition in
+    # runtime/exception_stack.cpp is always linked. Only valid where Runtime is on the link line.
+    set(WRAP_FORCE_UNDEFINED_FLAGS "-Wl,-u,__wrap___cxa_throw")
 endif()
 
 FUNCTION(ADD_BE_LIB LIB_NAME)
@@ -933,7 +956,7 @@ endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS} ${WRAP_FORCE_UNDEFINED_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on

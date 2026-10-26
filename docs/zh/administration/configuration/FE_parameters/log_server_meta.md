@@ -438,6 +438,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
 
+### `lock_invariant_violation_log_interval_ms`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_target_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 对非 Internal Catalog 所有的对象（例如来自 External Catalog 的数据库，或占位的表 ID）请求元数据锁时的处理方式。这类标识符并不指向锁管理器能够保护的任何对象：它要么永远不会与其他锁冲突，要么与同类的所有锁冲突。有效值：`off`（不检查）、`warn`（打印带堆栈的违规日志，操作继续执行）、`error`（拒绝该操作）。无法识别的取值按 `warn` 处理。由于该参数可动态修改，集群可以先以 `warn` 运行，确认日志干净后再收紧为 `error`，无需重启。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记并附带违规调用方的堆栈；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - 默认值: 3
@@ -814,6 +832,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000
@@ -967,9 +994,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
-  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+  `/dump`、`/dump_starmgr`、`/service_id` 不在豁免范围内：无论该参数如何设置，都只允许已认证的管理员访问。认证方式可以是 HTTP Basic 认证，也可以是登录 FE Web 控制台后获得的会话 cookie。满足以下任一条件即视为管理员：通过登录时处于激活状态的角色拥有 SYSTEM 级 `NODE` 权限，例如将内置角色 `cluster_admin` 设为用户的默认角色（当 `activate_all_roles_on_login` 为 `true` 时，用户被授予的任意角色均可）；是 `root` 用户或拥有 `root` 角色；同时拥有 `db_admin` 和 `user_admin` 角色。
+
+  `/api/_meta_replay_state` 同样不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
+
+  受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
+### `enable_rest_bearer_authentication`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
+- 引入版本: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1062,6 +1102,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. 握手包版本
   3. 全局变量 `version` 的值 (`show variables like 'version';`)
+- 引入版本: -
+
+### `mysql_service_compression_enabled`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 是否在连接握手中提供 MySQL 压缩协议（zlib 和 zstd）。只有请求压缩的客户端才会使用压缩传输，例如 `mysql --compression-algorithms=zstd` 或 JDBC `useCompression=true`；其他客户端不受影响。设置为 `false` 时，FE 不再提供压缩。修改仅对新建连接生效。
 - 引入版本: -
 
 ### `mysql_service_io_threads_num`
@@ -1205,7 +1254,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: No
-- 描述: 空闲客户端连接超时的时间长度。
+- 描述: 空闲客户端连接超时的时间长度。FE Thrift 服务器会关闭空闲达到该时长的客户端连接。因此，FE 连接池中通往其他 FE 的连接空闲达到该值的 80% 后，会在下次使用前被替换为新连接，避免在对端可能已经关闭的连接上发送请求。建议所有 FE 使用相同的取值。
 - 引入版本: -
 
 ### `thrift_rpc_max_body_size`
@@ -1835,7 +1884,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
+- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次重试前，执行器会先随机等待一段时间再重新打开连接：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止。这样，同时断开连接的多个调用方不会在同一时刻集中重连。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
 - 引入版本: v3.2.0
 
 ### `thrift_rpc_strict_mode`

@@ -23,6 +23,9 @@
 
 #include "fmt/format.h"
 
+// StarRocks headers.
+#include "base/coding.h"
+
 namespace starrocks {
 namespace {
 
@@ -676,7 +679,7 @@ Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics sem
                 return Status::InvalidArgument("coordinates must be finite");
             }
             if (semantics == WkbCoordinateSemantics::GEOGRAPHY_CRS84 &&
-                (coordinate.x < -180 || coordinate.x > 180 || coordinate.y < -90 || coordinate.y > 90)) {
+                !is_valid_crs84_coordinate(coordinate.x, coordinate.y)) {
                 return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
             }
         }
@@ -736,17 +739,13 @@ Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics sem
 }
 
 void append_uint32(uint32_t value, std::string* output) {
-    for (size_t i = 0; i < sizeof(uint32_t); ++i) {
-        output->push_back(static_cast<char>((value >> (i * 8)) & 0xff));
-    }
+    put_fixed32_le(output, value);
 }
 
 void append_double(double value, std::string* output) {
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(double));
-    for (size_t i = 0; i < sizeof(double); ++i) {
-        output->push_back(static_cast<char>((bits >> (i * 8)) & 0xff));
-    }
+    put_fixed64_le(output, bits);
 }
 
 Status write_wkb(const WkbGeometry& geometry, std::string* output) {

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <future>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
@@ -119,8 +120,9 @@ static Status prepare_segment_pruned_scan_range_for_split(
         tablet_range_offset = ranges_to_resolve.size();
         ranges_to_resolve.emplace_back(segment_read_options.tablet_range.value());
     }
-    ASSIGN_OR_RETURN(auto resolved_ranges, segment_seek_ranges_to_rowid_ranges(segment, ranges_to_resolve,
-                                                                               segment_read_options.lake_io_opts));
+    ASSIGN_OR_RETURN(auto resolved_ranges,
+                     segment_seek_ranges_to_rowid_ranges(segment, ranges_to_resolve, segment_read_options.lake_io_opts,
+                                                         prepare_stats));
     std::vector<std::optional<Range<rowid_t>>> seek_ranges_rowid_bounds(
             resolved_ranges.begin(), resolved_ranges.begin() + segment_read_options.ranges.size());
     std::optional<Range<rowid_t>> tablet_range_rowid_bounds;
@@ -174,7 +176,7 @@ static StatusOr<SparseRange<>> build_initial_coarse_scan_range(const SegmentPtr&
             !segment_read_options.ranges.empty() ||
             (segment_read_options.tablet_range.has_value() && !segment_read_options.tablet_range->all_range());
     if (need_short_key_index) {
-        RETURN_IF_ERROR(segment->load_index(segment_read_options.lake_io_opts));
+        RETURN_IF_ERROR(segment->load_index(segment_read_options.lake_io_opts, segment_read_options.stats));
     }
     ASSIGN_OR_RETURN(auto scan_range,
                      block_aligned_rowid_range_from_seek_ranges(segment.get(), segment_read_options.ranges));
@@ -463,8 +465,23 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 
         if (_could_split_physically && read_params.enable_prepared_physical_split_scan) {
             auto prepared_tablet_read_state = std::make_shared<PreparedTabletReadState>();
-            RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, prepared_tablet_read_state.get()));
-            RETURN_IF_ERROR(build_initial_coarse_split_tasks(read_params, prepared_tablet_read_state));
+            OlapReaderStatistics prepare_stats;
+            {
+                // Keep reads already performed even if a later preparation step fails.
+                DeferOp record_prepare_stats([&] {
+                    _stats.lake_prepared_tablet_segments_opened += prepare_stats.segments_opened;
+                    _stats.lake_prepared_tablet_io_ns += prepare_stats.io_ns;
+                    _stats.lake_prepared_tablet_io_count += prepare_stats.io_count;
+                    _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
+                    _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
+                    _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+                });
+                SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_prepare_ns);
+                RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, prepared_tablet_read_state.get(),
+                                                                 &prepare_stats));
+                RETURN_IF_ERROR(
+                        build_initial_coarse_split_tasks(read_params, prepared_tablet_read_state, &prepare_stats));
+            }
             if (_split_tasks.empty()) {
                 _need_split = false;
                 return init_collector(read_params);
@@ -542,13 +559,12 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Lake Compaction flat json paths exists: " << read_params.column_access_paths->size();
-        return Status::OK();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
     }
-
-    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
-           read_params.column_access_paths->empty());
     // Bail out before touching any segment when this read has no JSON column: get_segments() below
     // loads every input segment, so on JSON-free tables this path would fully load the whole input
     // set for nothing (500 wide segments ≈ 350MB). Without a held set it also loads them with
@@ -558,7 +574,8 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     bool has_json_column = false;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
-        if (col.type() == LogicalType::TYPE_JSON && _schema.get_field_by_name(std::string(col.name())) != nullptr) {
+        if (col.type() == LogicalType::TYPE_JSON && _schema.get_field_by_name(std::string(col.name())) != nullptr &&
+            !columns_with_path.contains(i)) {
             has_json_column = true;
             break;
         }
@@ -579,7 +596,8 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
@@ -680,8 +698,8 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
-Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params,
-                                                      PreparedTabletReadState* state) {
+Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
+                                                      OlapReaderStatistics* prepare_stats) {
     if (state == nullptr) {
         return Status::InvalidArgument("prepared tablet read state is null");
     }
@@ -698,8 +716,11 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
     rowset_segments.reserve(rowsets.size());
     rowset_prepared_states.reserve(rowsets.size());
+    SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_segment_open_ns);
     for (const auto& rowset : rowsets) {
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts));
+        // Include the failing rowset's candidate slots even if only some footers can be opened.
+        _stats.lake_prepared_tablet_segments += rowset->num_segments();
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats));
         std::vector<PreparedSegmentReadStatePtr> prepared_states;
         prepared_states.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
@@ -805,7 +826,8 @@ Status TabletReader::init_rowset_read_options_for_split(const TabletReaderParams
 }
 
 Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& params,
-                                                      const PreparedTabletReadStatePtr& prepared_tablet_read_state) {
+                                                      const PreparedTabletReadStatePtr& prepared_tablet_read_state,
+                                                      OlapReaderStatistics* prepare_stats) {
     if (prepared_tablet_read_state == nullptr) {
         return Status::InvalidArgument("prepared tablet read state is null");
     }
@@ -818,7 +840,6 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
     LakeIOOptions lake_io_opts;
     RETURN_IF_ERROR(init_rowset_read_options_for_split(params, &rowset_read_options, &lake_io_opts));
 
-    OlapReaderStatistics prepare_stats;
     _split_tasks.clear();
     const auto split_rows = rows_per_split(params);
     for (size_t rowset_idx = 0; rowset_idx < prepared_tablet_read_state->rowsets.size(); ++rowset_idx) {
@@ -846,7 +867,7 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
                             : DisjunctivePredicates{};
             SegmentReadOptions segment_read_options;
             RETURN_IF_ERROR(rowset->init_segment_read_options(rowset_read_options, lake_io_opts, delete_predicates,
-                                                              &prepare_stats, &segment_read_options));
+                                                              prepare_stats, &segment_read_options));
             RETURN_IF_ERROR(rowset->set_segment_tablet_range(segment_idx, shared_segment_range, &segment_read_options));
             ASSIGN_OR_RETURN(auto coarse_scan_range, build_initial_coarse_scan_range(segment, segment_read_options));
             if (coarse_scan_range.span_size() == 0) {
@@ -914,9 +935,37 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     RETURN_IF_ERROR(init_rowset_read_options_for_split(prepare_params, &rowset_read_options, &lake_io_opts));
 
     OlapReaderStatistics prepare_stats;
+    DeferOp record_seed_stats([&] {
+        // Preserve the seed breakdown when pruning fails after performing reads.
+        _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
+        _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
+        _stats.lake_prepared_seed_io_remote_ns += prepare_stats.io_ns_remote;
+        _stats.lake_prepared_seed_io_count_remote += prepare_stats.io_count_remote;
+        _stats.lake_prepared_seed_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+        _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+        _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
+        _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
+                prepare_stats.get_row_ranges_by_vector_index_timer;
+        _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
+        _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
+        _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
+        _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
+        _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
+        _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
+        _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
+        _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
+        _stats.lake_prepared_seed_process_vector_distance_and_id_ns +=
+                prepare_stats.process_vector_distance_and_id_timer;
+        _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
+        _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
+        _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
+        _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
+        _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
+    });
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
     Status st;
     {
+        TEST_SYNC_POINT("TabletReader::refine_initial_coarse_split::before_pruning");
         // Time the seed-only prepared-scan-range preparation (zonemap/bloom page-filter folding + seek-range
         // resolution). This otherwise hides inside IOTaskExecTime with no dedicated counter; for highly
         // selective scans over a big tablet it can dominate the whole scan.
@@ -930,28 +979,6 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         segment_state->coarse_split_allocation_closed = true;
     }
     RETURN_IF_ERROR(st);
-
-    // Fold the seed prepare's otherwise-discarded sub-metrics into the reader stats so the SeedPrepareTime
-    // breakdown (IO / segment-init / zonemap / bloom) is visible in the profile. Accumulated across segments.
-    _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
-    _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
-    _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
-    _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
-    _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns += prepare_stats.get_row_ranges_by_vector_index_timer;
-    _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
-    _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
-    _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
-    _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
-    _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
-    _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
-    _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
-    _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
-    _stats.lake_prepared_seed_process_vector_distance_and_id_ns += prepare_stats.process_vector_distance_and_id_timer;
-    _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
-    _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
-    _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
-    _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
-    _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
 
     SparseRange<> pruned_scan_range;
     if (segment_state->pruned_scan_range != nullptr) {
@@ -977,6 +1004,12 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
                                  std::make_shared<SparseRange<>>(std::move(seed_scan_range)),
                                  seed_split.is_first_split_of_segment);
                 *local_rowid_range = std::move(rowid_range);
+            } else if (seed_split.is_first_split_of_segment) {
+                // The segment survives, but its statistics owner has no rows to read. Account for
+                // the first-split contributions without opening an empty iterator. Other splits
+                // subtract their row counts from rows_key_range_filtered as usual.
+                _stats.phy_segments_count++;
+                _stats.rows_key_range_filtered += segment->num_rows();
             }
         }
     }

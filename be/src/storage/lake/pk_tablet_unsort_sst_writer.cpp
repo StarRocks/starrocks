@@ -26,8 +26,8 @@
 #include "platform/key_cache.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/filter_policy.h"
@@ -185,9 +185,9 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
         return true;
     }
     // Under memory pressure, spill at a lower bound, mirroring LakePersistentIndex::is_memtable_full.
-    auto* update_mgr = _tablet_mgr->update_mgr();
-    if (update_mgr != nullptr && update_mgr->mem_tracker() != nullptr &&
-        update_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+    auto* primary_key_mgr = _tablet_mgr->primary_key_mgr();
+    if (primary_key_mgr != nullptr && primary_key_mgr->mem_tracker() != nullptr &&
+        primary_key_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
         mem_usage >= static_cast<size_t>(config::l0_min_mem_usage)) {
         return true;
     }

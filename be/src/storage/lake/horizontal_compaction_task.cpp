@@ -26,13 +26,13 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
@@ -271,7 +271,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         // preload primary key table's compaction state
         SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
         Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
     if (config::enable_tablet_write_log) {

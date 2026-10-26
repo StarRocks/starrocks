@@ -1,0 +1,317 @@
+-- name: test_grouping_sets_cascade
+drop table if exists gs_cascade_src_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `gs_cascade_src_${uuid0}` (
+    `k1` varchar(20),
+    `k2` varchar(20),
+    `k3` varchar(20),
+    `k4` int,
+    `k5` int,
+    `v_big` bigint,
+    `v_int` int,
+    `v_dec` decimal(27,9),
+    `v_dbl` double
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO gs_cascade_src_${uuid0} VALUES
+ ('a','x','p',1,1,  10,  1,  1.500000000,  1.5)
+,('a','x','p',1,1,  20,  2,  2.500000000,  2.5)
+,('a','x','p',1,2,  30,  3,  3.500000000,  3.5)
+,('a','x','q',2,1,   7,  7,  7.250000000,  7.25)
+,('a','y','p',1,1,  11, 11, 11.125000000, 11.125)
+,('b','x','p',1,1, 100, 10, 10.125000000, 10.125)
+,('b','y','q',2,2,NULL,NULL,NULL,NULL)
+,('b','y','q',2,2,NULL,  5,  5.000000000,  5.0)
+,('c',NULL,'p',1,1, 40,  4,  4.750000000,  4.75)
+,('c',NULL,NULL,NULL,1, 50,  5,  5.250000000,  5.25)
+,(NULL,'x','p',2,2, 60,  6,  6.125000000,  6.125)
+,(NULL,NULL,NULL,NULL,NULL,70, 7,  7.875000000,  7.875);
+-- result:
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 1;
+-- result:
+-- !result
+create table gs_casc_lvl1_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, sum(v_dec) s_dec, round(avg(v_dbl), 6) a_dbl,
+       grouping(k4) g4, grouping_id(k1, k2, k3, k4, k5) gid
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_1_${uuid0}) - (select count(*) from gs_casc_lvl1_1_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_1_${uuid0}) - (select count(*) from gs_casc_deep_1_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_1_${uuid0}) except (select * from gs_casc_lvl1_1_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_1_${uuid0}) except (select * from gs_casc_off_1_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_1_${uuid0}) except (select * from gs_casc_deep_1_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_1_${uuid0}) except (select * from gs_casc_off_1_${uuid0})) d) only_deep;
+-- result:
+0	0	0	0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5);
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_2_${uuid0}) - (select count(*) from gs_casc_deep_2_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_2_${uuid0}) except (select * from gs_casc_deep_2_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_2_${uuid0}) except (select * from gs_casc_off_2_${uuid0})) d) only_deep;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_3_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, count(*) c_star, count(v_big) c_big, avg(v_big) a_big, sum(v_dec) s_dec
+from gs_cascade_src_${uuid0} group by cube(k1, k2, k3, k4);
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_3_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, count(*) c_star, count(v_big) c_big, avg(v_big) a_big, sum(v_dec) s_dec
+from gs_cascade_src_${uuid0} group by cube(k1, k2, k3, k4);
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_3_${uuid0}) - (select count(*) from gs_casc_deep_3_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_3_${uuid0}) except (select * from gs_casc_deep_3_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_3_${uuid0}) except (select * from gs_casc_off_3_${uuid0})) d) only_deep;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, avg(v_big) a_big, count(*) c_star
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having avg(v_big) > 20;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, avg(v_big) a_big, count(*) c_star
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having avg(v_big) > 20;
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_4_${uuid0}) - (select count(*) from gs_casc_deep_4_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_4_${uuid0}) except (select * from gs_casc_deep_4_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_4_${uuid0}) except (select * from gs_casc_off_4_${uuid0})) d) only_deep;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 1;
+-- result:
+-- !result
+create table gs_casc_lvl1_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_5_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, count(*) c_star, count(v_big) c_big, sum(v_big) s_big
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5) having count(*) > 1;
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_5_${uuid0}) - (select count(*) from gs_casc_lvl1_5_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_5_${uuid0}) - (select count(*) from gs_casc_deep_5_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_5_${uuid0}) except (select * from gs_casc_lvl1_5_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_5_${uuid0}) except (select * from gs_casc_off_5_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_5_${uuid0}) except (select * from gs_casc_deep_5_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_5_${uuid0}) except (select * from gs_casc_off_5_${uuid0})) d) only_deep;
+-- result:
+0	0	0	0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 1;
+-- result:
+-- !result
+create table gs_casc_lvl1_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_6_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, k4, k5, sum(v_big) s_big, max(v_int) mx
+from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)
+having sum(v_big) > 20 and (k4 is null or k5 is null);
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_6_${uuid0}) - (select count(*) from gs_casc_lvl1_6_${uuid0}) cnt_diff_lvl1,
+       (select count(*) from gs_casc_off_6_${uuid0}) - (select count(*) from gs_casc_deep_6_${uuid0}) cnt_diff_deep,
+       (select count(*) from ((select * from gs_casc_off_6_${uuid0}) except (select * from gs_casc_lvl1_6_${uuid0})) d) only_off_lvl1,
+       (select count(*) from ((select * from gs_casc_lvl1_6_${uuid0}) except (select * from gs_casc_off_6_${uuid0})) d) only_lvl1,
+       (select count(*) from ((select * from gs_casc_off_6_${uuid0}) except (select * from gs_casc_deep_6_${uuid0})) d) only_off_deep,
+       (select count(*) from ((select * from gs_casc_deep_6_${uuid0}) except (select * from gs_casc_off_6_${uuid0})) d) only_deep;
+-- result:
+0	0	0	0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_casc_off_7_${uuid0} properties("replication_num"="1") as
+select * from (select grouping(k1, k2) as aa, k1, k2, k3, k4, k5, sum(v_dec) s_dec
+               from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)) t where aa = 1;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 64;
+-- result:
+-- !result
+create table gs_casc_deep_7_${uuid0} properties("replication_num"="1") as
+select * from (select grouping(k1, k2) as aa, k1, k2, k3, k4, k5, sum(v_dec) s_dec
+               from gs_cascade_src_${uuid0} group by rollup(k1, k2, k3, k4, k5)) t where aa = 1;
+-- result:
+-- !result
+select (select count(*) from gs_casc_off_7_${uuid0}) - (select count(*) from gs_casc_deep_7_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_casc_off_7_${uuid0}) except (select * from gs_casc_deep_7_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_casc_deep_7_${uuid0}) except (select * from gs_casc_off_7_${uuid0})) d) only_deep;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+set cbo_push_down_groupingset_cascade_level = 5;
+-- result:
+-- !result
+drop table gs_casc_off_5_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_lvl1_5_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_5_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_6_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_lvl1_6_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_6_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_7_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_7_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_1_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_lvl1_1_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_1_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_2_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_2_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_3_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_3_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_off_4_${uuid0};
+-- result:
+-- !result
+drop table gs_casc_deep_4_${uuid0};
+-- result:
+-- !result
+drop table gs_cascade_src_${uuid0};
+-- result:
+-- !result

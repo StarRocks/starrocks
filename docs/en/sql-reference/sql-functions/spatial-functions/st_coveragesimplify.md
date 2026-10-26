@@ -39,18 +39,9 @@ Returns native XY WKB GEOMETRY with the input CRS and one output per input row. 
 - Zero tolerance validates inputs and coverage, then returns the original WKB bytes, including repeated closing coordinates.
 - Invalid parameters are rejected even for all-NULL/all-EMPTY or empty input. Invalid coverage, malformed WKB, unsupported descriptors/dimensions and exceeded limits fail the partition before its output is published.
 
-## Resource limits
+## Resource management
 
-The coverage kernel applies the following fixed internal bounds to each partition. These are not BE configuration options:
-
-| Resource | Bound | Includes |
-| --- | ---: | --- |
-| Rows | 10000 | All rows, including NULL and EMPTY. |
-| Vertices | 1000000 | Original WKB coordinate positions, including closures and repetitions. |
-| Input bytes | 67108864 | Input WKB bytes, including typed EMPTY. |
-| Working bytes | 268435456 | Kernel-owned input WKB, models, indices, scratch, mapping and output storage in bytes. |
-
-The standard window operator first materializes a complete partition under StarRocks query memory accounting. The function then checks rows, vertices and input WKB limits while admitting data to the kernel, before decoding and simplifying the coverage. The working limit covers kernel-owned allocations; it excludes the window operator's input buffers, fixed function state and independently owned output columns, which remain subject to the query memory limit. Exceeding an internal bound returns an error without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation follows the standard window lifecycle and is also checked in kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
+The window operator and coverage kernel use StarRocks query memory accounting and the query memory limit. Cancellation and memory checks run during input admission, kernel loops and output. Native WKB structural bounds and integer-range checks still apply. Errors do not publish partial partition results. No fixed cancellation latency or execution time is promised.
 
 ## Examples
 

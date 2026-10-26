@@ -69,7 +69,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
+- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. The same redaction is applied before finished task runs are archived to `_statistics_.task_run_history`, so the archived definition does not contain credentials in clear text. When false, raw task definitions are returned and archived (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
 ### `privilege_max_role_depth`
@@ -90,6 +90,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of roles a user can have.
 - Introduced in: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Default value of the External Catalog property `ranger.plugin.hive.catalog_prefix.enabled` for catalogs that use a Ranger Hive Service (`ranger.plugin.hive.service.name`). When the effective value is `true`, StarRocks sends `<catalog_name><separator><database_name>` instead of the bare database name as the `database` resource to Ranger, so catalogs that share one Ranger Hive Service do not collide on same-named databases. A catalog that sets the property explicitly overrides this item. Changes take effect immediately on all FEs that receive them.
+- Introduced in: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- Default: _
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The separator placed between the catalog name and the database name when `ranger_hive_catalog_prefix_enabled` (or the catalog property `ranger.plugin.hive.catalog_prefix.enabled`) is `true`. Every catalog that shares one Ranger Hive Service must use the same separator, so this item is global only.
+- Introduced in: v4.2
+
 ## Query engine
 
 ### `ai_default_chat_endpoint`
@@ -107,7 +125,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The default model used by the prompt-only forms of SYSTEM `ai_complete`. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Description: The default model used by SYSTEM `ai_complete` calls without an explicit model, including FILE overloads. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
 - Introduced in: -
 
 ### `ai_default_chat_provider`
@@ -115,9 +133,9 @@ This topic introduces the following types of FE configurations:
 - Default: Empty string
 - Type: String
 - Unit: -
-- Valid values: `openai_compatible`
+- Valid values: `openai_compatible`, `qwen_compatible`
 - Is mutable: Yes
-- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible` or `qwen_compatible`; empty or unrecognized values cause analysis to fail. Both protocols support text and inline image FILE inputs; only `qwen_compatible` supports inline MP4 video. The selected model must support the input modality. The protocol is not inferred from the endpoint or model name. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
 - Introduced in: -
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +161,9 @@ This topic introduces the following types of FE configurations:
 - Default: Empty string
 - Type: String
 - Unit: -
-- Valid values: `openai_compatible`
+- Valid values: `openai_compatible`, `dashscope_multimodal`
 - Is mutable: Yes
-- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
+- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible` for text or `dashscope_multimodal` for text and inline JPEG, PNG, or WebP image FILE inputs. The selected model must support the input modality. Video FILE embedding is unsupported. The empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused, and the protocol is not inferred from the endpoint or model name. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -200,6 +218,32 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
+- Introduced in: v4.1
+
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- Default: 0.5
+- Type: Double
+- Is mutable: Yes
+- Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
+- Introduced in: v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The total time one external-table statistics collection job may spend waiting for a backend to free memory. A collection query that a backend rejects because the backend as a whole is out of memory is retried after a pause rather than counted as a failed partition, because the shortage is caused by other work and passes on its own. That is only true of a short spike: under a sustained shortage every query is rejected, and without this ceiling the job would sleep away its entire `statistic_collect_query_timeout` budget while holding one of the `connector_table_query_trigger_analyze_max_running_task_num` slots, collecting nothing and preventing any other table from being collected. Once the budget is used up the job stops waiting; its failures then count against `statistic_full_statistics_failure_tolerance_ratio` as they did before retries existed, and the job ends early enough to be triggered again after the cluster recovers. A value of `0` or less means unlimited waiting, bounded only by `statistic_collect_query_timeout`.
+- Introduced in: v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The longest a table whose query-triggered analyze keeps failing is left alone before being tried again. A failed collection commits no metadata, so the statistics it was collecting are still missing and the next query asks for them again; the scheduler then runs the same job one tick later, every `connector_table_query_trigger_task_schedule_interval` seconds, for as long as the failure lasts. The interval settings above cannot prevent this, because they are measured against metadata a failed job never wrote. After each consecutive failure the table is left alone for twice as long, starting at one minute and stopping at this ceiling; one successful collection resets it. Manual `ANALYZE` is never held back. A value of `0` or less disables the backoff, restoring a retry on every schedule tick.
 - Introduced in: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -1195,7 +1239,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `history_job_keep_max_num`
 
-- Default: 1000
+- Default: 10000
 - Type: Int
 - Unit: -
 - Is mutable: Yes

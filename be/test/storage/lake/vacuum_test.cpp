@@ -2277,6 +2277,104 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     }
 }
 
+// Deciding whether a bundle file goes with the deleted tablets reads its footer, which may come from a
+// read that mixed locally cached blocks of two writes while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the footer was read again, and
+// leaving the damage in place proves nothing is deleted on a bundle that stays bad.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_rereads_corrupted_bundle) {
+    ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    const std::string segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    create_data_file(segment);
+    auto t720_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[720] = *t720_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    auto fs = FileSystem::Default();
+    auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(720, 2);
+    auto overwrite = [&](const std::string& content) {
+        ASSERT_OK(fs->delete_file(bundle_path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(bundle_path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto intact_content, rf->read_all());
+    // The footer ends with [crc32][size]; flipping a byte of the stored crc fails the footer check.
+    std::string mixed_content = intact_content;
+    mixed_content[mixed_content.size() - sizeof(uint64_t) - sizeof(uint32_t)] ^= 0xFF;
+
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+    auto delete_tablet_720 = [&]() {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(720);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    {
+        // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+        config::lake_clear_corrupted_cache_meta = false;
+        overwrite(mixed_content);
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(0, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is still there after the drop, so the second read fails and nothing is deleted.
+        config::lake_clear_corrupted_cache_meta = true;
+        restore_on_drop = false;
+        cache_drops = 0;
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is gone after the drop, so the second read succeeds and the tablet's files go.
+        restore_on_drop = true;
+        cache_drops = 0;
+        EXPECT_EQ(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(segment));
+    }
+}
+
 // A split-shared segment's .vi is named by the recorded owner, so it is the SAME file for every
 // sibling tablet. It must follow the shared segment's deletion policy: kept while any sibling still
 // references the segment, deleted only once none do. Owner (710) differs from the sibling (711) to
@@ -4763,10 +4861,55 @@ TEST_P(LakeVacuumTest, test_incremental_grace_blocked) {
     ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // Nothing proposed; every version retained.
     EXPECT_GE(response.vacuum_state().to_delete_low(), response.vacuum_state().to_delete_high());
+    // The tablet anchored (read real versions) but every one is still within grace: this is a GENUINE
+    // grace block, so the FE must wait -- grace_blocked is set. (Contrast the never-anchored case below.)
+    EXPECT_TRUE(response.vacuum_state().grace_blocked());
     EXPECT_EQ(0, response.vacuumed_files());
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 4)));
+}
+
+// A never-anchored tablet -- its first version sits ABOVE the partition retain floor (a non-base index
+// added late, or a cross-generation tablet) -- has no metadata at or below the floor, so a fresh walk
+// anchors nothing. It is DRAINED, not grace-blocked: the round must still propose the OTHER tablets'
+// garbage and report grace_blocked=false. Regression for the bug where grace_blocked was derived from
+// nothing_to_delete, so a never-anchored tablet reported grace_blocked=true and livelocked the FE forever
+// (the pass never advances -> the sibling tablet's real garbage is orphaned below the raised floor).
+TEST_P(LakeVacuumTest, test_incremental_never_anchored_not_grace_blocked) {
+    // Tablet A: real garbage chain v2 -> v3 -> v4 below the retain floor, all older than the grace timestamp.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 2, "prev_garbage_version": 0, "commit_time": 1002 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 3, "prev_garbage_version": 2, "commit_time": 1003 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30006, "version": 4, "prev_garbage_version": 3, "commit_time": 1004 })DEL")));
+    // Tablet B: never-anchored -- its only metadata (v5) sits ABOVE the retain floor 4, so v4 and below
+    // are all NotFound and the fresh walk anchors nothing.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30007, "version": 5, "prev_garbage_version": 0, "commit_time": 1005 })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(4);
+    // Grace boundary above A's commit times -> A's versions below the floor are all deletable.
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    auto* a = request.add_tablet_infos();
+    a->set_tablet_id(30006);
+    a->set_min_version(1);
+    auto* b = request.add_tablet_infos();
+    b->set_tablet_id(30007);
+    b->set_min_version(1);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    const auto& state = response.vacuum_state();
+    // B is drained, not grace-blocked: it does not zero the round.
+    EXPECT_FALSE(state.grace_blocked());
+    // A's garbage below the retain floor is proposed; the high end is the floor.
+    EXPECT_LT(state.to_delete_low(), state.to_delete_high());
+    EXPECT_EQ(4, state.to_delete_high());
 }
 
 // End-to-end drain: a long chain under a small per-round budget takes several propose/commit rounds
