@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,6 +44,8 @@ import java.util.Set;
 public class ExecPlanAIProviderTest extends PlanTestBase {
     private static FunctionCallExpr chatTemplate;
     private static FunctionCallExpr embeddingTemplate;
+    private static FunctionCallExpr decisionDefaultTemplate;
+    private static FunctionCallExpr decisionNamedTemplate;
 
     @BeforeAll
     public static void resolveFunctions() throws Exception {
@@ -60,6 +63,11 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
             embeddingTemplate = analyzedCall("ai_custom_embedding", "embedding_template");
         } finally {
             registry.dropProvider("embedding_template", true);
+        }
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_template", AIProviderType.DECISION,
+                Map.of("endpoint", "https://example.test/v1/systemone", "model", "decision-model"))) {
+            decisionDefaultTemplate = decisionCall(false);
+            decisionNamedTemplate = decisionCall(true);
         }
     }
 
@@ -192,6 +200,99 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
         Assertions.assertEquals("provider:0", bound.getAiModelConfigId());
         Assertions.assertEquals("provider:0", ((FunctionCallExpr) bound.clone()).getAiModelConfigId());
         Assertions.assertTrue(Modifier.isFinal(FunctionCallExpr.class.getDeclaredField("aiModelConfigId").getModifiers()));
+    }
+
+    @Test
+    public void testDefaultSelectionIsStableWithinPlanAndFreshForNewPlan() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider first = provider("first", AIProviderType.DECISION, "first-model");
+        AIProvider second = provider("second", AIProviderType.DECISION, "second-model");
+        Mockito.when(manager.getDefaultProvider(AIProviderType.DECISION)).thenReturn(first, second);
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(decisionDefaultTemplate)).get("provider:0");
+            Assertions.assertSame(captured,
+                    plan.bindAIModelConfigs(project(decisionDefaultTemplate)).get("provider:0"));
+            Assertions.assertEquals("first-model", captured.model());
+            AIModelConfigs.ModelConfig fresh = new ExecPlan(connectContext, List.of(), null, List.of(), false)
+                    .bindAIModelConfigs(project(decisionDefaultTemplate)).get("provider:0");
+            Assertions.assertEquals("second-model", fresh.model());
+            Mockito.verify(manager, Mockito.times(2)).getDefaultProvider(AIProviderType.DECISION);
+            Mockito.verifyNoMoreInteractions(manager);
+        }
+    }
+
+    @Test
+    public void testDefaultAndNamedSelectorsReuseFirstSnapshotByUuid() {
+        for (boolean defaultFirst : List.of(true, false)) {
+            AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+            AIProvider shared = provider("decision_template", AIProviderType.DECISION, "original-model");
+            Mockito.when(manager.getDefaultProvider(AIProviderType.DECISION)).thenReturn(shared);
+            Mockito.when(manager.getProvider("decision_template")).thenReturn(shared);
+            ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+            try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+                FunctionCallExpr first = defaultFirst ? decisionDefaultTemplate : decisionNamedTemplate;
+                FunctionCallExpr second = defaultFirst ? decisionNamedTemplate : decisionDefaultTemplate;
+                AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(first)).get("provider:0");
+                shared.mergeParams(Map.of("model", "changed-model", "api_key", "changed-key"));
+                Map<String, AIModelConfigs.ModelConfig> rebound = plan.bindAIModelConfigs(project(second));
+                Assertions.assertEquals(Set.of("provider:0"), rebound.keySet());
+                Assertions.assertSame(captured, rebound.get("provider:0"));
+                Assertions.assertEquals("original-model", captured.model());
+                Assertions.assertEquals("test-key", captured.apiKey());
+                Mockito.verify(manager).getDefaultProvider(AIProviderType.DECISION);
+                Mockito.verify(manager).getProvider("decision_template");
+                Mockito.verifyNoMoreInteractions(manager);
+            }
+        }
+    }
+
+    @Test
+    public void testNewSelectorDoesNotAliasRecreatedProviderWithSameName() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider original = provider("decision_template", AIProviderType.DECISION, "original-model");
+        AIProvider replacement = new AIProvider("replacement-id", original.getName(), original.getType(),
+                Map.of("endpoint", original.getEndpoint(), "model", "replacement-model"), "");
+        Mockito.when(manager.getDefaultProvider(AIProviderType.DECISION)).thenReturn(original);
+        Mockito.when(manager.getProvider("decision_template")).thenReturn(replacement);
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            AIModelConfigs.ModelConfig captured = plan.bindAIModelConfigs(project(decisionDefaultTemplate)).get("provider:0");
+            Map<String, AIModelConfigs.ModelConfig> named = plan.bindAIModelConfigs(project(decisionNamedTemplate));
+            Assertions.assertEquals(Set.of("provider:1"), named.keySet());
+            Assertions.assertEquals("replacement-model", named.get("provider:1").model());
+            Assertions.assertSame(captured,
+                    plan.bindAIModelConfigs(project(decisionDefaultTemplate)).get("provider:0"));
+        }
+    }
+
+    @Test
+    public void testDefaultBindingFailuresDoNotCaptureSelectionOrConsumeIds() {
+        AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
+        AIProvider invalid = provider("invalid", AIProviderType.DECISION, "invalid-model");
+        invalid.mergeParams(Map.of("protocol", "openai"));
+        Mockito.when(manager.getDefaultProvider(AIProviderType.DECISION)).thenReturn(null,
+                provider("wrong-type", AIProviderType.CHAT, "chat-model"), invalid,
+                provider("valid", AIProviderType.DECISION, "valid-model"));
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
+        try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
+            for (String message : List.of("does not exist", "requires type DECISION", "not OPENAI")) {
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> plan.bindAIModelConfigs(project(decisionDefaultTemplate)));
+                Assertions.assertTrue(error.getDetailMsg().contains(message), error.getDetailMsg());
+            }
+            Map<String, AIModelConfigs.ModelConfig> configs = plan.bindAIModelConfigs(project(decisionDefaultTemplate));
+            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
+            Assertions.assertEquals("valid-model", configs.get("provider:0").model());
+            Mockito.verify(manager, Mockito.times(4)).getDefaultProvider(AIProviderType.DECISION);
+        }
+    }
+
+    private static FunctionCallExpr decisionCall(boolean explicitProvider) throws Exception {
+        QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                "select ai_decide(" + (explicitProvider ? "'decision_template', " : "")
+                        + "'state', parse_json('{\"q\":{\"type\":\"noul\"}}'))", connectContext);
+        return (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0);
     }
 
     private static FunctionCallExpr analyzedCall(String function, String providerName) throws Exception {

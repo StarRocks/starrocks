@@ -68,6 +68,21 @@ public class AIProviderAnalysisTest {
     }
 
     @Test
+    public void testCreateDecisionUsesDecisionProtocolAndCommonProperties() {
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put("endpoint", "https://example.test/v1/systemone");
+        parameters.put("model", "decision-model");
+        parameters.put("api_key", "decision-key");
+        parameters.put("timeout_ms", "1000");
+        CreateAIProviderStmt statement = create("decision", parameters);
+        AIProviderAnalyzer.analyze(statement, new ConnectContext());
+        Assertions.assertEquals("bailian_decision", statement.getProperties().get("protocol"));
+        parameters.put("dimensions", "128");
+        Assertions.assertThrows(SemanticException.class,
+                () -> AIProviderAnalyzer.analyze(create("decision", parameters), new ConnectContext()));
+    }
+
+    @Test
     public void testCreateRejectsUnknownType() {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(create("bogus", validEmbedding()), new ConnectContext()));

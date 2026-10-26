@@ -92,16 +92,13 @@ public class Authorizer {
                     PrivilegeType.USAGE.name(), "AI FUNCTION", function.functionName());
         }
         if (function.getAiModelSource() == TAIModelSource.PROVIDER) {
-            String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(function)));
-            AIProvider provider = context.getGlobalStateMgr().getAIProviderMgr().getProvider(name);
-            if (provider == null) {
-                throw new SemanticException("AI provider '%s' does not exist", name);
-            }
+            AIProvider provider = AIModelConfigs.resolveProvider(AIModelConfigs.providerSelection(call),
+                    context.getGlobalStateMgr().getAIProviderMgr());
             try {
                 checkAIProviderAction(context, provider, PrivilegeType.USAGE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), "AI PROVIDER", name);
+                        PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
             }
         }
     }

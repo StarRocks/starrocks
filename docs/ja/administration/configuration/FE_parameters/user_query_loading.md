@@ -166,33 +166,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：SYSTEM `ai_embed` のプロバイダープロトコル。テキスト用の `openai_compatible`、またはテキストと inline JPEG、PNG、WebP 画像 FILE 用の `dashscope_multimodal` を正確に指定します。選択したモデルは入力のモダリティに対応している必要があります。動画 FILE の埋め込みは未対応です。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。プロトコルを endpoint やモデル名から推定することはありません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
-### `ai_default_decision_endpoint`
-
-- デフォルト: 空文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: SYSTEM `ai_decide` 用の決定 API パスを含む完全な HTTPS POST URL。chat と embedding とは独立した必須設定です。ホストが必要で、ユーザー情報、クエリ文字列、フラグメント、制御文字は使用できません。明示的なポートは 1–65535 です。各 BE の `AI_FUNCTION_DECISION_ENDPOINT` を完全に同じ URL にし、`AI_FUNCTION_DECISION_API_KEY` をローカルに設定します。環境変数変更後は BE の再起動が必要です。SYSTEM 認証情報は計画に含まれません。 FE の再起動なしで新しい計画に適用され、既存の計画はスナップショットを保持します。
-- 導入バージョン: -
-
-### `ai_default_decision_model`
-
-- デフォルト: 空文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: 2 引数 SYSTEM `ai_decide` のデフォルトモデル。空白のみ、C0 制御文字、DEL は使用できません。すべての呼び出しで定数モデルを明示する場合は空にできます。chat や embedding のモデルにはフォールバックしません。 FE の再起動なしで新しい計画に適用され、既存の計画はスナップショットを保持します。
-- 導入バージョン: -
-
-### `ai_default_decision_provider`
-
-- デフォルト: 空文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: SYSTEM `ai_decide` のプロトコル。`bailian_decision` のみをサポートします。空または未対応の値では計画を作成できず、エンドポイントやモデルから推測しません。 FE の再起動なしで新しい計画に適用され、既存の計画はスナップショットを保持します。
-- 導入バージョン: -
-
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - デフォルト：60000

@@ -23,9 +23,11 @@ import com.starrocks.common.Config;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TAIEndpointConfig;
 import com.starrocks.thrift.TAIModelConfiguration;
@@ -39,7 +41,6 @@ import java.util.Locale;
 public final class AIModelConfigs {
     public static final String SYSTEM_CHAT_CONFIG_ID = "__system_chat__";
     public static final String SYSTEM_EMBEDDING_CONFIG_ID = "__system_embedding__";
-    public static final String SYSTEM_DECISION_CONFIG_ID = "__system_decision__";
     public static final String BAILIAN_DECISION_PROVIDER = "bailian_decision";
     public static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
     public static final String QWEN_COMPATIBLE_PROVIDER = "qwen_compatible";
@@ -90,12 +91,48 @@ public final class AIModelConfigs {
         return literal.getValue();
     }
 
+    /** A SQL selector, not a registry identity. Exactly one of name and defaultType is present. */
+    public record ProviderSelection(String name, AIProviderType defaultType) {
+        public ProviderSelection {
+            Preconditions.checkArgument((name == null) != (defaultType == null), "Expected one provider selector");
+        }
+
+        public String description() {
+            return name != null ? "AI provider '" + name + "'" : "Default AI provider of type " + defaultType;
+        }
+    }
+
+    public static AIProviderType providerType(Function function) {
+        return switch (capability(function)) {
+            case CHAT -> AIProviderType.CHAT;
+            case TEXT_EMBEDDING -> AIProviderType.EMBEDDING;
+            case DECISION -> AIProviderType.DECISION;
+        };
+    }
+
+    public static ProviderSelection providerSelection(FunctionCallExpr call) {
+        Preconditions.checkState(call.getFn().getAiModelSource() == TAIModelSource.PROVIDER,
+                "Expected a Provider function");
+        int argument = getProviderArgument(call.getFn());
+        return argument >= 0 ? new ProviderSelection(providerName(call.getChild(argument)), null)
+                : new ProviderSelection(null, providerType(call.getFn()));
+    }
+
+    public static AIProvider resolveProvider(ProviderSelection selection, AIProviderMgr manager) {
+        AIProvider provider = selection.name() != null ? manager.getProvider(selection.name())
+                : manager.getDefaultProvider(selection.defaultType());
+        if (provider == null) {
+            throw new SemanticException(selection.description() + " does not exist");
+        }
+        return provider;
+    }
+
     public static String systemConfigId(Function function) {
         Preconditions.checkState(function.getAiModelSource() == TAIModelSource.SYSTEM, "Unsupported AI model source");
         return switch (capability(function)) {
             case CHAT -> SYSTEM_CHAT_CONFIG_ID;
             case TEXT_EMBEDDING -> SYSTEM_EMBEDDING_CONFIG_ID;
-            case DECISION -> SYSTEM_DECISION_CONFIG_ID;
+            default -> throw new IllegalStateException("AI capability requires a Provider");
         };
     }
 
@@ -110,25 +147,20 @@ public final class AIModelConfigs {
         return config;
     }
 
-    public static ModelConfig systemDecisionSnapshot(DefaultModelRequirement requirement) {
-        ModelConfig config = new ModelConfig("DECISION", Config.ai_default_decision_endpoint,
-                Config.ai_default_decision_model, Config.ai_default_decision_provider);
-        validateSystem(config, requirement);
-        return config;
-    }
-
     public static void validateSystemEmbedding(ModelConfig config, DefaultModelRequirement requirement) {
         validateSystem(config, requirement);
     }
 
     public static ModelConfig fromProvider(AIProvider provider) {
         AIProviderType type = provider.getType();
-        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
-            throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);
+        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING && type != AIProviderType.DECISION) {
+            throw new SemanticException("AI functions require a CHAT, EMBEDDING or DECISION provider, not " + type);
         }
         AIProviderProtocol protocol = provider.getProtocol();
-        if (protocol != AIProviderProtocol.OPENAI) {
-            throw new SemanticException("AI functions require an OPENAI provider protocol, not " + protocol);
+        AIProviderProtocol requiredProtocol = type == AIProviderType.DECISION
+                ? AIProviderProtocol.BAILIAN_DECISION : AIProviderProtocol.OPENAI;
+        if (protocol != requiredProtocol) {
+            throw new SemanticException("AI functions require an " + requiredProtocol + " provider protocol, not " + protocol);
         }
         String endpoint = provider.getEndpoint();
         String model = provider.getModel();
@@ -152,8 +184,15 @@ public final class AIModelConfigs {
         if ((timeout != null && timeout <= 0) || (dimensions != null && dimensions <= 0)) {
             throw new SemanticException("AI provider timeout_ms and dimensions must be positive integers");
         }
-        return new ModelConfig(type == AIProviderType.CHAT ? "CHAT" : "TEXT_EMBEDDING", endpoint, model,
-                OPENAI_COMPATIBLE_PROVIDER, apiKey, TAIModelSource.PROVIDER, timeout, dimensions);
+        String capability = switch (type) {
+            case CHAT -> "CHAT";
+            case EMBEDDING -> "TEXT_EMBEDDING";
+            case DECISION -> "DECISION";
+            default -> throw new IllegalStateException("Unsupported AI provider type");
+        };
+        return new ModelConfig(capability, endpoint, model,
+                type == AIProviderType.DECISION ? BAILIAN_DECISION_PROVIDER : OPENAI_COMPATIBLE_PROVIDER,
+                apiKey, TAIModelSource.PROVIDER, timeout, dimensions);
     }
 
     public static void validateSystemChat(DefaultModelRequirement defaultModelRequirement) {
@@ -187,27 +226,17 @@ public final class AIModelConfigs {
                 prefix = "ai_default_embedding_";
                 functionName = "ai_embed";
             }
-            case "DECISION" -> {
-                prefix = "ai_default_decision_";
-                functionName = "ai_decide";
-            }
             default -> throw invalidConfig("AI capability", "is unsupported");
         }
         String endpoint = requireNonBlank(config.endpoint(), prefix + "endpoint", functionName);
         validateEndpoint(endpoint, prefix + "endpoint");
 
         String provider = requireNonBlank(config.provider(), prefix + "provider", functionName);
-        if ("DECISION".equals(config.capability())) {
-            if (!BAILIAN_DECISION_PROVIDER.equals(provider)) {
-                throw invalidConfig(prefix + "provider", "must be '" + BAILIAN_DECISION_PROVIDER + "'");
-            }
-        } else {
-            String multimodalProvider = "TEXT_EMBEDDING".equals(config.capability())
-                    ? DASHSCOPE_MULTIMODAL_PROVIDER : QWEN_COMPATIBLE_PROVIDER;
-            if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider) && !multimodalProvider.equals(provider)) {
-                throw invalidConfig(prefix + "provider",
-                        "must be '" + OPENAI_COMPATIBLE_PROVIDER + "' or '" + multimodalProvider + "'");
-            }
+        String multimodalProvider = "TEXT_EMBEDDING".equals(config.capability())
+                ? DASHSCOPE_MULTIMODAL_PROVIDER : QWEN_COMPATIBLE_PROVIDER;
+        if (!OPENAI_COMPATIBLE_PROVIDER.equals(provider) && !multimodalProvider.equals(provider)) {
+            throw invalidConfig(prefix + "provider",
+                    "must be '" + OPENAI_COMPATIBLE_PROVIDER + "' or '" + multimodalProvider + "'");
         }
 
         String model = config.model();

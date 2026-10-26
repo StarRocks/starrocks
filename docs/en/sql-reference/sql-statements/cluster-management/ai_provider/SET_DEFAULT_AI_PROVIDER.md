@@ -6,8 +6,10 @@ description: "Set an AI provider as the default for its type."
 # SET DEFAULT AI PROVIDER
 
 Marks a provider as the default for **its own type**. The registry keeps one default per type
-(`embedding` / `rerank` / `chat`), so setting an embedding provider as default does not affect the
+(`embedding` / `rerank` / `chat` / `decision`), so setting an embedding provider as default does not affect the
 rerank default and vice versa.
+
+[ai_decide](../../../sql-functions/ai-functions/ai_decide.md) without an explicit Provider name uses the default `decision` Provider. This does not reroute existing SYSTEM chat or embedding functions.
 
 ## Syntax
 

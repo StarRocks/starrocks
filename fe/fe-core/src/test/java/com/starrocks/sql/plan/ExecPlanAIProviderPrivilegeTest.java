@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,39 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
             manager.dropProvider(name, true);
             executeAsRoot("DROP USER '" + user + "'");
             connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testChangedDefaultRequiresSelectedProviderGrantAtFirstBinding() throws Exception {
+        String user = "decision_binding_caller";
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        Map<String, String> parameters = Map.of("endpoint", "https://example.test/v1/systemone", "model", "decision-model");
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_authorized", AIProviderType.DECISION,
+                parameters)) {
+            manager.createProvider("decision_replacement", AIProviderType.DECISION, parameters, "");
+            executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
+            try {
+                executeAsRoot("GRANT USAGE ON AI FUNCTION ai_decide TO '" + user + "'");
+                executeAsRoot("GRANT USAGE ON AI PROVIDER decision_authorized TO '" + user + "'");
+                ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
+                caller.setCurrentRoleIds(Set.of());
+                QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT ai_decide('state', parse_json('{\"q\":{\"type\":\"noul\"}}'))", caller);
+                FunctionCallExpr call = (FunctionCallExpr) statement.getQueryRelation().getOutputExpression().get(0);
+                Authorizer.check(statement, caller);
+                manager.setDefaultProvider("decision_replacement");
+                ExecPlan plan = new ExecPlan(caller, List.of(), null, List.of(), false);
+                Assertions.assertThrows(ErrorReportException.class, () -> plan.bindAIModelConfigs(project(call)));
+                executeAsRoot("GRANT USAGE ON AI PROVIDER decision_replacement TO '" + user + "'");
+                Assertions.assertEquals(Set.of("provider:0"), plan.bindAIModelConfigs(project(call)).keySet());
+                Assertions.assertNull(call.getAiModelConfigId());
+            } finally {
+                manager.setDefaultProvider("decision_authorized");
+                manager.dropProvider("decision_replacement", true);
+                executeAsRoot("DROP USER '" + user + "'");
+                connectContext.setThreadLocalInfo();
+            }
         }
     }
 

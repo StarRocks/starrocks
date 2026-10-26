@@ -284,10 +284,10 @@ def validate_ai_metadata(fn_data):
             if args[index] != 'VARCHAR':
                 invalid(f'{field} must refer to a VARCHAR')
             selectors.append(index)
-    if (metadata['model_source'] == 'PROVIDER') != (metadata['provider_argument'] >= 0):
-        invalid('AI model source must have an Provider selector')
-    if metadata['provider_argument'] >= 0 and metadata['model_argument'] >= 0:
-        invalid('Provider selector is not an explicit provider model')
+    if metadata['model_source'] == 'SYSTEM' and metadata['provider_argument'] >= 0:
+        invalid('SYSTEM functions cannot select a Provider')
+    if metadata['model_source'] == 'PROVIDER' and metadata['model_argument'] >= 0:
+        invalid('Provider functions use the registered model')
 
     file_argument = metadata.setdefault('file_argument', -1)
     if type(file_argument) is not int or file_argument < -1 or file_argument >= len(args):
@@ -304,11 +304,11 @@ def validate_ai_metadata(fn_data):
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
     if metadata['capability'] == 'DECISION':
-        if (metadata['model_source'] != 'SYSTEM' or metadata['prompt_kind'] != 'NONE'
+        if (metadata['model_source'] != 'PROVIDER' or metadata['prompt_kind'] != 'NONE'
                 or metadata['result_kind'] != 'JSON' or options or file_argument >= 0
                 or [args[i] for i in inputs] not in (['VARCHAR', 'JSON'], ['JSON', 'JSON'])
                 or metadata.get('null_as_empty_arguments') or metadata.get('blank_as_null_arguments')):
-            invalid('decision requires SYSTEM typed state/questions inputs and a JSON result')
+            invalid('decision requires PROVIDER typed state/questions inputs and a JSON result')
     elif [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
         invalid('input arguments must match the prompt builder contract')
     roles = selectors + options + inputs + ([file_argument] if file_argument >= 0 else [])

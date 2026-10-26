@@ -66,7 +66,6 @@ namespace {
 
 constexpr std::string_view kSystemConfigId = "__system_chat__";
 constexpr std::string_view kEmbeddingConfigId = "__system_embedding__";
-constexpr std::string_view kDecisionConfigId = "__system_decision__";
 
 std::string_view system_config_id(AICapability capability) {
     switch (capability) {
@@ -75,7 +74,7 @@ std::string_view system_config_id(AICapability capability) {
     case AICapability::TEXT_EMBEDDING:
         return kEmbeddingConfigId;
     case AICapability::DECISION:
-        return kDecisionConfigId;
+        return {};
     }
     return {};
 }
@@ -457,7 +456,6 @@ StatusOr<AIFunctionCallExpr*> AIFunctionCallExpr::create(ObjectPool* pool, const
     if (spec->model_source == TAIModelSource::PROVIDER) {
         const std::string& key = node.ai_model_config_id;
         if (contains_only_ascii_whitespace(Slice(key)) || key == kSystemConfigId || key == kEmbeddingConfigId ||
-            key == kDecisionConfigId ||
             std::any_of(key.begin(), key.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; })) {
             return invalid_ai_expression();
         }
@@ -525,9 +523,8 @@ Status AIFunctionCallExpr::open(RuntimeState* state, ExprContext* context, Funct
 
     if (_descriptor->capability == AICapability::DECISION) {
         const size_t questions = _descriptor->input_arguments[1];
-        if (!_children[questions]->is_constant() ||
-            (_descriptor->model_argument >= 0 && !_children[_descriptor->model_argument]->is_constant())) {
-            return Status::InvalidArgument("AI decision questions and model must be constant");
+        if (!_children[questions]->is_constant()) {
+            return Status::InvalidArgument("AI decision questions must be constant");
         }
         ASSIGN_OR_RETURN(ColumnPtr column, _children[questions]->evaluate_const(context));
         if (column == nullptr || column->empty()) return invalid_ai_expression();
@@ -671,8 +668,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             }
             batch.rows.emplace_back(AIFunctionRowInput{
                     .action = AIFunctionRowAction::DISPATCH,
-                    .model = spec.model_argument >= 0 ? strings[spec.model_argument]->value(row).to_string()
-                                                      : std::string(default_model),
+                    .model = std::string(default_model),
                     .decision = std::move(decision),
             });
             continue;

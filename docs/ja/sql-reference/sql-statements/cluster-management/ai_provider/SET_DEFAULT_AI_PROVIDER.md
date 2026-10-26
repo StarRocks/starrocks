@@ -6,8 +6,10 @@ description: "AI プロバイダーをそのタイプのデフォルトとして
 # SET DEFAULT AI PROVIDER
 
 プロバイダーを**そのプロバイダー自身のタイプ**のデフォルトとして設定します。レジストリはタイプごと
-(`embedding` / `rerank` / `chat`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
+(`embedding` / `rerank` / `chat` / `decision`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
 設定しても rerank のデフォルトには影響せず、その逆も同様です。
+
+プロバイダー名を省略した [ai_decide](../../../sql-functions/ai-functions/ai_decide.md) は、デフォルトの `decision` プロバイダーを使用します。既存の SYSTEM Chat や Embedding 関数のルーティングは変わりません。
 
 ## 構文
 

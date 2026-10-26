@@ -24,7 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Persisted metadata for one external AI service provider (embedding / rerank / chat). The
+ * Persisted metadata for one external AI service provider (embedding / rerank / chat / decision). The
  * full property bag — including the API key — lives on the FE meta journal and image, so cluster
  * upgrades that wipe the installation directory do not lose the credential.
  *

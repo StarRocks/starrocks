@@ -234,11 +234,12 @@ TEST_F(AIProjectNodeTest, ExecFactoryDeserializesExactThriftContract) {
     root->close(&_runtime_state);
 }
 
-TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndSystemConfiguration) {
+TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndProviderConfiguration) {
     TPlan plan = make_valid_ai_plan(_tuple_id);
-    auto expression = make_ai_complete(_tuple_id, kPromptSlotId, "__system_decision__");
+    auto expression = make_ai_complete(_tuple_id, kPromptSlotId, "provider:decision");
     auto& call = expression.nodes.front();
     call.fn.__set_fid(200160);
+    call.fn.__set_ai_model_source(TAIModelSource::PROVIDER);
     call.fn.name.__set_function_name("ai_decide");
     call.fn.__set_arg_types({varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
     call.fn.__set_ret_type(TypeDescriptor(TYPE_JSON).to_thrift());
@@ -270,8 +271,11 @@ TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndSystemConfigur
     endpoint.__set_provider("bailian_decision");
     endpoint.__set_model("decision-model");
     TAIModelConfiguration config;
+    endpoint.__set_api_key("decision-provider-secret");
+    endpoint.__set_timeout_ms(75);
     config.__set_decision(endpoint);
-    project.__set_ai_model_configs({{"__system_decision__", config}});
+    config.__set_source(TAIModelSource::PROVIDER);
+    project.__set_ai_model_configs({{"provider:decision", config}});
     auto decoded = binary_round_trip(plan);
     ObjectPool plan_pool;
     ExecNode* root = nullptr;

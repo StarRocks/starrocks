@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.ExchangeNode;
@@ -70,6 +71,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.thrift.TAIEndpointConfig;
 import com.starrocks.thrift.TAIModelConfiguration;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -83,6 +85,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -143,13 +146,9 @@ public class AIProjectPlanTest extends PlanTestBase {
 
     @Test
     public void testDecisionOccurrencesAndWireConfiguration() throws Exception {
-        String endpoint = Config.ai_default_decision_endpoint;
-        String model = Config.ai_default_decision_model;
-        String provider = Config.ai_default_decision_provider;
-        try {
-            Config.ai_default_decision_endpoint = "https://decision.example.test/compatible-mode/v1/systemone";
-            Config.ai_default_decision_model = "decision-model";
-            Config.ai_default_decision_provider = "bailian_decision";
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_plan", AIProviderType.DECISION,
+                Map.of("endpoint", "https://decision.example.test/compatible-mode/v1/systemone", "model", "decision-model",
+                        "api_key", "decision-key"))) {
             String call = "ai_decide(k1, parse_json('{\"q\":{\"type\":\"noul\"}}'))";
             ExecPlan plan = getExecPlan("select " + call + ", " + call + " from t7");
             AIProjectNode node = findOnlyAIProjectNode(plan);
@@ -157,13 +156,14 @@ public class AIProjectPlanTest extends PlanTestBase {
                     && function.getFn().isAi()).count();
             Assertions.assertEquals(2, calls);
             TAIProjectNode wire = findAIProjectThriftNodes(plan).get(0).getAi_project_node();
-            Assertions.assertEquals(Set.of(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID), wire.getAi_model_configs().keySet());
-            TAIModelConfiguration config = wire.getAi_model_configs().get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID);
+            Assertions.assertEquals(Set.of("provider:0"), wire.getAi_model_configs().keySet());
+            TAIModelConfiguration config = wire.getAi_model_configs().get("provider:0");
             Assertions.assertTrue(config.isSetDecision());
             Assertions.assertFalse(config.isSetChat());
             Assertions.assertFalse(config.isSetEmbedding());
-            Assertions.assertFalse(config.getDecision().isSetApi_key());
-            Assertions.assertEquals(Config.ai_default_decision_endpoint, config.getDecision().getEndpoint());
+            Assertions.assertEquals(TAIModelSource.PROVIDER, config.getSource());
+            Assertions.assertEquals("decision-key", config.getDecision().getApi_key());
+            Assertions.assertEquals("https://decision.example.test/compatible-mode/v1/systemone", config.getDecision().getEndpoint());
             wire.getSlot_map().values().stream().map(expr -> expr.getNodes().get(0))
                     .filter(expr -> expr.isSetFn() && expr.getFn().getBinary_type() == TFunctionBinaryType.AI)
                     .forEach(expr -> Assertions.assertEquals(2, expr.getNum_children()));
@@ -172,17 +172,13 @@ public class AIProjectPlanTest extends PlanTestBase {
             Assertions.assertEquals(1, findOnlyAIProjectNode(aliased).getSlotMap().values().stream()
                     .filter(expression -> expression instanceof FunctionCallExpr function && function.getFn().isAi()).count());
             Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
-            Config.ai_default_decision_endpoint = "https://changed.example.test/systemone";
-            Config.ai_default_decision_model = "changed-model";
+            GlobalStateMgr.getCurrentState().getAIProviderMgr().alterProvider("decision_plan",
+                    Map.of("endpoint", "https://changed.example.test/systemone", "model", "changed-model"), false);
             Map<String, AIModelConfigs.ModelConfig> second = plan.bindAIModelConfigs(new LinkedHashMap<>(node.getSlotMap()));
-            Assertions.assertSame(first.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID),
-                    second.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID));
+            Assertions.assertSame(first.get("provider:0"),
+                    second.get("provider:0"));
             Assertions.assertEquals(config.getDecision().getEndpoint(),
-                    second.get(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID).endpoint());
-        } finally {
-            Config.ai_default_decision_endpoint = endpoint;
-            Config.ai_default_decision_model = model;
-            Config.ai_default_decision_provider = provider;
+                    second.get("provider:0").endpoint());
         }
     }
 

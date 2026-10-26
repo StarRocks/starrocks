@@ -166,33 +166,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为用于文本的 `openai_compatible`，或用于文本以及 inline JPEG、PNG、WebP 图片 FILE 的 `dashscope_multimodal`。所选模型必须支持输入模态。不支持视频 FILE 向量化。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置，也不会根据 endpoint 或模型名称推断协议。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
-### `ai_default_decision_endpoint`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否动态: 是
-- 描述: SYSTEM `ai_decide` 使用的完整 HTTPS POST URL，包含决策 API 路径。该参数独立于 chat 和 embedding，必须配置。URL 必须包含主机，不能包含用户信息、查询参数、片段或控制字符；显式端口范围为 1 至 65535。每个执行请求的 BE 必须将 `AI_FUNCTION_DECISION_ENDPOINT` 设置为完全一致的 URL，并通过 `AI_FUNCTION_DECISION_API_KEY` 在本地提供凭证。修改环境变量后需要重启 BE；SYSTEM 凭证不会下发到查询计划。 动态变更无需重启 FE，仅作用于新生成的计划；已有计划保留配置快照。
-- 引入版本: -
-
-### `ai_default_decision_model`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否动态: 是
-- 描述: 双参数 SYSTEM `ai_decide` 的默认模型。这类调用要求其非空白，且不能含 C0 控制字符或 DEL。如果所有调用均显式传入常量模型，可以留空。不回退到 chat 或 embedding 默认模型。 动态变更无需重启 FE，仅作用于新生成的计划；已有计划保留配置快照。
-- 引入版本: -
-
-### `ai_default_decision_provider`
-
-- 默认值: 空字符串
-- 类型: String
-- 单位: -
-- 是否动态: 是
-- 描述: SYSTEM `ai_decide` 的协议，仅支持 `bailian_decision`。空值或不支持的值会阻止生成调用计划，不会根据端点或模型推断协议。 动态变更无需重启 FE，仅作用于新生成的计划；已有计划保留配置快照。
-- 引入版本: -
-
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - 默认值: 60000

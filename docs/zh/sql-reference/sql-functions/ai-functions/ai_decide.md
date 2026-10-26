@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "通过 SYSTEM 决策模型评估业务状态，并返回经过校验的 JSON 答案。"
+description: "通过注册的 decision Provider 评估业务状态，并返回经过校验的 JSON 答案。"
 sidebar_position: 70
 ---
 
@@ -13,37 +13,37 @@ sidebar_position: 70
 ```sql
 ai_decide(state VARCHAR, questions JSON) -> JSON
 ai_decide(state JSON, questions JSON) -> JSON
-ai_decide(model VARCHAR, state VARCHAR, questions JSON) -> JSON
-ai_decide(model VARCHAR, state JSON, questions JSON) -> JSON
+ai_decide(provider_name VARCHAR, state VARCHAR, questions JSON) -> JSON
+ai_decide(provider_name VARCHAR, state JSON, questions JSON) -> JSON
 ```
 
 - `state`：VARCHAR/CHAR 或 JSON 表达式。文本必须是合法 UTF-8，即使内容类似 JSON 或 URL，也按文本发送。JSON 状态只接受字符串、对象或数组。其他类型需要显式转换或使用 `parse_json`。
 - `questions`：定义 1–16 个问题的常量 JSON 对象。不支持 JSON 列或 `parse_json(column)`，也不会将字符串隐式视为 JSON。
-- `model`：可选的常量 VARCHAR 表达式。省略时使用 `ai_default_decision_model`，只替换模型，不改变端点、协议或凭证。显式 SQL NULL 不回退到默认模型。
+- `provider_name`：可选的常量 VARCHAR 表达式，必须非 NULL、非空白，按名称选择已注册的 Provider。省略时使用默认 `decision` Provider。远端模型始终来自 Provider 元数据，该参数不是远端模型名。
 
-本函数不提供 options MAP 或 AI PROVIDER 重载，沿用已有的 [AI 函数权限](ai_functions.mdx#ai-function-privileges)、SQL 使用位置限制、异步 AIProject 和请求生命周期。使用新重载前，请升级所有 FE 和 BE。
+本函数不提供 options MAP。两种形式都要求 Provider 类型为 `decision`、协议为 `bailian_decision`，沿用已有的 [AI 函数权限](ai_functions.mdx#ai-function-privileges)、SQL 使用位置限制、异步 AIProject 和请求生命周期。创建或使用 decision Provider 前，请升级所有 FE 和 BE。
 
 ## 配置
 
-在每个 FE 上设置独立的决策配置：
-
-```properties
-ai_default_decision_endpoint = https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/systemone
-ai_default_decision_provider = bailian_decision
-ai_default_decision_model = decision-model-preview
-```
-
-三个参数默认均为空。端点与 provider 必填；所有调用均显式指定模型时，默认模型可以为空。参见 [FE 决策配置](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_decision_endpoint)。配置变更作用于新生成的计划，已有计划保留配置快照。
-
-每个执行请求的 BE 必须将环境变量 `AI_FUNCTION_DECISION_ENDPOINT` 设置为与 FE 端点完全相同的 URL，并通过 `AI_FUNCTION_DECISION_API_KEY` 提供对应凭证。修改环境变量后需要重启该 BE。FE 计划不携带 SYSTEM API key，决策端点与凭证也不回退到 chat 或 embedding 设置。端点必须是管理员认可的 HTTPS URL；业务状态和问题定义会发送到该服务。
-
-为已有角色授予权限：
+通过 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) 注册模型。管理员可设置该类型的默认项，不影响 chat、embedding 或 rerank 的默认项。为已有角色配置示例：
 
 ```sql
+CREATE AI PROVIDER support_decision TYPE decision
+PROPERTIES (
+    "endpoint" = "https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/systemone",
+    "model" = "decision-model-preview",
+    "protocol" = "bailian_decision",
+    "api_key" = "<api-key>"
+);
+SET support_decision AS DEFAULT AI PROVIDER;
+
 GRANT USAGE ON AI FUNCTION ai_decide TO ROLE decision_reader;
+GRANT USAGE ON AI PROVIDER support_decision TO ROLE decision_reader;
 ```
 
-读取业务表仍需相应表权限。模型权限及地域可用性取决于服务账号，参见[模型文档](https://help.aliyun.com/zh/model-studio/decision-model-preview)。
+端点、模型、凭证及可选的 `timeout_ms` 来自 Provider 元数据，不需要 decision FE 配置或 BE 本地决策凭证，也不回退到 SYSTEM chat/embedding 设置。携带凭证的请求必须使用 HTTPS。Provider 密钥持久化到 FE 元数据，并通过现有内部 RPC 下发到执行 BE；SHOW/DESC 和诊断输出会脱敏。参见 [Provider 设置与快照](ai_custom_functions.md#query-snapshots-and-system-compatibility)。
+
+一个计划固定首次选中的默认 Provider 或每个显式名称，并按 Provider UUID 保存不可变快照。默认与显式选择指向同一 UUID 时复用该快照。后续 ALTER、DROP 或默认项切换不会重定向已有计划；新计划重新解析当前元数据并检查权限。Provider 缺失、类型/协议不符或缺少函数/Provider USAGE 权限时直接失败，不回退 SYSTEM。读取业务表仍需相应表权限。业务状态和问题会发送到配置的服务；模型权限及地域可用性取决于服务账号，参见[模型文档](https://help.aliyun.com/zh/model-studio/decision-model-preview)。
 
 ## 问题与返回值
 
@@ -72,7 +72,7 @@ SELECT ai_decide(
 
 ## NULL、错误与用量
 
-state、questions 或显式 model 为 SQL NULL 时，返回 SQL NULL 且不发送请求。对于实际初始化的 AIProject，非法常量问题定义在 fragment 初始化阶段报错，即使后续没有输入行或 state/model 为 SQL NULL。被优化器移除的调用（例如 `WHERE 1=0` 或 `LIMIT 0`）不会初始化或校验。原生 JSON null 与 SQL NULL 不同，不能用作状态或问题定义。
+state 或 questions 为 SQL NULL 时，返回 SQL NULL 且不发送请求。显式 Provider 名称为 NULL 或空白会在分析阶段失败，不会选择默认项。对于实际初始化的 AIProject，非法常量问题定义在 fragment 初始化阶段报错，即使后续没有输入行或 state 为 SQL NULL。被优化器移除的调用（例如 `WHERE 1=0` 或 `LIMIT 0`）不会初始化并校验问题定义；函数及 Provider 授权仍遵循既有的优化前检查。原生 JSON null 与 SQL NULL 不同，不能用作状态或问题定义。
 
 行输入错误、HTTP 失败和非法响应遵循 [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)：`ignore` 对失败行返回 SQL NULL，`fail` 中止查询。非法配置和查询生命周期失败保留已有 AI 执行错误。错误不会转成否定答案或零分。
 

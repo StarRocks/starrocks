@@ -1277,50 +1277,69 @@ TEST_F(AIProjectPipelineTest, SystemEmbeddingUsesItsOwnEndpointAndCredential) {
     EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
 }
 
-TEST_F(AIProjectPipelineTest, SystemDecisionRequiresItsOwnEndpointCredentialAndProtocol) {
+TEST_F(AIProjectPipelineTest, DecisionProviderUsesSnapshotCredentialTimeoutAndPinnedEndpoint) {
     const std::string endpoint = "https://127.0.0.1/compatible-mode/v1/systemone";
-    ScopedEnvironment endpoint_binding{"AI_FUNCTION_DECISION_ENDPOINT", endpoint};
-    ScopedEnvironment credential{"AI_FUNCTION_DECISION_API_KEY", "decision-only-secret"};
-    ScopedEnvironment chat_key{std::string(kApiKeyEnvironment), std::nullopt};
-    AIProjectModelConfigs configs{{"__system_decision__", AIProjectModelConfig{.endpoint = endpoint,
-                                                                               .model = "decision-model",
-                                                                               .capability = AICapability::DECISION,
-                                                                               .protocol = "bailian_decision"}}};
+    ScopedEnvironment chat_key{std::string(kApiKeyEnvironment), "unrelated-chat-key"};
+    AIProjectModelConfigs configs{{"provider:decision", AIProjectModelConfig{.endpoint = endpoint,
+                                                                             .model = "decision-model",
+                                                                             .api_key = "decision-only-secret",
+                                                                             .capability = AICapability::DECISION,
+                                                                             .source = TAIModelSource::PROVIDER,
+                                                                             .timeout_ms = 75,
+                                                                             .protocol = "bailian_decision"}}};
     auto create = [&] {
         return AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
     };
     auto submitter = create();
     ASSERT_TRUE(submitter.ok()) << submitter.status();
-    EXPECT_EQ("decision-only-secret", submitter.value()->_routes.at("__system_decision__").api_key);
-    {
-        ScopedEnvironment missing{"AI_FUNCTION_DECISION_API_KEY", std::nullopt};
-        ScopedEnvironment unrelated{std::string(kApiKeyEnvironment), "chat-key-must-not-be-used"};
+    const auto& bound = submitter.value()->_routes.at("provider:decision");
+    EXPECT_EQ("decision-only-secret", bound.api_key);
+    EXPECT_EQ(75, bound.attempt_timeout_ms);
+    ASSERT_NE(nullptr, bound.resolved_endpoint);
+    EXPECT_EQ((std::vector<std::string>{"127.0.0.1"}), bound.resolved_endpoint->addresses);
+    auto& route = configs.at("provider:decision");
+    route.api_key.clear();
+    auto keyless = create();
+    ASSERT_TRUE(keyless.ok()) << keyless.status();
+    EXPECT_TRUE(keyless.value()->_routes.at("provider:decision").api_key.empty());
+    route.api_key = "decision-only-secret";
+    for (const std::string protocol : {"openai_compatible", "qwen_compatible", "dashscope_multimodal"}) {
+        route.protocol = protocol;
         EXPECT_FALSE(create().ok());
     }
-    auto& route = configs.at("__system_decision__");
-    route.endpoint = "https://127.0.0.1/other-endpoint";
+    route.protocol = "bailian_decision";
+    route.capability = AICapability::CHAT;
+    EXPECT_FALSE(create().ok());
+    route.capability = AICapability::DECISION;
+    route.source = TAIModelSource::SYSTEM;
+    EXPECT_FALSE(create().ok());
+    route.source = TAIModelSource::PROVIDER;
+    route.endpoint = "http://127.0.0.1/compatible-mode/v1/systemone";
     EXPECT_FALSE(create().ok());
     route.endpoint = endpoint;
-    route.protocol = "openai_compatible";
+    route.timeout_ms = 0;
     EXPECT_FALSE(create().ok());
-    route.protocol = "bailian_decision";
-    route.api_key = "must-not-come-from-fe";
+    route.timeout_ms = 75;
+    route.dimensions = 3;
     EXPECT_FALSE(create().ok());
-    route.api_key.clear();
-    route.source = TAIModelSource::PROVIDER;
-    EXPECT_FALSE(create().ok());
+    route.dimensions.reset();
+    route.api_key = "bad\ncredential";
+    auto invalid = create();
+    ASSERT_FALSE(invalid.ok());
+    EXPECT_EQ(std::string::npos, invalid.status().to_string().find("credential"));
     EXPECT_EQ(0, _http.pending_count());
 }
 
 TEST_F(AIProjectPipelineTest, DecisionDispatcherOwnsResponseSchemaAfterTypedInputIsReleased) {
     set_query_deadline_ns(120'000'000'000);
     const std::string endpoint = "https://127.0.0.1/compatible-mode/v1/systemone";
-    ScopedEnvironment endpoint_binding{"AI_FUNCTION_DECISION_ENDPOINT", endpoint};
-    ScopedEnvironment credential{"AI_FUNCTION_DECISION_API_KEY", "decision-secret"};
-    AIProjectModelConfigs configs{{"__system_decision__", AIProjectModelConfig{.endpoint = endpoint,
-                                                                               .model = "decision-model",
-                                                                               .capability = AICapability::DECISION,
-                                                                               .protocol = "bailian_decision"}}};
+    AIProjectModelConfigs configs{{"provider:decision", AIProjectModelConfig{.endpoint = endpoint,
+                                                                             .model = "decision-model",
+                                                                             .api_key = "decision-secret",
+                                                                             .capability = AICapability::DECISION,
+                                                                             .source = TAIModelSource::PROVIDER,
+                                                                             .timeout_ms = 75,
+                                                                             .protocol = "bailian_decision"}}};
     auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
     ASSERT_TRUE(submitter.ok()) << submitter.status();
     auto parsed = parse_ai_decision_questions(R"({"q":{"type":"noul"}})");
@@ -1333,7 +1352,7 @@ TEST_F(AIProjectPipelineTest, DecisionDispatcherOwnsResponseSchemaAfterTypedInpu
     AIExecutionStatistics statistics;
     auto handle = submitter.value()->submit(AIProjectTaskRequest{.task_id = 1,
                                                                  .model = "decision-model",
-                                                                 .model_config_id = "__system_decision__",
+                                                                 .model_config_id = "provider:decision",
                                                                  .capability = AICapability::DECISION,
                                                                  .decision = &*input},
                                             [&](AITaskResult value, const AIExecutionStatistics& observed) {
@@ -1347,6 +1366,10 @@ TEST_F(AIProjectPipelineTest, DecisionDispatcherOwnsResponseSchemaAfterTypedInpu
     _control.run_until_idle();
     ASSERT_EQ(1, _http.pending_count());
     EXPECT_EQ(endpoint, _http.request().url);
+    EXPECT_EQ(75, _http.request().attempt_timeout_ms);
+    EXPECT_TRUE(std::any_of(_http.request().headers.begin(), _http.request().headers.end(), [](const auto& header) {
+        return header.name == "Authorization" && header.value == "Bearer decision-secret";
+    }));
     EXPECT_NE(std::string::npos, _http.request().body.find("typed state"));
     EXPECT_EQ(std::string::npos, _http.request().body.find("messages"));
     _http.complete_next(R"({"answers":{"q":{"type":"noul","noul":0.5}},"usage":{"input_tokens":7}})");
@@ -1359,6 +1382,48 @@ TEST_F(AIProjectPipelineTest, DecisionDispatcherOwnsResponseSchemaAfterTypedInpu
     EXPECT_EQ(7, statistics.prompt_tokens);
     EXPECT_EQ(0, statistics.completion_tokens);
     EXPECT_EQ(7, statistics.total_tokens);
+}
+
+TEST_F(AIProjectPipelineTest, DecisionProviderCancellationPreservesLifecycleOutcome) {
+    set_query_deadline_ns(120'000'000'000);
+    AIProjectModelConfigs configs{
+            {"provider:decision", AIProjectModelConfig{.endpoint = "https://127.0.0.1/compatible-mode/v1/systemone",
+                                                       .model = "decision-model",
+                                                       .api_key = "decision-secret",
+                                                       .capability = AICapability::DECISION,
+                                                       .source = TAIModelSource::PROVIDER,
+                                                       .timeout_ms = 75,
+                                                       .protocol = "bailian_decision"}}};
+    auto config = _config_source->snapshot();
+    config.on_error = "ignore";
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    auto parsed = parse_ai_decision_questions(R"({"q":{"type":"noul"}})");
+    ASSERT_TRUE(parsed.ok()) << parsed.status();
+    AIDecisionInput input{.state = "state",
+                          .questions = std::make_shared<const AIDecisionQuestions>(std::move(parsed).value())};
+    std::vector<AITaskResult> results;
+    auto handle = submitter.value()->submit(
+            AIProjectTaskRequest{.task_id = 1,
+                                 .model = "decision-model",
+                                 .model_config_id = "provider:decision",
+                                 .capability = AICapability::DECISION,
+                                 .decision = &input},
+            [&](AITaskResult value, const AIExecutionStatistics&) { results.emplace_back(std::move(value)); });
+    ASSERT_TRUE(handle.ok()) << handle.status();
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+    _query_context->cancel(Status::Cancelled("test query cancellation"), true);
+    EXPECT_EQ(AILifecycleState::CANCELLED,
+              observe_ai_lifecycle(_http.request().lifecycle, _http.request().request_deadline_ns,
+                                   _clock.monotonic_now_ns())
+                      .state);
+    _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+    _completion.run_until_idle();
+    _control.run_until_idle();
+    ASSERT_EQ(1, results.size());
+    ASSERT_TRUE(std::holds_alternative<AILifecycleCancelled>(results.front()));
+    EXPECT_EQ(AILifecycleReason::CANCELLED, std::get<AILifecycleCancelled>(results.front()).reason);
 }
 
 TEST_F(AIProjectPipelineTest, ProviderDimensionsDefaultDoesNotOverrideExplicitOptions) {

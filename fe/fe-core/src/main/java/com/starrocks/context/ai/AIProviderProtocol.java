@@ -29,6 +29,7 @@ import java.util.Locale;
  *       OpenRouter, ...) expose.</li>
  *   <li>ANTHROPIC — Anthropic Messages API.</li>
  *   <li>COHERE — Cohere-compatible {@code /rerank} (Cohere, Jina, Voyage, OpenRouter, local TEI).</li>
+ *   <li>BAILIAN_DECISION — Bailian SystemOne typed decision API.</li>
  * </ul>
  *
  * <p>Any protocol may be declared on any provider type; the type only decides the default. Every
@@ -38,7 +39,8 @@ import java.util.Locale;
 public enum AIProviderProtocol {
     OPENAI,
     ANTHROPIC,
-    COHERE;
+    COHERE,
+    BAILIAN_DECISION;
 
     public static AIProviderProtocol fromString(String s) {
         if (Strings.isNullOrEmpty(s)) {
@@ -48,7 +50,7 @@ public enum AIProviderProtocol {
             return valueOf(s.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    "invalid AI provider protocol '" + s + "'; expected one of openai, anthropic, cohere");
+                    "invalid AI provider protocol '" + s + "'; expected one of openai, anthropic, cohere, bailian_decision");
         }
     }
 
@@ -60,6 +62,8 @@ public enum AIProviderProtocol {
     /** The protocol a provider of the given type uses when none is specified. */
     public static AIProviderProtocol defaultFor(AIProviderType type) {
         switch (type) {
+            case DECISION:
+                return BAILIAN_DECISION;
             case RERANK:
                 return COHERE;
             case EMBEDDING:

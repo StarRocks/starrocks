@@ -30,6 +30,7 @@ import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -362,6 +363,40 @@ public class AIProviderPlanTest extends PlanTestBase {
             Assertions.assertTrue(error.getMessage().contains("Query dump replay does not support named AI providers"));
         } finally {
             connectContext.setDatabase(previousDatabase);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testDecisionProvidersCannotBeReboundByQueryDumpOrExposeCredentials(boolean explicitProvider)
+            throws Exception {
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_dump", AIProviderType.DECISION,
+                Map.of("endpoint", "https://decision.example.test/v1/systemone", "model", "decision-model",
+                        "api_key", "private-decision-dump-key"))) {
+            String sql = "select ai_decide(" + (explicitProvider ? "'decision_dump', " : "")
+                    + "'state', parse_json('{\"q\":{\"type\":\"noul\"}}'))";
+            boolean previous = connectContext.getSessionVariable().getEnableQueryDump();
+            String previousDatabase = connectContext.getDatabase();
+            connectContext.getSessionVariable().setEnableQueryDump(true);
+            try {
+                String serialized = getDumpString(sql);
+                Assertions.assertFalse(serialized.contains("private-decision-dump-key"));
+                Assertions.assertFalse(serialized.contains("ai_model_configs"));
+                QueryDumpInfo dump = new QueryDumpInfo(connectContext);
+                dump.setOriginStmt(sql);
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dump));
+                Assertions.assertTrue(error.getMessage().contains("Query dump replay does not support named AI providers"));
+                error = Assertions.assertThrows(SemanticException.class,
+                        () -> UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, dump));
+                Assertions.assertTrue(error.getMessage().contains("Query dump replay does not support named AI providers"));
+                error = Assertions.assertThrows(SemanticException.class,
+                        () -> UtFrameUtils.replaySql(connectContext, sql));
+                Assertions.assertTrue(error.getMessage().contains("Query dump replay does not support named AI providers"));
+            } finally {
+                connectContext.getSessionVariable().setEnableQueryDump(previous);
+                connectContext.setDatabase(previousDatabase);
+            }
         }
     }
 

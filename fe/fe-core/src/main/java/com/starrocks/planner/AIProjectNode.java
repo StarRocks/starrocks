@@ -97,8 +97,7 @@ public final class AIProjectNode extends ProjectNode {
                     "AIProject model source does not match the AI function");
             if (config.source() == TAIModelSource.PROVIDER) {
                 Preconditions.checkState(!AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(configId)
-                                && !AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID.equals(configId)
-                                && !AIModelConfigs.SYSTEM_DECISION_CONFIG_ID.equals(configId),
+                                && !AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID.equals(configId),
                         "Named AI providers must not use SYSTEM configuration IDs");
             } else {
                 Preconditions.checkState(AIModelConfigs.systemConfigId(call.getFn()).equals(configId),

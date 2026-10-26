@@ -1768,10 +1768,11 @@ vectorized_functions = [
 # dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
 # BE builtin descriptor table.
 def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1):
+                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1,
+                model_source=None):
     # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
     return {
-        'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
+        'model_source': model_source if model_source is not None else ('PROVIDER' if provider_argument >= 0 else 'SYSTEM'),
         'capability': capability,
         'prompt_kind': prompt_kind,
         'result_kind': result_kind,
@@ -1864,11 +1865,11 @@ ai_vectorized_functions = [
     [200143, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
     [200160, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'JSON'], 'AiFunctions::ai_decide',
-     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1])],
+     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1], model_source='PROVIDER')],
     [200161, 'ai_decide', True, False, 'JSON', ['JSON', 'JSON'], 'AiFunctions::ai_decide',
-     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1])],
+     ai_metadata('DECISION', 'NONE', 'JSON', [0, 1], model_source='PROVIDER')],
     [200162, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'JSON'], 'AiFunctions::ai_decide',
-     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], model_argument=0)],
+     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], provider_argument=0)],
     [200163, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'JSON', 'JSON'], 'AiFunctions::ai_decide',
-     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], model_argument=0)],
+     ai_metadata('DECISION', 'NONE', 'JSON', [1, 2], provider_argument=0)],
 ]

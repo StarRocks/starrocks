@@ -66,19 +66,19 @@ final class AIFunctionAnalyzer {
         boolean hasOptionMap = argumentCount > 1 && node.getChild(argumentCount - 1).getType().isMapType();
         int modelArgument = AIModelConfigs.getModelArgument(node.getFn());
         AICapability capability = AIModelConfigs.capability(node.getFn());
-        boolean namedProvider = node.getFn().getAiModelSource() == TAIModelSource.PROVIDER;
+        boolean providerSource = node.getFn().getAiModelSource() == TAIModelSource.PROVIDER;
 
         try {
             AIModelConfigs.DefaultModelRequirement requirement = modelArgument >= 0
                     ? AIModelConfigs.DefaultModelRequirement.OPTIONAL : AIModelConfigs.DefaultModelRequirement.REQUIRED;
-            if (namedProvider) {
+            if (providerSource) {
                 // Only emitted physical AIProject calls capture metadata, independently for each execution plan.
-                AIModelConfigs.providerName(node.getChild(AIModelConfigs.getProviderArgument(node.getFn())));
+                AIModelConfigs.providerSelection(node);
             } else {
                 switch (capability) {
                     case CHAT -> AIModelConfigs.validateSystemChat(requirement);
                     case TEXT_EMBEDDING -> AIModelConfigs.systemEmbeddingSnapshot(requirement);
-                    case DECISION -> AIModelConfigs.systemDecisionSnapshot(requirement);
+                    default -> throw new SemanticException("AI capability requires a Provider", node.getPos());
                 }
             }
         } catch (StarRocksPlannerException e) {
@@ -86,7 +86,7 @@ final class AIFunctionAnalyzer {
         }
 
         if (capability == AICapability.DECISION) {
-            validateDecisionInputs(node, modelArgument);
+            validateDecisionInputs(node);
         }
         if (modelArgument >= 0) {
             validateExplicitModel(node.getChild(modelArgument), node);
@@ -102,14 +102,8 @@ final class AIFunctionAnalyzer {
         }
     }
 
-    private static void validateDecisionInputs(FunctionCallExpr node, int modelArgument) {
-        if (modelArgument >= 0) {
-            Expr model = node.getChild(modelArgument);
-            if (!model.isConstant() || (!model.getType().isStringType() && !model.getType().isNull())) {
-                throw new SemanticException("ai_decide model must be a constant string", node.getPos());
-            }
-        }
-        Expr state = node.getChild(modelArgument >= 0 ? 1 : 0);
+    private static void validateDecisionInputs(FunctionCallExpr node) {
+        Expr state = node.getChild(node.getChildren().size() - 2);
         if (!state.getType().isStringType() && !state.getType().isJsonType() && !state.getType().isNull()) {
             throw new SemanticException("ai_decide state must have VARCHAR or JSON type", node.getPos());
         }

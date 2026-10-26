@@ -47,6 +47,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -120,26 +121,22 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testDecisionRequiresItsOwnFunctionUsage() throws Exception {
-        String endpoint = Config.ai_default_decision_endpoint;
-        String model = Config.ai_default_decision_model;
-        String provider = Config.ai_default_decision_provider;
-        try {
-            Config.ai_default_decision_endpoint = "https://decision.example.test/systemone";
-            Config.ai_default_decision_model = "decision-model";
-            Config.ai_default_decision_provider = "bailian_decision";
+    public void testDecisionRequiresFunctionAndDefaultProviderUsageBeforePruning() throws Exception {
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_rbac", AIProviderType.DECISION,
+                Map.of("endpoint", "https://decision.example.test/systemone", "model", "decision-model"))) {
             String query = "SELECT ai_decide(prompt, parse_json('{\"q\":{\"type\":\"noul\"}}')) FROM prompts";
+            String pruned = "SELECT 1 FROM (" + query + ") unused";
             assertDenied(query);
             executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
             assertDenied(query);
             executeAsRoot("GRANT USAGE ON AI FUNCTION ai_decide TO '" + user + "'");
+            assertDenied(query, "AI PROVIDER");
+            assertDenied(pruned, "AI PROVIDER");
+            executeAsRoot("GRANT USAGE ON AI PROVIDER decision_rbac TO '" + user + "'");
             authorize(query);
+            authorize(pruned);
             executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_decide FROM '" + user + "'");
             assertDenied(query);
-        } finally {
-            Config.ai_default_decision_endpoint = endpoint;
-            Config.ai_default_decision_model = model;
-            Config.ai_default_decision_provider = provider;
         }
     }
 

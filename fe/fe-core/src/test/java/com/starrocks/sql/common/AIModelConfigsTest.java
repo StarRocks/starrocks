@@ -46,6 +46,21 @@ import static com.starrocks.sql.common.AIModelConfigs.DefaultModelRequirement.OP
 import static com.starrocks.sql.common.AIModelConfigs.DefaultModelRequirement.REQUIRED;
 
 public class AIModelConfigsTest {
+    @Test
+    public void testDecisionProviderUsesRegistryModelAndCredentials() {
+        AIProviderType type = AIProviderType.fromString("decision");
+        AIProvider provider = new AIProvider("decision-id", "decision-provider", type,
+                Map.of("endpoint", "https://models.example.test/v1/systemone", "model", "registry-model",
+                        "api_key", "registry-key", "timeout_ms", "1000"), "");
+        AIModelConfigs.ModelConfig config = AIModelConfigs.fromProvider(provider);
+        Assertions.assertEquals("DECISION", config.capability());
+        Assertions.assertEquals(TAIModelSource.PROVIDER, config.source());
+        Assertions.assertEquals("bailian_decision", config.provider());
+        Assertions.assertEquals("registry-model", config.model());
+        Assertions.assertEquals("registry-key", config.toThrift().getDecision().getApi_key());
+        Assertions.assertEquals(1000, config.toThrift().getDecision().getTimeout_ms());
+    }
+
     @BeforeEach
     public void setUpSystemChat() {
         Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
@@ -61,9 +76,6 @@ public class AIModelConfigsTest {
         Config.ai_default_embedding_endpoint = "";
         Config.ai_default_embedding_model = "";
         Config.ai_default_embedding_provider = "";
-        Config.ai_default_decision_endpoint = "";
-        Config.ai_default_decision_model = "";
-        Config.ai_default_decision_provider = "";
     }
 
     @Test
@@ -71,7 +83,7 @@ public class AIModelConfigsTest {
         FunctionSet functions = new FunctionSet();
         functions.init();
         Set<Long> explicitModelIds = Set.of(200102L, 200103L, 200106L, 200107L, 200111L, 200113L, 200115L, 200117L,
-                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L, 200136L, 200137L, 200162L, 200163L);
+                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L, 200136L, 200137L);
         Set<Long> observedExplicitModelIds = functions.getBuiltinFunctions().stream()
                 .filter(Function::isAi)
                 .filter(AIModelConfigs::hasExplicitModel)
@@ -79,7 +91,7 @@ public class AIModelConfigsTest {
                 .collect(Collectors.toSet());
         Assertions.assertEquals(explicitModelIds, observedExplicitModelIds,
                 "Provider selectors and default-model arguments must not be classified as explicit remote models");
-        Set<Long> namedModelIds = Set.of(200140L, 200141L, 200142L, 200143L);
+        Set<Long> namedModelIds = Set.of(200140L, 200141L, 200142L, 200143L, 200162L, 200163L);
         functions.getBuiltinFunctions().stream().filter(Function::isAi).forEach(function -> {
             long id = function.getFunctionId();
             Assertions.assertEquals(explicitModelIds.contains(id) ? 0 : -1, AIModelConfigs.getModelArgument(function),
@@ -87,7 +99,8 @@ public class AIModelConfigsTest {
             Assertions.assertEquals(namedModelIds.contains(id) ? 0 : -1, AIModelConfigs.getProviderArgument(function),
                     () -> function.signatureString() + " (function ID " + id + ")");
             int providerArgument = AIModelConfigs.getProviderArgument(function);
-            Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.PROVIDER, providerArgument >= 0);
+            Assertions.assertEquals(function.getAiModelSource() == TAIModelSource.PROVIDER,
+                    providerArgument >= 0 || id == 200160L || id == 200161L);
             if (providerArgument >= 0) {
                 Assertions.assertTrue(providerArgument < function.getNumArgs());
                 Assertions.assertTrue(function.getArgs()[providerArgument].isVarchar());
@@ -120,9 +133,9 @@ public class AIModelConfigsTest {
                 .filter(function -> AIModelConfigs.capability(function) == AICapability.DECISION)
                 .peek(function -> {
                     Assertions.assertFalse(AIModelConfigs.isTextEmbedding(function));
-                    Assertions.assertEquals(TAIModelSource.SYSTEM, function.getAiModelSource());
-                    Assertions.assertEquals(AIModelConfigs.SYSTEM_DECISION_CONFIG_ID,
-                            AIModelConfigs.systemConfigId(function));
+                    Assertions.assertEquals(TAIModelSource.PROVIDER, function.getAiModelSource());
+                    Assertions.assertEquals(AIProviderType.DECISION, AIModelConfigs.providerType(function));
+                    Assertions.assertThrows(IllegalStateException.class, () -> AIModelConfigs.systemConfigId(function));
                 })
                 .map(Function::getFunctionId)
                 .collect(Collectors.toSet());
@@ -131,23 +144,18 @@ public class AIModelConfigsTest {
 
     @ParameterizedTest
     @CsvSource({"CHAT, openai_compatible", "CHAT, qwen_compatible",
-            "TEXT_EMBEDDING, openai_compatible", "TEXT_EMBEDDING, dashscope_multimodal", "DECISION, bailian_decision"})
+            "TEXT_EMBEDDING, openai_compatible", "TEXT_EMBEDDING, dashscope_multimodal"})
     public void testSystemProtocolsPreserveImmutableWireSnapshot(String capability, String protocol) {
         Config.ai_default_chat_provider = protocol;
         Config.ai_default_embedding_endpoint = "https://models.example.test/v1/inference";
         Config.ai_default_embedding_model = "embedding-model";
         Config.ai_default_embedding_provider = protocol;
-        Config.ai_default_decision_endpoint = "https://models.example.test/v1/systemone";
-        Config.ai_default_decision_model = "decision-model";
-        Config.ai_default_decision_provider = protocol;
         AIModelConfigs.ModelConfig snapshot = switch (capability) {
             case "TEXT_EMBEDDING" -> AIModelConfigs.systemEmbeddingSnapshot(REQUIRED);
-            case "DECISION" -> AIModelConfigs.systemDecisionSnapshot(REQUIRED);
             default -> AIModelConfigs.fromSystemChat(AIModelConfigs.systemChatSnapshot(REQUIRED));
         };
         Config.ai_default_chat_provider = "changed-provider";
         Config.ai_default_embedding_provider = "changed-provider";
-        Config.ai_default_decision_provider = "changed-provider";
         TAIModelConfiguration thrift = snapshot.toThrift();
         Assertions.assertEquals(capability.equals("CHAT"), thrift.isSetChat());
         Assertions.assertEquals(capability.equals("TEXT_EMBEDDING"), thrift.isSetEmbedding());
@@ -273,7 +281,8 @@ public class AIModelConfigsTest {
         }
         provider.setType(AIProviderType.RERANK);
         SemanticException error = Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.fromProvider(provider));
-        Assertions.assertEquals("AI functions require a CHAT or EMBEDDING provider, not RERANK", error.getDetailMsg());
+        Assertions.assertEquals("AI functions require a CHAT, EMBEDDING or DECISION provider, not RERANK",
+                error.getDetailMsg());
     }
 
     @Test
@@ -317,17 +326,14 @@ public class AIModelConfigsTest {
     }
 
     @Test
-    public void testDecisionConfigurationNormalizesMissingDefaultAndRemainsIndependent() {
-        Config.ai_default_decision_endpoint = "https://models.example.test/v1/systemone";
-        Config.ai_default_decision_model = null;
-        Config.ai_default_decision_provider = "bailian_decision";
-        AIModelConfigs.ModelConfig snapshot = AIModelConfigs.systemDecisionSnapshot(OPTIONAL);
-        Assertions.assertEquals("", snapshot.model());
-        Assertions.assertNull(snapshot.apiKey());
-        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemDecisionSnapshot(REQUIRED));
-        Config.ai_default_decision_endpoint = "";
-        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateSystem(snapshot, OPTIONAL));
-        Assertions.assertThrows(StarRocksPlannerException.class, () -> AIModelConfigs.systemDecisionSnapshot(OPTIONAL));
+    public void testDecisionProviderRequiresItsProtocolAndCannotUseSystemConfiguration() {
+        AIProvider provider = new AIProvider("decision-id", "decision", AIProviderType.DECISION,
+                Map.of("endpoint", "https://models.example.test/v1/systemone", "model", "decision-model",
+                        "protocol", "openai"), "");
+        Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.fromProvider(provider));
+        Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> AIModelConfigs.validateSystem(new AIModelConfigs.ModelConfig("DECISION",
+                        "https://models.example.test/v1/systemone", "model", "bailian_decision"), REQUIRED));
         Assertions.assertDoesNotThrow(() -> AIModelConfigs.systemChatSnapshot(REQUIRED));
     }
 

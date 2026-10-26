@@ -44,7 +44,6 @@ constexpr std::string_view kApiKeyEnvironment = "AI_FUNCTION_MODEL_API_KEY";
 constexpr std::string_view kEndpointEnvironment = "AI_FUNCTION_MODEL_ENDPOINT";
 constexpr std::string_view kSystemChatConfigId = "__system_chat__";
 constexpr std::string_view kSystemEmbeddingConfigId = "__system_embedding__";
-constexpr std::string_view kSystemDecisionConfigId = "__system_decision__";
 constexpr int64_t kNanosecondsPerMillisecond = 1'000'000;
 
 Status invalid_projection() {
@@ -524,9 +523,6 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 } else if (id == kSystemEmbeddingConfigId && model_config.capability == AICapability::TEXT_EMBEDDING) {
                     endpoint_environment = "AI_FUNCTION_EMBEDDING_ENDPOINT";
                     key_environment = "AI_FUNCTION_EMBEDDING_API_KEY";
-                } else if (id == kSystemDecisionConfigId && model_config.capability == AICapability::DECISION) {
-                    endpoint_environment = "AI_FUNCTION_DECISION_ENDPOINT";
-                    key_environment = "AI_FUNCTION_DECISION_API_KEY";
                 } else {
                     return Status::InvalidArgument("AI function model configuration is invalid");
                 }
@@ -541,9 +537,9 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 }
                 route.api_key = api_key;
             } else if (model_config.source == TAIModelSource::PROVIDER) {
-                if (model_config.protocol != "openai_compatible" || id == kSystemChatConfigId ||
-                    id == kSystemEmbeddingConfigId || id == kSystemDecisionConfigId ||
-                    model_config.capability == AICapability::DECISION ||
+                if ((model_config.capability != AICapability::DECISION &&
+                     model_config.protocol != "openai_compatible") ||
+                    id == kSystemChatConfigId || id == kSystemEmbeddingConfigId ||
                     contains_only_ascii_whitespace(model_config.model) ||
                     contains_control_character(model_config.api_key) ||
                     (model_config.timeout_ms.has_value() &&

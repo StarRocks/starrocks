@@ -35,6 +35,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -71,50 +72,49 @@ public class AIFunctionAnalyzerTest {
         Config.ai_default_embedding_endpoint = "";
         Config.ai_default_embedding_model = "";
         Config.ai_default_embedding_provider = "";
-        Config.ai_default_decision_endpoint = "";
-        Config.ai_default_decision_model = "";
-        Config.ai_default_decision_provider = "";
     }
 
     @Test
-    public void testDecisionSignaturesAndConstantControls() {
-        Config.ai_default_decision_endpoint = "https://workspace.example.test/compatible-mode/v1/systemone";
-        Config.ai_default_decision_model = "decision-model";
-        Config.ai_default_decision_provider = "bailian_decision";
-        String questions = "parse_json('{\"q\":{\"type\":\"noul\"}}')";
-        long expectedId = 200160;
-        for (String args : new String[] {"'state', " + questions, "parse_json('{}'), " + questions,
-                "'model', 'state', " + questions, "'model', parse_json('[]'), " + questions,
-                "concat('mod', 'el'), ta, " + questions, "NULL, NULL, " + questions,
-                "cast(1 as varchar), cast(2 as varchar), " + questions, "'state', NULL"}) {
-            QueryStatement statement = (QueryStatement) analyzeSuccess("select ai_decide(" + args + ") from tall");
-            FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
-                    .getOutputExpression().get(0);
-            Assertions.assertTrue(call.getType().isJsonType());
-            if (expectedId <= 200163) {
-                Assertions.assertEquals(expectedId++, call.getFn().getFunctionId());
+    public void testDecisionSignaturesAndConstantControls() throws Exception {
+        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_analyzer", AIProviderType.DECISION,
+                Map.of("endpoint", "https://workspace.example.test/v1/systemone", "model", "decision-model"))) {
+            String questions = "parse_json('{\"q\":{\"type\":\"noul\"}}')";
+            long expectedId = 200160;
+            for (String args : new String[] {"'state', " + questions, "parse_json('{}'), " + questions,
+                    "'decision_analyzer', 'state', " + questions, "'decision_analyzer', parse_json('[]'), " + questions,
+                    "concat('decision_', 'analyzer'), ta, " + questions, "'decision_analyzer', NULL, " + questions,
+                    "'state', NULL"}) {
+                QueryStatement statement = (QueryStatement) analyzeSuccess("select ai_decide(" + args + ") from tall");
+                FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                        .getOutputExpression().get(0);
+                Assertions.assertTrue(call.getType().isJsonType());
+                if (expectedId <= 200163) {
+                    Assertions.assertEquals(expectedId++, call.getFn().getFunctionId());
+                }
             }
+            analyzeFail("select ai_decide(1, " + questions + ")", "state must have VARCHAR or JSON type");
+            analyzeFail("select ai_decide('state', '{}')", "questions must have JSON type");
+            analyzeFail("select ai_decide('state', parse_json(ta)) from tall", "questions must be constant");
+            analyzeFail("select ai_decide(ta, 'state', " + questions + ") from tall", "constant AI provider name");
+            analyzeFail("select ai_decide(1, 'state', " + questions + ")", "constant AI provider name");
+            analyzeFail("select ai_decide(NULL, 'state', " + questions + ")", "constant AI provider name");
+            analyzeFail("select ai_decide('  ', 'state', " + questions + ")", "nonblank constant AI provider name");
         }
-        analyzeFail("select ai_decide(1, " + questions + ")", "state must have VARCHAR or JSON type");
-        analyzeFail("select ai_decide('state', '{}')", "questions must have JSON type");
-        analyzeFail("select ai_decide('state', parse_json(ta)) from tall", "questions must be constant");
-        analyzeFail("select ai_decide(ta, 'state', " + questions + ") from tall", "model must be a constant string");
-        analyzeFail("select ai_decide(1, 'state', " + questions + ")", "model must be a constant string");
-        Config.ai_default_decision_model = "";
-        analyzeSuccess("select ai_decide('explicit', 'state', " + questions + ")");
-        analyzeFail("select ai_decide('state', " + questions + ")", "ai_default_decision_model");
     }
 
     @Test
-    public void testDecisionRequiresIndependentConfiguration() {
-        analyzeFail("select ai_decide('state', parse_json('{}'))", "ai_default_decision_endpoint");
-        Config.ai_default_decision_endpoint = "https://workspace.example.test/compatible-mode/v1/systemone";
-        Config.ai_default_decision_model = "decision-model";
-        Config.ai_default_decision_provider = "openai_compatible";
-        analyzeFail("select ai_decide('state', parse_json('{}'))", "bailian_decision");
-        Config.ai_default_decision_provider = "bailian_decision";
-        Config.ai_default_decision_endpoint = "http://workspace.example.test/compatible-mode/v1/systemone";
-        analyzeFail("select ai_decide('state', parse_json('{}'))", "HTTPS");
+    public void testDecisionRequiresRegistryDefaultOrExplicitProvider() throws Exception {
+        analyzeFail("select ai_decide('state', parse_json('{}'))", "Default AI provider of type DECISION does not exist");
+        var manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        manager.createProvider("decision_explicit", AIProviderType.DECISION,
+                Map.of("endpoint", "https://workspace.example.test/v1/systemone", "model", "decision-model"), "");
+        try {
+            analyzeSuccess("select ai_decide('decision_explicit', 'state', parse_json('{}'))");
+            analyzeFail("select ai_decide('missing', 'state', parse_json('{}'))", "AI provider 'missing' does not exist");
+            analyzeFail("select ai_decide('state', parse_json('{}'))", "Default AI provider of type DECISION does not exist");
+        } finally {
+            manager.dropProvider("decision_explicit", true);
+        }
     }
 
     @Test

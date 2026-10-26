@@ -5599,15 +5599,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
     public static String ai_default_embedding_provider = "";
 
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_decide calls")
-    public static String ai_default_decision_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_decide calls without an explicit model")
-    public static String ai_default_decision_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_decide calls; bailian_decision")
-    public static String ai_default_decision_provider = "";
-
     /**
      * How the FE reacts when a metadata lock is requested on an object the internal catalog does
      * not own -- a database from an external catalog, or a placeholder table id such as the
