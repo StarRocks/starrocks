@@ -180,12 +180,34 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             fixture.setBufferSize(20L * 1024 * 1024);
             fixture.failOnSecondColumn();
 
-            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
+            // One column's histogram says nothing about another's, so the job keeps what it got instead of
+            // discarding a table's histograms because one column could not be scanned.
+            fixture.collect();
 
-            Assertions.assertEquals("mock second-column failure", exception.getMessage());
             Assertions.assertEquals(1, fixture.batchInsertSql().size());
             Assertions.assertEquals(1, fixture.cleanupCallCount());
             Assertions.assertEquals(Lists.newArrayList("v2"), fixture.cleanedColumns());
+            // The job finishes, but says what it lost, and only claims a histogram for the column it wrote.
+            Assertions.assertEquals(Lists.newArrayList("v2"), fixture.collectedColumns());
+            Assertions.assertTrue(fixture.analyzeStatus().getReason().contains("partially failed but tolerated 1/2"),
+                    fixture.analyzeStatus().getReason());
+            Assertions.assertTrue(fixture.analyzeStatus().getReason().contains("mock second-column failure"),
+                    fixture.analyzeStatus().getReason());
+        }
+    }
+
+    @Test
+    public void testEveryColumnFailingIsStillAFailedJob() throws Exception {
+        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
+            fixture.setBufferSize(20L * 1024 * 1024);
+            fixture.failEveryColumn();
+
+            // Nothing was collected, so there is no partial result to keep and no reason to report success.
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
+
+            Assertions.assertEquals("mock every-column failure", exception.getMessage());
+            Assertions.assertTrue(fixture.batchInsertSql().isEmpty());
+            Assertions.assertTrue(fixture.collectedColumns().isEmpty());
         }
     }
 
@@ -195,11 +217,11 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             fixture.setBufferSize(20L * 1024 * 1024);
             fixture.returnNoSecondColumnHistogramResults();
 
-            Exception exception = Assertions.assertThrows(Exception.class, fixture::collect);
+            fixture.collect();
 
-            Assertions.assertEquals(
-                    "Expected exactly one external histogram result for column v7, but got 0",
-                    exception.getMessage());
+            Assertions.assertTrue(fixture.analyzeStatus().getReason().contains(
+                    "Expected exactly one external histogram result for column v7, but got 0"),
+                    fixture.analyzeStatus().getReason());
             Assertions.assertEquals(1, fixture.batchInsertSql().size());
             Assertions.assertTrue(fixture.batchInsertSql().get(0).contains("'v2'"));
             Assertions.assertFalse(fixture.batchInsertSql().get(0).contains("'v7'"));
@@ -228,6 +250,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         private final ExternalHistogramStatisticsCollectJob job;
         private final AtomicInteger cleanupCalls = new AtomicInteger();
         private final AtomicInteger failSecondColumn = new AtomicInteger();
+        private final AtomicInteger failEveryColumn = new AtomicInteger();
         private final List<String> cleanedColumns = new ArrayList<>();
         private boolean emptyV2Histogram;
         private boolean noSecondColumnHistogramResults;
@@ -236,6 +259,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> batchInsertSql = new ArrayList<>();
         private final long originalBufferSize = Config.histogram_batch_insert_buffer_size;
+        private final AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
 
         private ExternalHistogramBatchFixture(ConnectContext context) {
             this.context = context;
@@ -258,6 +282,9 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                 @Mock
                 public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
                     statisticsQueries.add(sql);
+                    if (failEveryColumn.get() != 0) {
+                        throw new RuntimeException("mock every-column failure");
+                    }
                     if (failSecondColumn.get() != 0 && sql.contains("`v7`")) {
                         throw new RuntimeException("mock second-column failure");
                     }
@@ -307,6 +334,10 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             failSecondColumn.set(1);
         }
 
+        private void failEveryColumn() {
+            failEveryColumn.set(1);
+        }
+
         private void returnEmptyV2Histogram() {
             emptyV2Histogram = true;
         }
@@ -316,7 +347,15 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         }
 
         private void collect() throws Exception {
-            job.collect(context, new NativeAnalyzeStatus());
+            job.collect(context, analyzeStatus);
+        }
+
+        private AnalyzeStatus analyzeStatus() {
+            return analyzeStatus;
+        }
+
+        private List<String> collectedColumns() {
+            return job.getCollectedColumns();
         }
 
         private String tableUuidHash() {

@@ -222,6 +222,9 @@ public class UtFrameUtils {
     // RESERVED_PORTS check, and the second tryLock() on its file would throw OverlappingFileLockException.
     // A dedicated lock rather than the class monitor, which createMinStarRocksCluster() holds while the FE starts.
     private static final Object PORT_LOCK = new Object();
+    // Replay mocks min(this, be_number) backends. The existing dump tests' expectations were produced with 3; a
+    // corpus whose plans must match the source cluster (e.g. IcebergTPCDS1TReplayTest) raises it to the real count.
+    public static int replayMaxBackendNum = 3;
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -935,7 +938,9 @@ public class UtFrameUtils {
                 // partition DataFile carries its true row count instead of an even split of the total.
                 Map<String, Long> partRowCounts =
                         replayDumpInfo.getPartitionRowCountMap().getOrDefault(key, Collections.emptyMap());
-                meta.registerTable(db, table, columns, rowCount, columnStats, partTransforms, partNames, partRowCounts);
+                meta.registerTable(db, table, columns, rowCount, columnStats, partTransforms, partNames, partRowCounts,
+                        replayDumpInfo.getExternalTableFormatVersionMap().getOrDefault(key, 1));
+                meta.setAnalyzedColumnRowCounts(db, table, replayDumpInfo.getExternalColumnRowCountMap().get(key));
                 catalogType.put(catalog, "iceberg");
                 consumed.add(key);
             } else if (engine.equalsIgnoreCase("hive")) {
@@ -965,6 +970,7 @@ public class UtFrameUtils {
                         .newArrayList();
                 ReplayHiveCatalogMetadata meta = hiveByCatalog.computeIfAbsent(catalog, ReplayHiveCatalogMetadata::new);
                 meta.registerTable(db, table, columns, dataCols, partCols, rowCount, columnStats, partNames);
+                meta.setAnalyzedColumnRowCounts(db, table, replayDumpInfo.getExternalColumnRowCountMap().get(key));
                 catalogType.put(catalog, "hive");
                 consumed.add(key);
                 // Drop the matching hms entry so the legacy resource-mapping hive replay path below does not

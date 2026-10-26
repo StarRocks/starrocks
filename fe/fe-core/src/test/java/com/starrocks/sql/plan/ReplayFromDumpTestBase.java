@@ -153,8 +153,8 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         Assertions.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    // Large dumps (e.g. query_dump/iceberg_tpcds1t_unknown_stats) are checked in gzipped; a plain <name>.json takes
-    // precedence over <name>.json.gz.
+    // Large dumps (e.g. query_dump/iceberg_tpcds1t, which list every partition of the fact tables) are checked in
+    // gzipped; a plain <name>.json takes precedence over <name>.json.gz.
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
         String completeFileName = fileName + ".json";
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
