@@ -22,19 +22,12 @@
 #include <sstream>
 
 #include "butil/time.h"
-<<<<<<< HEAD
+#include "column/json_column.h"
 #include "common/config.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/decimalv3.h"
-=======
-#include "column/json_column.h"
-#include "common/config_expr_fwd.h"
-#include "exprs/mock_vectorized_expr.h"
-#include "exprs/string_functions.h"
-#include "types/decimalv3.h"
-#include "types/json_value.h"
->>>>>>> 6bf11de ([BugFix] Use a prefix-free row id fingerprint for incremental MVs (#81259))
+#include "util/json.h"
 
 namespace starrocks {
 

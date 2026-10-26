@@ -18,14 +18,6 @@
 #include <string_view>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/base64.h"
-#include "base/coding.h"
-#include "base/crypto/aes_util.h"
-#include "base/crypto/md5.h"
-#include "base/crypto/sha.h"
->>>>>>> 6bf11de ([BugFix] Use a prefix-free row id fingerprint for incremental MVs (#81259))
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -33,6 +25,7 @@
 #include "exprs/base64.h"
 #include "types/logical_type_infra.h"
 #include "util/aes_util.h"
+#include "util/coding.h"
 #include "util/md5.h"
 #include "util/sha.h"
 
