@@ -280,7 +280,7 @@ public:
     virtual uint32_t max_one_element_serialize_size() const = 0;
 
     // Upper bound for the compact key encoding written by serialize_batch*(). Only
-    // BinaryColumnBase differs from the persisted encoding, because only it writes a length
+    // BinaryColumn differs from the persisted encoding, because only it writes a length
     // prefix; for every other column the two encodings are byte-identical. Note it is NOT
     // always <= max_one_element_serialize_size(): a string of 255+ bytes costs one byte more.
     virtual uint32_t max_one_element_serialize_size_compact() const { return max_one_element_serialize_size(); }

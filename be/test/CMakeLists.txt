@@ -52,11 +52,8 @@ set(EXEC_FILES
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
-<<<<<<< HEAD
         ./exec/compress_serializer_test.cpp
-=======
         ./exec/aggregator_hash_variant_test.cpp
->>>>>>> d67d85cfa19... [Enhancement] Speed up wide-key aggregation by caching the key hash and shrinking the serialized key (#63210)
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp

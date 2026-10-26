@@ -70,10 +70,6 @@ ALWAYS_INLINE uint32_t serialize_binary_element(const Offset* __restrict offsets
     return sizeof(uint32_t) + binary_size;
 }
 
-<<<<<<< HEAD
-class BinaryColumn final : public CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn> {
-    friend class CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn>;
-=======
 // ---------------------------------------------------------------------------------------------
 // Compact length prefix, used only by the in-memory hash-table key encoders (group by, distinct,
 // except/intersect, partition) via the serialize_batch* / deserialize_*_batch* family. Never
@@ -124,10 +120,8 @@ ALWAYS_INLINE uint32_t serialize_binary_element_compact(const Offset* __restrict
     return header_size + binary_size;
 }
 
-template <typename T>
-class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
-    friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
->>>>>>> d67d85cfa19... [Enhancement] Speed up wide-key aggregation by caching the key hash and shrinking the serialized key (#63210)
+class BinaryColumn final : public CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn> {
+    friend class CowFactory<ColumnFactory<Column, BinaryColumn>, BinaryColumn>;
 
 public:
     using ValueType = Slice;

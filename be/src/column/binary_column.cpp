@@ -1017,8 +1017,7 @@ uint32_t BinaryColumn::max_one_element_serialize_size() const {
     return max_size + sizeof(uint32_t);
 }
 
-template <typename T>
-uint32_t BinaryColumnBase<T>::max_one_element_serialize_size_compact() const {
+uint32_t BinaryColumn::max_one_element_serialize_size_compact() const {
     // Reuse the scan above and swap the length-prefix width. Note this can exceed the legacy
     // bound by one byte when the longest element is 255+, which is why the hash-table staging
     // buffer must be sized from this and not from max_one_element_serialize_size().
@@ -1125,11 +1124,7 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
-<<<<<<< HEAD
-void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-=======
-template <typename T>
-const uint8_t* BinaryColumnBase<T>::deserialize_compact_and_append(const uint8_t* pos) {
+const uint8_t* BinaryColumn::deserialize_compact_and_append(const uint8_t* pos) {
     uint32_t string_size = 0;
     pos = read_compact_len(pos, &string_size);
 
@@ -1141,23 +1136,16 @@ const uint8_t* BinaryColumnBase<T>::deserialize_compact_and_append(const uint8_t
     return pos + string_size;
 }
 
-template <typename T>
-void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
->>>>>>> d67d85cfa19... [Enhancement] Speed up wide-key aggregation by caching the key hash and shrinking the serialized key (#63210)
+void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     // Callers hand down a full-size slice buffer and a row count, and the entries past that count
     // may still be default constructed -- Slice() points its data at a 1-byte "" literal. Bail out
     // before the reserve heuristic peeks at srcs[0], which would read past that literal.
     if (chunk_size == 0) {
         return;
     }
-<<<<<<< HEAD
-    // max size of one string is 2^32, so use uint32_t
-    uint32_t string_size = *((uint32_t*)srcs[0].data);
-=======
     // These bytes come from serialize_batch(), i.e. the compact key encoding.
     uint32_t string_size = 0;
     read_compact_len(reinterpret_cast<const uint8_t*>(srcs[0].data), &string_size);
->>>>>>> d67d85cfa19... [Enhancement] Speed up wide-key aggregation by caching the key hash and shrinking the serialized key (#63210)
     get_bytes().reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_compact_and_append((uint8_t*)srcs[i].data);

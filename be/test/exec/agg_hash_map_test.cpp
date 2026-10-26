@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
+#include "exec/partition/partition_hash_map.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
@@ -323,36 +324,6 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWit
     TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32) {
-    using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
-
-    RuntimeProfile profile("SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32");
-    AggStatistics statistics(&profile);
-    constexpr int kEstimatedChunkSize = 4096;
-    TestAggHashMapKey key(kEstimatedChunkSize, &statistics);
-
-    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 'x');
-    auto column = BinaryColumn::create();
-    column->append(Slice(large_value));
-    Columns key_columns{column};
-
-    Buffer<AggDataPtr> agg_states(1);
-    MemPool pool;
-    key.build_hash_map(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states);
-
-    EXPECT_EQ(0, key.max_one_row_size);
-    EXPECT_EQ(1, key.hash_map.size());
-    EXPECT_NE(nullptr, agg_states[0]);
-
-    Filter not_founds;
-    key.build_hash_map_with_selection(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states,
-                                      &not_founds);
-    ASSERT_EQ(1, not_founds.size());
-    EXPECT_EQ(0, not_founds[0]);
-}
-
 // get_max_serialize_size() sizes the staging buffer for serialize_batch(), which writes the
 // compact key encoding: a one-byte length prefix for a string that fits in one, not the four-byte
 // prefix of the persisted encoding. So the bound comes from max_one_element_serialize_size_compact(),
@@ -366,15 +337,13 @@ TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
     int_column->append(7);
     Columns key_columns{string_column, int_column};
 
-    auto size_or = partition_map.get_max_serialize_size(key_columns);
-    ASSERT_TRUE(size_or.ok()) << size_or.status();
+    const uint32_t max_one_row_size = partition_map.get_max_serialize_size(key_columns);
     EXPECT_EQ(string_column->max_one_element_serialize_size_compact() +
                       int_column->max_one_element_serialize_size_compact(),
-              size_or.value());
+              max_one_row_size);
     // Spelled out: one length byte plus "abc", then a bare int32.
-    EXPECT_EQ(static_cast<uint32_t>(1 + 3 + sizeof(int32_t)), size_or.value());
+    EXPECT_EQ(static_cast<uint32_t>(1 + 3 + sizeof(int32_t)), max_one_row_size);
 
-    const uint32_t max_one_row_size = size_or.value();
     Buffer<uint32_t> slice_sizes(1, 0);
     std::vector<uint8_t> buffer(max_one_row_size + 32, 0);
     for (const auto& key_column : key_columns) {
@@ -383,7 +352,6 @@ TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
     EXPECT_LE(slice_sizes[0], max_one_row_size) << "serialize_batch() overran the bound it was given";
 }
 
->>>>>>> d67d85cfa19... [Enhancement] Speed up wide-key aggregation by caching the key hash and shrinking the serialized key (#63210)
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {
     using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
     using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
