@@ -824,7 +824,6 @@ public class GroupingSetsTest extends PlanTestBase {
         }
     }
 
-<<<<<<< HEAD
     @Test
     public void testRewriteGroupingSetsByCteKeepsHaving() throws Exception {
         boolean old = connectContext.getSessionVariable().isEnableRewriteGroupingsetsToUnionAll();
@@ -954,7 +953,10 @@ public class GroupingSetsTest extends PlanTestBase {
             assertNotContains(plan, "MultiCastDataSinks");
             assertContains(plan, "repeat: repeat 2 lines");
         } finally {
-=======
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
     private static int countOf(String plan, String needle) {
         int count = 0;
         for (int i = plan.indexOf(needle); i >= 0; i = plan.indexOf(needle, i + needle.length())) {
@@ -1057,7 +1059,6 @@ public class GroupingSetsTest extends PlanTestBase {
             Assertions.assertEquals(1, countOf(cube, ":UNION"), cube);
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
->>>>>>> b97c489d06c... [Enhancement] Compute ROLLUP levels by cascading aggregation instead of expanding every level from the finest one (#63034)
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }

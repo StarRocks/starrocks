@@ -23,12 +23,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
 import java.util.List;
-=======
 import java.util.Set;
 import java.util.TreeSet;
->>>>>>> b97c489d06c... [Enhancement] Compute ROLLUP levels by cascading aggregation instead of expanding every level from the finest one (#63034)
 
 public class TPCDS1TTest extends TPCDS1TTestBase {
 

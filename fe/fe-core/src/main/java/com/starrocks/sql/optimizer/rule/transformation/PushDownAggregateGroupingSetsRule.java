@@ -105,11 +105,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.inputAt(0).getOp();
-<<<<<<< HEAD
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 2
-                || repeatOperator.hasPushDown()) {
-=======
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 3) {
+        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 2) {
             return false;
         }
 
@@ -117,9 +113,14 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         // it, and the plan it produces matches this rule's own pattern again - so applying the rule
         // repeatedly builds a cascade g_n -> g_n-1 -> ... instead of expanding every level from g_n.
         // The depth is capped here: the level counter on the repeat grows by one per application, and
-        // `size() <= 3` above floors it independently, so the cascade always terminates.
+        // a cascade level never goes down to 3 grouping sets (below), so the cascade always terminates.
         if (repeatOperator.getPushDownLevel() >= cascadeLevelLimit(context)) {
->>>>>>> b97c489d06c... [Enhancement] Compute ROLLUP levels by cascading aggregation instead of expanding every level from the finest one (#63034)
+            return false;
+        }
+
+        // The estimate-gated push down of 3 grouping sets applies to the first application only; a
+        // cascade level stops at the static floor of more than 3 grouping sets.
+        if (repeatOperator.getPushDownLevel() > 0 && repeatOperator.getRepeatColumnRef().size() <= 3) {
             return false;
         }
 
