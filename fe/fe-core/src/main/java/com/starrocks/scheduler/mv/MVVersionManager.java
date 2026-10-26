@@ -84,19 +84,11 @@ public class MVVersionManager {
         Map<Boolean, List<TableSnapshotInfo>> snapshotInfoSplits = snapshotBaseTables.values()
                 .stream()
                 .collect(Collectors.partitioningBy(s -> s.getBaseTable().isNativeTableOrMaterializedView()));
-<<<<<<< HEAD
         List<TableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
         List<TableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
-        boolean isOlapTableRefreshed = updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
-        updateMetaForExternalTable(refreshContext, externalTablePartitionNames);
-=======
-        List<BaseTableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
-        List<BaseTableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
-        Set<String> refreshedMvPartitions = mvRefreshedPartitions.getPartitionNames();
         boolean isOlapTableRefreshed =
-                updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds, refreshedMvPartitions);
-        updateMetaForExternalTable(refreshContext, externalTablePartitionNames, refBaseTableIds, refreshedMvPartitions);
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
+                updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds, mvRefreshedPartitions);
+        updateMetaForExternalTable(refreshContext, externalTablePartitionNames, refBaseTableIds, mvRefreshedPartitions);
         // Unchanged semantics: having any external base table at all counts as "meta changed", even when every
         // one of them is deferred to the batch's final run.
         boolean isExternalTableRefreshed = !externalTables.isEmpty();
@@ -224,14 +216,9 @@ public class MVVersionManager {
     }
 
     private boolean updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
-<<<<<<< HEAD
                                            List<TableSnapshotInfo> changedTablePartitionInfos,
-                                           Set<Long> refBaseTableIds) {
-=======
-                                           List<BaseTableSnapshotInfo> changedTablePartitionInfos,
                                            Set<Long> refBaseTableIds,
                                            Set<String> refreshedMvPartitions) {
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
         if (changedTablePartitionInfos.isEmpty()) {
             return false;
         }
@@ -374,13 +361,9 @@ public class MVVersionManager {
     }
 
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
-<<<<<<< HEAD
-                                            Map<TableSnapshotInfo, List<String>> externalTablePartitionNames) {
-=======
-                                            Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames,
+                                            Map<TableSnapshotInfo, List<String>> externalTablePartitionNames,
                                             Set<Long> refBaseTableIds,
                                             Set<String> refreshedMvPartitions) {
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
         if (externalTablePartitionNames.isEmpty()) {
             return;
         }

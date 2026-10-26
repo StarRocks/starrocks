@@ -458,7 +458,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     protected static void executeAllBatches(TaskRun taskRun) throws Exception {
         while (taskRun != null) {
             initAndExecuteTaskRun(taskRun);
-            taskRun = getPartitionBasedRefreshProcessor(taskRun).getNextTaskRun();
+            taskRun = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getNextTaskRun();
         }
     }
 

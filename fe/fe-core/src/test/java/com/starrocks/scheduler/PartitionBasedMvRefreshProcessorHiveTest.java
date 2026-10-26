@@ -1494,9 +1494,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                     "to the size of the first partition expr maps: 1."));
         }
     }
-<<<<<<< HEAD
-}
-=======
 
     /** An external ref base table's version map is pruned on its own path, so it must keep drop evidence too. */
     @Test
@@ -1528,7 +1525,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
             TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(firstBatch);
-            TaskRun secondBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            TaskRun secondBatch = ((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun();
             Assertions.assertNotNull(secondBatch);
             Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
             executeAllBatches(secondBatch);
@@ -1544,11 +1541,10 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
             TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(steadyRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) steadyRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             droppedDays.forEach(day -> mockedHiveMetadata.addPartition("partitioned_db", "orders", day));
             starRocksAssert.dropMaterializedView("hive_orders_by_year");
         }
     }
 }
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))

@@ -3067,14 +3067,10 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             String marchMvPartition = mvPartitionsBeforeDrop.stream()
                     .filter(name -> name.contains("202203")).findFirst().orElseThrow();
             Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
-<<<<<<< HEAD
                     processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-=======
-                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
 
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_rollup_month");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3266,7 +3262,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             februaryOnly.put(TaskRun.PARTITION_END, "2022-03-01");
             TaskRun februaryRun = TaskRunBuilder.newBuilder(task).properties(februaryOnly).build();
             initAndExecuteTaskRun(februaryRun);
-            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(februaryRun).getMvContext().getExecPlan());
+            Assertions.assertNotNull(
+                    ((PartitionBasedMvRefreshProcessor) februaryRun.getProcessor()).getMvContext().getExecPlan());
             Assertions.assertTrue(getPartitionNamesToRefreshForMv(mv).contains(januaryMv));
 
             initAndExecuteTaskRun(TaskRunBuilder.newBuilder(task).build());
@@ -3331,7 +3328,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             }
             TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(firstBatch);
-            TaskRun secondBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            TaskRun secondBatch = ((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun();
             Assertions.assertNotNull(secondBatch);
             Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
             executeAllBatches(secondBatch);
@@ -3349,7 +3346,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(steadyRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan());
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) steadyRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_batched");
             starRocksAssert.dropTable("test.tbl_batched");
@@ -3421,12 +3418,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 }
                 TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
                 initAndExecuteTaskRun(firstBatch);
-                Assertions.assertNotNull(getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun());
-                executeAllBatches(getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun());
+                Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun());
+                executeAllBatches(((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun());
 
                 TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
                 initAndExecuteTaskRun(steadyRun);
-                Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan(),
+                Assertions.assertNull(((PartitionBasedMvRefreshProcessor) steadyRun.getProcessor()).getMvContext().getExecPlan(),
                         "dropping from " + round.getKey() + " never settles");
             }
         } finally {
@@ -3503,13 +3500,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             dropDailyBasePartition("p20220301");
             initAndExecuteTaskRun(taskRun);
 
-<<<<<<< HEAD
             Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
-=======
-            Assertions.assertNotNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertNull(getPartitionBasedRefreshProcessor(taskRun).getMvContext().getExecPlan());
->>>>>>> eb5b120 ([BugFix] Keep a dropped base partition tracked until its mv partitions are refreshed (#81187))
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_unpartitioned_daily");
             starRocksAssert.dropTable("test.tbl_daily");
