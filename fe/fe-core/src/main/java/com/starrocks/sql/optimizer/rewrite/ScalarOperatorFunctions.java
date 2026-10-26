@@ -384,7 +384,8 @@ public class ScalarOperatorFunctions {
         // Whole seconds, rounded towards zero as in the BE (the difference in microseconds divided by 1000000).
         // Duration.getSeconds() would round a negative difference down: -10.5 seconds would be -11.
         long microseconds = ChronoUnit.MICROS.between(second.getDatetime(), first.getDatetime());
-        return ConstantOperator.createTime(microseconds / 1_000_000);
+        long seconds = microseconds / 1_000_000;
+        return ConstantOperator.createTime(seconds);
     }
 
     @ConstantFunction(name = "datediff", argTypes = {DATETIME, DATETIME}, returnType = INT, isMonotonic = true)
