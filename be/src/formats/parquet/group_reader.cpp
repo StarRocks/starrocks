@@ -479,7 +479,10 @@ StatusOr<bool> GroupReader::_filter_and_backfill_lazy(const Range<uint64_t>& r, 
     Filter post_filter;
 
     if (state.has_filter) {
-        state.active_chunk->filter(state.chunk_filter);
+        {
+            SCOPED_RAW_TIMER(&_param.stats->group_chunk_filter_ns);
+            state.active_chunk->filter(state.chunk_filter);
+        }
         if (state.active_chunk->num_rows() == 0) {
             return false;
         }
