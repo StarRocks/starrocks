@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -43,6 +44,9 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -354,6 +358,72 @@ public class StatisticsCalculatorTest {
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
         Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
         optimizerContext.setObtainedFromInternalStatistics(false);
+    }
+
+    @Test
+    public void testLogicalIcebergTableScanCapturesAnalyzedStatsToDump() {
+        // A query dump records the per-column ANALYZE row counts and the iceberg format version of an external table
+        // planned from ANALYZE statistics, so replay can reproduce the scan row count and V3-only rewrites.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> cols) {
+                Statistics.Builder builder = Statistics.builder();
+                cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
+                return builder.setOutputRowCount(100).build();
+            }
+        };
+        String analyzed = columns.get(0).getName();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+                return cols.stream().map(c -> c.equals(analyzed)
+                        ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
+                        : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+            }
+        };
+
+        DumpInfo previous = connectContext.getDumpInfo();
+        try {
+            QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+            // the analyzer registers every table of a dumped query
+            dumpInfo.addTable("partitioned_db", icebergTable);
+            connectContext.setDumpInfo(dumpInfo);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            Assertions.assertEquals(Map.of("partitioned_db.t1", Map.of(analyzed, 3612L)),
+                    dumpInfo.getExternalColumnRowCountMap());
+            Assertions.assertEquals(1, dumpInfo.getExternalTableFormatVersionMap().size());
+
+            // a dump info that does not keep these sections, and no dump at all, plan the same way
+            connectContext.setDumpInfo(new MockDumpInfo());
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            connectContext.setDumpInfo(null);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+        } finally {
+            connectContext.setDumpInfo(previous);
+            optimizerContext.setObtainedFromInternalStatistics(false);
+        }
+    }
+
+    private void estimateIcebergScan(Table icebergTable, Map<ColumnRefOperator, Column> refToColumn,
+                                     Map<Column, ColumnRefOperator> columnToRef) {
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                null, TvrTableSnapshot.empty());
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
     }
 
     @Test
