@@ -251,11 +251,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         // rather than in getConnection(). This runs during JDBCMetadata construction, which for a
         // catalog restored from the journal happens on the first caller to touch it -- inside
         // whatever lock that caller holds.
-<<<<<<< HEAD
         BlockingCallValidator.validateNotUnderLock("jdbc", catalogName);
-=======
-        BlockingCallValidator.validateNotUnderLock("jdbc");
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(getJdbcUrl());
         config.setUsername(properties.get(JDBCResource.USER));
@@ -301,11 +297,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     public Connection getConnection() throws SQLException {
         // The only door to the pool in this class. Hikari opens a socket here on a pool miss, and
         // the pool itself is built lazily on the first call.
-<<<<<<< HEAD
         BlockingCallValidator.validateNotUnderLock("jdbc", catalogName);
-=======
-        BlockingCallValidator.validateNotUnderLock("jdbc");
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         Connection connection = dataSource.getConnection();
         try {
             // Set network timeout only when it's configured (>=0)

@@ -188,11 +188,7 @@ public class LockInvariantViolations {
     }
 
     /**
-<<<<<<< HEAD
      * The mode the lock-target check runs in right now, honouring the
-=======
-     * The mode the lock-target check ({@link LockTargetValidator}) runs in right now, honouring the
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
      * unit-test escalation.
      */
     public static Mode currentMode() {

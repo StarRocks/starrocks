@@ -16,11 +16,8 @@ package com.starrocks.rpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-import com.starrocks.metric.MetricRepo;
-=======
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

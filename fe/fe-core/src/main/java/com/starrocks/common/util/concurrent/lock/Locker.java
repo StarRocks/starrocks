@@ -115,13 +115,8 @@ public class Locker {
         // released nothing: LockManager refuses before touching the lock table when the rid is not
         // held at all, and MultiUserLock throws only on the !hasOwner path, where no refcount was
         // decremented. Decrementing anyway would let a thread that still holds a lock be talked
-<<<<<<< HEAD
         // down to depth 0 by repeated bogus releases, and from then on every call it makes under
         // that lock would look lock-free.
-=======
-        // down to depth 0 by repeated bogus releases, and from then on every blocking call it makes
-        // under that lock would be waved through in silence.
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         LockHoldDepth.exit();
     }
 

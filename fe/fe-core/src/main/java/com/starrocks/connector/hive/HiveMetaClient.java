@@ -154,11 +154,7 @@ public class HiveMetaClient {
     private RecyclableClient getClient() throws MetaException {
         // Every path to the metastore comes through here -- callRPC and the direct
         // getPartitionsByNames alike -- and a pool miss constructs a client, which connects.
-<<<<<<< HEAD
         BlockingCallValidator.validateNotUnderLock("hive-metastore", catalogName);
-=======
-        BlockingCallValidator.validateNotUnderLock("hive-metastore");
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
         // The MetaStoreClient c'tor relies on knowing the Hadoop version by asking
         // org.apache.hadoop.util.VersionInfo. The VersionInfo class relies on opening
         // the 'common-version-info.properties' file as a resource from hadoop-common*.jar

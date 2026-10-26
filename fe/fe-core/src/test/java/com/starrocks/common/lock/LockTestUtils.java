@@ -31,10 +31,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
-<<<<<<< HEAD
-=======
-    private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
     private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
 
     /**
@@ -99,22 +95,6 @@ public class LockTestUtils {
                 return CompletableFuture.completedFuture(result.get());
             }
         };
-    }
-
-    /**
-     * Opt a test out of the blocking-call-under-lock check.
-     * <p>
-     * For a test that holds a metadata lock across a {@code @Blocking} call <em>on purpose</em> --
-     * one that reproduces such a site, or asserts what the FE does when the connector is slow.
-     * A test that merely happens to trip the check is reporting a real defect and must not use
-     * this. Pair with {@link #restoreBlockingCallValidation()} in teardown.
-     */
-    public static void disableBlockingCallValidation() {
-        Config.lock_blocking_call_validation_mode = "off";
-    }
-
-    public static void restoreBlockingCallValidation() {
-        Config.lock_blocking_call_validation_mode = DEFAULT_BLOCKING_CALL_VALIDATION_MODE;
     }
 
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {

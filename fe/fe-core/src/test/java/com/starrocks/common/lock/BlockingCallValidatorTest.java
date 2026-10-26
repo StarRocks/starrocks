@@ -14,10 +14,7 @@
 package com.starrocks.common.lock;
 
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.util.concurrent.lock.BlockingCallUnderLock;
-=======
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
@@ -286,7 +283,6 @@ public class BlockingCallValidatorTest {
             LockTestUtils.restoreBlockingCallValidation();
         }
     }
-<<<<<<< HEAD
 
     // --------------- the attribution record the slow-lock trace reads ---------------
 
@@ -357,6 +353,4 @@ public class BlockingCallValidatorTest {
         FakeBlockingTransport.contact("hive_cat");
         Assertions.assertNull(BlockingCallUnderLock.of(Thread.currentThread().getId()));
     }
-=======
->>>>>>> a168faad4d1... [Enhancement] Report calls that can wait on an external metadata service while an FE metadata lock is held (#61954)
 }
