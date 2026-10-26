@@ -31,7 +31,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
-<<<<<<< HEAD
     private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
 
     /**
@@ -96,7 +95,8 @@ public class LockTestUtils {
                 return CompletableFuture.completedFuture(result.get());
             }
         };
-=======
+    }
+
     private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
 
     /**
@@ -115,7 +115,6 @@ public class LockTestUtils {
 
     public static void restoreLockTargetValidation() {
         Config.lock_target_validation_mode = DEFAULT_LOCK_TARGET_VALIDATION_MODE;
->>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
     }
 
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {
