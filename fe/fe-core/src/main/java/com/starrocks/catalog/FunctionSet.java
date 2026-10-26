@@ -51,7 +51,6 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
@@ -284,7 +283,6 @@ public class FunctionSet {
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
     public static final String HTTP_REQUEST = "http_request";
-    public static final String AI_COMPLETE = "ai_complete";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -776,13 +774,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    // AI functions with options treat a top-level NULL map as an empty option set.
-    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
-            ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
-                    PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY, AI_COMPLETE,
-                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
+            ImmutableSet.<String>builder()
+                    .add(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
+                            PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT,
+                            AES_DECRYPT, ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
+                    .build();
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -1228,9 +1226,7 @@ public class FunctionSet {
         if (family == null || family.isEmpty()) {
             return null;
         }
-        TAIModelSource modelSource = family.get(0).getAiModelSource();
-        if (modelSource == null || family.stream().anyMatch(fn -> !fn.isAi() || !fn.isUserVisible()
-                || fn.getAiModelSource() != modelSource)) {
+        if (family.stream().anyMatch(fn -> !fn.isAI() || !fn.isUserVisible())) {
             return null;
         }
         return canonicalName;
@@ -1289,14 +1285,10 @@ public class FunctionSet {
         addVectorizedBuiltin(ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType));
     }
 
-    public void addVectorizedAIScalarBuiltin(long fid, String fnName, boolean varArgs,
-                                             TAIModelSource modelSource, Type retType, Type... args) {
-        Preconditions.checkState(nonDeterministicFunctions.contains(fnName),
-                "AI function %s must be non-deterministic", fnName);
-        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
-        ScalarFunction fn = ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType);
+    public void addVectorizedAIBuiltin(Function fn) {
+        Preconditions.checkState(nonDeterministicFunctions.contains(fn.functionName()),
+                "AI function %s must be non-deterministic", fn.functionName());
         fn.setBinaryType(TFunctionBinaryType.AI);
-        fn.setAiModelSource(modelSource);
         addVectorizedBuiltin(fn);
     }
 

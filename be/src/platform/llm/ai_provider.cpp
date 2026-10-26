@@ -19,27 +19,24 @@
 
 namespace starrocks {
 
-Status validate_ai_protocol(std::string_view protocol, AICapability capability) {
-    if (protocol == "openai_compatible" &&
-        (capability == AICapability::CHAT || capability == AICapability::TEXT_EMBEDDING)) {
+Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability) {
+    if (protocol == AIProviderProtocol::OPENAI &&
+        (capability == AICapability::CHAT || capability == AICapability::EMBEDDING)) {
         return Status::OK();
     }
-    if (protocol == "qwen_compatible" && capability == AICapability::CHAT) {
-        return Status::OK();
-    }
-    if (protocol == "dashscope_multimodal" && capability == AICapability::TEXT_EMBEDDING) {
+    if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL && capability == AICapability::EMBEDDING) {
         return Status::OK();
     }
     return Status::NotSupported("AI protocol does not support the requested capability");
 }
 
-StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(std::string_view protocol, AICapability capability) {
+StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol protocol, AICapability capability) {
     auto status = validate_ai_protocol(protocol, capability);
     if (!status.ok()) return status;
-    if (protocol == "dashscope_multimodal") {
+    if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL) {
         return std::unique_ptr<AIProvider>(std::make_unique<DashScopeMultimodalProvider>());
     }
-    return std::unique_ptr<AIProvider>(std::make_unique<OpenAICompatibleProvider>(protocol == "qwen_compatible"));
+    return std::unique_ptr<AIProvider>(std::make_unique<OpenAICompatibleProvider>());
 }
 
 std::optional<AIProviderErrorCode> parse_ai_provider_error_code(std::string_view identifier) {
