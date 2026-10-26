@@ -15,10 +15,6 @@
 package com.starrocks.connector.statistics;
 
 import com.google.common.annotations.VisibleForTesting;
-<<<<<<< HEAD
-=======
-import com.google.common.collect.Lists;
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
@@ -46,23 +42,6 @@ public class ConnectorAnalyzeTaskQueue {
     private final Map<String, ConnectorAnalyzeTask> pendingTasks = Maps.newLinkedHashMap();
     private final Map<String, ConnectorAnalyzeTask> runningTasks = Maps.newConcurrentMap();
 
-<<<<<<< HEAD
-    // Use abort policy instead of the blocked policy, submitting is done with wLock held and must not block.
-    // A rejected task is kept in pendingTasks and retried in the next schedule round.
-    private final Executor taskRunPool;
-
-    public ConnectorAnalyzeTaskQueue() {
-        this(ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
-                Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
-                Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
-                "connector-trigger-analyze-pool", true));
-    }
-
-    @VisibleForTesting
-    ConnectorAnalyzeTaskQueue(Executor taskRunPool) {
-        this.taskRunPool = taskRunPool;
-    }
-=======
     // Tables whose last triggered analyze failed, and when they may be tried again.
     //
     // Nothing else holds a failing table back. A query enqueues an analyze when a column has no statistics
@@ -78,11 +57,21 @@ public class ConnectorAnalyzeTaskQueue {
     // soon as one attempt succeeds.
     private final Map<String, FailureBackoff> failureBackoffs = Maps.newConcurrentMap();
 
-    private final ExecutorService taskRunPool = ThreadPoolManager.newDaemonFixedThreadPool(
-            Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
-            Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
-            "connector-trigger-analyze-pool", true);
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
+    // Use abort policy instead of the blocked policy, submitting is done with wLock held and must not block.
+    // A rejected task is kept in pendingTasks and retried in the next schedule round.
+    private final Executor taskRunPool;
+
+    public ConnectorAnalyzeTaskQueue() {
+        this(ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
+                Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
+                Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
+                "connector-trigger-analyze-pool", true));
+    }
+
+    @VisibleForTesting
+    ConnectorAnalyzeTaskQueue(Executor taskRunPool) {
+        this.taskRunPool = taskRunPool;
+    }
 
     public boolean addPendingTask(String tableUUID, ConnectorAnalyzeTask task) {
         if (task == null) {
@@ -163,7 +152,6 @@ public class ConnectorAnalyzeTaskQueue {
                 Map.Entry<String, ConnectorAnalyzeTask> entry = iterator.next();
                 String tableUUID = entry.getKey();
                 ConnectorAnalyzeTask task = entry.getValue();
-<<<<<<< HEAD
                 if (runningTasks.containsKey(tableUUID)) {
                     // keep the task pending until the running task of the same table finishes,
                     // otherwise the running entry would be overwritten and removed by the running task
@@ -176,6 +164,7 @@ public class ConnectorAnalyzeTaskQueue {
                         if (e != null) {
                             LOG.warn("[ExternalStats] trigger fail | table_uuid={} error={}", tableUUID, e.getMessage(), e);
                         }
+                        recordOutcome(tableUUID, result, e);
                         runningTasks.remove(tableUUID, task);
                     });
                 } catch (RejectedExecutionException e) {
@@ -183,18 +172,6 @@ public class ConnectorAnalyzeTaskQueue {
                     runningTasks.remove(tableUUID, task);
                     LOG.warn("[ExternalStats] trigger delay | table_uuid={} reason=pool_rejected running={}",
                             tableUUID, runningTasks.size());
-=======
-                removePendingTasks.add(entry.getKey());
-                runningTasks.put(entry.getKey(), task);
-                CompletableFuture.supplyAsync(task::run, taskRunPool).whenComplete((result, e) -> {
-                    if (e != null) {
-                        LOG.warn("[ExternalStats] trigger fail | table_uuid={} error={}", entry.getKey(), e.getMessage(), e);
-                    }
-                    recordOutcome(entry.getKey(), result, e);
-                    runningTasks.remove(entry.getKey());
-                });
-                if (isMaxRunningConcurrencyReached()) {
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
                     break;
                 }
                 iterator.remove();

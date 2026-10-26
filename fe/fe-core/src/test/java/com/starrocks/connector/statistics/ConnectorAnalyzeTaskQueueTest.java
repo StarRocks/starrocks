@@ -25,18 +25,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
-<<<<<<< HEAD
-=======
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.StatsConstants;
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
 import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -45,10 +42,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
-=======
-import java.time.LocalDateTime;
-import java.util.Optional;
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
 
 public class ConnectorAnalyzeTaskQueueTest {
     private static ConnectContext ctx;
@@ -123,7 +116,6 @@ public class ConnectorAnalyzeTaskQueueTest {
         Assertions.assertEquals(0, queue.getPendingTaskSize());
     }
 
-<<<<<<< HEAD
     private static class BlockingTask extends ConnectorAnalyzeTask {
         private final CountDownLatch latch = new CountDownLatch(1);
         private final AtomicInteger runCount;
@@ -235,7 +227,9 @@ public class ConnectorAnalyzeTaskQueueTest {
             Assertions.assertEquals(0, runCount.get());
         } finally {
             Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
-=======
+        }
+    }
+
     private static AnalyzeStatus statusWith(StatsConstants.ScheduleStatus scheduleStatus, String tableUUID) {
         AnalyzeStatus status = new ExternalAnalyzeStatus(1L, "hive0", "partitioned_db", "orders", tableUUID,
                 Lists.newArrayList("o_orderkey"), StatsConstants.AnalyzeType.FULL,
@@ -329,7 +323,6 @@ public class ConnectorAnalyzeTaskQueueTest {
                     new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
         } finally {
             Config.connector_table_query_trigger_analyze_failure_backoff_max_second = saved;
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
         }
     }
 }

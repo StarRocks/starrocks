@@ -140,7 +140,6 @@ struct TStatisticData {
     //     distinct count says whether the column's values repeat across partitions or not.
     18: optional i64 collectedPartitionCount
     19: optional i64 perPartitionNdvSum
-<<<<<<< HEAD
     // Two nested subsets of those partitions, picked by a hash of the partition name - about a third
     // and about two thirds of them: the merged distinct count over each, and how many partitions each
     // holds. Next to countDistinct over all of them they trace how the distinct count grows as
@@ -151,8 +150,6 @@ struct TStatisticData {
     22: optional i64 thirdPartitionCount
     23: optional i64 twoThirdsPartitionCount
     24: optional TStatisticDataExt ext
-=======
->>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
 }
 
 // Result data for user variable
