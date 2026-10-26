@@ -1,4 +1,9 @@
 -- name: test_schema_change_with_sync_mv
+-- Test Point: Reject dropping distribution/partition keys and preserve sync-MV column mappings through schema changes.
+-- Method: Check exact refusal errors, ordered schema/data and bound ALTER job completion; insert after column removal.
+-- Scope: Synchronous MV column dependencies and base-table schema evolution.
+CREATE DATABASE sync_mv_schema_${uuid0};
+USE sync_mv_schema_${uuid0};
 CREATE TABLE IF NOT EXISTS t1
 (
     `id` bigint(20) NULL,
@@ -22,35 +27,38 @@ CREATE TABLE IF NOT EXISTS t1
     "dynamic_partition.prefix" = "p"
 );
 INSERT INTO t1 values(1, '2022-04-17 00:00:00', 'k3', 1, 1, 1.0, 'k7'), (2, '2022-04-20 00:00:00', 'k4', 1, 1, 1.0, 'k7');
-
 CREATE MATERIALIZED VIEW mv_t1 AS
 SELECT k2,k3,id,k4,k5,k6,k7 FROM t1 ORDER BY k2,k3,id;
 function: wait_materialized_view_finish()
-                 
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
 alter table t1 drop column id;
-function: wait_alter_table_finish()
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
 select * from t1 order by id;
-
 alter table t1 drop column k2;
-function: wait_alter_table_finish()
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
 select * from t1 order by id;
+function: alter_and_wait("alter table t1 drop column k3")
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
+INSERT INTO t1 (k7, k6, k5, k4, k2, id) VALUES ('after_k3', 3.5, 350, 34, '2022-04-21 00:00:00', 3);
+select * from t1 order by id;
+function: alter_and_wait("alter table t1 drop column k4")
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
+function: alter_and_wait("alter table t1 drop column k5")
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
+function: alter_and_wait("alter table t1 drop column k6")
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
+function: alter_and_wait("alter table t1 drop column k7")
+[ORDER]SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = 'sync_mv_schema_${uuid0}' AND TABLE_NAME = 't1' ORDER BY ORDINAL_POSITION;
+select * from t1 order by id;
+INSERT INTO t1 (k2, id) VALUES ('2022-04-22 00:00:00', 4);
+select * from t1 order by id;
+DROP DATABASE sync_mv_schema_${uuid0} FORCE;
 
-alter table t1 drop column k3;
-function: wait_alter_table_finish()
-select * from t1 order by id;
-
-alter table t1 drop column k4;
-function: wait_alter_table_finish()
-select * from t1 order by id;
-
-alter table t1 drop column k5;
-function: wait_alter_table_finish()
-select * from t1 order by id;
-
-alter table t1 drop column k6;
-function: wait_alter_table_finish()
-select * from t1 order by id;
-
-alter table t1 drop column k7;
-function: wait_alter_table_finish()
-select * from t1 order by id;
+CLEANUP {
+    DROP DATABASE IF EXISTS sync_mv_schema_${uuid0} FORCE;
+} END CLEANUP
