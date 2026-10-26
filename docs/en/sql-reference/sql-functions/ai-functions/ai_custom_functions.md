@@ -46,7 +46,7 @@ Register and manage providers with the existing [CREATE](../../sql-statements/cl
 
 Provider API keys are stored in the FE metadata journal and image and sent to executing BEs through the existing internal RPC path. Protect metadata files and cluster-network access. SHOW and DESC mask the key; this is not a claim that metadata or internal RPC is encrypted. Do not put credentials in function arguments or options.
 
-## Query snapshots and SYSTEM compatibility {#query-snapshots-and-system-compatibility}
+## Query snapshots and SYSTEM compatibility {/* #query-snapshots-and-system-compatibility */}
 
 Each physical execution plan fixes its first provider selection for each explicit name or capability default. Configurations are captured by Provider UUID: default and explicit selections of the same UUID share one immutable snapshot. Authorization checks all resolved AI calls before optimization. Only surviving physical AI calls capture execution configurations; the actual Provider UUID is authorized again before its configuration enters the plan. Later ALTER, DROP, or default changes do not redirect a captured selection or change its snapshot. A newly built plan, including replanning for a retry or a subsequent prepared EXECUTE, resolves current metadata and permissions.
 
