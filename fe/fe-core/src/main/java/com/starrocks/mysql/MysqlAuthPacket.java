@@ -49,6 +49,8 @@ public class MysqlAuthPacket extends MysqlPacket {
     private String pluginName;
     private MysqlCapability capability;
     private Map<String, String> connectAttributes;
+    // zstd level the client asked for, 0 if it did not send one
+    private int zstdCompressionLevel;
 
     public String getUser() {
         return userName;
@@ -84,6 +86,10 @@ public class MysqlAuthPacket extends MysqlPacket {
 
     public Map<String, String> getConnectAttributes() {
         return connectAttributes;
+    }
+
+    public int getZstdCompressionLevel() {
+        return zstdCompressionLevel;
     }
 
     @Override
@@ -126,6 +132,10 @@ public class MysqlAuthPacket extends MysqlPacket {
         if (buffer.remaining() > 0 && capability.isConnectAttrs()) {
             connectAttributes = parseConnectAttrs(buffer);
         }
+        // a client that asks for zstd sends its compression level after the connect attrs
+        if (buffer.remaining() > 0 && capability.isZstdCompress()) {
+            zstdCompressionLevel = MysqlCodec.readInt1(buffer);
+        }
 
         // Commented for JDBC
         // if (buffer.remaining() != 0) {
@@ -140,20 +150,26 @@ public class MysqlAuthPacket extends MysqlPacket {
         connectAttributes = Maps.newHashMap();
         try {
             long allAttrLength = MysqlCodec.readVInt(buffer);
+            // Parse the attrs from their own view and step over them, so the fields that follow the attrs
+            // (e.g. the zstd level) are not read as attrs.
+            int attrsEnd = (int) Math.min(buffer.limit(), buffer.position() + allAttrLength);
+            ByteBuffer attrs = buffer.duplicate();
+            attrs.limit(attrsEnd);
+            buffer.position(attrsEnd);
             long curDealLen = 0;
-            while (buffer.remaining() > 0 && allAttrLength - curDealLen > 0) {
+            while (attrs.remaining() > 0 && allAttrLength - curDealLen > 0) {
                 key = value = "";
-                long keyLength = MysqlCodec.readVInt(buffer);
+                long keyLength = MysqlCodec.readVInt(attrs);
 
-                if (buffer.remaining() >= keyLength) {
-                    key = new String(MysqlCodec.readFixedString(buffer, (int) keyLength));
+                if (attrs.remaining() >= keyLength) {
+                    key = new String(MysqlCodec.readFixedString(attrs, (int) keyLength));
                 } else {
                     return connectAttributes;
                 }
                 curDealLen += keyLength;
-                long valLength = MysqlCodec.readVInt(buffer);
-                if (buffer.remaining() >= valLength) {
-                    value = new String(MysqlCodec.readFixedString(buffer, (int) valLength));
+                long valLength = MysqlCodec.readVInt(attrs);
+                if (attrs.remaining() >= valLength) {
+                    value = new String(MysqlCodec.readFixedString(attrs, (int) valLength));
                 } else {
                     // only parse key success
                     connectAttributes.put(key, "");

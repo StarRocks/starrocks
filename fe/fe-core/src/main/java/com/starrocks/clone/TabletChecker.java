@@ -648,7 +648,7 @@ public class TabletChecker extends LeaderDaemon {
                 repairTabletInfo.partIds);
     }
 
-    private boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation, int replicaNum) {
+    public boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation, int replicaNum) {
         List<List<Long>> locBackendIdList = new ArrayList<>();
         List<ComputeNode> availableBackends = Lists.newArrayList();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

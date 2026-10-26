@@ -15,16 +15,21 @@
 #include "storage/segment_flush_executor.h"
 
 #include <brpc/controller.h>
+#include <butil/time.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <limits>
 #include <thread>
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
@@ -46,6 +51,41 @@
 #include "storage/txn_manager.h"
 
 namespace starrocks {
+
+namespace {
+
+void check_add_segment_deadline(int32_t configured_ms, int32_t fallback_seconds, int64_t expected_ms) {
+    const auto old_timeout = config::tablet_writer_add_segment_lock_timeout_ms;
+    const auto old_fallback = config::be_exit_after_disk_write_hang_second;
+    DeferOp restore([&] {
+        config::tablet_writer_add_segment_lock_timeout_ms = old_timeout;
+        config::be_exit_after_disk_write_hang_second = old_fallback;
+    });
+    config::tablet_writer_add_segment_lock_timeout_ms = configured_ms;
+    config::be_exit_after_disk_write_hang_second = fallback_seconds;
+    const int64_t before_us = butil::gettimeofday_us();
+    const auto deadline = add_segment_lock_deadline();
+    const int64_t after_us = butil::gettimeofday_us();
+    const int64_t deadline_us = butil::timespec_to_microseconds(deadline);
+    EXPECT_GE(deadline_us, before_us + expected_ms * 1000);
+    EXPECT_LE(deadline_us, after_us + expected_ms * 1000);
+}
+
+} // namespace
+
+TEST(SegmentFlushDeadlineTest, positive_override_uses_milliseconds) {
+    check_add_segment_deadline(125, 60, 125);
+}
+
+TEST(SegmentFlushDeadlineTest, nonpositive_override_uses_disk_hang_seconds) {
+    check_add_segment_deadline(0, 3, 3000);
+    check_add_segment_deadline(-7, 3, 3000);
+}
+
+TEST(SegmentFlushDeadlineTest, fallback_conversion_does_not_overflow_int32) {
+    const auto seconds = std::numeric_limits<int32_t>::max();
+    check_add_segment_deadline(0, seconds, static_cast<int64_t>(seconds) * 1000);
+}
 
 class SegmentFlushExecutorTest : public ::testing::Test {
 public:
