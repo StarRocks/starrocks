@@ -124,7 +124,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstExactLimitWithOversizeRow) {
 
 // A chunk whose bytes are dominated by rows that repeat past the string limit - and therefore
 // produce nothing at all. This is the skew the reservation used to get wrong: `times *
-// total_input_bytes` counts the dropped row's 700 bytes, and the recount that would have corrected
+// total_input_bytes` counts the dropped row's bytes, and the recount that would have corrected
 // it only ran when that product exceeded `max_length * num_rows`, which this input stays well
 // under. The over-reservation itself is transient - the byte buffer is sized down to what was
 // written before the column is handed back - so what is pinned here is the result, over exactly
@@ -134,8 +134,8 @@ TEST_F(StringFunctionRepeatTest, repeatConstOversizeRowsDoNotInflateTheOutput) {
 
     constexpr int32_t repeat_times = 100;
     constexpr int kSmallRows = 9;
-    // 700 * 100 > 64 KiB, so this row is dropped; it still carries most of the input bytes.
-    constexpr size_t kOversizeRowLength = 700;
+    // Just past the limit once repeated, so this row is dropped; it still carries most of the input bytes.
+    const size_t kOversizeRowLength = get_olap_string_max_length() / repeat_times + 1;
     ASSERT_GT(kOversizeRowLength * repeat_times, get_olap_string_max_length());
 
     auto str = BinaryColumn::create();
@@ -160,7 +160,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstOversizeRowsDoNotInflateTheOutput) {
     }
     ASSERT_TRUE(viewer.is_null(kSmallRows));
 
-    // 900 bytes of payload, not the 70900 the old estimate reserved: the dropped row contributes
+    // 900 bytes of payload, not the ~max_length the old estimate reserved: the dropped row contributes
     // nothing to the result either.
     constexpr size_t kProducedBytes = static_cast<size_t>(kSmallRows) * repeat_times;
     const auto* data_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(result.get()));
