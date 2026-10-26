@@ -405,13 +405,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 RuntimeEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
 - 引入版本：v3.2.12
 
+### enable_jvm_memory_tracker
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否将 JVM 使用的内存计入 BE 的内存上限（`mem_limit`）。JVM 的堆内存和非堆内存（例如 Metaspace 和代码缓存）由 JVM 自行映射，不经过 BE 的内存分配器，因此默认不会被计入。该参数为 `true` 时，BE 在每次采集 JVM 指标时（当 `enable_metric_calculator` 为 `true` 时每 15 秒一次），将 `process` Tracker 下的 `jvm` 内存 Tracker 设置为 JVM 已提交的堆内存与非堆内存之和。`jvm` Tracker 会显示在 `/mem_tracker` 页面上。将该参数改为 `false` 后，下一次采集会将 `jvm` Tracker 重置为 0。该参数仅在 `enable_jvm_metrics` 为 `true` 时生效。在 BE 进程中创建 JVM 之前，`jvm` Tracker 的值为 0。
+- 引入版本：-
+
 ### enable_jvm_metrics
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否初始化并注册 JVM 相关指标（heap、GC、线程等）。这是预留的兼容开关，未来可能移除；系统级指标由 `enable_system_metrics` 控制。
+- 描述：是否在 BE 上采集 JVM 内存指标。指标包括堆内存和非堆内存的 `jvm_heap_size_bytes`、`jvm_non_heap_size_bytes`，以及各内存池的 `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` 和 `jvm_perm_size_bytes`（Metaspace）。每个指标的 `type` 标签取值为 `used`、`committed`、`max`、`peak_used` 或 `peak_max`。开启该参数不会启动 JVM。只有当 HDFS 访问、基于 JNI 的读取器、Java UDF 等使用 Java 的功能在 BE 进程中创建了 JVM 之后，BE 才开始采集这些指标，在此之前指标值为 0。当 `enable_metric_calculator` 为 `true` 时，指标每 15 秒刷新一次。当 `enable_jvm_memory_tracker` 为 `true` 时，每次刷新还会将 JVM 的内存计入 BE 的内存上限，详见 `enable_jvm_memory_tracker`。如果未设置 `JAVA_HOME`，则不会注册这些指标。`max` 或 `peak_max` 为 -1 表示该内存池没有定义上限。在默认的 G1 垃圾回收器下，`jvm_young_size_bytes` 和 `jvm_survivor_size_bytes`（Eden 区和 Survivor 区）属于这种情况；未设置 `MaxMetaspaceSize` 时，`jvm_perm_size_bytes`（Metaspace）也是如此。内存池指标仅在使用 Serial、Parallel 和 G1 垃圾回收器时有值。系统级指标由 `enable_system_metrics` 控制。
 - 引入版本：v4.0.0
 
 ### get_pindex_worker_count

@@ -635,7 +635,8 @@ TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsIceberg) {
     ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
     ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
     ASSERT_EQ(mapping.parquet_children[2], nullptr);
-    ASSERT_EQ(mapping.lake_children[2], nullptr);
+    // kept so its initial-default can fill the missing subfield
+    ASSERT_EQ(mapping.lake_children[2], &root.children[2]);
 
     // file without field ids: match by physical name, else table field name
     mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, &root, false);
@@ -644,7 +645,8 @@ TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsIceberg) {
     ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
     ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
     ASSERT_EQ(mapping.parquet_children[2], nullptr);
-    ASSERT_EQ(mapping.lake_children[2], nullptr);
+    // kept so its initial-default can fill the missing subfield
+    ASSERT_EQ(mapping.lake_children[2], &root.children[2]);
 }
 
 // field_ids / field_physical_names hold -1 / "" for a subfield without one; such a subfield is matched by its

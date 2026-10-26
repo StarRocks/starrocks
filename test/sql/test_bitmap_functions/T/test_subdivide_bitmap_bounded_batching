@@ -1,0 +1,76 @@
+-- name: test_subdivide_bitmap_bounded_batching
+-- subdivide_bitmap turns one bitmap of cardinality C into ceil(C/n) independent BitmapValue objects,
+-- which is a multiplicative expansion - a dense Roaring bitset costs a fraction of a byte per value,
+-- a SINGLE BitmapValue costs ~48. It used to build the whole input chunk's worth of them in one call,
+-- and through a by-value std::vector that was still alive while they were copied into the result
+-- column, so two full copies of that expansion coexisted with no memory-limit check in between.
+--
+-- None of that is visible in the result set - the answers below were already correct - so this case
+-- asserts it on TableFunctionExecCount, the counter that changes: from one call per input chunk to
+-- roughly one call per output chunk. What the result set does pin is that slicing the expansion, and
+-- slicing it *inside* a row, does not change which values land in which sub-bitmap.
+--
+-- enable_async_profile = false makes the profile readable by get_query_profile() as soon as the query
+-- returns, which is what the framework's own profile helpers do.
+CREATE TABLE sbb_${uuid0} (
+    `id` int(11) NULL COMMENT "",
+    `b` bitmap BITMAP_UNION NULL COMMENT ""
+)
+AGGREGATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 4 rows of cardinality 10 each.
+INSERT INTO sbb_${uuid0} SELECT 1, bitmap_agg(generate_series) FROM TABLE(generate_series(1, 10));
+INSERT INTO sbb_${uuid0} SELECT 2, bitmap_agg(generate_series) FROM TABLE(generate_series(11, 20));
+INSERT INTO sbb_${uuid0} SELECT 3, bitmap_agg(generate_series) FROM TABLE(generate_series(21, 30));
+INSERT INTO sbb_${uuid0} SELECT 4, bitmap_agg(generate_series) FROM TABLE(generate_series(31, 40));
+
+SET pipeline_dop = 1;
+SET enable_profile = true;
+SET enable_async_profile = false;
+SET chunk_size = 2;
+
+-- Split size 1: every row expands to 10 single-value bitmaps, 40 output rows in total.
+SELECT count(1), sum(bitmap_count(subdivide_bitmap)), sum(bitmap_min(subdivide_bitmap))
+FROM sbb_${uuid0}, subdivide_bitmap(b, 1);
+-- 40 output rows at chunk_size 2, so at least 20 calls: no single call built more than chunk_size
+-- sub-bitmaps. Unbatched this was 1 (one call per input chunk), which is the whole defect.
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+
+-- The sub-bitmaps are never read here, so the operator asks for counts only. That path skips building
+-- them entirely and must still report the same number of rows per input row.
+SELECT count(1) FROM sbb_${uuid0}, subdivide_bitmap(b, 1);
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+
+-- One input row whose own expansion (10 pieces) is larger than a chunk, so the split falls inside the
+-- row. That is the case where a mishandled cursor pairs sub-bitmaps with the wrong outer row instead
+-- of failing, so it needs its own assertion: ceil(10/3) = 4 calls minimum.
+SET chunk_size = 3;
+SELECT count(1), sum(bitmap_count(subdivide_bitmap)) FROM sbb_${uuid0}, subdivide_bitmap(b, 1) WHERE id = 1;
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+
+-- The contents must not depend on where the batch boundaries fell. Split size 4 over cardinality 10
+-- gives pieces of 4, 4 and 2, and the boundary between output chunks lands inside the row at
+-- chunk_size 2 and not at chunk_size 4096.
+SET chunk_size = 2;
+SELECT id, bitmap_to_string(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 4) ORDER BY id, 2;
+SET chunk_size = 4096;
+SELECT id, bitmap_to_string(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 4) ORDER BY id, 2;
+
+-- A split size of 0 expands to nothing, an empty bitmap to exactly one empty sub-bitmap, and a NULL
+-- bitmap to nothing - all of which are decided before the batching loop sees the row.
+INSERT INTO sbb_${uuid0} SELECT 5, bitmap_empty();
+INSERT INTO sbb_${uuid0} SELECT 6, NULL;
+SET chunk_size = 2;
+SELECT count(1) FROM sbb_${uuid0}, subdivide_bitmap(b, 0);
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 100) ORDER BY id;
+
+-- The split size is declared as any integer type, LARGEINT included, so it can be larger than any
+-- cardinality a bitmap can hold. It must behave like every other oversized split size - the whole
+-- bitmap in one piece, as `subdivide_bitmap(b, 9223372036854775807)` already does - rather than
+-- narrowing into the uint64 the cursor arithmetic uses, where 2^64 becomes a positive-looking zero.
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, CAST(18446744073709551616 AS LARGEINT)) ORDER BY id;
+SELECT id, bitmap_count(subdivide_bitmap) FROM sbb_${uuid0}, subdivide_bitmap(b, 9223372036854775807) ORDER BY id;
+
+DROP TABLE sbb_${uuid0};

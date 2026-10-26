@@ -1072,6 +1072,17 @@ public class Config extends ConfigBase {
     public static boolean enable_http_auth = false;
 
     /**
+     * Master switch for Bearer-token authentication on the non-MySQL channels: the HTTP endpoints
+     * (SQL API, Stream Load, Web UI, /metrics), Arrow Flight SQL, and the load RPCs a BE forwards
+     * with auth_type=bearer. The token is verified against the JWT and OAuth2 security integrations
+     * in {@code authentication_chain}, routed by its issuer, exactly as a MySQL token login is.
+     * When false those channels refuse any {@code Authorization: Bearer ...} and only Basic (and the
+     * Arrow Flight session tokens) remain; MySQL protocol authentication is never gated by this.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_rest_bearer_authentication = true;
+
+    /**
      * Fe https port
      * Currently, all FEs' https port must be the same.
      */
@@ -1322,6 +1333,14 @@ public class Config extends ConfigBase {
     public static boolean mysql_service_kill_after_disconnect = true;
 
     /**
+     * Offer the MySQL compressed protocol (zlib and zstd) in the handshake. Only clients that ask for it
+     * (e.g. mysql --compression-algorithms=zstd, JDBC useCompression=true) get compressed traffic.
+     * Applies to new connections.
+     */
+    @ConfField(mutable = true)
+    public static boolean mysql_service_compression_enabled = true;
+
+    /**
      * max num of thread to handle task in mysql.
      */
     @ConfField
@@ -1425,7 +1444,16 @@ public class Config extends ConfigBase {
             "is ever suspected of regressing.")
     public static boolean lake_enable_per_partition_coordinator_txn_log = true;
 
+    /**
+     * @deprecated No effect. Whether the tablets of a shared-data partition share one version-1 tablet
+     * metadata object is decided by the table property {@code file_bundling} alone, and the rollup and
+     * schema-change jobs always create per-tablet version-1 metadata. As a switch of its own this item was
+     * unsafe: on a table without {@code file_bundling}, a rollup or schema-change job wrote the shared object
+     * of its new index to the same name as the base index's and overwrote it. Kept, and still mutable, only
+     * so that an existing fe.conf entry or ADMIN SET FRONTEND CONFIG on it keeps working.
+     */
     @ConfField(mutable = true)
+    @Deprecated
     public static boolean lake_enable_tablet_creation_optimization = false;
 
     @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
@@ -2507,6 +2535,35 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
+
+    /**
+     * JWKS cache lifetime in seconds. HTTP Bearer authenticates fully on every request, so the JWK
+     * set is cached per JWKS URL instead of being fetched each time.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_ttl_seconds = 600;
+
+    /**
+     * Refresh the cached JWKS this many seconds before it expires, in the background, to reduce
+     * cache misses.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_ahead_seconds = 300;
+
+    /**
+     * When the IdP is unreachable, keep serving the stale (expired) JWKS for at most this many
+     * seconds.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_outage_ttl_seconds = 3600;
+
+    /**
+     * Lower bound (seconds) on how often an unknown {@code kid} may trigger a forced JWKS refresh,
+     * to guard against kid-flooding.
+     */
+    @ConfField(mutable = true)
+    public static int jwks_cache_refresh_rate_limit_seconds = 30;
+
     /**
      * If set to true, the granularity of auth check extends to the column level
      */
@@ -2627,6 +2684,24 @@ public class Config extends ConfigBase {
             "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
             "Does not affect native-password, JWT or OAuth2 users.")
     public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
+     * Whether a group name from a login matches a {@code GRANT ... TO EXTERNAL GROUP} entry or a
+     * {@code permitted_groups} entry that differs from it only in case.
+     * <p>
+     * On by default because the first source of such groups was LDAP, whose {@code cn} is
+     * case-insensitive in the directory: a GRANT written in another case than the directory
+     * returns must not silently have no effect. An identity provider that distinguishes groups by
+     * case (groups read from a JWT claim, for instance) wants this off, so that {@code Admins} and
+     * {@code admins} stay two groups.
+     * <p>
+     * Only the comparison is affected. The names are stored and reported exactly as they arrived,
+     * and handed to Apache Ranger unchanged, whatever this is set to.
+     */
+    @ConfField(mutable = true, comment = "Whether group names are matched ignoring case in " +
+            "GRANT ... TO EXTERNAL GROUP and in the permitted_groups of a security integration. " +
+            "Names are never rewritten; only the comparison changes.")
+    public static boolean authentication_group_case_insensitive = true;
 
     /**
      * For forward compatibility, will be removed later.
@@ -3137,6 +3212,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
 
+    // A query-triggered analyze that fails leaves the statistics it was collecting still missing, so the
+    // next query asks for it again and the scheduler runs it again one tick later - a retry every
+    // connector_table_query_trigger_task_schedule_interval seconds, for as long as the failure lasts. The
+    // interval settings above cannot stop it: they are measured against metadata a failed job never wrote.
+    // After each consecutive failure the table is left alone for twice as long, starting at a minute and
+    // stopping at this ceiling; one success clears it. Manual ANALYZE is never held back.
+    @ConfField(mutable = true, comment = "Longest a table whose query-triggered analyze keeps failing is " +
+            "left alone before being tried again; the wait doubles from one minute up to this value and is " +
+            "reset by a successful collection. <= 0 disables the backoff and retries on every schedule tick.")
+    public static long connector_table_query_trigger_analyze_failure_backoff_max_second = 1800; // default 30min
+
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_task_schedule_interval = 30; // unit: second, default 30s
 
@@ -3173,6 +3259,33 @@ public class Config extends ConfigBase {
             "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
             "additionally bounded by statistic_collect_query_timeout.")
     public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
+
+    // A collection query that a backend rejects for want of memory is waited out rather than counted as a
+    // failed partition, because the shortage is caused by other work and passes on its own. That only holds
+    // for a spike. Under a sustained shortage every query is rejected, and without a ceiling the job would
+    // sleep away its whole deadline (statistic_collect_query_timeout, an hour by default) while holding one
+    // of the few analyze slots - no statistics collected, and none collectable for any other table either.
+    // This caps the total time one job may spend waiting; past it the job stops waiting, its failures count
+    // against statistic_full_statistics_failure_tolerance_ratio as they did before retries existed, and it
+    // ends early enough to be re-triggered once the cluster has room again. The default covers a spike
+    // lasting minutes - the one this was written for cleared in about a second.
+    @ConfField(mutable = true, comment = "Total time an external-table analyze job may spend waiting for a " +
+            "backend to free memory before it stops retrying; <= 0 means unlimited waiting, bounded only by " +
+            "statistic_collect_query_timeout.")
+    public static long connector_table_analyze_memory_backoff_budget_second = 300; // unit: second, default 5min
+
+    // A collection that is cut short still writes rows for the partitions it read, and metadata saying how
+    // many partitions that was, so the read path scales them correctly. Below some coverage that stops
+    // being worth doing: row counts extrapolate, but NDV does not, and NDV is what join cardinality
+    // estimates are most sensitive to. A column collected from a twentieth of its partitions would give
+    // the optimizer an NDV roughly twenty times too small, stated as fact. Recording nothing for it
+    // instead falls back to the connector's own table metadata, which supplies an accurate row count and
+    // no NDV - a default selectivity rather than a confidently wrong one. Measured against what the
+    // collection asked for, so a sample is not "sparse" merely for being a sample.
+    @ConfField(mutable = true, comment = "Least fraction of the partitions an external-table analyze asked " +
+            "for that must actually be collected before a column's statistics are recorded; below it the " +
+            "column is left to the connector's own table metadata. <= 0 records whatever was collected.")
+    public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -3848,6 +3961,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int star_client_write_timeout_seconds = 30;
 
+    @ConfField(mutable = true, comment = "Max number of shards in one StarMgr getShardInfo call when FE resolves the "
+            + "compute nodes of many tablets at once (query planning, loads, vacuum, shard deletion). StarMgr holds "
+            + "its shard lock while it builds the reply, which blocks StarMgr writes and journal replay, so a larger "
+            + "batch blocks them for longer; values < 1 are treated as 1.")
+    public static int star_client_get_shard_info_batch_size = 1024;
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
@@ -4151,6 +4270,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
+
+    @ConfField(mutable = true, comment =
+            "Per-round work cap for the incremental (bounded, resumable) shared-data auto vacuum: the most " +
+                    "metadata versions one AutoVacuum round may commit and propose for a partition. The " +
+                    "incremental protocol is always on and cannot be disabled -- the legacy one-shot path " +
+                    "cannot safely resume after it (it would stop at the chain holes a bounded round leaves " +
+                    "and miss garbage below them), so there is no fall-back. This value only bounds how much " +
+                    "each round does, so a large backlog drains across many rounds instead of timing out one " +
+                    "RPC. Default 500. Values below 100 are clamped up to 100 (a smaller per-round budget " +
+                    "would need too many rounds to drain a backlog). Does not change tablet-to-node routing.")
+    public static long lake_autovacuum_max_versions_per_round = 500;
 
     @ConfField(mutable = true, comment = "the minimum delay between full vacuum runs on any given partition")
     public static long lake_fullvacuum_partition_naptime_seconds = 3600L * 24L;
@@ -4940,6 +5070,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static int arrow_flight_port = -1;
 
+    /**
+     * Largest request header block, in bytes, the Arrow Flight SQL server accepts - all headers of
+     * one gRPC request together. The first request of a session carries the client's credential in
+     * a header, and a JWT that lists many groups grows with them: two hundred group IDs, the most
+     * Microsoft Entra ID puts into a token, come to about 10 KB. gRPC's own default is 8 KB, which
+     * would refuse such a token before authentication even starts; the default here matches
+     * http_max_header_size so the same token works on both channels.
+     */
+    @ConfField(comment = "Maximum size in bytes of the request header block the Arrow Flight SQL server "
+            + "accepts. Raise it when clients send large JWTs, for example ones that list many groups.")
+    public static int arrow_flight_max_header_size = 32768;
+
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 
@@ -5488,23 +5630,6 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
-
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
-    public static String ai_default_chat_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
-    public static String ai_default_chat_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
-    public static String ai_default_chat_provider = "";
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
-    public static String ai_default_embedding_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
-    public static String ai_default_embedding_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
-    public static String ai_default_embedding_provider = "";
 
     /**
      * How the FE reacts when a metadata lock is requested on an object the internal catalog does

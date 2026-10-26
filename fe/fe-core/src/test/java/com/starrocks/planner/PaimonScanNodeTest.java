@@ -22,6 +22,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -34,11 +35,8 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
-import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
@@ -48,19 +46,25 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.io.DataOutputView;
 import org.apache.paimon.manifest.FileSource;
+import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.schema.TableSchema;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.Range;
+import org.apache.paimon.utils.InstantiationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
@@ -177,7 +181,7 @@ public class PaimonScanNodeTest {
         DeletionFile deletionFile = new DeletionFile("dummy", 1, 22, 0L);
         scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
         scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
-        scanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.AUTO, split, null, 256 * 1024 * 1024);
+        scanNode.addSDKSplitScanRangeLocations(Reader.NATIVE, split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());
     }
 
@@ -204,7 +208,7 @@ public class PaimonScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-        scanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 256 * 1024 * 1024);
+        scanNode.addSDKSplitScanRangeLocations(Reader.JNI, split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
         THdfsScanRange hdfsScanRange = tScanRangeLocations.getScan_range().getHdfs_scan_range();
@@ -226,7 +230,8 @@ public class PaimonScanNodeTest {
             TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
             desc.setTable(table);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-            scanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.NATIVE, split, null, 200L);
+            String predicateInfo = PaimonScanNode.encodeObjectToString(List.of());
+            scanNode.addSDKSplitScanRangeLocations(Reader.NATIVE, split, predicateInfo, 200L);
 
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange hdfsScanRange = scanNode.getScanRangeLocations(10).get(0)
@@ -234,6 +239,8 @@ public class PaimonScanNodeTest {
             Assertions.assertFalse(hdfsScanRange.isUse_paimon_jni_reader());
             Assertions.assertTrue(hdfsScanRange.isUse_paimon_native_reader());
             Assertions.assertFalse(hdfsScanRange.isSetFull_path());
+            Assertions.assertFalse(hdfsScanRange.isSetPaimon_split_info());
+            Assertions.assertFalse(hdfsScanRange.isSetJni_predicate_info());
             Assertions.assertTrue(hdfsScanRange.isSetPaimon_split_info_binary());
             Assertions.assertNotNull(hdfsScanRange.getPaimon_split_info_binary());
             Assertions.assertTrue(hdfsScanRange.getPaimon_split_info_binary().length > 0);
@@ -243,30 +250,24 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(split.bucket(), deserializedSplit.bucket());
             Assertions.assertEquals(split.bucketPath(), deserializedSplit.bucketPath());
 
-            // Under AUTO, SDK splits keep the legacy JNI reader; only an explicit NATIVE routes
-            // them to paimon-cpp.
-            PaimonScanNode autoScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
-            autoScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.AUTO, split, null, 200L);
-            THdfsScanRange autoRange = autoScanNode.getScanRangeLocations(10).get(0)
-                    .getScan_range().getHdfs_scan_range();
-            Assertions.assertTrue(autoRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(autoRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(autoRange.isSetPaimon_split_info_binary());
-
             PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
-            jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 200L);
+            jniScanNode.addSDKSplitScanRangeLocations(Reader.JNI, split, predicateInfo, 200L);
             THdfsScanRange jniScanRange = jniScanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertTrue(jniScanRange.isUse_paimon_jni_reader());
             Assertions.assertFalse(jniScanRange.isUse_paimon_native_reader());
             Assertions.assertFalse(jniScanRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(PaimonScanNode.encodeObjectToString(split), jniScanRange.getPaimon_split_info());
+            Assertions.assertEquals(predicateInfo, jniScanRange.getJni_predicate_info());
+            Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> scanNode.addSDKSplitScanRangeLocations(Reader.STARROCKS, split, predicateInfo, 200L));
         } finally {
             ConnectContext.remove();
         }
     }
 
     @Test
-    public void testSetupScanRangeLocationsAutoRoutesRawAndUnknownFormats(
+    public void testSetupScanRangeLocationsAutoRoutesRawSdkAndSystemSplits(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
         ConnectContext ctx = new ConnectContext();
         // With GlobalStateMgr mocked, the ConnectContext-created SessionVariable is a cascaded mock
@@ -276,14 +277,17 @@ public class PaimonScanNodeTest {
         try {
             DeletionFile deletionFile = new DeletionFile("delete-file", 7, 11, 0L);
             DataSplit parquetSplit = createRawConvertibleDataSplit("parquet", List.of(deletionFile));
-            DataSplit unknownSplit = createRawConvertibleDataSplit("unknown", List.of());
-            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, unknownSplit);
+            DataSplit avroSplit = createRawConvertibleDataSplit("avro", List.of());
+            FileStoreTable nativeTable = createNativeTable();
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, avroSplit, new TestSplit());
             new Expectations() {
                 {
                     GlobalStateMgr.getCurrentState();
                     result = globalStateMgr;
                     globalStateMgr.getMetadataMgr();
                     result = metadataMgr;
+                    table.getNativeTable();
+                    result = nativeTable;
                     metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
                     result = remoteFiles;
                 }
@@ -291,32 +295,43 @@ public class PaimonScanNodeTest {
 
             TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
             desc.setTable(table);
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "id", IntegerType.INT, false);
+            slot.setColumn(new Column("id", IntegerType.INT));
+            desc.addSlot(slot);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setupScanRangeLocations(desc, null, -1);
 
-            Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
+            Assertions.assertEquals(3, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange parquetRange = scanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertEquals(THdfsFileFormat.PARQUET, parquetRange.getFile_format());
             Assertions.assertTrue(parquetRange.isSetPaimon_deletion_file());
             Assertions.assertEquals(deletionFile.path(), parquetRange.getPaimon_deletion_file().getPath());
             Assertions.assertFalse(parquetRange.isUse_paimon_jni_reader());
+            Assertions.assertEquals(100L, parquetRange.getLength());
 
-            THdfsScanRange unknownRange = scanNode.getScanRangeLocations(10).get(1)
+            THdfsScanRange avroRange = scanNode.getScanRangeLocations(10).get(1)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertEquals(THdfsFileFormat.UNKNOWN, unknownRange.getFile_format());
-            // Under AUTO, a split that cannot be read as raw files keeps the legacy JNI reader;
-            // paimon-cpp is only chosen by an explicit NATIVE mode.
-            Assertions.assertTrue(unknownRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(unknownRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(unknownRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(THdfsFileFormat.UNKNOWN, avroRange.getFile_format());
+            Assertions.assertFalse(avroRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(avroRange.isUse_paimon_native_reader());
+            Assertions.assertTrue(avroRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(100L, avroRange.getLength());
+
+            THdfsScanRange systemRange = scanNode.getScanRangeLocations(10).get(2)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(systemRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(systemRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(systemRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(IntegerType.INT.getTypeSize(), systemRange.getLength());
+            Assertions.assertEquals(1, scanNode.getScanNodePredicates().getSelectedPartitionIds().size());
         } finally {
             ConnectContext.remove();
         }
     }
 
     @Test
-    public void testSetupScanRangeLocationsNativeAndNonDataSplit(
+    public void testSetupScanRangeLocationsNativeRejectsNonDataSplit(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
         ConnectContext ctx = new ConnectContext();
         // With GlobalStateMgr mocked, the ConnectContext-created SessionVariable is a cascaded mock
@@ -325,14 +340,16 @@ public class PaimonScanNodeTest {
         ctx.getSessionVariable().setPaimonReaderMode("NATIVE");
         ctx.setThreadLocalInfo();
         try {
-            DataSplit dataSplit = createDataSplit();
-            List<RemoteFileInfo> remoteFiles = createRemoteFiles(dataSplit, new TestSplit());
+            FileStoreTable nativeTable = createNativeTable();
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(new TestSplit());
             new Expectations() {
                 {
                     GlobalStateMgr.getCurrentState();
                     result = globalStateMgr;
                     globalStateMgr.getMetadataMgr();
                     result = metadataMgr;
+                    table.getNativeTable();
+                    result = nativeTable;
                     metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
                     result = remoteFiles;
                 }
@@ -341,36 +358,28 @@ public class PaimonScanNodeTest {
             TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
             desc.setTable(table);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-            scanNode.setupScanRangeLocations(desc, null, -1);
-
-            Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
-            THdfsScanRange nativeRange = scanNode.getScanRangeLocations(10).get(0)
-                    .getScan_range().getHdfs_scan_range();
-            Assertions.assertTrue(nativeRange.isUse_paimon_native_reader());
-            Assertions.assertTrue(nativeRange.isSetPaimon_split_info_binary());
-            Assertions.assertFalse(nativeRange.isSetFull_path());
-
-            THdfsScanRange nonDataSplitRange = scanNode.getScanRangeLocations(10).get(1)
-                    .getScan_range().getHdfs_scan_range();
-            Assertions.assertTrue(nonDataSplitRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(nonDataSplitRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(nonDataSplitRange.isSetPaimon_split_info_binary());
+            var error = Assertions.assertThrows(StarRocksConnectorException.class,
+                    () -> scanNode.setupScanRangeLocations(desc, null, -1));
+            Assertions.assertTrue(error.getMessage().contains("SYSTEM_SPLIT"));
+            Assertions.assertTrue(scanNode.getScanRangeLocations(10).isEmpty());
         } finally {
             ConnectContext.remove();
         }
     }
 
     @Test
-    public void testSetupIndexedSplitIgnoresForcedJniAndTracksPartition(
+    public void testSetupIndexedSplitHonorsForcedJniAndTracksPartition(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table)
-            throws IOException {
+            throws Exception {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonReaderMode("NATIVE");
         Deencapsulation.setField(ctx.getSessionVariable(), "paimonForceJNIReader", true);
         ctx.setThreadLocalInfo();
         try {
             DataSplit dataSplit = createDataSplit();
             IndexedSplit indexedSplit = new IndexedSplit(dataSplit, List.of(new Range(0L, 0L)), null);
+            FileStoreTable nativeTable = createNativeTable();
             List<RemoteFileInfo> remoteFiles = createRemoteFiles(indexedSplit);
             new Expectations() {
                 {
@@ -378,6 +387,8 @@ public class PaimonScanNodeTest {
                     result = globalStateMgr;
                     globalStateMgr.getMetadataMgr();
                     result = metadataMgr;
+                    table.getNativeTable();
+                    result = nativeTable;
                     metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
                     result = remoteFiles;
                 }
@@ -391,11 +402,13 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange indexedRange = scanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertFalse(indexedRange.isUse_paimon_jni_reader());
-            Assertions.assertTrue(indexedRange.isUse_paimon_native_reader());
-            Assertions.assertTrue(indexedRange.isSetPaimon_split_info_binary());
-            IndexedSplit decoded = IndexedSplit.deserialize(new DataInputViewStreamWrapper(
-                    new ByteArrayInputStream(indexedRange.getPaimon_split_info_binary())));
+            Assertions.assertTrue(indexedRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(indexedRange.isUse_paimon_native_reader());
+            Assertions.assertTrue(indexedRange.isSetPaimon_split_info());
+            Assertions.assertTrue(indexedRange.isSetJni_predicate_info());
+            Assertions.assertFalse(indexedRange.isSetPaimon_split_info_binary());
+            IndexedSplit decoded = InstantiationUtil.deserializeObject(
+                    Base64.getUrlDecoder().decode(indexedRange.getPaimon_split_info()), getClass().getClassLoader());
             Assertions.assertEquals(dataSplit.snapshotId(), decoded.dataSplit().snapshotId());
             Assertions.assertEquals(dataSplit.bucket(), decoded.dataSplit().bucket());
             Assertions.assertEquals(1, decoded.rowRanges().size());
@@ -403,6 +416,18 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(0L, decoded.rowRanges().get(0).to);
             Assertions.assertEquals(100L, indexedRange.getFile_length());
             Assertions.assertEquals(1, scanNode.getScanNodePredicates().getSelectedPartitionIds().size());
+
+            // AUTO still uses native for compatible index ranges.
+            Deencapsulation.setField(ctx.getSessionVariable(), "paimonForceJNIReader", false);
+            ctx.getSessionVariable().setPaimonReaderMode("AUTO");
+            PaimonScanNode autoScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
+            autoScanNode.setupScanRangeLocations(desc, null, -1);
+            THdfsScanRange autoRange = autoScanNode.getScanRangeLocations(10).get(0).getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(autoRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(autoRange.isUse_paimon_jni_reader());
+            IndexedSplit nativeDecoded = IndexedSplit.deserialize(new DataInputViewStreamWrapper(
+                    new ByteArrayInputStream(autoRange.getPaimon_split_info_binary())));
+            Assertions.assertEquals(decoded.rowRanges(), nativeDecoded.rowRanges());
         } finally {
             ConnectContext.remove();
         }
@@ -419,7 +444,7 @@ public class PaimonScanNodeTest {
 
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> scanNode.addSDKSplitScanRangeLocations(
-                            PaimonReaderMode.NATIVE, new FailingDataSplit(createDataSplit()), null, 200L));
+                            Reader.NATIVE, new FailingDataSplit(createDataSplit()), null, 200L));
             Assertions.assertTrue(exception.getMessage().contains("Failed to serialize Paimon split"));
             Assertions.assertTrue(exception.getCause() instanceof IOException);
         } finally {
@@ -452,98 +477,11 @@ public class PaimonScanNodeTest {
         Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
     }
 
-    @Test
-    public void testJniReaderRejectsVariantSlot() {
-        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
-        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
-        slot.setType(com.starrocks.type.VariantType.VARIANT);
-        slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
-        tuple.addSlot(slot);
-        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
-        Assertions.assertTrue(e.getMessage().contains("VARIANT"));
-        Assertions.assertTrue(e.getMessage().contains("SET paimon_force_jni_reader=false"));
-        Assertions.assertTrue(e.getMessage().contains("SET paimon_reader_mode=AUTO"));
-        Assertions.assertTrue(e.getMessage().contains("compact the Paimon table"));
-        Assertions.assertFalse(e.getMessage().contains("reader ("));
-        Assertions.assertFalse(e.getMessage().contains("global-index.enabled"));
-    }
-
-    @Test
-    public void testIndexedSplitWithVariantUsesNativeReader(@Mocked PaimonTable table) {
-        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
-        tuple.setTable(table);
-        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
-        slot.setType(com.starrocks.type.VariantType.VARIANT);
-        slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
-        tuple.addSlot(slot);
-        IndexedSplit split = new IndexedSplit(createDataSplit(), List.of(new Range(0L, 0L)), null);
-        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), tuple, "XXX");
-        Assertions.assertDoesNotThrow(() -> scanNode.addSDKSplitScanRangeLocations(
-                PaimonReaderMode.AUTO, split, null, 100L));
-        THdfsScanRange range = scanNode.getScanRangeLocations(10).get(0).getScan_range().getHdfs_scan_range();
-        Assertions.assertTrue(range.isUse_paimon_native_reader());
-        Assertions.assertFalse(range.isUse_paimon_jni_reader());
-
-        // An indexed split must use the native reader even when JNI is requested explicitly.
-        PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), tuple, "XXX");
-        jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 100L);
-        THdfsScanRange jniRange = jniScanNode.getScanRangeLocations(10).get(0)
-                .getScan_range().getHdfs_scan_range();
-        Assertions.assertTrue(jniRange.isUse_paimon_native_reader());
-        Assertions.assertFalse(jniRange.isUse_paimon_jni_reader());
-        Assertions.assertTrue(jniRange.isSetPaimon_split_info_binary());
-    }
-
-    @Test
-    public void testAutoReaderModeSwitchesToNativeForFileColumns() {
-        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
-        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(0), tuple);
-        idSlot.setType(IntegerType.INT);
-        idSlot.setColumn(new Column("id", IntegerType.INT));
-        tuple.addSlot(idSlot);
-        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(1), tuple);
-        fileSlot.setType(FileType.FILE);
-        fileSlot.setColumn(new Column("image", FileType.FILE));
-        tuple.addSlot(fileSlot);
-
-        Assertions.assertEquals(PaimonReaderMode.NATIVE,
-                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.AUTO));
-        // An explicit choice is left alone; the BE reports whatever the chosen reader cannot do.
-        Assertions.assertEquals(PaimonReaderMode.JNI,
-                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.JNI));
-        Assertions.assertEquals(PaimonReaderMode.NATIVE,
-                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.NATIVE));
-
-        // Paimon allows ARRAY<BLOB> and MAP<K, BLOB>; the FILE inside them must route the same way.
-        TupleDescriptor nested = new TupleDescriptor(new TupleId(1));
-        SlotDescriptor arraySlot = new SlotDescriptor(new SlotId(0), nested);
-        Type arrayOfFile = new ArrayType(FileType.FILE);
-        arraySlot.setType(arrayOfFile);
-        arraySlot.setColumn(new Column("images", arrayOfFile));
-        nested.addSlot(arraySlot);
-        Assertions.assertEquals(PaimonReaderMode.NATIVE,
-                PaimonScanNode.resolveAutoReaderModeForFileColumns(nested, PaimonReaderMode.AUTO));
-
-        // No FILE anywhere, even inside a complex type: AUTO stays AUTO.
-        TupleDescriptor plain = new TupleDescriptor(new TupleId(2));
-        SlotDescriptor intArraySlot = new SlotDescriptor(new SlotId(0), plain);
-        Type arrayOfInt = new ArrayType(IntegerType.INT);
-        intArraySlot.setType(arrayOfInt);
-        intArraySlot.setColumn(new Column("ids", arrayOfInt));
-        plain.addSlot(intArraySlot);
-        Assertions.assertEquals(PaimonReaderMode.AUTO,
-                PaimonScanNode.resolveAutoReaderModeForFileColumns(plain, PaimonReaderMode.AUTO));
-    }
-
-    @Test
-    public void testJniReaderAllowsNonVariantSlots() {
-        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
-        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
-        slot.setType(IntegerType.INT); // same constant PaimonColumnConverterTest asserts against
-        slot.setColumn(new Column("i", IntegerType.INT));
-        tuple.addSlot(slot);
-        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
+    private static FileStoreTable createNativeTable() {
+        FileStoreTable table = org.mockito.Mockito.mock(FileStoreTable.class);
+        org.mockito.Mockito.when(table.schema()).thenReturn(new TableSchema(1L,
+                List.of(DataTypes.FIELD(0, "id", DataTypes.INT())), 0, List.of(), List.of(), Map.of(), ""));
+        return table;
     }
 
     private static DataSplit createDataSplit() {
@@ -553,7 +491,7 @@ public class PaimonScanNodeTest {
         writer.writeInt(1, 4444);
         writer.complete();
 
-        DataFileMeta dataFile = DataFileMeta.create("file1", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+        DataFileMeta dataFile = DataFileMeta.create("file1.parquet", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
                 EMPTY_STATS, EMPTY_STATS, 100L, 200L, 1L, DUMMY_LEVEL, List.of(),
                 null, null, null, null, null, null, null);
         return DataSplit.builder().withSnapshot(1L).withPartition(partition).withBucket(1)
@@ -597,18 +535,13 @@ public class PaimonScanNodeTest {
     }
 
     private static class FailingDataSplit extends DataSplit {
-        private int serializeCount;
-
         private FailingDataSplit(DataSplit split) {
             assign(split);
         }
 
         @Override
         public void serialize(DataOutputView out) throws IOException {
-            if (++serializeCount > 1) {
-                throw new IOException("expected binary split serialization failure");
-            }
-            super.serialize(out);
+            throw new IOException("expected binary split serialization failure");
         }
     }
 }

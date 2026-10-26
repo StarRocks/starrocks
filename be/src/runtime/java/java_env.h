@@ -22,6 +22,7 @@
 
 namespace starrocks {
 
+class MemTracker;
 class MetricRegistry;
 class PriorityThreadPool;
 class RuntimeState;
@@ -39,7 +40,9 @@ public:
     JavaEnv(const JavaEnv&) = delete;
     const JavaEnv& operator=(const JavaEnv&) = delete;
 
-    Status init(MetricRegistry* metrics = nullptr, bool enable_jvm_metrics = false);
+    // jvm_mem_tracker, when not null, is set to the committed JVM memory on each JVM metrics round.
+    Status init(MetricRegistry* metrics = nullptr, bool enable_jvm_metrics = false,
+                MemTracker* jvm_mem_tracker = nullptr);
     void shutdown();
     void destroy();
 
@@ -50,7 +53,7 @@ public:
     JavaUdfPromiseStatusPtr submit_java_udf_call(RuntimeState* state, const std::function<Status()>& func);
 
 private:
-    Status _init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics);
+    Status _init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics, MemTracker* jvm_mem_tracker);
 
     std::unique_ptr<PriorityThreadPool> _jvm_call_pool;
     std::unique_ptr<PriorityThreadPool> _udf_call_pool;

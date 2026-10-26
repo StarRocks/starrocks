@@ -204,6 +204,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by the INT8 column pool.
 
+## `jwks_fetch_latency_ms`
+
+- Unit: ms
+- Type: Histogram
+- Description: Latency of each JWKS (JSON Web Key Set) fetch from the identity provider, whatever triggered it: the first load of a `jwks_url`, a background refresh ahead of the cache TTL, a refresh forced by a token with an unknown `kid`, or a retry. Failed fetches are timed as well. A JWT verification itself is a stable CPU cost; when Bearer authentication gets slow, this fetch is where the time goes.
+- Introduced in: v4.2
+
+## `jwks_refresh_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of JWKS fetches from the identity provider, labeled by `result` (`success` or `failure`). One increment per HTTP fetch, counted at the fetch itself, so a background refresh counts once and a fetch that failed but was answered from cached keys (see `jwks_cache_outage_ttl_seconds`) counts as a failure. A rising `failure` rate means the identity provider's JWKS endpoint is unhealthy; authentication keeps working from the cached keys until the outage window runs out.
+- Introduced in: v4.2
+
 ## `jemalloc_active_bytes`
 
 - Unit: Bytes
@@ -333,11 +347,29 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
 
+## `lake_segment_cache_hit_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookup hits in the last 60 seconds on shared-data clusters. A hit returns a cached candidate, which can subsequently be rejected if its schema is incompatible with the request. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_miss_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookups that find no cache entry in the last 60 seconds on shared-data clusters. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_schema_reject_total`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of cached segment candidates rejected since this BE/CN started because their schema is missing or incompatible with the requested schema. When cache filling is enabled, a rejected entry is atomically replaced only if it still refers to the same segment; existing readers keep their segment. Otherwise, the request opens a private segment. Includes incompatible candidates returned by concurrent cache insertion after a lookup miss, so this value cannot be subtracted directly from lookup hits. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
 ## `lake_tablet_location_handoff_entries`
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_enable_tablet_location_handoff`). They are kept in an LRU cache of 16 MiB: an entry is used for five minutes after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_shard_info_cache_ttl_sec`). They are kept in an LRU cache of 16 MiB, shared with the locations counted in `staros_shard_info_fallback_cache_entries`: an entry is used for `lake_shard_info_cache_ttl_sec` after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
 
 ## `lake_tablet_location_handoff_hits_total`
 

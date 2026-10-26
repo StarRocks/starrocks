@@ -18,12 +18,14 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -141,9 +143,11 @@ public class ColocatedBackendSelector implements BackendSelector {
         if (minBackendId == Long.MAX_VALUE && workerProvider.allowUsingBackupNode() &&
                 !unavailableDataNodeIds.isEmpty()) {
             // [Shared-Data Only] If all locations are in unavailable nodes, a backup node can be selected on behalf of starmgr.
-            Collections.shuffle(unavailableDataNodeIds);
+            // Keep the order deterministic, so the same bucket resolves to the same backup on every query.
+            Collections.sort(unavailableDataNodeIds);
+            long affinityKey = bucketAffinityKey(bucketSeq);
             for (long id : unavailableDataNodeIds) {
-                long backupNodeId = workerProvider.selectBackupWorker(id);
+                long backupNodeId = workerProvider.selectBackupWorker(id, affinityKey);
                 LOG.debug("Select a backup node:{} for node:{}", backupNodeId, id);
                 if (backupNodeId > 0) {
                     Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(backupNodeId, 0);
@@ -164,6 +168,24 @@ public class ColocatedBackendSelector implements BackendSelector {
         workerProvider.selectWorker(minBackendId);
         colocatedAssignment.seqToWorkerId.put(bucketSeq, minBackendId);
         bucketSequenceIterator.useBackend(minBackendId);
+    }
+
+    /**
+     * The backup affinity key of a bucket: (colocate group id, bucket seq) for a colocated table, so every table of the
+     * group sends that bucket to the same backup, and (table id, bucket seq) otherwise. The representative tablet is
+     * not used, as it changes with partition pruning.
+     */
+    private long bucketAffinityKey(int bucketSeq) {
+        long tableId = scanNode.getOlapTable().getId();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        // Shared-data colocate groups are either hash (StarOS meta group) or range ones. Both lookups return null
+        // instead of failing when the table leaves its group concurrently, which falls back to the table id.
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getMetaGroupColocateGroupId(tableId);
+        if (groupId == null) {
+            groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        }
+        long scopeId = groupId != null ? groupId.grpId : tableId;
+        return WorkerProviderHelper.combineAffinityKey(scopeId, bucketSeq);
     }
 
     public static class BucketSeqToScanRange

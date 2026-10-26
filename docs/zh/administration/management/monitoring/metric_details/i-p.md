@@ -204,6 +204,20 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：INT8 列池使用的内存。
 
+## `jwks_fetch_latency_ms`
+
+- 单位：毫秒
+- 类型：Histogram
+- 描述：每次从身份提供方拉取 JWKS（JSON Web Key Set）的耗时，不区分触发原因：某个 `jwks_url` 的首次加载、缓存到期前的后台提前刷新、token 带未知 `kid` 触发的刷新、失败后的重试都算，失败的拉取同样计时。JWT 验签本身是稳定的 CPU 开销，Bearer 认证变慢时，时间基本花在这里。
+- 引入版本：v4.2
+
+## `jwks_refresh_total`
+
+- 单位：个
+- 类型：Counter
+- 描述：从身份提供方拉取 JWKS 的总次数，按 `result`（`success` / `failure`）打标签。在 HTTP 拉取本身计数，每次拉取加一：后台刷新只算一次，拉取失败但用缓存的旧 key 顶上（见 `jwks_cache_outage_ttl_seconds`）的情况算 `failure`。`failure` 持续上升说明身份提供方的 JWKS 端点不健康；在容错窗口用完之前，认证仍靠缓存的 key 继续工作。
+- 引入版本：v4.2
+
 ## `jemalloc_active_bytes`
 
 - 单位：字节
@@ -333,11 +347,29 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
+## `lake_segment_cache_hit_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找命中的次数。命中表示找到一个缓存候选对象，该对象仍可能因 schema 与请求不兼容而被拒绝复用。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_miss_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找未找到缓存条目的次数。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，缓存 segment 候选对象因 schema 缺失或与请求指定的 schema 不兼容而被拒绝复用的累积次数。启用缓存填充时，仅当被拒绝的条目仍指向同一个 segment 对象，才会原子替换该条目；在途读取继续使用原对象。否则，本次请求打开私有 segment。也包括查找未命中后，并发缓存插入返回不兼容候选对象的情况，因此不能直接从查找命中数中扣除此值。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
 ## `lake_tablet_location_handoff_entries`
 
 - 单位：计数
 - 类型：瞬时值
-- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_shard_info_cache_ttl_sec`）。条目保存在一个 16 MiB 的 LRU 缓存中，与 `staros_shard_info_fallback_cache_entries` 统计的条目共用，最后一次刷新后在 `lake_shard_info_cache_ttl_sec` 时长内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
 
 ## `lake_tablet_location_handoff_hits_total`
 

@@ -243,6 +243,10 @@ dependencies {
         // uses the Apache HttpClient path, not the Jetty HTTP/2 client, so this is runtime-safe.
         exclude(group = "org.eclipse.jetty", module = "*")
     }
+    // ZooKeeper classes that solr-solrj needs on every Solr audit send; see fe/pom.xml.
+    implementation("org.apache.zookeeper:zookeeper") {
+        isTransitive = false
+    }
     implementation("org.apache.ranger:ranger-plugins-common") {
         exclude(group = "org.elasticsearch", module = "*")
         exclude(group = "org.elasticsearch.client", module = "*")
@@ -319,6 +323,7 @@ dependencies {
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
+    implementation("com.github.luben:zstd-jni")
     // dependency sync end
 
     // extra dependencies pom.xml does not have

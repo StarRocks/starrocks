@@ -147,7 +147,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Requests per second
 - Valid values: Positive integers
 - Is mutable: Yes
-- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI provider-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
 - Introduced in: -
 
 ### ai_function_max_inflight
@@ -845,8 +845,8 @@ This topic introduces the following types of BE configurations:
 - Default: 60
 - Type: Int
 - Unit: Percent
-- Is mutable: No
-- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
+- Is mutable: Yes
+- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). When this value is changed at runtime, the update `MemTracker` limit, the primary index cache capacity, and the derived limits of the update state, compaction state, and primary index block caches are recalculated. Decreasing this value evicts unused primary index cache entries immediately, but memory that is in use is released only after the running loads and compactions finish. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
 ### enable_vector_index_block_cache

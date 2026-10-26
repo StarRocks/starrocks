@@ -22,7 +22,16 @@ StarRocks v3.1.9 では、ネイティブの RBAC 特権システムに加えて
 - Apache Ranger を通じてアクセス ポリシー、マスキング ポリシー、および行レベル フィルタ ポリシーを作成します。
 - Ranger の監査ログ。
 - **Kerberos を使用して認証する Ranger サーバーはサポートされていません。**
+- **JavaScript で評価される Ranger のポリシー条件はサポートされていません。** たとえば、`expression` 条件や、タグベースのポリシーの `accessed-after-expiry` 条件です。詳細は以下の注記を参照してください。
 - 同じ Apache Ranger サービスに複数の StarRocks サービスを登録することで、異なる StarRocks クラスタでの権限管理を行うことができます。
+
+:::note
+
+StarRocks FE は JDK 17 以降で動作し、JavaScript エンジンを含みません。Ranger は JavaScript の条件を評価できない場合、その条件を満たしたものとして扱い、評価のたびに `failed to evaluate condition '<condition>': script engine not found` をログに出力します。たとえば、`expression` 条件を持つ許可項目は、式を確認せずにアクセスを許可します。StarRocks に適用されるポリシーではこれらの条件を使用しないでください。
+
+FE はポリシーの読み込み時にも `failed to initialize condition 'accessed-after-expiry'` をログに出力します。これは、Ranger Admin がデフォルトでサービスに関連付けるタグサービスの `EXPIRES_ON` ポリシーによるものです。`EXPIRES_ON` タグを持つリソースがない限り、このメッセージは影響しません。このタグを持つリソースへのアクセスは、有効期限前でも拒否されます。
+
+:::
 
 このトピックでは、StarRocks と Apache Ranger の権限制御方法と統合プロセスについて説明します。Ranger でセキュリティ ポリシーを作成してデータ セキュリティを管理する方法については、[Apache Ranger 公式ウェブサイト](https://ranger.apache.org/) を参照してください。
 
@@ -111,12 +120,22 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
    :::
 
+   Ranger でビューおよびマテリアライズドビューに SELECT 権限を付与するには、.json ファイル内の `view` リソースと `materialized_view` リソースの `accessTypeRestrictions` に `"select"` が含まれている必要があります。含まれていない場合は、次の手順でサービス定義を追加または更新する前に追加してください。
+
 2. Ranger 管理者として次のコマンドを実行して StarRocks Service を追加します。
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   Ranger に StarRocks のサービス定義がすでに登録されている場合（StarRocks のアップグレード時など）は、再度追加せずに更新します:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. `http://<ranger-ip>:<ranger-host>/login.jsp` にアクセスして Apache Ranger ページにログインします。ページに STARROCKS サービスが表示されます。

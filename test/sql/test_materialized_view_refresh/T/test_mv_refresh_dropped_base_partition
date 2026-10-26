@@ -202,3 +202,80 @@ select province from mv_list order by province;
 drop materialized view mv_list;
 
 drop database db_${uuid0};
+
+-- name: test_mv_refresh_dropped_base_partition_across_batches
+-- Each batch updates the version map, so a drop whose mv partition lands in a later batch must stay
+-- tracked until that batch recomputes it.
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO base_f VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-07-11 00:00:00', 2, 20),
+                          ('2026-08-10 00:00:00', 3, 30), ('2026-08-11 00:00:00', 4, 40);
+
+create materialized view mv_batched
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1", "partition_refresh_number" = "1", "partition_refresh_strategy" = "strict")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+refresh materialized view mv_batched;
+function: wait_mv_refresh_count("db_${uuid0}", "mv_batched", 2)
+
+-- One day per month, so the two months are recomputed by different batches.
+ALTER TABLE base_f DROP PARTITION p20260710;
+ALTER TABLE base_f DROP PARTITION p20260810;
+refresh materialized view mv_batched;
+function: wait_mv_refresh_count("db_${uuid0}", "mv_batched", 4)
+
+set enable_materialized_view_rewrite = false;
+select date_trunc('month', event_day) as m, sum(imp) from base_f group by m order by m;
+select date_trunc('month', event_day) as m, sum(imp) from mv_batched group by m order by m;
+
+drop database db_${uuid0};
+
+-- name: test_mv_refresh_dropped_base_partition_across_partial_refresh
+-- A refresh of another range updates the version map too, and must not erase the evidence that the
+-- mv partition outside it is stale.
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO base_f VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-07-11 00:00:00', 2, 20),
+                          ('2026-08-10 00:00:00', 3, 30);
+
+create materialized view mv_partial
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1", "partition_refresh_number" = "-1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+refresh materialized view mv_partial with sync mode;
+
+ALTER TABLE base_f DROP PARTITION p20260710;
+-- August has to change too, or the August-only refresh has nothing to do and never updates the version map.
+INSERT INTO base_f VALUES ('2026-08-10 00:00:00', 3, 5);
+refresh materialized view mv_partial partition start ('2026-08-01') end ('2026-09-01') with sync mode;
+refresh materialized view mv_partial with sync mode;
+
+set enable_materialized_view_rewrite = false;
+select date_trunc('month', event_day) as m, sum(imp) from base_f group by m order by m;
+select date_trunc('month', event_day) as m, sum(imp) from mv_partial group by m order by m;
+
+drop database db_${uuid0};

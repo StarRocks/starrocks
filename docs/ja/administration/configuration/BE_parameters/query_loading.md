@@ -148,7 +148,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: リクエスト/秒
 - 有効な値: 正の整数
 - 変更可能: はい
-- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。SYSTEM と AI provider 指定の埋め込み呼び出しに適用され、リトライも含みます。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
+- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
 - 導入バージョン: -
 
 ### ai_function_max_inflight
@@ -828,8 +828,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 60
 - タイプ: Int
 - 単位: パーセント
-- 変更可能: いいえ
-- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `RuntimeEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
+- 変更可能: はい
+- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `RuntimeEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。実行時にこの値を変更すると、更新用 `MemTracker` の上限、プライマリインデックスキャッシュの容量、およびそこから派生する update state、compaction state、プライマリインデックスブロックキャッシュの上限が再計算されます。この値を小さくすると、使用されていないプライマリインデックスキャッシュのエントリは即座に削除されますが、使用中のメモリは実行中のロードとコンパクションが完了した後に解放されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
 - 導入バージョン: v3.2.0
 
 ### enable_vector_index_block_cache

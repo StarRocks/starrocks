@@ -72,6 +72,7 @@ set(FORMAT_ORC_TEST_FILES
     orc/orc_column_reader_test.cpp
     orc/orc_emit_rejected_rows_test.cpp
     orc/orc_lazy_load_test.cpp
+    orc/orc_mapping_test.cpp
     orc/utils_test.cpp
 )
 

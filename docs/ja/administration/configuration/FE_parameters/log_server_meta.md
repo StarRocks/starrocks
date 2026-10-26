@@ -429,6 +429,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：内部アペンダー (`fe.internal.log`) に対して保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大で `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によって管理されます)。値を小さくするとディスク使用量が減りますが、ログ履歴が短くなります。値を大きくすると、より多くの履歴内部ログが保持されます。この項目は、`internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`) と連携して機能します。
 - 導入時期：v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメタデータロックを保持したまま、Hive Metastore、JDBC データソース、Iceberg REST catalog、thrift のピアといった外部システムに接続したときの動作。この場合ロックの保持時間はその外部システムのラウンドトリップ時間となり、同じロックを待つすべての処理がその代償を払います。チェックは FE 自身のコードがネットワークリクエストを発行する直前の層に置かれているため、キャッシュヒットはここに到達せず、報告される違反はすべて実際に送信されたリクエストです。有効な値：`off`（チェックしない）、`warn`（違反した呼び出し元のスタックトレース付きでログに記録し、呼び出しはそのまま続行する）、`error`（その呼び出しを拒否する）。認識できない値は `warn` として扱われます。`lock_target_validation_mode` と異なり、このチェックは正常に動作しているクラスターでも違反を報告します。対象となる呼び出し箇所の移行が進行中であるためです。したがって `warn` はそれらをトランスポートごとに集計できるログに変えるためのものであり、`error` はそのログがクリーンになってから初めて適切になります。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` タグと `kind=blocking_call_under_lock` を付けた 1 行として出力されます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：同一の呼び出し箇所から出力されるロック不変条件違反のログ行の最小間隔。スロットリングはグローバルではなく呼び出し箇所ごとに行われるため、違反頻度の高い箇所が他の箇所をログから締め出すことはありません。調査時には `0` に設定すると、すべての違反がログに出力されます。`lock_target_validation_mode` または `lock_blocking_call_validation_mode` が `warn` の場合にのみ有効です。
+- 導入時期：v26.2
+
+### `lock_target_validation_mode`
+
+- デフォルト：warn
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：internal catalog が所有していないオブジェクト（external catalog のデータベースや、プレースホルダーのテーブル ID など）に対してメタデータロックが要求されたときの FE の動作。そのような識別子はロックマネージャーが保護できる対象を何も指しておらず、他のロックと決して競合しないか、同種のすべてのロックと競合するかのいずれかになります。有効な値：`off`（チェックしない）、`warn`（スタックトレース付きで違反をログに記録し、処理はそのまま続行する）、`error`（その処理を拒否する）。認識できない値は `warn` として扱われます。この項目は変更可能なため、クラスターはまず `warn` で運用してログがクリーンであることを確認し、再起動なしで `error` に引き締めることができます。`warn` モードでは各違反が `LOCK_INVARIANT_VIOLATION` というタグを付けた 1 行として出力され、違反した呼び出し元のスタックトレースが付きます。ログ量は `lock_invariant_violation_log_interval_ms` で制御します。
+- 導入時期：v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - デフォルト：3
@@ -806,6 +833,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- デフォルト：32768
+- タイプ：Int
+- 単位：Bytes
+- 変更可能：No
+- 説明：Arrow Flight SQL サーバーが受け付けるリクエストヘッダーの合計サイズの上限（バイト）。1 つの gRPC リクエストのすべてのヘッダーを合計して数えます。Arrow Flight SQL セッションの最初のリクエストはクライアントの認証情報をヘッダーで運び、ユーザーの所属グループを列挙した JWT はグループ数に応じて大きくなります。Microsoft Entra ID が 1 つのトークンに入れるグループ ID は最大 200 個で、約 10 KB になります。gRPC のデフォルトの 8 KB では認証が始まる前にこのようなリクエストが拒否されるため、デフォルト値は `http_max_header_size` に合わせています。クライアントがより大きなトークンを送る場合は値を大きくしてください。変更後は FE の再起動が必要です。
+- 導入時期：v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - デフォルト：10000
@@ -967,6 +1003,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
   この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
+### `enable_rest_bearer_authentication`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：MySQL 以外のチャネル（HTTP、Arrow Flight、BE 直結の Stream Load）における Bearer トークン認証のマスタースイッチ。`false` に設定すると、これらのチャネルは `Authorization: Bearer ...` を含むリクエストをすべて HTTP 401 で拒否し、「トークン認証は MySQL プロトコルのみ」という以前の動作に戻ります。Basic 認証と既存の Arrow Flight UUID セッショントークンは影響を受けません。MySQL プロトコルの認証がこのスイッチで制限されることはありません。
+- 導入時期：v4.2
+
 ### `http_web_page_display_hardware`
 
 - デフォルト：true
@@ -1058,6 +1103,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. ハンドシェイクパケットバージョン
   3. グローバル変数 `version` の値 (`show variables like 'version';`)
+- 導入時期：-
+
+### `mysql_service_compression_enabled`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：FE が接続ハンドシェイクで MySQL 圧縮プロトコル (zlib および zstd) を提供するかどうか。圧縮を要求したクライアントのみが圧縮された通信を使用します (例: `mysql --compression-algorithms=zstd` や JDBC `useCompression=true`)。その他のクライアントには影響しません。`false` に設定すると、FE は圧縮を提供しなくなります。変更は新しい接続にのみ適用されます。
 - 導入時期：-
 
 ### `mysql_service_io_threads_num`

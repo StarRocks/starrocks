@@ -438,6 +438,33 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when it contacts an external system, such as a Hive Metastore, a JDBC source, an Iceberg REST catalog, or a thrift peer, while holding an FE metadata lock. The lock's hold time then becomes that external system's round-trip time, and every operation waiting on the same lock pays it. The check is placed at the last layer the FE owns before a network request is issued, so a cache hit never reaches it and every reported violation is a request that really went out. Valid values: `off` (do not check), `warn` (log the violation with the offending caller's stack trace and let the call proceed), and `error` (refuse the call). Any unrecognized value behaves as `warn`. Unlike `lock_target_validation_mode`, this check is expected to report violations on a cluster that is behaving normally, because the call sites it covers are still being migrated; `warn` therefore turns them into a log you can aggregate by transport, and `error` is only appropriate once those logs are clean. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=blocking_call_under_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode` or `lock_blocking_call_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_target_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a metadata lock is requested on an object the internal catalog does not own, such as a database from an external catalog or a placeholder table ID. Such an identifier names nothing the lock manager can protect: it either never collides with another lock, or collides with every other lock of its kind. Valid values: `off` (do not check), `warn` (log the violation with a stack trace and let the operation proceed), and `error` (refuse the operation). Any unrecognized value behaves as `warn`. Because this item is mutable, a cluster can run at `warn`, confirm that its logs stay clean, and then tighten to `error` without a restart. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION`, carrying the offending caller's stack trace; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - Default: 3
@@ -815,6 +842,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000
@@ -976,6 +1012,15 @@ This topic introduces the following types of FE configurations:
 
   Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
 
+### `enable_rest_bearer_authentication`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
+
 ### `http_web_page_display_hardware`
 
 - Default: true
@@ -1067,6 +1112,15 @@ This topic introduces the following types of FE configurations:
   1. `select version();`
   2. Handshake packet version
   3. Value of the global variable `version` (`show variables like 'version';`)
+- Introduced in: -
+
+### `mysql_service_compression_enabled`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE offers the MySQL compressed protocol (zlib and zstd) in the connection handshake. Only clients that request compression get compressed traffic, for example `mysql --compression-algorithms=zstd` or JDBC `useCompression=true`; other clients are unaffected. When set to `false`, the FE stops offering compression. A change applies to new connections only.
 - Introduced in: -
 
 ### `mysql_service_io_threads_num`

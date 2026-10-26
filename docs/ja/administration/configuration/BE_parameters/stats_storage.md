@@ -620,6 +620,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
 - 導入バージョン: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: Rowset
+- 変更可能: はい
+- 説明: 主キーテーブルの size-tiered コンパクションで一度に選択する level=-1 の Rowset の最大数。設定値が 2 未満の場合は 2 として扱います。level=-1 には行数が 0、または推定有効バイト数が 0 の Rowset が含まれます。他のレベルと一緒にマージする場合、この設定は入力の合計数を制限しません。
+- 導入バージョン: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - デフォルト: 2
@@ -989,6 +998,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: サイズ階層型コンパクションポリシーの最小レベルのデータサイズ。この値より小さい rowset はすぐにデータコンパクションをトリガーします。
 - 導入バージョン: -
 
+### skip_pindex_l1_l2_check_in_insert
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: shared-nothing クラスタのローカル永続主キーインデックスへの挿入時に、イミュータブルな L1/L2 ファイルの重複キーチェックをスキップするかどうか。デフォルトの `true` では L0 memtable のみをチェックし、チェックに伴うディスク読み取りを回避して、shared-data クラスタのクラウドネイティブ主キーインデックスと動作を揃えます。`false` に設定するとイミュータブルインデックスのチェックを再開します。この設定はインデックス内部の整合性チェックを制御し、主キーテーブルに対する SQL INSERT 文の更新セマンティクスは変更しません。
+- 導入バージョン: -
+
 ### snapshot_expire_time_sec
 
 - デフォルト: 172800
@@ -1171,6 +1189,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
 - 導入バージョン: v3.5.16, v4.0.9
+
+### tablet_writer_add_segment_lock_timeout_ms
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: shared-nothing クラスターのセカンダリ BE が segment 複製リクエストを受信する際の、ロック待機時間の合計上限です。`0` 以下の値は `be_exit_after_disk_write_hang_second` をミリ秒に換算した値を使用し、正の値はその上限を上書きします。LoadChannel のミューテックスと LocalTabletsChannel の共有ロックは、BRPC リクエストハンドラーの開始時に一度だけ計算した同じ期限を使用します。いずれかのロック待機がタイムアウトすると、segment の書き込みを投入する前に RPC がタイムアウトエラーを返します。RPC タイムアウトとは独立しており、その後の segment flush や commit の処理時間は制限しません。segment 複製の受信経路にのみ適用されます。writer のハングによる終了判定とは計測開始時点が異なるため、BE 終了前のロックタイムアウトを保証するものではありません。
+- 導入バージョン: -
 
 ### transaction_apply_worker_count
 

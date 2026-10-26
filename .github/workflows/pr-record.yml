@@ -33,6 +33,8 @@ jobs:
       cancel-in-progress: true  # every run reads the live state, so the newest run suffices
     # PRs someone watches while open: branch PRs, and sync / reverse-sync PRs. A retarget
     # (edited with changes.base, e.g. main -> branch-4.1 or back) is recorded on any PR.
+    # A human comment is recorded when it carries a seal-check skip command read on this
+    # repo's PRs: ignore backport check / merge / sync (ignore reverse sync is read on CD PRs).
     # No comments inside the expression below: in a folded scalar a '#' line is part of it.
     if: >-
       (github.event_name == 'pull_request_target' && (
@@ -45,7 +47,7 @@ jobs:
           contains(github.event.pull_request.head.ref, '-cd-contributed-pr-')) && (
           contains(fromJSON('["opened","reopened"]'), github.event.action) ||
           (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) &&
-            contains(fromJSON('["ERROR","conflict","conflicts","pending"]'), github.event.label.name)) ||
+            contains(fromJSON('["ERROR","conflict","conflicts","pending","SKIP MERGE"]'), github.event.label.name)) ||
           (github.event.action == 'edited' && github.event.changes.title != null) ||
           (contains(fromJSON('["ready_for_review","converted_to_draft"]'), github.event.action) &&
             github.event.pull_request.base.ref != 'main'))))) ||
@@ -55,7 +57,11 @@ jobs:
         !contains(fromJSON('["CelerData-Reviewer","wanpengfei-git","CLAassistant","starrocks-robot","robot-sync"]'),
                   github.event.comment.user.login) &&
         (contains(github.event.comment.body, 'ignore backport check') ||
-         contains(github.event.changes.body.from, 'ignore backport check')))
+         contains(github.event.comment.body, 'ignore merge') ||
+         contains(github.event.comment.body, 'ignore sync') ||
+         contains(github.event.changes.body.from, 'ignore backport check') ||
+         contains(github.event.changes.body.from, 'ignore merge') ||
+         contains(github.event.changes.body.from, 'ignore sync')))
     runs-on: [self-hosted, pr-record]
     continue-on-error: true
     timeout-minutes: 5

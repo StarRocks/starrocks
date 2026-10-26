@@ -1,0 +1,41 @@
+@startuml
+' Source of truth for 04-key-management.png -- see ../README.md to regenerate.
+!pragma layout smetana
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+title Where the per-file data key is protected
+
+rectangle "Per-file DEK\nRAND_bytes in the BE" as DEK
+rectangle "key_metadata =\nStandardKeyMetadata(DEK + aad_prefix)\nDEK IS IN THE CLEAR" as KM
+
+DEK --> KM
+
+rectangle "Iceberg metadata-encryption chain (Iceberg >= 1.11)" as CHAIN {
+  rectangle "manifest\nAES-GCM stream, AGS1 magic\nholds each data file's key_metadata" as M1
+  rectangle "manifest list\nAES-GCM stream, AGS1 magic\nholds each manifest's key + AAD prefix" as M2
+  rectangle "manifest-list key metadata\nencrypted with a KEK\nAAD = KEK creation timestamp" as M3
+  rectangle "metadata.json (NOT encrypted)\nencryption-keys: KEK wrapped by\nthe table master key\nsnapshot.key-id = KEK_ID" as M4
+  M1 --> M2 : key recovered from
+  M2 --> M3 : key recovered from
+  M3 --> M4 : KEK recovered from
+}
+
+KM --> M1 : carried in
+
+rectangle "KMS\ntable master key" as KMS
+M4 --> KMS : the ONLY KMS call\nper KEK, not per file
+
+note right of KM
+  This is why the dependency floor is Iceberg 1.11.0 and not a
+  preference: without the chain below, the same code leaves a
+  usable key in cleartext storage beside the file it decrypts.
+end note
+
+note bottom of CHAIN
+  StarRocks implements none of this chain -- Iceberg does.
+  StarRocks contributes the data-file layer plus carrying
+  key_metadata across the FE<->BE boundary.
+  The KEK rotates per NIST SP 800-57; previous KEKs are
+  retained for existing snapshots.
+end note
+@enduml

@@ -144,7 +144,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：请求/秒
 - 有效值：正整数
 - 是否动态：是
-- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
 - 引入版本：-
 
 ### ai_function_max_inflight
@@ -842,8 +842,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：60
 - 类型：Int
 - 单位：Percent
-- 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 是否动态：是
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。运行时修改该值后，会重新计算更新 `MemTracker` 的上限、primary index cache 的容量，以及由其派生的 update state、compaction state 和 primary index block cache 的上限。调小该值时，未被使用的 primary index cache 条目会被立即淘汰，但正在使用的内存要等正在执行的导入和 compaction 结束后才会释放。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
 ### enable_vector_index_block_cache

@@ -504,6 +504,8 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
+// Maximum number of level -1 rowsets selected per size-tiered primary key compaction. Values below 2 are treated as 2.
+CONF_mInt64(max_update_compaction_num_level_minus_one_rowsets, "10000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
@@ -814,6 +816,10 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
 CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
+// Combined lock-wait budget for receiving a replicated segment, in milliseconds.
+// The deadline is computed at the BRPC handler entry and shared by both channel locks.
+// Nonpositive values use be_exit_after_disk_write_hang_second converted to milliseconds; a positive value overrides it.
+CONF_mInt32(tablet_writer_add_segment_lock_timeout_ms, "0");
 // make_snapshot rpc timeout
 CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
@@ -917,7 +923,14 @@ CONF_Bool(enable_stop_be_action, "true");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
-CONF_Bool(enable_jvm_metrics, "false");
+// Collect JVM memory metrics. No JVM is created for this: collection starts once a JVM exists
+// in the process, for example after HDFS access, a JNI scanner, or a Java UDF.
+CONF_Bool(enable_jvm_metrics, "true");
+
+// Count the committed JVM heap and non-heap memory in the "jvm" memory tracker under the process
+// tracker, so the BE memory limit includes it. Updated by the JVM metrics hook, so it needs
+// enable_jvm_metrics. When turned off, the next round releases the tracked memory.
+CONF_mBool(enable_jvm_memory_tracker, "true");
 
 CONF_mBool(enable_prefetch, "true");
 
@@ -982,7 +995,8 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 // Metadata cache limit for shared-nothing mode. Not working for PK table now.
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
@@ -1685,6 +1699,19 @@ CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
 // the legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
+// Whether a Primary Key publish reads the base segments it needs through the segment metacache
+// (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
+// read in UpdateManager::get_column_values -- row-mode partial update and condition update alike,
+// since both re-read old values from the same segments and pay the same cost. The static open
+// neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
+// reader for every column of the tablet schema, a cost paid again on each publish for base segments
+// that a high frequency update stream keeps touching. The cache is used only while the tablet's base
+// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
+// always uses the static open: it reads this transaction's own segment through a schema restricted
+// to the partial-update columns, which must never be published into the cache. Set to false to
+// restore the static open everywhere.
+CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
@@ -1779,8 +1806,18 @@ CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // non-existent segments and prevent delvec file garbage collection.
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
-// Used for control memory usage of update state cache and compaction state cache
+// Used for control memory usage of update state cache and compaction state cache in shared-data mode
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+// Upper bound of the shared-data primary key index cache, as a percentage of its capacity, checked after every
+// publish that does not fail on the update memory limit. A backstop for when the background evict thread has
+// not yet brought the cache down to primary_key_index_memory_high_percent.
+CONF_mInt32(primary_key_index_memory_urgent_percent, "85");
+// The background update cache evict thread shrinks the shared-data primary key index cache to this percentage
+// of its capacity whenever it holds more.
+CONF_mInt32(primary_key_index_memory_high_percent, "75");
+// When a shared-data primary key publish fails because it exceeds the update memory limit, the primary key
+// index cache is shrunk to this percentage of its capacity, so that the retry has memory to work with.
+CONF_mInt32(primary_key_index_memory_middle_percent, "50");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // Verify sstable block checksums on cloud-native PK index reads (open, point lookup,
@@ -1797,7 +1834,8 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // existed (or by the replication path, which cannot compute it) carry none and are always accepted.
 // Writing the checksum is unconditional; this only controls verification, as an escape hatch.
 CONF_mBool(lake_enable_del_file_crc_check, "true");
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
@@ -2017,6 +2055,9 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(l0_snapshot_size, "16777216");
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
@@ -2563,11 +2604,14 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 // Must be positive. Runtime changes resize the existing pool without interrupting running closes.
 CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
-// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
-// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
-// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
-// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
-CONF_mBool(lake_enable_tablet_location_handoff, "true");
+// Shared-data only. Seconds a node keeps the shard info of a tablet it does not own, so that touching
+// the tablet again within this time does not ask starmgr for it (GetShard RPC). It keeps what it had
+// to ask starmgr for, and what the tablet's owners hand over to the load coordinator along with the
+// txn logs, which then writes each partition's combined txn log without asking. An owner gets storage
+// updates pushed by starmgr; a kept copy only picks them up when it expires, so this also bounds how
+// long such a node may use outdated storage settings. 0 disables both: nothing is handed over or kept,
+// and every such touch asks starmgr.
+CONF_mInt64(lake_shard_info_cache_ttl_sec, "60");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics

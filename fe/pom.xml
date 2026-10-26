@@ -57,6 +57,7 @@ under the License.
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.18.1</parquet.version>
         <ranger.version>2.9.0</ranger.version>
+        <zookeeper.version>3.9.6</zookeeper.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
@@ -83,7 +84,7 @@ under the License.
         <paimon.version>2.0.0</paimon.version>
         <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
-        <iceberg.version>1.10.0</iceberg.version>
+        <iceberg.version>1.11.0</iceberg.version>
         <staros.version>4.2-rc6</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
@@ -1756,6 +1757,23 @@ under the License.
                     </exclusion>
                     <exclusion>
                         <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <!-- solr-solrj's org.apache.solr.common.util.Utils references ZooKeeper classes,
+                 and HttpSolrClient calls Utils.consumeFully after reading every Solr response.
+                 dest-solr excludes zookeeper, so without these classes every Solr audit send
+                 fails with NoClassDefFoundError after Solr has already stored the events. Only
+                 the classes are needed, so the jar comes without any of its own dependencies. -->
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>${zookeeper.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>*</groupId>
                         <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>

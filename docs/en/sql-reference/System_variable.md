@@ -268,11 +268,35 @@ Used for MySQL client compatibility. No practical usage.
 ### blacklist_backup_routing
 
 * **Scope**: Session
-* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). `TABLET_HASH` takes the eligible node with the highest hash of the tablet and the node (rendezvous hashing): the tablets of an unavailable node spread evenly over the other nodes, while each tablet keeps going to the same backup across queries, so its data is cached on only one backup node. For a colocated scan, the hash uses the colocation group and the bucket instead of the tablet, so every table in the group sends the same bucket to the same backup. FEs choose the same backup for a tablet as long as they see the same set of eligible nodes. The variable also applies when a load (for example, `INSERT`) writes to a tablet whose compute node is unavailable. Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
 * **Default**: `CIRCULAR`
 * **Data type**: String
-* **Valid values**: `CIRCULAR`, `RANDOM`
+* **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
 * **Introduced in**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
 
 ### broadcast_row_limit
 
@@ -736,6 +760,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this prevents the gather fragment from being placed on a BE that the rest of the query does not use. It does not guarantee label isolation by itself: if any other fragment of the query runs outside the label, the gather fragment may also run there. Known cases include scans of external catalog tables (such as Hive or Iceberg), `choose_execute_instances_mode` values other than `LOCALITY`, `prefer_compute_node=true`, and right or full bucket-shuffle joins with pruned buckets. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
+
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
@@ -767,6 +797,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
+
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
 
 ### enable_incremental_mv
 
@@ -1588,7 +1624,12 @@ Used for MySQL client compatibility. No practical usage.
 
 ### paimon_reader_mode
 
-* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).
+
+  * `AUTO`: StarRocks automatically selects an appropriate reader.
+  * `JNI`: Forces the Paimon Java reader through JNI.
+  * `NATIVE`: Uses the StarRocks file reader when compatible; otherwise requires a compatible paimon-cpp read. The query fails instead of falling back to JNI.
+  * Setting `paimon_force_jni_reader=true` is equivalent to selecting `JNI` and takes precedence over this variable.
 * **Default**: AUTO
 * **Data type**: String
 * **Introduced in**: v4.2
@@ -1756,7 +1797,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 

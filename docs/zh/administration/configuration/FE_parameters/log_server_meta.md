@@ -438,6 +438,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 在持有元数据锁期间访问外部系统（例如 Hive Metastore、JDBC 数据源、Iceberg REST Catalog 或 Thrift 对端）时的处理方式。此时锁的持有时长等于该外部系统的往返时延，所有等待同一把锁的操作都要为此付出代价。该检查位于 FE 自身代码中发起网络请求之前的最后一层，因此缓存命中不会触发它，报出的每一条违规都是真实发出的请求。有效值：`off`（不检查）、`warn`（打印带违规调用方堆栈的日志，调用继续执行）、`error`（拒绝该调用）。无法识别的取值按 `warn` 处理。与 `lock_target_validation_mode` 不同，该检查在运行正常的集群上也会报出违规，因为它覆盖的调用点仍在迁移过程中；因此 `warn` 的作用是把这些调用点变成可按传输类型聚合的日志，只有在这些日志干净之后才适合收紧为 `error`。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=blocking_call_under_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode` 或 `lock_blocking_call_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_target_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 对非 Internal Catalog 所有的对象（例如来自 External Catalog 的数据库，或占位的表 ID）请求元数据锁时的处理方式。这类标识符并不指向锁管理器能够保护的任何对象：它要么永远不会与其他锁冲突，要么与同类的所有锁冲突。有效值：`off`（不检查）、`warn`（打印带堆栈的违规日志，操作继续执行）、`error`（拒绝该操作）。无法识别的取值按 `warn` 处理。由于该参数可动态修改，集群可以先以 `warn` 运行，确认日志干净后再收紧为 `error`，无需重启。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记并附带违规调用方的堆栈；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - 默认值: 3
@@ -814,6 +841,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000
@@ -975,6 +1011,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
   受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
 
+### `enable_rest_bearer_authentication`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
+- 引入版本: v4.2
+
 ### `http_web_page_display_hardware`
 
 - 默认值: true
@@ -1066,6 +1111,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. 握手包版本
   3. 全局变量 `version` 的值 (`show variables like 'version';`)
+- 引入版本: -
+
+### `mysql_service_compression_enabled`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 是否在连接握手中提供 MySQL 压缩协议（zlib 和 zstd）。只有请求压缩的客户端才会使用压缩传输，例如 `mysql --compression-algorithms=zstd` 或 JDBC `useCompression=true`；其他客户端不受影响。设置为 `false` 时，FE 不再提供压缩。修改仅对新建连接生效。
 - 引入版本: -
 
 ### `mysql_service_io_threads_num`

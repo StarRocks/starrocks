@@ -91,14 +91,12 @@ Status VariantFunctions::variant_segments_close(FunctionContext* context, Functi
 }
 
 template <LogicalType ResultType>
-static void append_variant_field_to_result(FunctionContext* context, VariantRowValue&& field,
-                                           ColumnBuilder<ResultType>* result) {
+static void append_variant_field_to_result(const cctz::time_zone& zone, TzOffsetCache* offset_cache,
+                                           VariantRowValue&& field, ColumnBuilder<ResultType>* result) {
     if constexpr (ResultType == TYPE_VARIANT) {
         result->append(std::move(field));
     } else {
-        const RuntimeState* state = context->state();
-        cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
-        Status casted = VariantRowConverter::cast_to<ResultType, true>(field.as_ref(), zone, *result);
+        Status casted = VariantRowConverter::cast_to<ResultType, true>(field.as_ref(), zone, *result, offset_cache);
         if (!casted.ok()) {
             result->append_null();
         }
@@ -159,6 +157,8 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
 
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
 
     ColumnBuilder<ResultType> result(num_rows);
 
@@ -188,7 +188,8 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
             result.append_null();
             continue;
         }
-        Status cast_status = VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result);
+        Status cast_status =
+                VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result, &offset_cache);
         if (!cast_status.ok()) {
             result.append_null();
         }
@@ -238,6 +239,10 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     ColumnBuilder<ResultType> result(num_rows);
     VariantPath row_path;
     VariantPathReader row_reader;
+    const RuntimeState* state = context->state();
+    const cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
 
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row) || path_viewer.is_null(row)) {
@@ -266,7 +271,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             result.append_null();
             continue;
         }
-        append_variant_field_to_result<ResultType>(context, std::move(read.value), &result);
+        append_variant_field_to_result<ResultType>(zone, &offset_cache, std::move(read.value), &result);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
