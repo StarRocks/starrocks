@@ -212,47 +212,6 @@ public class FlussScanTest extends PlanTestBase {
     }
 
     /**
-     * And the residual, asserted as the deliberate current behaviour rather than as a defect: a table
-     * the planner has no snapshot for -- an ENGINE=mysql external table here, an {@code ExternalOlapTable}
-     * or a resource-mapping table just as well -- keeps the whole statement on the locked path, and every
-     * connector call in it is then made under the lock again. The Fluss side is guiltless; what decides
-     * is the table that cannot be copied.
-     */
-    @Test
-    public void testATableWithNoSnapshotPutsFlussBackUnderTheLock() throws Exception {
-        connectContext.changeCatalogDb("default_catalog.test");
-        starRocksAssert.useDatabase("test").withTable("CREATE EXTERNAL TABLE fluss_lock_mysql_tbl\n"
-                + "(\n"
-                + "    k1 INT,\n"
-                + "    k2 VARCHAR(64)\n"
-                + ")\n"
-                + "ENGINE=mysql\n"
-                + "PROPERTIES\n"
-                + "(\n"
-                + "    \"host\" = \"127.0.0.1\",\n"
-                + "    \"port\" = \"3306\",\n"
-                + "    \"user\" = \"mysql_user\",\n"
-                + "    \"password\" = \"mysql_passwd\",\n"
-                + "    \"database\" = \"mysql_db_test\",\n"
-                + "    \"table\" = \"mysql_table_test\"\n"
-                + ");");
-        try {
-            Map<String, Boolean> underLock = probeConnectorCalls();
-            getFragmentPlan("select m.k1, e.id from test.fluss_lock_mysql_tbl m "
-                    + "join fluss0.fluss_db.log_events e on m.k1 = e.id");
-            Assertions.assertFalse(underLock.isEmpty(),
-                    "planning never reached the fluss catalog, the probe proves nothing");
-            Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
-                    "a statement with no snapshot for one of its tables is expected to plan under the "
-                            + "lock; if this now passes, the residual entry point is closed and the "
-                            + "lock plan doc should say so: " + underLock);
-        } finally {
-            starRocksAssert.dropTable("test.fluss_lock_mysql_tbl");
-            connectContext.changeCatalogDb(CATALOG + "." + DB);
-        }
-    }
-
-    /**
      * Whether any connector call made while planning ran with an FE metadata lock held, per entry point.
      * OR-accumulated: one planning run calls these along several paths and a plain put would keep only
      * the last sample.

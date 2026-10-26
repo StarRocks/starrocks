@@ -35,10 +35,6 @@ import java.util.Set;
  * type keep working.
  *
  * @see BlockingCallValidator the guard that raises it for a remote call under a lock
-<<<<<<< HEAD
-=======
- * @see LockTargetValidator the guard that raises it for an illegitimate lock target
->>>>>>> 13074dc6d5d... [Enhancement] Guard the connector transports that had no door under the metadata lock (#63331)
  */
 public class LockInvariantViolationException extends IllegalStateException {
     public LockInvariantViolationException(String message) {
