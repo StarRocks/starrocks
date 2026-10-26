@@ -126,14 +126,8 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 ### 语法
 
 ```SQL
-<<<<<<< HEAD
-DELETE FROM <table_name> WHERE <condition>
-=======
-[WITH <with_query> [, ...]]
 DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
-[USING <relation> [, ...]]
 WHERE <condition>
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 ```
 
 ### 参数
@@ -143,15 +137,8 @@ WHERE <condition>
   - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
   - 仅表名（设置 catalog 和数据库后）：`table_name`
 
-<<<<<<< HEAD
-=======
 - `branch_name`：要删除数据的分支。从该分支读取数据，并将变更提交到该分支。必须是分支，不能是标签（tag）。
 
-- `relation`：`condition` 中与目标表关联的表或子查询。目标表的一行即使匹配到其中的多行，也只删除一次。
-
-- `with_query`：`condition` 中可以引用的公用表表达式（CTE）。
-
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`: 用于标识要删除哪些行的条件。可以包括：
   - 比较运算符：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
   - 逻辑运算符：`AND`、`OR`、`NOT`
@@ -237,12 +224,7 @@ UPDATE 通过 Iceberg V2 的 **Merge-On-Read** 模型实现：每次 UPDATE 会�
 ### 语法
 
 ```SQL
-<<<<<<< HEAD
-UPDATE <table_name>
-=======
-[WITH <with_query> [, ...]]
 UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
 ```
@@ -256,13 +238,8 @@ WHERE <condition>
 
 - `column_name = expression`：要更新的列以及新值。表达式可以引用同一行的其它列，以及系统支持的标量函数。
 
-<<<<<<< HEAD
-=======
 - `branch_name`：要更新的分支。从该分支读取数据，并将变更提交到该分支。必须是分支，不能是标签（tag）。
 
-- `with_query`：`condition` 中可以引用的公用表表达式（CTE）。
-
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 - `condition`：用于标识需要更新的行的谓词。支持的运算符与 `DELETE` 一致（比较运算符、逻辑运算符、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`，以及 `IN` / `EXISTS` 子查询）。
 
 ### 使用说明

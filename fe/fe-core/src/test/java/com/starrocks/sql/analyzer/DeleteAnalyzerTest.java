@@ -32,11 +32,7 @@ import java.io.File;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.newFolder;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-<<<<<<< HEAD
-=======
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;

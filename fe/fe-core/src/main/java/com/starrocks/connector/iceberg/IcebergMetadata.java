@@ -2919,9 +2919,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         Long baseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
         if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
+            Snapshot head = headSnapshot(nativeTbl, branch);
+            if (head != null) {
+                baseSnapshotId = head.snapshotId();
             }
         }
         if (baseSnapshotId != null) {
@@ -2952,40 +2952,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (context != null) {
             updateCommitInfo(rowDelta, context);
         }
-<<<<<<< HEAD
-=======
-    }
-
-    private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
-                                       List<TIcebergDataFile> dataFiles,
-                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles, String branch,
-                                       String dbName, String tableName, Object extra,
-                                       ConnectContext context) {
-        long startMs = System.currentTimeMillis();
-        // Splits the delete metrics (total/duration/rows/bytes) by V2 position deletes vs V3
-        // deletion vectors, which have distinct cost and failure profiles.
-        String deleteType = IcebergDeletionVectorSupport.isDeletionVectorDelete(dataFiles)
-                ? ConnectorMetricsMgr.DELETE_TYPE_DELETION_VECTOR
-                : ConnectorMetricsMgr.DELETE_TYPE_POSITION;
-
-        // DELETE operations - use RowDelta
-        RowDelta rowDelta = transaction.newRowDelta();
-        if (branch != null) {
-            rowDelta.toBranch(branch);
-        }
-
-        // Base snapshot id frozen at plan time so conflict detection covers every commit landed between
-        // scan and commit; falling back to currentSnapshot would defeat SERIALIZABLE isolation.
-        Long planBaseSnapshotId = extra instanceof IcebergSinkExtra
-                ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
-        if (planBaseSnapshotId == null) {
-            Snapshot head = headSnapshot(nativeTbl, branch);
-            if (head != null) {
-                planBaseSnapshotId = head.snapshotId();
-            }
-        }
-        final Long baseSnapshotId = planBaseSnapshotId;
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 
         try {
             // Build the delete files inside commitWithCleanup so a failed lookup deletes the BE-written files.

@@ -51,14 +51,8 @@ public class IcebergDeleteSink extends DataSink {
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
-<<<<<<< HEAD
-=======
     // the branch the commit goes to, or null for the main branch
     private String targetBranch;
-    // The table's live position deletes, shipped to the BE deletion-vector sink so a touched
-    // data file's pre-existing deletes are folded into its new deletion vector.
-    private List<TIcebergPreviousDeleteFile> previousDeleteFiles = List.of();
->>>>>>> 3c711e7f637... [Enhancement][RB-225] Support DELETE, UPDATE and MERGE on an Iceberg branch (#66810)
 
     /**
      * Constructor for IcebergDeleteSink
