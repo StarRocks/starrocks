@@ -1101,9 +1101,9 @@ TExpr make_extended_ai_expression(int64_t fid, const std::string& name, const Ty
         call.fn.arg_types.push_back(argument.to_thrift());
     }
     call.__set_num_children(canonical_arguments.size());
-    call.__set_ai_provider_id(provider                         ? "provider:00000000-0000-0000-0000-000000000102"
-                              : result_type.type == TYPE_ARRAY ? "provider:default_embedding"
-                                                               : "provider:default_chat");
+    call.__set_ai_provider_id(provider ? "provider:00000000-0000-0000-0000-000000000102"
+                                       : result_type.type == TYPE_ARRAY ? "provider:default_embedding"
+                                                                        : "provider:default_chat");
     expression.nodes.resize(1);
     for (size_t i = 0; i < canonical_arguments.size(); ++i) {
         if (i < arguments.size()) {
