@@ -177,6 +177,8 @@ public class MVVersionManagerTest {
         when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
         when(externalBaseTable.getId()).thenReturn(3000L);
         BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        when(baseTableInfo.matchTable(externalBaseTable)).thenReturn(true);
+        mv.setBaseTableInfos(List.of(baseTableInfo));
         TableSnapshotInfo snapshot = new TableSnapshotInfo(baseTableInfo, externalBaseTable);
         snapshot.getRefreshedPartitionInfos().put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
 

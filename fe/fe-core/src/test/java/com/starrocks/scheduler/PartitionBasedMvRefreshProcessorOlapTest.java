@@ -3069,6 +3069,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     .filter(name -> name.contains("202203")).findFirst().orElseThrow();
             Assertions.assertEquals(Sets.newHashSet(marchMvPartition),
                     processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
+
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_rollup_month");
             starRocksAssert.dropTable("test.tbl_daily");
@@ -3213,8 +3216,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     }
 
     /**
-     * A refresh restricted to an unrelated range still prunes the dropped base partitions from the version map when it
-     * updates meta, so the evidence that the other mv partition is stale must survive it.
+     * A refresh restricted to an unrelated range updates the version map too, and must not erase the evidence that the
+     * mv partition outside its range is stale.
      */
     @Test
     public void testPartialRefreshOfUnrelatedRangeKeepsDropEvidence() throws Exception {
@@ -3251,6 +3254,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     mv.getPartition(januaryMv).getDefaultPhysicalPartition().getVisibleVersion();
 
             dropDailyBasePartitionOf("test.tbl_partial", "p20220110");
+            // Name the partition: the UT DML mock bumps every target partition, which would refresh January anyway.
+            executeInsertSql(connectContext, "insert into test.tbl_partial partition(p20220210) values('2022-02-10', 2);");
 
             // Refresh February only: it must not be able to erase January's evidence.
             Map<String, String> februaryOnly = Maps.newHashMap();
@@ -3258,6 +3263,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             februaryOnly.put(TaskRun.PARTITION_END, "2022-03-01");
             TaskRun februaryRun = TaskRunBuilder.newBuilder(task).properties(februaryOnly).build();
             initAndExecuteTaskRun(februaryRun);
+            Assertions.assertNotNull(
+                    ((PartitionBasedMvRefreshProcessor) februaryRun.getProcessor()).getMvContext().getExecPlan());
+            Assertions.assertTrue(getPartitionNamesToRefreshForMv(mv).contains(januaryMv));
 
             initAndExecuteTaskRun(TaskRunBuilder.newBuilder(task).build());
             long januaryVersionAfter =
@@ -3271,8 +3279,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     }
 
     /**
-     * With batching, the first run's meta update prunes every dropped base partition from the version map, including
-     * ones whose mv partition has not been recomputed yet. A later batch must still refresh those.
+     * With batching, each run updates the version map, so a drop whose mv partition falls in a later batch must keep
+     * its evidence until that batch recomputes it.
      */
     @Test
     public void testBatchedRefreshDoesNotLoseDropEvidenceForLaterBatches() throws Exception {
@@ -3295,15 +3303,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 "partition by date_trunc('month', k1)\n" +
                 "distributed by hash(k1) buckets 3\n" +
                 "refresh deferred manual\n" +
-                "properties('replication_num' = '1', 'partition_refresh_number' = '1')\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
                 "as select k1, sum(v1) as v1 from test.tbl_batched group by k1;");
         try {
             Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "mv_batched");
             Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-            initAndExecuteTaskRun(taskRun);
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
 
             Map<String, Long> versionsBeforeDrop = Maps.newHashMap();
             for (String mvPartition : mv.getVisiblePartitionNames()) {
@@ -3318,9 +3327,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 new StmtExecutor(connectContext, SqlParser.parseSingleStatement(
                         sql, connectContext.getSessionVariable().getSqlMode())).execute();
             }
-            for (int i = 0; i < 6; i++) {
-                initAndExecuteTaskRun(taskRun);
-            }
+            TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(firstBatch);
+            TaskRun secondBatch = ((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun();
+            Assertions.assertNotNull(secondBatch);
+            Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
+            executeAllBatches(secondBatch);
 
             // Both months lost a day, so both mv partitions must have been rewritten, not just the first batch's.
             for (String month : List.of("202201", "202202")) {
@@ -3331,9 +3343,94 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         mvPartition + " was not recomputed after its base partition was dropped: version stayed at "
                                 + after);
             }
+            Assertions.assertTrue(getPartitionNamesToRefreshForMv(mv).isEmpty());
+
+            TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(steadyRun);
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) steadyRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_batched");
             starRocksAssert.dropTable("test.tbl_batched");
+        }
+    }
+
+    /**
+     * The association mapping does not record which ref base table a partition name came from, so with several ref
+     * base tables a recomputed mv partition can keep looking affected by another table's drop. A batched refresh of
+     * such an mv must still settle, whether the tables share partition names or not.
+     */
+    @Test
+    public void testBatchedRefreshSettlesWithRefTablesSharingPartitionNames() throws Exception {
+        assertBatchedRefreshSettlesAfterDropsFromEachRefTable("p", "p");
+    }
+
+    @Test
+    public void testBatchedRefreshSettlesWithRefTablesOfDisjointPartitionNames() throws Exception {
+        assertBatchedRefreshSettlesAfterDropsFromEachRefTable("pa", "pb");
+    }
+
+    private void assertBatchedRefreshSettlesAfterDropsFromEachRefTable(String prefixA, String prefixB)
+            throws Exception {
+        Map<String, String> tableToPrefix = new LinkedHashMap<>();
+        tableToPrefix.put("tbl_ref_a", prefixA);
+        tableToPrefix.put("tbl_ref_b", prefixB);
+        for (Map.Entry<String, String> table : tableToPrefix.entrySet()) {
+            String p = table.getValue();
+            starRocksAssert.useDatabase("test").withTable("CREATE TABLE test." + table.getKey() + " (\n" +
+                    "  k1 date,\n" +
+                    "  v1 int\n" +
+                    ")\n" +
+                    "PARTITION BY RANGE(k1) (\n" +
+                    "  PARTITION " + p + "20220110 VALUES [('2022-01-10'),('2022-01-11')),\n" +
+                    "  PARTITION " + p + "20220111 VALUES [('2022-01-11'),('2022-01-12')),\n" +
+                    "  PARTITION " + p + "20220210 VALUES [('2022-02-10'),('2022-02-11')),\n" +
+                    "  PARTITION " + p + "20220211 VALUES [('2022-02-11'),('2022-02-12'))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                    "PROPERTIES('replication_num' = '1');");
+            for (String day : List.of("2022-01-10", "2022-01-11", "2022-02-10", "2022-02-11")) {
+                executeInsertSql(connectContext,
+                        String.format("insert into test.%s values('%s', 1);", table.getKey(), day));
+            }
+        }
+        starRocksAssert.withMaterializedView("create materialized view test.mv_two_ref_tables\n" +
+                "partition by date_trunc('month', k1)\n" +
+                "distributed by hash(k1) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
+                "as select k1, v1 from test.tbl_ref_a union all select k1, v1 from test.tbl_ref_b;");
+        try {
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "mv_two_ref_tables");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
+
+            // Only one table's names survive in the mapping, so drop from each in turn: whichever table loses its
+            // entries, the mapping shows the other table's partitions.
+            Map<String, List<String>> roundsOfDrops = new LinkedHashMap<>();
+            roundsOfDrops.put("test.tbl_ref_a", List.of(prefixA + "20220110", prefixA + "20220210"));
+            roundsOfDrops.put("test.tbl_ref_b", List.of(prefixB + "20220111", prefixB + "20220211"));
+            for (Map.Entry<String, List<String>> round : roundsOfDrops.entrySet()) {
+                for (String partition : round.getValue()) {
+                    dropDailyBasePartitionOf(round.getKey(), partition);
+                }
+                TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+                initAndExecuteTaskRun(firstBatch);
+                Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun());
+                executeAllBatches(((PartitionBasedMvRefreshProcessor) firstBatch.getProcessor()).getNextTaskRun());
+
+                TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+                initAndExecuteTaskRun(steadyRun);
+                Assertions.assertNull(((PartitionBasedMvRefreshProcessor) steadyRun.getProcessor()).getMvContext().getExecPlan(),
+                        "dropping from " + round.getKey() + " never settles");
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("mv_two_ref_tables");
+            starRocksAssert.dropTable("test.tbl_ref_a");
+            starRocksAssert.dropTable("test.tbl_ref_b");
         }
     }
 
@@ -3405,6 +3502,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             initAndExecuteTaskRun(taskRun);
 
             Assertions.assertNotNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
+            initAndExecuteTaskRun(taskRun);
+            Assertions.assertNull(((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext().getExecPlan());
         } finally {
             starRocksAssert.dropMaterializedView("mv_unpartitioned_daily");
             starRocksAssert.dropTable("test.tbl_daily");
