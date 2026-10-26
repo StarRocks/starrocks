@@ -360,6 +360,28 @@ public class QueryOptimizer extends Optimizer {
                     "Skip mv rewrite because the query reads a table at an explicit time-travel version");
             return;
         }
+<<<<<<< HEAD
+=======
+        // Likewise for a read scoped to a bookmark: a [_BOOKMARK_] hint, or the pinned snapshot of an incremental
+        // MV's refresh.
+        if (MvUtils.containsBookmarkScopedScan(logicOperatorTree)) {
+            OptimizerTraceUtil.logMVPrepare(connectContext,
+                    "Skip mv rewrite because the query reads a table at a bookmark");
+            return;
+        }
+        // MV rewrite would change the result or the plan of an index search: BM25 score() ranks with the scanned
+        // tablets' own statistics, and an ANN search (approx_* vector function) needs the scanned table's vector
+        // index, which a union with an MV, or an MV without that index, does not offer.
+        if (context.isUsesBm25Score()) {
+            OptimizerTraceUtil.logMVPrepare(connectContext, "Skip mv rewrite because the query ranks by BM25 score()");
+            return;
+        }
+        if (MvUtils.containsApproxVectorFunction(logicOperatorTree)) {
+            OptimizerTraceUtil.logMVPrepare(connectContext,
+                    "Skip mv rewrite because the query runs an ANN search (approx_* vector function)");
+            return;
+        }
+>>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
                 .prepare(logicOperatorTree);

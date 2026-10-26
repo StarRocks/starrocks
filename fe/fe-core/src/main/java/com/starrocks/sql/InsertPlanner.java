@@ -705,6 +705,7 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            optimizerContext.setMaterializedViewRefresh(targetTable.isMaterializedView() && insertStmt.isSystem());
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
                 // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
