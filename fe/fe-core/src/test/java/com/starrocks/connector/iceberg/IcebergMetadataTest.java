@@ -59,11 +59,7 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
-import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
->>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
@@ -220,11 +216,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-<<<<<<< HEAD
-=======
 import java.util.function.Function;
 import java.util.stream.Collectors;
->>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;

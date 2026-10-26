@@ -110,15 +110,7 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
         }
     }
 
-<<<<<<< HEAD
-    private Object get(String columnName, ContentFile<?> file) {
-=======
-    private static List<String> withColumns(List<String> columns, List<String> extra) {
-        return ImmutableList.<String>builder().addAll(columns).addAll(extra).build();
-    }
-
     protected Object get(String columnName, ContentFile<?> file) {
->>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
         switch (columnName) {
             case "content":
                 return file.content().id();

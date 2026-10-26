@@ -74,28 +74,7 @@ public class IcebergManifestsTable extends MetadataTable {
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
-<<<<<<< HEAD
-                builder()
-                        .column("path", VarcharType.VARCHAR)
-                        .column("length", BIGINT)
-                        .column("partition_spec_id", INT)
-                        .column("added_snapshot_id", BIGINT)
-                        .column("added_data_files_count", INT)
-                        .column("added_rows_count", BIGINT)
-                        .column("existing_data_files_count", INT)
-                        .column("existing_rows_count", BIGINT)
-                        .column("deleted_data_files_count", INT)
-                        .column("deleted_rows_count", BIGINT)
-                        .column("partitions", new ArrayType(
-                                new StructType(Lists.newArrayList(
-                                        new StructField("contains_null", VarcharType.VARCHAR),
-                                        new StructField("contains_nan", VarcharType.VARCHAR),
-                                        new StructField("lower_bound", VarcharType.VARCHAR),
-                                        new StructField("upper_bound", VarcharType.VARCHAR)))))
-                        .build(),
-=======
                 builder.build(),
->>>>>>> 6e500687b4f... [Enhancement][RB-225] Add Iceberg $entries and all-snapshots metadata tables, nested field DDL, and WITH / USING in DML (#66643)
                 originDb,
                 originTable,
                 metadataTableType);
