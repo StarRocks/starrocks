@@ -586,22 +586,36 @@ public final class SqlToScalarOperatorTranslator {
             if (!add && !FunctionSet.SECONDS_SUB.equals(fnName)) {
                 return null;
             }
-            BigDecimal seconds = constantSeconds(arguments.get(1));
+            ScalarOperator amount = arguments.get(1);
+            if (!amount.isConstantRef() && amount.isConstant()) {
+                // A constant expression, as in `INTERVAL (0.25 + 0.25) SECOND`, is folded here. Later on the amount is
+                // cast to INT before constants are folded, which would drop the fraction.
+                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                amount = rewriter.rewrite(rewriter.rewrite(amount, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE),
+                        ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
+            }
+            BigDecimal seconds = constantSeconds(amount);
             if (seconds == null) {
                 return null;
             }
-
-            BigDecimal[] wholeAndFraction = seconds.divideAndRemainder(BigDecimal.ONE);
-            BigDecimal microseconds = wholeAndFraction[1].movePointRight(6);
-            if (microseconds.stripTrailingZeros().scale() > 0) {
-                throw new SemanticException("The amount of an INTERVAL in SECOND can have at most 6 decimals "
-                        + "because a datetime has no digits below microseconds: " + seconds.toPlainString());
+            // An INT holds at most 10 digits before the point, so a larger amount is left to the INT cast. This also
+            // keeps the arithmetic below away from the huge numbers a short exponent can describe, as in '1e100000000'.
+            if ((long) seconds.precision() - seconds.scale() > 10) {
+                return null;
             }
+            BigDecimal exact = seconds.stripTrailingZeros();
+            if (exact.scale() > 6) {
+                // BigDecimal.toString() writes a long fraction such as '1e-100000000' with an exponent, so the message
+                // stays short
+                throw new SemanticException("The amount of an INTERVAL in SECOND can have at most 6 decimals "
+                        + "because a datetime has no digits below microseconds: " + seconds);
+            }
+            BigDecimal[] wholeAndFraction = exact.divideAndRemainder(BigDecimal.ONE);
             int wholeSeconds;
             int wholeMicroseconds;
             try {
                 wholeSeconds = wholeAndFraction[0].intValueExact();
-                wholeMicroseconds = microseconds.intValueExact();
+                wholeMicroseconds = wholeAndFraction[1].movePointRight(6).intValueExact();
             } catch (ArithmeticException e) {
                 // doesn't fit in an INT, which is what the function takes
                 return null;
