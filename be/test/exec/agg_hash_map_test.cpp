@@ -539,7 +539,7 @@ TEST(SliceWithHash32Test, PerRowAndPerColumnPathsAgreeOnTheKey) {
     AggStatistics statistics(&profile);
     Map map(4096, &statistics);
     MemPool pool;
-    const std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 'x');
+    const std::string large_value(TypeDescriptor::MAX_VARCHAR_LENGTH, 'x');
 
     auto make_chunk = [&](bool with_large) {
         auto column = BinaryColumn::create();
