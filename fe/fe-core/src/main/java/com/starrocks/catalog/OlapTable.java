@@ -1306,12 +1306,17 @@ public class OlapTable extends Table {
      * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
+        inferDistribution(info, getDefaultReplicationNum());
+    }
+
+    public void inferDistribution(DistributionInfo info, short replicationNum) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
-                        Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution,
+                        replicationNum);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -1320,7 +1325,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(this, replicationNum);
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {

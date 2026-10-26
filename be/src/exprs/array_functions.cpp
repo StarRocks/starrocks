@@ -38,6 +38,12 @@
 
 namespace starrocks {
 
+// Upper bound on what a selective-copy index buffer reserves up front. Collecting the surviving
+// element indices and copying them with one append_selective() beats one append() per element, but
+// the survivor count is only known after the scan - so reserve for the common case and let the
+// buffer grow past this when a chunk really does keep that much.
+static constexpr size_t kSelectiveIndexReserveCap = 16 * 1024; // 64 KiB of indexes
+
 StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1403,6 +1409,16 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
     result_offsets->reserve(offsets->size());
     result_offsets->append(0);
 
+    // Which elements survive is decided per row, but copying them does not have to be: collect the
+    // surviving indices for the whole chunk and hand them to append_selective() once at the end.
+    // append_selective() sizes the destination in one pass and then copies in bulk, while
+    // append(src, i, 1) redoes the per-element offset bookkeeping on every call - the same trade
+    // that MapFunctions::_filter_map_items() already makes.
+    // Capped so that a chunk whose elements nearly all deduplicate away does not pay four bytes per
+    // input element for a small result; the buffer still grows on demand past the cap.
+    Buffer<uint32_t> kept;
+    kept.reserve(std::min<size_t>(elements->size(), kSelectiveIndexReserveCap));
+
     phmap::flat_hash_set<uint32_t> sets;
 
     // A hash is only ever consulted while deduplicating the row it belongs to: `sets` is cleared
@@ -1426,7 +1442,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
             // append offsets directly
         } else if (array_size <= 1) {
             for (size_t j = 0; j < array_size; j++) {
-                result_elements->append(*elements, offset + j, 1);
+                kept.emplace_back(offset + j);
             }
         } else {
             if (offsets_ptr[i + 1] > block_end) {
@@ -1448,7 +1464,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
             const auto* hashes = hash.data();
 
             // put first
-            result_elements->append(*elements, offset, 1);
+            kept.emplace_back(offset);
 
             sets.clear();
             sets.emplace(hashes[offset - block_begin]);
@@ -1458,7 +1474,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
                 const uint32_t elements_hash = hashes[elements_idx - block_begin];
                 // hash check
                 if (!sets.contains(elements_hash)) {
-                    result_elements->append(*elements, elements_idx, 1);
+                    kept.emplace_back(elements_idx);
                     sets.emplace(elements_hash);
                     continue;
                 }
@@ -1473,13 +1489,15 @@ StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx
                 }
 
                 if (!is_contains) {
-                    result_elements->append(*elements, elements_idx, 1);
+                    kept.emplace_back(elements_idx);
                 }
             }
         }
 
-        result_offsets->append(result_elements->size());
+        result_offsets->append(static_cast<uint32_t>(kept.size()));
     }
+
+    result_elements->append_selective(*elements, kept);
 
     return NullableColumn::create(ArrayColumn::create(std::move(result_elements), std::move(result_offsets)),
                                   std::move(array_null));
@@ -1886,6 +1904,16 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     const Column* elements_column = array_column->elements_column().get();
     auto& array_offsets = const_cast<ArrayColumn*>(array_column)->offsets().get_data();
 
+    // Which elements win is decided per row, but copying them is not: collect the winning indices
+    // for the whole chunk and hand them to append_selective() once at the end, instead of one
+    // append(src, i, 1) per element. The sort scratch is hoisted for the same reason - it used to
+    // be a fresh allocation on every row.
+    // Capped: a small n over long arrays keeps only a handful of elements per row, so reserving one
+    // index per input element would dwarf the result. The buffer still grows on demand past the cap.
+    Buffer<uint32_t> kept;
+    kept.reserve(std::min<size_t>(elements_column->size(), kSelectiveIndexReserveCap));
+    std::vector<uint32_t> indices;
+
     // Process each row
     for (size_t i = 0; i < chunk_size; i++) {
         int32_t n = count_column->get(i).get_int32();
@@ -1911,7 +1939,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         }
 
         // Create indices for sorting
-        std::vector<uint32_t> indices(array_size);
+        indices.resize(array_size);
         std::iota(indices.begin(), indices.end(), 0);
 
         // Sort indices based on values in descending order using Column's compare_at
@@ -1935,17 +1963,17 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         // Take top n elements (or all if n > array_size)
         size_t result_size = std::min(static_cast<size_t>(n), array_size);
 
-        // Append the top n elements to destination
-        auto* dest_data = dest_data_column->elements_column_raw_ptr();
+        // Record the top n elements; they are copied in one pass after the loop.
         for (size_t j = 0; j < result_size; j++) {
-            size_t src_idx = array_start + indices[j];
-            dest_data->append(*elements_column, src_idx, 1);
+            kept.emplace_back(static_cast<uint32_t>(array_start + indices[j]));
         }
 
         // Update offsets
         auto& dest_offsets = dest_data_column->offsets_column_raw_ptr()->get_data();
         dest_offsets.emplace_back(dest_offsets.back() + result_size);
     }
+
+    dest_data_column->elements_column_raw_ptr()->append_selective(*elements_column, kept);
     return dest_column;
 }
 
