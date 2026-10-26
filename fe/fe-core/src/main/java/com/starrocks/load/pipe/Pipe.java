@@ -42,6 +42,7 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -399,10 +400,15 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        List<String> endedTaskNames = new ArrayList<>();
         Runnable changeStateAction = null;
         LoadStatus changedLoadStatus = loadStatus.cloneForUpdate();
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
+                if (task.isFinished() || task.isError()) {
+                    // The attempt is over either way, and a retry runs as a new task: drop this one below.
+                    endedTaskNames.add(task.getUniqueTaskName());
+                }
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
@@ -444,8 +450,90 @@ public class Pipe implements GsonPostProcessable {
             }
             LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
         }
+
+        dropEndedTasks(endedTaskNames);
     }
 
+    /**
+     * Drop the tasks of ended attempts from TaskManager. Pipe tasks carry no expire time, so nothing else removes them:
+     * without this, every batch and every retry of one would stay registered for good. The task run history is kept
+     * apart from the task and is not affected.
+     */
+    private void dropEndedTasks(List<String> taskNames) {
+        if (taskNames.isEmpty()) {
+            return;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<Long> taskIds = new ArrayList<>();
+        for (String taskName : taskNames) {
+            // There is no task if creating it failed. The source check leaves alone a task of another kind that
+            // happens to have the same name.
+            Task task = taskManager.getTask(taskName);
+            if (task != null && task.getSource() == Constants.TaskSource.PIPE) {
+                taskIds.add(task.getId());
+            }
+        }
+        if (!taskIds.isEmpty()) {
+            taskManager.dropTasks(taskIds);
+        }
+    }
+
+<<<<<<< HEAD
+=======
+    /**
+     * Account a task that has exhausted its retries: the failure counters plus one structured log
+     * record carrying the pipe identity and the error text.
+     *
+     * <p>The log record exists because per-pipe identity does not belong in a metric label. Pipes
+     * can be created and dropped in quick succession, so a {@code pipe_name} label would accumulate
+     * dead series for {@link Config#pipe_metric_expire_minutes}. A log event carries no time-series
+     * cardinality cost, and it can carry the error message, which a counter cannot.</p>
+     */
+    private void recordTerminalTaskFailure(PipeTaskDesc task) {
+        FilePipePiece piece = task.getPiece();
+        long dbId = getPipeId().getDbId();
+        long failedFiles = piece.getNumFiles();
+        long failedBytes = piece.getTotalBytes();
+
+        PipeMetricMgr.incPipeFailedTasks(dbId, type.name(), 1);
+        PipeMetricMgr.incPipeFailedFiles(dbId, type.name(), failedFiles);
+        PipeMetricMgr.incPipeFailedBytes(dbId, type.name(), failedBytes);
+
+        // Keep this record on one line and keep its shape stable: it is meant to be matched by
+        // log-based alerting, which is what gives per-pipe granularity without a metric label.
+        // Every value has to stay a single token, so pipe_id emits the bare numeric id rather
+        // than the PipeId object, whose toString() renders as "PipeId{dbId=1, id=2}" and would
+        // split across two tokens under a logfmt parser, one of them a spurious "id" key.
+        LOG.warn("PIPE_TASK_FAILED pipe={} pipe_id={} db_id={} task={} failed_files={} "
+                        + "failed_bytes={} error=\"{}\"",
+                name, id.getId(), dbId, task.getUniqueTaskName(), failedFiles, failedBytes,
+                singleLineError(task.getErrorMsg()));
+    }
+
+    private static long totalFileSize(List<PipeFileRecord> files) {
+        return files.stream().mapToLong(PipeFileRecord::getFileSize).sum();
+    }
+
+    /**
+     * Collapse an error message onto a single line so a PIPE_TASK_FAILED record stays parseable by
+     * log-based alerting, and bound its length.
+     *
+     * <p>Worth testing directly: the end-to-end failure tests stub the task submission, so their runs
+     * never reach the task run history and {@link #checkTaskExecutionResult} substitutes a short
+     * single-line placeholder for the error. The collapse and the cap therefore get no coverage from
+     * them.</p>
+     */
+    @VisibleForTesting
+    static String singleLineError(String error) {
+        if (StringUtils.isEmpty(error)) {
+            return "";
+        }
+        String flat = error.replaceAll("\\s+", " ").replace('"', '\'').trim();
+        return flat.length() <= ERROR_MSG_LOG_LIMIT
+                ? flat : flat.substring(0, ERROR_MSG_LOG_LIMIT) + "...";
+    }
+
+>>>>>>> a53c7c14ddb... [BugFix][RB-741] Drop the task of each pipe batch attempt once it ends (#66899)
     private void recordTaskError(PipeTaskDesc task, Throwable e) {
         task.onError(e.getMessage());
         lastErrorInfo.errorMessage = e.getMessage();
@@ -527,7 +615,7 @@ public class Pipe implements GsonPostProcessable {
         if (taskDesc.getFuture().isCancelled()) {
             recordTaskError(taskDesc, "task got cancelled");
             return;
-        } else if (!taskDesc.getFuture().isDone()) {
+        } else if (!taskDesc.getFuture().isDone() || isTaskRunArchivePending(taskDesc)) {
             return;
         }
         try {
@@ -549,6 +637,35 @@ public class Pipe implements GsonPostProcessable {
                 return;
             }
             recordTaskError(taskDesc, e.getMessage());
+        }
+    }
+
+    /**
+     * Whether the attempt's task run is still registered as running although its future is done. The task run
+     * scheduler moves a done run into the task run history on its next dispatch round, so wait for that before treating
+     * the attempt as ended:
+     * - a failed attempt reads its error from the history, which does not have the run before then;
+     * - {@link #dropEndedTasks} must journal the drop after the run's archive record. Dropping a task kills its
+     *   registered run: the leader then archives the run from the kill path, but a follower replaying the drop discards
+     *   the run first and the archive record that follows finds nothing, so the run is missing from its history.
+     * The scheduler archives a run under the task run lock, removing it from the running map before adding it to the
+     * history, so check under that lock: a run gone from the map is then in the history too. While the lock is busy,
+     * check again next round.
+     */
+    private static boolean isTaskRunArchivePending(PipeTaskDesc taskDesc) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(taskDesc.getUniqueTaskName());
+        if (task == null) {
+            return false;
+        }
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        if (!taskRunManager.tryTaskRunLock()) {
+            return true;
+        }
+        try {
+            return taskRunManager.getTaskRunScheduler().getRunningTaskRun(task.getId()) != null;
+        } finally {
+            taskRunManager.taskRunUnlock();
         }
     }
 
