@@ -143,15 +143,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
         MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-<<<<<<< HEAD
-            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
-=======
             // Read the in-flight markers before the committed transactions are snapshotted, see
             // dropInFlightBatches() for why the order matters.
             Set<Long> inFlightTxnIds = Sets.newHashSet(getPublishingTransactions());
             Set<Long> inFlightTableIds = Sets.newHashSet(getPublishingLakeTransactionsBatchTableId());
-            if (Config.lake_enable_batch_publish_version && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
->>>>>>> 4fdfcb3dcc7... [Enhancement] Skip in-flight transactions when the publish daemon snapshots ready txns (#63786)
+            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = dropInFlightBatches(
                         globalTransactionMgr.getReadyPublishTransactionsBatch(), inFlightTxnIds, inFlightTableIds);
