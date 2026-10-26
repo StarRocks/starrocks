@@ -209,7 +209,7 @@ arrow_flight_ssl_key_file = /path/to/server.key
 
 :::note
 
-- 这些配置项为静态配置，修改后需重启 FE 才能生效。
+- 这些配置项为静态配置，FE 在启动时读取证书、私钥和 CA 文件。修改后需重启 FE 才能生效，替换其中任一文件后也需要重启。
 - 集群中所有 FE 必须使用相同的设置。FE 将请求转发给另一个 FE 时，会使用该 FE 对外公布的主机名或 IP 地址通过 TLS 连接，因此每个 FE 的证书必须对该主机名或 IP 地址有效。如果 `arrow_flight_ssl_require_client_auth` 为 `true`，FE 会向其他 FE 出示自己的证书，因此该证书还必须可用于客户端认证。
 - 如果设置了 `arrow_flight_proxy`，请添加 `grpcs://` 前缀，使客户端通过 TLS 连接代理，例如 `grpcs://your-proxy-hostname:Port`。
 - 仅覆盖 FE 的 Arrow Flight 服务。FE 到 BE 的 Arrow Flight 服务的连接保持明文，禁用代理时客户端到 BE 的连接同样是明文。
@@ -251,6 +251,8 @@ conn = flight_sql.connect(
 )
 cursor = conn.cursor()
 ```
+
+如果 FE 启用了 TLS，请在 URI 中使用 `grpc+tls://` 代替 `grpc://`。客户端必须信任 FE 的证书。如果该证书不是由公共 CA 签发的，请将 CA 证书提供给客户端，例如通过 ADBC Flight SQL 的数据库选项 `adbc.flight.sql.client_option.tls_root_certs`。
 
 连接建立后，您可以通过返回的 Cursor 执行 SQL 语句与 StarRocks 进行交互。
 

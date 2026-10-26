@@ -209,7 +209,7 @@ arrow_flight_ssl_key_file = /path/to/server.key
 
 :::note
 
-- These items are static. Restart the FE for a change to take effect.
+- These items are static, and the FE reads the certificate, key and CA files when it starts. Restart the FE for a change to take effect, also after you replace one of the files.
 - All FEs of a cluster must use the same setting. An FE that forwards a request to another FE connects to it over TLS, by the host name or IP address that FE advertises, so the certificate of each FE must be valid for it. If `arrow_flight_ssl_require_client_auth` is `true`, the FE presents its own certificate to the other FEs, so the certificate must also be valid for client authentication.
 - If you set `arrow_flight_proxy`, prefix it with `grpcs://` so that clients connect to the proxy over TLS, for example `grpcs://your-proxy-hostname:Port`.
 - Only the Arrow Flight server of the FE is covered. The connection from an FE to the Arrow Flight server of a BE stays plaintext, and so does the one from a client to a BE when the proxy is disabled.

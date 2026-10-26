@@ -166,4 +166,18 @@ public class ArrowFlightSqlTlsConfigTest {
             }
         }
     }
+
+    // The files are read once. The server and the clients to other FEs keep using what was read, even if the files are
+    // replaced or removed later: they all change together when the FE restarts.
+    @Test
+    public void testFilesAreReadOnce() throws Exception {
+        ArrowFlightSqlTlsConfig mutual = new ArrowFlightSqlTlsConfig(cert, key, cert, true);
+        Files.delete(pem.cert);
+        Files.delete(pem.key);
+
+        try (FlightServer server = startPingServer(allocator, mutual);
+                FlightClient client = mutual.newClient(allocator, "localhost", server.getPort())) {
+            assertEquals("pong", ping(client));
+        }
+    }
 }

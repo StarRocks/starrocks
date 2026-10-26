@@ -20,10 +20,9 @@ import org.apache.arrow.flight.FlightServer;
 import org.apache.arrow.flight.Location;
 import org.apache.arrow.memory.BufferAllocator;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
@@ -32,31 +31,42 @@ import java.nio.file.Files;
  *
  * <p>They secure the FE's own server and the clients the FE opens to other FEs when it forwards requests.
  * The Arrow Flight server of a BE is not covered, so the connections from the FE to a BE stay plaintext.
+ *
+ * <p>The certificate, key and CA files are read once, when the settings are created. The server and every client to
+ * another FE use what was read then, until the FE restarts, even if the files are replaced or removed in between.
  */
 public final class ArrowFlightSqlTlsConfig {
     private static final String PKCS8_PEM_HEADER = "-----BEGIN PRIVATE KEY-----";
 
-    private final File certFile;
-    private final File keyFile;
+    // The paths, for messages and the log, and the contents of the files
+    private final String certFile;
+    private final byte[] certPem;
+    private final String keyFile;
+    private final byte[] keyPem;
     // null if arrow_flight_ssl_ca_cert_file is not set
-    private final File caCertFile;
+    private final String caCertFile;
+    private final byte[] caCertPem;
     private final boolean requireClientAuth;
 
     /**
      * @throws IllegalArgumentException if a required setting is missing or a file can't be read
      */
     public ArrowFlightSqlTlsConfig(String certFile, String keyFile, String caCertFile, boolean requireClientAuth) {
-        this.certFile = readableFile("arrow_flight_ssl_cert_file", certFile);
-        this.keyFile = readableFile("arrow_flight_ssl_key_file", keyFile);
-        checkPkcs8(this.keyFile);
+        this.certFile = certFile;
+        this.certPem = readPem("arrow_flight_ssl_cert_file", certFile);
+        this.keyFile = keyFile;
+        this.keyPem = readPem("arrow_flight_ssl_key_file", keyFile);
+        checkPkcs8(keyFile, keyPem);
         if (caCertFile == null || caCertFile.isEmpty()) {
             if (requireClientAuth) {
                 throw new IllegalArgumentException(
                         "arrow_flight_ssl_ca_cert_file must be set when arrow_flight_ssl_require_client_auth is true");
             }
             this.caCertFile = null;
+            this.caCertPem = null;
         } else {
-            this.caCertFile = readableFile("arrow_flight_ssl_ca_cert_file", caCertFile);
+            this.caCertFile = caCertFile;
+            this.caCertPem = readPem("arrow_flight_ssl_ca_cert_file", caCertFile);
         }
         this.requireClientAuth = requireClientAuth;
     }
@@ -74,37 +84,33 @@ public final class ArrowFlightSqlTlsConfig {
     }
 
     /**
-     * Makes the server use TLS, and verify client certificates against the CA file if client authentication is required.
-     * The location of the server has to be a {@link Location#forGrpcTls} one.
+     * Makes the server use TLS, and verify client certificates against the CA certificates if client authentication is
+     * required. The location of the server has to be a {@link Location#forGrpcTls} one.
      */
     public FlightServer.Builder configure(FlightServer.Builder builder) throws IOException {
-        builder.useTls(certFile, keyFile);
+        builder.useTls(new ByteArrayInputStream(certPem), new ByteArrayInputStream(keyPem));
         if (requireClientAuth) {
-            builder.useMTlsClientVerification(caCertFile);
+            builder.useMTlsClientVerification(new ByteArrayInputStream(caCertPem));
         }
         return builder;
     }
 
     /**
      * Opens a connection to the Arrow Flight SQL server of another FE. The server's certificate is verified against the
-     * CA file, or the default trust store of the JVM if there is none. If client authentication is required, this FE
-     * presents its own certificate.
+     * CA certificates, or the default trust store of the JVM if there are none. If client authentication is required,
+     * this FE presents its own certificate.
      */
-    public FlightClient newClient(BufferAllocator allocator, String host, int port) throws IOException {
-        try (InputStream trusted = caCertFile == null ? null : new FileInputStream(caCertFile);
-                InputStream clientCert = requireClientAuth ? new FileInputStream(certFile) : null;
-                InputStream clientKey = requireClientAuth ? new FileInputStream(keyFile) : null) {
-            FlightClient.Builder builder = FlightClient.builder()
-                    .allocator(allocator)
-                    .location(Location.forGrpcTls(host, port));
-            if (trusted != null) {
-                builder.trustedCertificates(trusted);
-            }
-            if (requireClientAuth) {
-                builder.clientCertificate(clientCert, clientKey);
-            }
-            return builder.build();
+    public FlightClient newClient(BufferAllocator allocator, String host, int port) {
+        FlightClient.Builder builder = FlightClient.builder()
+                .allocator(allocator)
+                .location(Location.forGrpcTls(host, port));
+        if (caCertPem != null) {
+            builder.trustedCertificates(new ByteArrayInputStream(caCertPem));
         }
+        if (requireClientAuth) {
+            builder.clientCertificate(new ByteArrayInputStream(certPem), new ByteArrayInputStream(keyPem));
+        }
+        return builder.build();
     }
 
     @Override
@@ -113,7 +119,7 @@ public final class ArrowFlightSqlTlsConfig {
                 + ", requireClientAuth=" + requireClientAuth;
     }
 
-    private static File readableFile(String config, String path) {
+    private static byte[] readPem(String config, String path) {
         if (path == null || path.isEmpty()) {
             throw new IllegalArgumentException(config + " must be set when arrow_flight_ssl_enable is true");
         }
@@ -121,19 +127,16 @@ public final class ArrowFlightSqlTlsConfig {
         if (!file.isFile() || !file.canRead()) {
             throw new IllegalArgumentException(config + " '" + path + "' is not a readable file");
         }
-        return file;
+        try {
+            return Files.readAllBytes(file.toPath());
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Can't read " + config + " '" + path + "': " + e.getMessage(), e);
+        }
     }
 
     // The gRPC server only reads PKCS#8 keys, and complains about anything else with an error that doesn't say why.
-    private static void checkPkcs8(File keyFile) {
-        String pem;
-        try {
-            pem = Files.readString(keyFile.toPath(), StandardCharsets.ISO_8859_1);
-        } catch (IOException e) {
-            throw new IllegalArgumentException(
-                    "Can't read arrow_flight_ssl_key_file '" + keyFile + "': " + e.getMessage(), e);
-        }
-        if (!pem.contains(PKCS8_PEM_HEADER)) {
+    private static void checkPkcs8(String keyFile, byte[] keyPem) {
+        if (!new String(keyPem, StandardCharsets.ISO_8859_1).contains(PKCS8_PEM_HEADER)) {
             throw new IllegalArgumentException("arrow_flight_ssl_key_file '" + keyFile
                     + "' is not an unencrypted PKCS#8 PEM private key (\"BEGIN PRIVATE KEY\"). Convert it with: "
                     + "openssl pkcs8 -topk8 -nocrypt -in <key file> -out <pkcs8 key file>");

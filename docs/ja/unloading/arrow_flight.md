@@ -209,7 +209,7 @@ arrow_flight_ssl_key_file = /path/to/server.key
 
 :::note
 
-- これらの項目は静的です。変更を反映するには FE を再起動します。
+- これらの項目は静的で、FE は起動時に証明書、秘密鍵、CA のファイルを読み込みます。変更を反映するには FE を再起動します。いずれかのファイルを置き換えた場合も同様です。
 - クラスターのすべての FE で同じ設定を使用する必要があります。FE が別の FE にリクエストを転送するときは、その FE が公開しているホスト名または IP アドレスを使用して TLS で接続するため、各 FE の証明書はそれに対して有効でなければなりません。`arrow_flight_ssl_require_client_auth` が `true` の場合、FE は他の FE に自身の証明書を提示するため、その証明書はクライアント認証にも有効である必要があります。
 - `arrow_flight_proxy` を設定する場合は、クライアントが TLS でプロキシに接続できるように `grpcs://` を前置してください。例: `grpcs://your-proxy-hostname:Port`
 - FE の Arrow Flight サーバーのみが対象です。FE から BE の Arrow Flight サーバーへの接続は平文のままで、プロキシが無効な場合のクライアントから BE への接続も同様です。
@@ -251,6 +251,8 @@ conn = flight_sql.connect(
 )
 cursor = conn.cursor()
 ```
+
+FE で TLS が有効な場合は、URI で `grpc://` の代わりに `grpc+tls://` を使用します。クライアントは FE の証明書を信頼する必要があります。証明書が公的な CA によって署名されていない場合は、ADBC Flight SQL のデータベースオプション `adbc.flight.sql.client_option.tls_root_certs` などで CA 証明書をクライアントに渡してください。
 
 接続が確立されると、返されたCursorを通じてSQL文を実行することでStarRocksと対話できます。
 

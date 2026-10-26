@@ -658,7 +658,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     // TLS covers the Arrow Flight servers of the FEs. The one of a BE is plaintext.
     @VisibleForTesting
-    FlightClient createClient(String host, int port, boolean peerIsFe) throws IOException {
+    FlightClient createClient(String host, int port, boolean peerIsFe) {
         if (peerIsFe && tlsConfig != null) {
             return tlsConfig.newClient(rootAllocator, host, port);
         }
