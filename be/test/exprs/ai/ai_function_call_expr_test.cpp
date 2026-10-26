@@ -1101,9 +1101,9 @@ TExpr make_extended_ai_expression(int64_t fid, const std::string& name, const Ty
         call.fn.arg_types.push_back(argument.to_thrift());
     }
     call.__set_num_children(canonical_arguments.size());
-    call.__set_ai_provider_id(provider ? "provider:00000000-0000-0000-0000-000000000102"
-                                       : result_type.type == TYPE_ARRAY ? "provider:default_embedding"
-                                                                        : "provider:default_chat");
+    call.__set_ai_provider_id(provider                         ? "provider:00000000-0000-0000-0000-000000000102"
+                              : result_type.type == TYPE_ARRAY ? "provider:default_embedding"
+                                                               : "provider:default_chat");
     expression.nodes.resize(1);
     for (size_t i = 0; i < canonical_arguments.size(); ++i) {
         if (i < arguments.size()) {
@@ -1191,10 +1191,9 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
         }
     }
     // ai_query, the first unassigned ID, and retired AI overload IDs are not AIProject functions.
-    for (int64_t fid : {200000, 200014, 200100, 200101, 200102, 200103, 200104, 200108, 200109, 200110,
-                        200111, 200112, 200113, 200114, 200115, 200116, 200118, 200120, 200122, 200124,
-                        200126, 200128, 200129, 200130, 200134, 200138, 200139, 200140, 200141, 200142,
-                        200143, 200144, 200150, 200164}) {
+    for (int64_t fid : {200000, 200014, 200100, 200101, 200102, 200103, 200104, 200108, 200109, 200110, 200111, 200112,
+                        200113, 200114, 200115, 200116, 200118, 200120, 200122, 200124, 200126, 200128, 200129, 200130,
+                        200134, 200138, 200139, 200140, 200141, 200142, 200143, 200144, 200150, 200164}) {
         EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_id(fid)) << fid;
     }
     EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_name("ai_query"));
