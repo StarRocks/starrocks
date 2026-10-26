@@ -53,11 +53,8 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
-<<<<<<< HEAD
 import com.starrocks.persist.WALApplier;
-=======
 import com.starrocks.persist.gson.GsonUtils;
->>>>>>> 93264f7823c... [Enhancement] Drive bounded incremental lake vacuum from the FE coordinator (#62441)
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -890,7 +887,6 @@ public class LocalMetaStoreTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testAddPartitionsRejectedWhenBatchWouldExceedPerTableLimit() throws Exception {
         starRocksAssert.useDatabase("test").withTable(
                 "CREATE TABLE test.add_partition_limit(dt DATE NOT NULL, v1 INT) " +
@@ -1117,7 +1113,9 @@ public class LocalMetaStoreTest {
         Assertions.assertEquals(groupSchema.getBucketsNum(), p2.getDistributionInfo().getBucketNum());
 
         starRocksAssert.dropTable("test.colocate_auto_add");
-=======
+    }
+
+    @Test
     public void testReplayModifyPartitionVacuumState() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table =
@@ -1147,6 +1145,5 @@ public class LocalMetaStoreTest {
         Assertions.assertEquals(50L, partition.getVacuumState().getMinRetainedVersion());
         Assertions.assertEquals(50L, partition.getLastSuccVacuumVersion());
         Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
->>>>>>> 93264f7823c... [Enhancement] Drive bounded incremental lake vacuum from the FE coordinator (#62441)
     }
 }
