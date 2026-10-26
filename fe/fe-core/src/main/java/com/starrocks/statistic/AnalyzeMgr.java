@@ -61,6 +61,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
@@ -91,6 +92,9 @@ public class AnalyzeMgr implements Writable {
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
 
     private LocalDateTime lastCleanTime;
+
+    // Serializes the read-modify-write behind updateExternalBasicStatsMeta; see its javadoc.
+    private final Object externalBasicStatsMetaCommitLock = new Object();
 
     public AnalyzeMgr() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -282,6 +286,30 @@ public class AnalyzeMgr implements Writable {
                         basicStatsMeta.getDbName(),
                         basicStatsMeta.getTableName()),
                         basicStatsMeta));
+    }
+
+    /**
+     * Applies {@code updater} to a table's {@link ExternalBasicStatsMeta} - the current one, or null when
+     * the table has none yet - and durably records what it returns. Returning null records nothing.
+     *
+     * <p>Serialized across callers, because committing one is a read-modify-write: the caller clones the
+     * current metadata, adds its own columns to it and writes the result back. Two analyze jobs on the same
+     * table can easily overlap - the query trigger only keeps its own tasks off each other, and says nothing
+     * about the auto collector or a manual ANALYZE - and interleaving their read-modify-writes drops one of
+     * them entirely. That used to be harmless, when every job recorded the same complete partition set for
+     * every column; now a job records the coverage it actually achieved, per column, so a lost write loses
+     * columns and partition sets that nothing will restore until the next full collection. The lock is only
+     * ever held for one metadata commit per analyze job, so contention is not a concern.
+     */
+    public void updateExternalBasicStatsMeta(String catalogName, String dbName, String tableName,
+                                             UnaryOperator<ExternalBasicStatsMeta> updater) {
+        synchronized (externalBasicStatsMetaCommitLock) {
+            ExternalBasicStatsMeta updated =
+                    updater.apply(externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName)));
+            if (updated != null) {
+                addExternalBasicStatsMeta(updated);
+            }
+        }
     }
 
     public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {

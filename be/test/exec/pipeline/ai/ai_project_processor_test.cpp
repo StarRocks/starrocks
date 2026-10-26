@@ -41,6 +41,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/schema.h"
 #include "common/memory/column_allocator.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "exec/pipeline/ai/ai_chunk_buffer.h"
@@ -73,6 +74,20 @@ ChunkPtr make_input_chunk(size_t begin, size_t rows) {
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(ids), kInputIdSlot);
     chunk->append_column(std::move(prompts), kPromptSlot);
+    return chunk;
+}
+
+// Shape of the empty last chunk an OLAP scan publishes at EOF. The chunk is allocated from the
+// scan's output schema, so it holds one empty column while the slot-id map stays empty:
+// OlapChunkSource::_read_chunk_from_storage returns before mapping slots once get_next() hits EOF.
+ChunkPtr make_scan_eos_chunk() {
+    Fields fields;
+    fields.emplace_back(std::make_shared<Field>(kPromptSlot, "prompt", TYPE_VARCHAR, /*nullable=*/true));
+    Columns columns;
+    columns.emplace_back(BinaryColumn::create());
+    auto chunk = std::make_shared<Chunk>(std::move(columns), std::make_shared<Schema>(fields));
+    chunk->owner_info().set_owner_id(43, true);
+    chunk->owner_info().set_passthrough(true);
     return chunk;
 }
 
@@ -475,7 +490,7 @@ private:
 };
 
 std::shared_ptr<AIProjectProcessor> make_processor(const std::shared_ptr<AIChunkBuffer>& input_buffer,
-                                                   const std::shared_ptr<RecordingProjection>& projection,
+                                                   const std::shared_ptr<AIProjectProjection>& projection,
                                                    const std::shared_ptr<ManualTaskSubmitter>& submitter,
                                                    std::string on_error = "ignore", int32_t dop = 1) {
     auto processor =
@@ -837,6 +852,56 @@ TEST(AIProjectProcessorTest, EmptyLastChunkPreservesOwnerInfoWithoutSubmitting) 
     auto finished = processor->lane_finished(0);
     ASSERT_TRUE(finished.ok()) << finished.status();
     EXPECT_TRUE(finished.value());
+}
+
+// A zero-row scan chunk carries no slot-id map, so this projection must not resolve input columns by
+// slot id. It mirrors the rows == 0 branch of AIProjectExpressionProjection.
+class EmptyLastChunkProjection final : public AIProjectProjection {
+public:
+    StatusOr<AIProjectPreparedSubchunk> prepare_subchunk(RuntimeState*, int32_t, const ChunkPtr& input) override {
+        ++prepare_calls;
+        if (input->num_rows() != 0 || input->get_slot_id_to_index_map().size() != 0) {
+            return Status::InternalError("empty last chunk projection expects a zero-row chunk without slots");
+        }
+        AIProjectPreparedSubchunk prepared;
+        prepared.output_chunk = std::make_shared<Chunk>();
+        prepared.output_chunk->append_column(BinaryColumn::create(), kAIOutputSlot);
+        AIProjectPreparedOutput output;
+        output.slot_id = kAIOutputSlot;
+        output.replace_existing = true;
+        prepared.ai_outputs.emplace_back(std::move(output));
+        return prepared;
+    }
+
+    size_t prepare_calls = 0;
+};
+
+TEST(AIProjectProcessorTest, EmptyScanLastChunkWithoutSlotMapIsProcessedAsEos) {
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<EmptyLastChunkProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter);
+    ASSERT_NE(nullptr, processor);
+
+    auto input = make_scan_eos_chunk();
+    EXPECT_EQ(0, input->num_rows());
+    EXPECT_EQ(1, input->num_columns());
+    EXPECT_EQ(0, input->get_slot_id_to_index_map().size());
+    put_and_finish(buffer, input);
+
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    EXPECT_EQ(1, projection->prepare_calls);
+    EXPECT_EQ(0, submitter->submit_calls);
+    EXPECT_TRUE(processor->has_output(0));
+
+    auto output = processor->pull_chunk(&state, 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    EXPECT_EQ(0, output.value()->num_rows());
+    EXPECT_EQ(43, output.value()->owner_info().owner_id());
+    EXPECT_TRUE(output.value()->owner_info().is_passthrough());
+    EXPECT_TRUE(output.value()->owner_info().is_last_chunk());
 }
 
 TEST(AIProjectProcessorTest, IgnoreTurnsOnlySanitizedRowFailureIntoNull) {

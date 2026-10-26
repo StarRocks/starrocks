@@ -33,8 +33,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.utframe.AIProviderTestUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -57,23 +55,24 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
         manager.createProvider(name, AIProviderType.CHAT, parameters, "");
         executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
         try {
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_custom_query TO '" + user + "'");
+            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
             executeAsRoot("GRANT USAGE ON AI PROVIDER " + name + " TO '" + user + "'");
             ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
             caller.setCurrentRoleIds(Set.of());
             QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                    "SELECT ai_custom_query('" + name + "', 'prompt')", caller);
+                    "SELECT ai_complete('prompt', '" + name + "', 'explicit-model')", caller);
             FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                     .getOutputExpression().get(0);
             Authorizer.check(statement, caller);
             ExecPlan captured = new ExecPlan(caller, List.of(), null, List.of(), false);
-            AIModelConfigs.ModelConfig original = captured.bindAIModelConfigs(project(call)).get("provider:0");
+            AIProvider original = captured.bindAIProviders(project(call)).values().iterator().next();
             String originalId = manager.getProvider(name).getId();
 
             manager.alterProvider(name, Map.of("model", "after-alter"), false);
             Assertions.assertEquals(originalId, manager.getProvider(name).getId());
             ExecPlan afterAlter = new ExecPlan(caller, List.of(), null, List.of(), false);
-            Assertions.assertEquals("after-alter", afterAlter.bindAIModelConfigs(project(call)).get("provider:0").model());
+            Assertions.assertEquals("after-alter",
+                    afterAlter.bindAIProviders(project(call)).values().iterator().next().getModel());
 
             // Simulate a metadata replacement between semantic authorization and physical binding.
             Authorizer.check(statement, caller);
@@ -81,50 +80,17 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
             manager.createProvider(name, AIProviderType.CHAT, parameters, "");
             Assertions.assertNotEquals(originalId, manager.getProvider(name).getId());
             ExecPlan rebuilt = new ExecPlan(caller, List.of(), null, List.of(), false);
-            Assertions.assertThrows(ErrorReportException.class, () -> rebuilt.bindAIModelConfigs(project(call)));
-            Assertions.assertSame(original, captured.bindAIModelConfigs(project(call)).get("provider:0"));
-            Assertions.assertEquals("before-alter", original.model());
+            Assertions.assertThrows(ErrorReportException.class, () -> rebuilt.bindAIProviders(project(call)));
+            Assertions.assertThrows(ErrorReportException.class, () -> captured.bindAIProviders(project(call)));
+            Assertions.assertEquals("before-alter", original.getModel());
 
             executeAsRoot("GRANT USAGE ON AI PROVIDER " + name + " TO '" + user + "'");
-            Assertions.assertEquals(Set.of("provider:0"), rebuilt.bindAIModelConfigs(project(call)).keySet());
-            Assertions.assertNull(call.getAiModelConfigId());
+            Assertions.assertEquals(Set.of(manager.getProvider(name).getId()), rebuilt.bindAIProviders(project(call)).keySet());
+            Assertions.assertNull(call.getAIProviderId());
         } finally {
             manager.dropProvider(name, true);
             executeAsRoot("DROP USER '" + user + "'");
             connectContext.setThreadLocalInfo();
-        }
-    }
-
-    @Test
-    public void testChangedDefaultRequiresSelectedProviderGrantAtFirstBinding() throws Exception {
-        String user = "decision_binding_caller";
-        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
-        Map<String, String> parameters = Map.of("endpoint", "https://example.test/v1/systemone", "model", "decision-model");
-        try (var ignored = AIProviderTestUtils.withDefaultProvider("decision_authorized", AIProviderType.DECISION,
-                parameters)) {
-            manager.createProvider("decision_replacement", AIProviderType.DECISION, parameters, "");
-            executeAsRoot("CREATE USER '" + user + "' IDENTIFIED BY ''");
-            try {
-                executeAsRoot("GRANT USAGE ON AI FUNCTION ai_decide TO '" + user + "'");
-                executeAsRoot("GRANT USAGE ON AI PROVIDER decision_authorized TO '" + user + "'");
-                ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
-                caller.setCurrentRoleIds(Set.of());
-                QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                        "SELECT ai_decide('state', parse_json('{\"q\":{\"type\":\"noul\"}}'))", caller);
-                FunctionCallExpr call = (FunctionCallExpr) statement.getQueryRelation().getOutputExpression().get(0);
-                Authorizer.check(statement, caller);
-                manager.setDefaultProvider("decision_replacement");
-                ExecPlan plan = new ExecPlan(caller, List.of(), null, List.of(), false);
-                Assertions.assertThrows(ErrorReportException.class, () -> plan.bindAIModelConfigs(project(call)));
-                executeAsRoot("GRANT USAGE ON AI PROVIDER decision_replacement TO '" + user + "'");
-                Assertions.assertEquals(Set.of("provider:0"), plan.bindAIModelConfigs(project(call)).keySet());
-                Assertions.assertNull(call.getAiModelConfigId());
-            } finally {
-                manager.setDefaultProvider("decision_authorized");
-                manager.dropProvider("decision_replacement", true);
-                executeAsRoot("DROP USER '" + user + "'");
-                connectContext.setThreadLocalInfo();
-            }
         }
     }
 
@@ -145,7 +111,7 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
         QueryStatement statement;
         try {
             statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                    "select ai_custom_query('private_provider', 'prompt')", connectContext);
+                    "select ai_complete('prompt', 'private_provider', 'explicit-model')", connectContext);
         } finally {
             registry.dropProvider("private_provider", true);
         }
@@ -163,20 +129,23 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
         Mockito.when(state.getAIProviderMgr()).thenReturn(manager);
         Mockito.when(state.getAuthorizationMgr()).thenReturn(originalState.getAuthorizationMgr());
         Mockito.when(state.getAuthorizer()).thenReturn(new Authorizer(access));
+        connectContext.setGlobalStateMgr(state);
         ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         try (MockedStatic<GlobalStateMgr> mocked = Mockito.mockStatic(GlobalStateMgr.class, Mockito.CALLS_REAL_METHODS)) {
             mocked.when(GlobalStateMgr::getCurrentState).thenReturn(state);
             ErrorReportException denied = Assertions.assertThrows(ErrorReportException.class,
-                    () -> plan.bindAIModelConfigs(project));
+                    () -> plan.bindAIProviders(project));
             Assertions.assertFalse(denied.getMessage().contains("private-test-key"));
             Assertions.assertSame(call, project.get(new SlotId(1)));
-            Assertions.assertNull(call.getAiModelConfigId());
+            Assertions.assertNull(call.getAIProviderId());
 
             access.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
-            Map<String, AIModelConfigs.ModelConfig> recovered = plan.bindAIModelConfigs(project);
-            Assertions.assertEquals(Set.of("provider:0"), recovered.keySet());
-            Assertions.assertEquals("test-model", recovered.get("provider:0").model());
+            Map<String, AIProvider> recovered = plan.bindAIProviders(project);
+            Assertions.assertEquals(Set.of(provider.getId()), recovered.keySet());
+            Assertions.assertEquals("test-model", recovered.values().iterator().next().getModel());
             Mockito.verify(manager, Mockito.times(2)).getProvider("private_provider");
+        } finally {
+            connectContext.setGlobalStateMgr(originalState);
         }
     }
 }

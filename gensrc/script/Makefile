@@ -27,6 +27,7 @@ all: gen_version gen_functions
 # generated vectorized engine function
 GEN_FUNCTIONS_OUTPUT = ${FE_TARGET_DIR}/com/starrocks/builtins/VectorizedBuiltinFunctions.java  \
 					${BUILD_DIR}/gen_cpp/opcode/AIFunctionDescriptors.inc \
+					${BUILD_DIR}/gen_cpp/opcode/AIFunctions.inc \
 					${BUILD_DIR}/gen_cpp/opcode/MathFunctions.inc \
 					${BUILD_DIR}/gen_cpp/opcode/StringFunctions.inc \
 					${BUILD_DIR}/gen_cpp/opcode/LikePredicate.inc \

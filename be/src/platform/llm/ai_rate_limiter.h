@@ -28,7 +28,7 @@ class AIRateLimiterTestPeer;
 class AIAdmissionControllerCore;
 struct AIRateLimitKeyHash;
 
-enum class AICapability : uint8_t { CHAT = 0, TEXT_EMBEDDING = 1, DECISION = 2 };
+enum class AICapability : uint8_t { CHAT = 0, EMBEDDING = 1, DECISION = 2 };
 
 class AIClock {
 public:

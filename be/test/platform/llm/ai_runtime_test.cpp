@@ -109,16 +109,16 @@ TEST(AIRuntimeConfigSourceTest, EmbeddingRateLimitIsIndependentAndDynamicallyVal
     auto source_or = AIRuntimeConfigSource::create();
     ASSERT_TRUE(source_or.ok()) << source_or.status();
     auto source = std::move(source_or).value();
-    EXPECT_EQ(128, source->qps(AICapability::TEXT_EMBEDDING));
+    EXPECT_EQ(128, source->qps(AICapability::EMBEDDING));
     AIRuntimeConfig candidate = source->snapshot();
     candidate.rate_limit_qps_embedding = 7;
     ASSERT_TRUE(source->update(candidate).ok());
-    EXPECT_EQ(7, source->qps(AICapability::TEXT_EMBEDDING));
+    EXPECT_EQ(7, source->qps(AICapability::EMBEDDING));
     EXPECT_EQ(128, source->qps(AICapability::CHAT));
     for (int invalid : {0, -1}) {
         candidate.rate_limit_qps_embedding = invalid;
         EXPECT_TRUE(source->update(candidate).is_invalid_argument());
-        EXPECT_EQ(7, source->qps(AICapability::TEXT_EMBEDDING));
+        EXPECT_EQ(7, source->qps(AICapability::EMBEDDING));
     }
 }
 
@@ -132,7 +132,7 @@ TEST(AIRuntimeConfigSourceTest, DecisionRateLimitIsIndependentAndDynamicallyVali
     ASSERT_TRUE(source->update(candidate).ok());
     EXPECT_EQ(7, source->qps(AICapability::DECISION));
     EXPECT_EQ(128, source->qps(AICapability::CHAT));
-    EXPECT_EQ(128, source->qps(AICapability::TEXT_EMBEDDING));
+    EXPECT_EQ(128, source->qps(AICapability::EMBEDDING));
     for (int invalid : {0, -1}) {
         candidate.rate_limit_qps_decision = invalid;
         EXPECT_TRUE(source->update(candidate).is_invalid_argument());

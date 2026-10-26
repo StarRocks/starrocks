@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Register an external AI service provider (embedding, rerank, chat, or decision) as SQL-managed cluster metadata."
+description: "Register an external AI service of type chat, embedding, rerank, or decision as an AI Provider in the cluster."
 ---
 
 # CREATE AI PROVIDER
@@ -9,7 +9,7 @@ Registers an external AI service provider in the cluster. A single, unified AI-p
 holds providers of different **types** and keeps one default **per type**:
 
 - `embedding` — OpenAI-compatible `/v1/embeddings` endpoint, used by the semantic-context module to
-  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md).
+  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed).
 - `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
   used by the optional cross-encoder second phase of `/api/context/search`.
 - `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
@@ -17,9 +17,9 @@ holds providers of different **types** and keeps one default **per type**:
 
 Each provider also declares the wire **protocol** its endpoint speaks via the `protocol` property.
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
-`cohere` for `rerank`, and `bailian_decision` for `decision`.
+`cohere` for `rerank`.
 
-[ai_custom_query](../../../sql-functions/ai-functions/ai_custom_functions.md) and [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
+[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) and [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
 
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these
@@ -29,6 +29,12 @@ settings.
 >
 > Anyone with read access to the FE meta image / BDB journal directory can read provider `api_key`
 > values; protect those files with filesystem permissions.
+
+Create a Provider with `protocol = "openai"`. Both HTTP and HTTPS endpoints are supported, with or without an API key. A nonempty key produces an `Authorization: Bearer ...` header. URL format, control-character, DNS, and address validation still apply. Use a trusted endpoint and data approved for transmission.
+
+Set a default with `SET <provider_name> AS DEFAULT AI PROVIDER`. If the corresponding default is absent, FE rejects implicit Provider calls, including `EXPLAIN`. Each execution plan captures its selected Provider configuration. ALTER and default changes affect newly planned queries; each prepared `EXECUTE` replans against current metadata.
+
+The default protocol for `decision` is `bailian_decision`. [ai_decide](../../../sql-functions/ai-functions/ai_decide.md) requires this type/protocol pair.
 
 ## Privileges
 

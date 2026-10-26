@@ -27,6 +27,7 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/exec_factory.h"
+#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec_primitive/exec_node.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -38,12 +39,12 @@
 namespace starrocks {
 namespace {
 
-constexpr int64_t kAICompletePromptFid = 200100;
+constexpr int64_t kAICompletePromptFid = 200001;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
 constexpr TSlotId kDecisionSlotId = 4;
-constexpr std::string_view kSystemChatConfigId = "__system_chat__";
+constexpr std::string_view kDefaultChatConfigId = "provider:default_chat";
 constexpr std::string_view kEndpointSentinel = "https://unit.test.invalid/v1/chat/completions";
 constexpr std::string_view kModelSentinel = "unit-test-model";
 constexpr std::string_view kSecretSentinel = "must-not-appear-in-plan-or-error";
@@ -71,42 +72,58 @@ TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {
 }
 
 TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot,
-                       std::string config_id = std::string(kSystemChatConfigId)) {
+                       std::string config_id = std::string(kDefaultChatConfigId)) {
     TFunctionName name;
     name.__set_function_name("ai_complete");
 
     TFunction function;
     function.__set_name(name);
     function.__set_binary_type(TFunctionBinaryType::AI);
-    function.__set_arg_types({varchar_type().to_thrift()});
+    function.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
+                              TypeDescriptor(TYPE_JSON).to_thrift()});
     function.__set_ret_type(varchar_type().to_thrift());
     function.__set_has_var_args(false);
     function.__set_fid(kAICompletePromptFid);
-    function.__set_ai_model_source(TAIModelSource::SYSTEM);
 
     TExprNode call;
     call.__set_node_type(TExprNodeType::FUNCTION_CALL);
-    call.__set_num_children(1);
+    call.__set_num_children(4);
     call.__set_type(varchar_type().to_thrift());
     call.__set_is_nullable(true);
     call.__set_fn(function);
-    call.__set_ai_model_config_id(std::move(config_id));
+    call.__set_ai_provider_id(std::move(config_id));
 
     TExpr expression;
     expression.nodes.emplace_back(std::move(call));
     expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    for (int i = 0; i < 2; ++i) {
+        TExprNode selector;
+        selector.__set_node_type(TExprNodeType::STRING_LITERAL);
+        selector.__set_num_children(0);
+        selector.__set_type(varchar_type().to_thrift());
+        selector.__set_is_nullable(false);
+        TStringLiteral literal;
+        literal.__set_value("");
+        selector.__set_string_literal(std::move(literal));
+        expression.nodes.emplace_back(std::move(selector));
+    }
+    TExprNode options;
+    options.__set_node_type(TExprNodeType::NULL_LITERAL);
+    options.__set_num_children(0);
+    options.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    options.__set_is_nullable(true);
+    expression.nodes.emplace_back(std::move(options));
     return expression;
 }
 
-TAIModelConfiguration make_system_chat_config(std::string provider = "openai_compatible") {
-    TAIEndpointConfig chat;
-    chat.__set_endpoint(std::string(kEndpointSentinel));
-    chat.__set_model(std::string(kModelSentinel));
-    chat.__set_provider(std::move(provider));
-
-    TAIModelConfiguration config;
-    config.__set_chat(std::move(chat));
-    return config;
+TAIProvider make_provider_chat_config(TAIProviderProtocol::type protocol = TAIProviderProtocol::OPENAI) {
+    TAIProvider provider;
+    provider.__set_id(std::string(kDefaultChatConfigId));
+    provider.__set_name("test-chat");
+    provider.__set_type(TAIProviderType::CHAT);
+    provider.__set_protocol(protocol);
+    provider.__set_params({{"endpoint", std::string(kEndpointSentinel)}, {"model", std::string(kModelSentinel)}});
+    return provider;
 }
 
 TPlanNode make_base_node(TPlanNodeType::type type, TTupleId tuple_id, int32_t node_id, int32_t num_children) {
@@ -128,8 +145,8 @@ TPlan make_valid_ai_plan(TTupleId tuple_id) {
     project.__set_common_slot_map({
             {kCommonSlotId, make_slot_ref(tuple_id, kPromptSlotId)},
     });
-    project.__set_ai_model_configs({
-            {std::string(kSystemChatConfigId), make_system_chat_config()},
+    project.__set_ai_provider_mapping({
+            {std::string(kDefaultChatConfigId), make_provider_chat_config()},
     });
 
     TPlanNode ai = make_base_node(TPlanNodeType::AI_PROJECT_NODE, tuple_id, 10, 1);
@@ -201,6 +218,101 @@ protected:
     TTupleId _tuple_id = 0;
 };
 
+TEST(AIProviderConfigParserTest, ParsesTypedPropertiesAndDefaults) {
+    auto provider = make_provider_chat_config();
+    auto chat = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    ASSERT_TRUE(chat.ok()) << chat.status();
+    EXPECT_EQ(AICapability::CHAT, chat->capability);
+    EXPECT_EQ(AIProviderProtocol::OPENAI, chat->protocol);
+    EXPECT_TRUE(chat->api_key.empty());
+    EXPECT_FALSE(chat->timeout_ms.has_value());
+    EXPECT_FALSE(chat->dimensions.has_value());
+
+    provider.__set_type(TAIProviderType::EMBEDDING);
+    provider.params["api_key"] = "test-secret";
+    provider.params["timeout_ms"] = "+123";
+    provider.params["dimensions"] = "256";
+    auto embedding = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    ASSERT_TRUE(embedding.ok()) << embedding.status();
+    EXPECT_EQ(AICapability::EMBEDDING, embedding->capability);
+    EXPECT_EQ("test-secret", embedding->api_key);
+    EXPECT_EQ(123, embedding->timeout_ms.value());
+    EXPECT_EQ(256, embedding->dimensions.value());
+    provider.params["timeout_ms"] = "";
+    provider.params["dimensions"] = "";
+    auto empty = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    ASSERT_TRUE(empty.ok());
+    EXPECT_FALSE(empty->timeout_ms.has_value());
+    EXPECT_FALSE(empty->dimensions.has_value());
+}
+
+TEST(AIProviderConfigParserTest, RejectsInvalidMetadataWithoutExposingProperties) {
+    auto provider = make_provider_chat_config();
+    provider.params["api_key"] = "test-secret";
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse("different-id", provider).ok());
+    provider.__set_type(TAIProviderType::RERANK);
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    provider.__set_type(static_cast<TAIProviderType::type>(99));
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    provider.__set_type(TAIProviderType::EMBEDDING);
+    for (const auto& key : {"timeout_ms", "dimensions"}) {
+        for (const auto& value : {"0", "-1", "2147483648", "123junk", " 123", "+"}) {
+            provider.params[key] = value;
+            auto result = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+            ASSERT_FALSE(result.ok()) << key << ": " << value;
+            EXPECT_EQ(std::string::npos, result.status().to_string().find("test-secret"));
+        }
+        provider.params.erase(key);
+    }
+    for (const auto& key : {"endpoint", "model"}) {
+        auto missing = provider;
+        missing.params.erase(key);
+        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, missing).ok());
+    }
+    for (auto protocol :
+         {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, static_cast<TAIProviderProtocol::type>(99)}) {
+        provider.__set_protocol(protocol);
+        provider.params["protocol"] = "openai";
+        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    }
+    provider.__set_protocol(TAIProviderProtocol::OPENAI);
+    provider.__isset.protocol = false;
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    provider.__set_protocol(TAIProviderProtocol::OPENAI);
+    provider.params["protocol"] = "anthropic";
+    EXPECT_TRUE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    provider.__isset.type = false;
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+}
+
+TEST(AIProviderConfigParserTest, DecisionUsesTypedProviderSnapshotAndProtocol) {
+    auto provider = make_provider_chat_config(TAIProviderProtocol::BAILIAN_DECISION);
+    provider.__set_type(TAIProviderType::DECISION);
+    provider.params["api_key"] = "decision-secret";
+    provider.params["timeout_ms"] = "75";
+    auto parsed = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    ASSERT_TRUE(parsed.ok()) << parsed.status();
+    EXPECT_EQ(AICapability::DECISION, parsed->capability);
+    EXPECT_EQ(AIProviderProtocol::BAILIAN_DECISION, parsed->protocol);
+    EXPECT_EQ(kEndpointSentinel, parsed->endpoint);
+    EXPECT_EQ(kModelSentinel, parsed->model);
+    EXPECT_EQ("decision-secret", parsed->api_key);
+    EXPECT_EQ(75, parsed->timeout_ms.value());
+    EXPECT_FALSE(parsed->dimensions.has_value());
+    for (auto type : {TAIProviderType::CHAT, TAIProviderType::EMBEDDING}) {
+        provider.__set_type(type);
+        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    }
+    provider.__set_type(TAIProviderType::DECISION);
+    provider.__set_protocol(TAIProviderProtocol::OPENAI);
+    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    provider.__set_protocol(TAIProviderProtocol::BAILIAN_DECISION);
+    provider.params["timeout_ms"] = "0";
+    auto invalid = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    ASSERT_FALSE(invalid.ok());
+    EXPECT_EQ(std::string::npos, invalid.status().to_string().find("decision-secret"));
+}
+
 TEST_F(AIProjectNodeTest, ExecFactoryDeserializesExactThriftContract) {
     std::string serialized;
     TPlan plan = binary_round_trip(make_valid_ai_plan(_tuple_id), &serialized);
@@ -211,11 +323,11 @@ TEST_F(AIProjectNodeTest, ExecFactoryDeserializesExactThriftContract) {
     ASSERT_TRUE(wire_node.__isset.ai_project_node);
     ASSERT_EQ(2, wire_node.ai_project_node.slot_map.size());
     ASSERT_EQ(1, wire_node.ai_project_node.common_slot_map.size());
-    ASSERT_EQ(1, wire_node.ai_project_node.ai_model_configs.size());
-    ASSERT_EQ(std::string(kSystemChatConfigId),
-              wire_node.ai_project_node.slot_map.at(kAnswerSlotId).nodes.front().ai_model_config_id);
+    ASSERT_EQ(1, wire_node.ai_project_node.ai_provider_mapping.size());
+    ASSERT_EQ(std::string(kDefaultChatConfigId),
+              wire_node.ai_project_node.slot_map.at(kAnswerSlotId).nodes.front().ai_provider_id);
 
-    const std::string wire_debug = wire_node.ai_project_node.ai_model_configs.begin()->second.chat.endpoint;
+    const std::string wire_debug = wire_node.ai_project_node.ai_provider_mapping.begin()->second.params.at("endpoint");
     ASSERT_EQ(kEndpointSentinel, wire_debug);
     ASSERT_EQ(std::string::npos, serialized.find(kSecretSentinel));
     ASSERT_EQ(std::string::npos, serialized.find(kArbitraryCredentialEnvironment));
@@ -239,12 +351,13 @@ TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndProviderConfig
     auto expression = make_ai_complete(_tuple_id, kPromptSlotId, "provider:decision");
     auto& call = expression.nodes.front();
     call.fn.__set_fid(200160);
-    call.fn.__set_ai_model_source(TAIModelSource::PROVIDER);
     call.fn.name.__set_function_name("ai_decide");
-    call.fn.__set_arg_types({varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+    call.fn.__set_arg_types({varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift(),
+                             varchar_type().to_thrift(), varchar_type().to_thrift()});
     call.fn.__set_ret_type(TypeDescriptor(TYPE_JSON).to_thrift());
     call.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
-    call.__set_num_children(2);
+    call.__set_num_children(4);
+    expression.nodes.resize(2);
     TExprNode cast;
     cast.__set_node_type(TExprNodeType::CAST_EXPR);
     cast.__set_opcode(TExprOpcode::CAST);
@@ -263,19 +376,22 @@ TEST_F(AIProjectNodeTest, DecisionWireRouteUsesItsOwnCapabilityAndProviderConfig
     value.__set_value(R"({"q":{"type":"noul"}})");
     literal.__set_string_literal(value);
     expression.nodes.push_back(literal);
+    value.__set_value("");
+    literal.__set_string_literal(value);
+    expression.nodes.push_back(literal);
+    expression.nodes.push_back(literal);
     auto& project = plan.nodes.front().ai_project_node;
     project.__set_slot_map({{kPromptSlotId, make_slot_ref(_tuple_id, kPromptSlotId)}, {kDecisionSlotId, expression}});
     project.__set_common_slot_map({});
-    TAIEndpointConfig endpoint;
-    endpoint.__set_endpoint("https://127.0.0.1/compatible-mode/v1/systemone");
-    endpoint.__set_provider("bailian_decision");
-    endpoint.__set_model("decision-model");
-    TAIModelConfiguration config;
-    endpoint.__set_api_key("decision-provider-secret");
-    endpoint.__set_timeout_ms(75);
-    config.__set_decision(endpoint);
-    config.__set_source(TAIModelSource::PROVIDER);
-    project.__set_ai_model_configs({{"provider:decision", config}});
+    TAIProvider provider;
+    provider.__set_id("provider:decision");
+    provider.__set_type(TAIProviderType::DECISION);
+    provider.__set_protocol(TAIProviderProtocol::BAILIAN_DECISION);
+    provider.__set_params({{"endpoint", "https://127.0.0.1/compatible-mode/v1/systemone"},
+                           {"model", "decision-model"},
+                           {"api_key", "decision-provider-secret"},
+                           {"timeout_ms", "75"}});
+    project.__set_ai_provider_mapping({{"provider:decision", provider}});
     auto decoded = binary_round_trip(plan);
     ObjectPool plan_pool;
     ExecNode* root = nullptr;
@@ -356,8 +472,8 @@ TEST(AIProjectNodeRecordDescriptorTest, ResolvesProjectionSlotsAcrossTupleBounda
     project.__set_common_slot_map({
             {kCommonSlotId, make_slot_ref(input_tuple_id, kPromptSlotId)},
     });
-    project.__set_ai_model_configs({
-            {std::string(kSystemChatConfigId), make_system_chat_config()},
+    project.__set_ai_provider_mapping({
+            {std::string(kDefaultChatConfigId), make_provider_chat_config()},
     });
 
     TPlanNode ai = make_base_node(TPlanNodeType::AI_PROJECT_NODE, input_tuple_id, 10, 1);
@@ -414,10 +530,10 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
                  node.ai_project_node.common_slot_map[kCommonSlotId] =
                          make_slot_ref(node.row_tuples.front(), kAnswerSlotId);
              }},
-            {"referenced config is missing", [](TPlanNode& node) { node.ai_project_node.ai_model_configs.clear(); }},
+            {"referenced config is missing", [](TPlanNode& node) { node.ai_project_node.ai_provider_mapping.clear(); }},
             {"AI call references unknown config",
              [](TPlanNode& node) {
-                 node.ai_project_node.slot_map[kAnswerSlotId].nodes.front().__set_ai_model_config_id("unknown");
+                 node.ai_project_node.slot_map[kAnswerSlotId].nodes.front().__set_ai_provider_id("unknown");
              }},
             {"AI output depends on a current AI output",
              [](TPlanNode& node) {
@@ -426,24 +542,23 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
              }},
             {"chat config is missing",
              [](TPlanNode& node) {
-                 node.ai_project_node.ai_model_configs[std::string(kSystemChatConfigId)] = TAIModelConfiguration{};
+                 node.ai_project_node.ai_provider_mapping[std::string(kDefaultChatConfigId)] = TAIProvider{};
              }},
-            {"chat and decision are both set",
+            {"chat provider has decision protocol",
              [](TPlanNode& node) {
-                 auto& config = node.ai_project_node.ai_model_configs.at(std::string(kSystemChatConfigId));
-                 config.__set_decision(config.chat);
+                 auto& config = node.ai_project_node.ai_provider_mapping.at(std::string(kDefaultChatConfigId));
+                 config.__set_protocol(TAIProviderProtocol::BAILIAN_DECISION);
              }},
-            {"embedding and decision are both set",
+            {"chat expression references decision provider",
              [](TPlanNode& node) {
-                 auto& config = node.ai_project_node.ai_model_configs.at(std::string(kSystemChatConfigId));
-                 config.__set_embedding(config.chat);
-                 config.__set_decision(config.chat);
-                 config.__isset.chat = false;
+                 auto& config = node.ai_project_node.ai_provider_mapping.at(std::string(kDefaultChatConfigId));
+                 config.__set_type(TAIProviderType::DECISION);
+                 config.__set_protocol(TAIProviderProtocol::BAILIAN_DECISION);
              }},
             {"provider is unsupported",
              [](TPlanNode& node) {
-                 node.ai_project_node.ai_model_configs[std::string(kSystemChatConfigId)] =
-                         make_system_chat_config("unsupported");
+                 node.ai_project_node.ai_provider_mapping[std::string(kDefaultChatConfigId)] =
+                         make_provider_chat_config(TAIProviderProtocol::ANTHROPIC);
              }},
     };
 

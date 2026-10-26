@@ -13,64 +13,84 @@
 # limitations under the License.
 
 import copy
+import tempfile
 import unittest
+from pathlib import Path
 
 import functions
 import gen_functions
 
 
 class DecisionMetadataTest(unittest.TestCase):
-    def decision(self, state='VARCHAR', explicit_provider=False):
-        arguments = ['VARCHAR', state, 'JSON'] if explicit_provider else [state, 'JSON']
-        inputs = [1, 2] if explicit_provider else [0, 1]
-        return [200160, 'ai_decide', True, False, 'JSON', arguments, 'AiFunctions::ai_decide',
-                functions.ai_metadata('DECISION', 'NONE', 'JSON', inputs,
-                                      provider_argument=0 if explicit_provider else -1, model_source='PROVIDER')]
+    def decision(self, state='VARCHAR'):
+        return [200160, 'ai_decide', True, False, 'JSON', [state, 'JSON', 'VARCHAR', 'VARCHAR'],
+                'AIFunctions::ai_decide', {
+                    'named_args': [{'name': 'state'}, {'name': 'questions'},
+                                   {'name': 'provider', 'default': ''}, {'name': 'model', 'default': ''}],
+                    'ai': functions.ai_metadata('DECISION', 'NONE', 'JSON', inputs=('state', 'questions')),
+                }]
 
-    def test_four_typed_provider_signatures(self):
-        declarations = [f for f in functions.ai_vectorized_functions if f[1] == 'ai_decide']
-        self.assertEqual([200160, 200161, 200162, 200163], [f[0] for f in declarations])
-        self.assertEqual([['VARCHAR', 'JSON'], ['JSON', 'JSON'],
-                          ['VARCHAR', 'VARCHAR', 'JSON'], ['VARCHAR', 'JSON', 'JSON']],
+    def validate(self, declaration):
+        return gen_functions.validate_ai_metadata(declaration, declaration[7]['ai'], declaration[7]['named_args'])
+
+    def test_two_canonical_typed_signatures(self):
+        declarations = [f for f in functions.vectorized_functions if f[1] == 'ai_decide']
+        self.assertEqual([200160, 200161], [f[0] for f in declarations])
+        self.assertEqual([['VARCHAR', 'JSON', 'VARCHAR', 'VARCHAR'], ['JSON', 'JSON', 'VARCHAR', 'VARCHAR']],
                          [f[5] for f in declarations])
         for declaration in declarations:
-            metadata = gen_functions.validate_ai_metadata(declaration)
-            self.assertEqual('PROVIDER', metadata['model_source'])
-            self.assertEqual(-1, metadata['model_argument'])
-            self.assertEqual(0 if declaration[0] >= 200162 else -1, metadata['provider_argument'])
+            metadata = self.validate(declaration)
+            self.assertEqual(2, metadata['provider_argument'])
+            self.assertEqual(3, metadata['model_argument'])
+            self.assertEqual([0, 1], metadata['input_arguments'])
             self.assertEqual('DECISION', metadata['capability'])
             self.assertEqual('NONE', metadata['prompt_kind'])
+            self.assertEqual([{'name': 'state'}, {'name': 'questions'},
+                              {'name': 'provider', 'default': ''}, {'name': 'model', 'default': ''}],
+                             declaration[7]['named_args'])
 
-    def test_decision_accepts_typed_inputs_without_chat_prompt(self):
+    def test_decision_accepts_typed_inputs_without_options(self):
         for state in ('VARCHAR', 'JSON'):
-            for explicit_provider in (False, True):
-                gen_functions.validate_ai_metadata(self.decision(state, explicit_provider))
+            self.validate(self.decision(state))
 
     def test_decision_rejects_incompatible_metadata(self):
-        original = self.decision()
-        mutations = [('capability', 'CHAT'), ('prompt_kind', 'PASSTHROUGH'),
-                     ('result_kind', 'STRING'), ('model_source', 'SYSTEM'), ('model_argument', 0),
-                     ('input_arguments', [1, 0]), ('null_as_empty_arguments', [0]),
-                     ('blank_as_null_arguments', [0])]
+        mutations = [('capability', 'CHAT'), ('prompt_kind', 'PASSTHROUGH'), ('result_kind', 'STRING'),
+                     ('inputs', ['questions', 'state']), ('null_as_empty', ['state']), ('blank_as_null', ['state'])]
         for key, value in mutations:
-            declaration = copy.deepcopy(original)
-            declaration[7][key] = value
+            declaration = copy.deepcopy(self.decision())
+            declaration[7]['ai'][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
-                gen_functions.validate_ai_metadata(declaration)
+                self.validate(declaration)
 
     def test_existing_registrations_remain_valid(self):
-        for declaration in functions.ai_vectorized_functions:
-            gen_functions.validate_ai_metadata(declaration)
+        for declaration in functions.vectorized_functions:
+            if len(declaration) == 8 and isinstance(declaration[7], dict) and 'ai' in declaration[7]:
+                self.validate(declaration)
 
-    def test_default_provider_routing_is_capability_driven(self):
-        declaration = copy.deepcopy(next(f for f in functions.ai_vectorized_functions if f[0] == 200100))
-        declaration[7]['model_source'] = 'PROVIDER'
-        metadata = gen_functions.validate_ai_metadata(declaration)
-        self.assertEqual(-1, metadata['provider_argument'])
-        self.assertEqual('CHAT', metadata['capability'])
-        declaration[7]['model_argument'] = 0
-        with self.assertRaises(ValueError):
-            gen_functions.validate_ai_metadata(declaration)
+    def test_json_input_and_options_have_distinct_runtime_roles(self):
+        saved = list(gen_functions.function_list)
+        saved_ids = set(gen_functions.function_set)
+        saved_signatures = set(gen_functions.function_signature_set)
+        gen_functions.function_list.clear()
+        gen_functions.function_set.clear()
+        gen_functions.function_signature_set.clear()
+        try:
+            decision = self.decision('JSON')
+            gen_functions.add_function(decision)
+            chat = next(f for f in functions.vectorized_functions if f[0] == 200001)
+            gen_functions.add_function(chat)
+            with tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / 'descriptors.inc'
+                gen_functions.generate_ai_cpp(str(output))
+                generated = output.read_text()
+                self.assertIn('AIArgumentType::JSON, AIArgumentType::JSON', generated)
+                self.assertEqual(1, generated.count('AIArgumentType::OPTIONS'))
+        finally:
+            gen_functions.function_list[:] = saved
+            gen_functions.function_set.clear()
+            gen_functions.function_set.update(saved_ids)
+            gen_functions.function_signature_set.clear()
+            gen_functions.function_signature_set.update(saved_signatures)
 
 
 if __name__ == '__main__':

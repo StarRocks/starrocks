@@ -3212,6 +3212,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
 
+    // A query-triggered analyze that fails leaves the statistics it was collecting still missing, so the
+    // next query asks for it again and the scheduler runs it again one tick later - a retry every
+    // connector_table_query_trigger_task_schedule_interval seconds, for as long as the failure lasts. The
+    // interval settings above cannot stop it: they are measured against metadata a failed job never wrote.
+    // After each consecutive failure the table is left alone for twice as long, starting at a minute and
+    // stopping at this ceiling; one success clears it. Manual ANALYZE is never held back.
+    @ConfField(mutable = true, comment = "Longest a table whose query-triggered analyze keeps failing is " +
+            "left alone before being tried again; the wait doubles from one minute up to this value and is " +
+            "reset by a successful collection. <= 0 disables the backoff and retries on every schedule tick.")
+    public static long connector_table_query_trigger_analyze_failure_backoff_max_second = 1800; // default 30min
+
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_task_schedule_interval = 30; // unit: second, default 30s
 
@@ -3248,6 +3259,33 @@ public class Config extends ConfigBase {
             "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
             "additionally bounded by statistic_collect_query_timeout.")
     public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
+
+    // A collection query that a backend rejects for want of memory is waited out rather than counted as a
+    // failed partition, because the shortage is caused by other work and passes on its own. That only holds
+    // for a spike. Under a sustained shortage every query is rejected, and without a ceiling the job would
+    // sleep away its whole deadline (statistic_collect_query_timeout, an hour by default) while holding one
+    // of the few analyze slots - no statistics collected, and none collectable for any other table either.
+    // This caps the total time one job may spend waiting; past it the job stops waiting, its failures count
+    // against statistic_full_statistics_failure_tolerance_ratio as they did before retries existed, and it
+    // ends early enough to be re-triggered once the cluster has room again. The default covers a spike
+    // lasting minutes - the one this was written for cleared in about a second.
+    @ConfField(mutable = true, comment = "Total time an external-table analyze job may spend waiting for a " +
+            "backend to free memory before it stops retrying; <= 0 means unlimited waiting, bounded only by " +
+            "statistic_collect_query_timeout.")
+    public static long connector_table_analyze_memory_backoff_budget_second = 300; // unit: second, default 5min
+
+    // A collection that is cut short still writes rows for the partitions it read, and metadata saying how
+    // many partitions that was, so the read path scales them correctly. Below some coverage that stops
+    // being worth doing: row counts extrapolate, but NDV does not, and NDV is what join cardinality
+    // estimates are most sensitive to. A column collected from a twentieth of its partitions would give
+    // the optimizer an NDV roughly twenty times too small, stated as fact. Recording nothing for it
+    // instead falls back to the connector's own table metadata, which supplies an accurate row count and
+    // no NDV - a default selectivity rather than a confidently wrong one. Measured against what the
+    // collection asked for, so a sample is not "sparse" merely for being a sample.
+    @ConfField(mutable = true, comment = "Least fraction of the partitions an external-table analyze asked " +
+            "for that must actually be collected before a column's statistics are recorded; below it the " +
+            "column is left to the connector's own table metadata. <= 0 records whatever was collected.")
+    public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -4232,6 +4270,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
+
+    @ConfField(mutable = true, comment =
+            "Per-round work cap for the incremental (bounded, resumable) shared-data auto vacuum: the most " +
+                    "metadata versions one AutoVacuum round may commit and propose for a partition. The " +
+                    "incremental protocol is always on and cannot be disabled -- the legacy one-shot path " +
+                    "cannot safely resume after it (it would stop at the chain holes a bounded round leaves " +
+                    "and miss garbage below them), so there is no fall-back. This value only bounds how much " +
+                    "each round does, so a large backlog drains across many rounds instead of timing out one " +
+                    "RPC. Default 500. Values below 100 are clamped up to 100 (a smaller per-round budget " +
+                    "would need too many rounds to drain a backlog). Does not change tablet-to-node routing.")
+    public static long lake_autovacuum_max_versions_per_round = 500;
 
     @ConfField(mutable = true, comment = "the minimum delay between full vacuum runs on any given partition")
     public static long lake_fullvacuum_partition_naptime_seconds = 3600L * 24L;
@@ -5581,23 +5630,6 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
-
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
-    public static String ai_default_chat_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
-    public static String ai_default_chat_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
-    public static String ai_default_chat_provider = "";
-    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
-    public static String ai_default_embedding_endpoint = "";
-
-    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
-    public static String ai_default_embedding_model = "";
-
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
-    public static String ai_default_embedding_provider = "";
 
     /**
      * How the FE reacts when a metadata lock is requested on an object the internal catalog does

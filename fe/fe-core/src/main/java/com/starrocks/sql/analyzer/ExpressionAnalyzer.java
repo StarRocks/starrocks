@@ -1194,7 +1194,7 @@ public class ExpressionAnalyzer {
                 node.setNondeterministicId(exprId);
             }
             FunctionAnalyzer.analyze(node);
-            verifyNoAiInConditionalFunction(node);
+            verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
             Authorizer.checkAIFunctionUsage(session, node);
         }
@@ -1208,7 +1208,7 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
             String resolvedFunctionName = node.getFn().functionName();
             if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
                     || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)

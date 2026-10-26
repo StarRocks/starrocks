@@ -11,17 +11,16 @@ sidebar_position: 70
 ## 構文
 
 ```sql
-ai_decide(state VARCHAR, questions JSON) -> JSON
-ai_decide(state JSON, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state VARCHAR, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state JSON, questions JSON) -> JSON
+ai_decide(state, questions[, provider[, model]]) -> JSON
 ```
 
 - `state`: VARCHAR/CHAR または JSON 式。テキストは有効な UTF-8 が必要で、JSON や URL に見えてもテキストとして送信されます。JSON は文字列、オブジェクト、配列のみを受け付けます。他の型は明示的な変換または `parse_json` を使用してください。
 - `questions`: 1–16 個の質問を定義する定数 JSON オブジェクト。JSON 列や `parse_json(column)` は使用できません。文字列からの暗黙変換は行いません。
-- `provider_name`: 登録済み Provider 名を指定する任意の定数 VARCHAR 式。NULL と空白だけの名前は使用できません。省略時はデフォルトの `decision` Provider を選択します。リモートモデルは常に Provider メタデータから取得し、この引数はモデル名ではありません。
+- `provider` と `model`: 任意の定数 VARCHAR 式。`provider` の省略、空文字列、SQL NULL はデフォルト `decision` Provider を選択します。`model` の同じ値は Provider のデフォルトモデルを選択し、明示値はそのモデルを上書きします。空白のみの値は無効です。明示的な Provider の指定ではクラスターのデフォルトは不要です。
 
-options MAP はありません。どちらの形式も `decision` 型かつ `bailian_decision` プロトコルの Provider を使用します。既存の [AI 関数権限](ai_functions.mdx#ai-function-privileges)、SQL 配置制約、非同期 AIProject、リクエストのライフサイクルを使用します。decision Provider の作成・利用前にすべての FE と BE をアップグレードしてください。
+位置引数と名前付き引数は[共通の呼び出し規則](ai_text_functions.md#共通の呼び出しルール)に従います。
+
+`options` 引数はありません。どちらの state オーバーロードも `decision` 型かつ `bailian_decision` プロトコルの Provider を使用します。既存の [AI 関数権限](ai_functions.mdx#ai-function-privileges)、SQL 配置制約、非同期 AIProject、リクエストのライフサイクルを使用します。decision Provider の作成・利用前にすべての FE と BE をアップグレードしてください。
 
 ## 設定
 
@@ -41,9 +40,9 @@ GRANT USAGE ON AI FUNCTION ai_decide TO ROLE decision_reader;
 GRANT USAGE ON AI PROVIDER support_decision TO ROLE decision_reader;
 ```
 
-エンドポイント、モデル、認証情報、任意の `timeout_ms` は Provider メタデータから取得します。decision 専用の FE 設定や BE ローカル認証情報は不要で、SYSTEM chat/embedding 設定にはフォールバックしません。認証情報を持つリクエストには HTTPS が必要です。Provider キーは FE メタデータに永続化され、既存の内部 RPC で実行 BE に送信されます。SHOW/DESC と診断出力ではマスクされます。[Provider 設定とスナップショット](ai_custom_functions.md#query-snapshots-and-system-compatibility)も参照してください。
+エンドポイント、デフォルトモデル、認証情報、任意の `timeout_ms` は Provider メタデータから取得します。`model` 引数でサービスがサポートする別の決定モデルを指定できます。HTTP と HTTPS エンドポイントには共通の Provider 検証規則が適用されます。Provider キーは FE メタデータに永続化され、既存の内部 RPC で実行 BE に送信されます。SHOW/DESC と診断出力ではマスクされます。[CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)を参照してください。
 
-計画は、デフォルトまたは各明示名について最初に選択した Provider を固定し、UUID ごとに不変スナップショットを保持します。同じ UUID を選択するデフォルト呼び出しと明示呼び出しはスナップショットを共有します。後続の ALTER、DROP、デフォルト変更で既存計画の参照先は変わりません。新しい計画は現在のメタデータと権限を確認します。Provider がない場合、型・プロトコルが不正な場合、または関数・Provider USAGE 権限がない場合は、SYSTEM にフォールバックせず失敗します。テーブル権限も必要です。状態と質問は設定済みサービスに送信されます。モデル利用権限とリージョンの可用性は Provider アカウントに依存します。[モデルドキュメント](https://help.aliyun.com/zh/model-studio/decision-model-preview)を参照してください。
+実行プランは選択された Provider 設定を保存します。メタデータとデフォルトの変更は、新しく計画するクエリに適用されます。Provider がない場合、型・プロトコルが不正な場合、または関数・Provider USAGE 権限がない場合、空入力を含め計画時に失敗します。テーブル権限も必要です。状態と質問は設定済みサービスに送信されます。モデル利用権限とリージョンの可用性は Provider アカウントに依存します。[モデルドキュメント](https://help.aliyun.com/zh/model-studio/decision-model-preview)を参照してください。
 
 ## 質問と結果
 
@@ -70,9 +69,21 @@ SELECT ai_decide(
 
 `result -> '$.answers.refund.noul'` などの JSON 式で結果を抽出できます。評価対象の非 NULL 行ごとに全質問を含む論理リクエストを送信し、再試行で HTTP 回数が増える場合があります。この関数は非決定的です。
 
+
+名前付き引数で Provider とモデルを指定します。
+
+```sql
+SELECT ai_decide(
+    state => 'A customer asks for a refund.',
+    questions => parse_json('{"refund":{"type":"noul"}}'),
+    provider => 'support_decision',
+    model => 'decision-model-preview'
+);
+```
+
 ## NULL、エラー、使用量
 
-state または questions の SQL NULL は、リクエストなしで SQL NULL を返します。明示的な Provider 名が NULL または空白の場合は解析エラーになり、デフォルトを選択しません。AIProject が実際に初期化される場合、不正な定数質問は、後続の入力行がない場合や state が SQL NULL の場合でも fragment 初期化時にエラーになります。`WHERE 1=0` や `LIMIT 0` などで除去された呼び出しは質問検証のために初期化されません。関数・Provider 認可は既存の最適化前チェックに従います。ネイティブ JSON null は SQL NULL と異なり、状態と質問には使用できません。
+state または questions の SQL NULL は、リクエストなしで SQL NULL を返します。AIProject が実際に初期化される場合、不正な定数質問は、後続の入力行がない場合や state が SQL NULL の場合でも fragment 初期化時にエラーになります。`WHERE 1=0` や `LIMIT 0` などで除去された呼び出しは質問検証のために初期化されません。関数・Provider 認可は既存の最適化前チェックに従います。ネイティブ JSON null は SQL NULL と異なり、状態と質問には使用できません。
 
 行入力エラー、HTTP 失敗、不正な応答は [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error) に従います。`ignore` は失敗行に SQL NULL を返し、`fail` はクエリを中止します。設定エラーとクエリのライフサイクル失敗は既存の AI 実行エラーを維持します。エラーを否定回答やゼロ点には変換しません。
 

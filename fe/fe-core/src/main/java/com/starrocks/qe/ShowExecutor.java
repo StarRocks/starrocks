@@ -1424,8 +1424,21 @@ public class ShowExecutor {
                         dbName + "." + tableRef.getTableName());
             }
 
+            // Both halves of this lock -- the IS on the database and the READ on the table -- are taken on ids
+            // that MetadataMgr just resolved through the catalog, so for an external catalog both are minted by
+            // the connector. Such a lock either never contends or, on a collision with the internal id space,
+            // makes SHOW on a Hive table serialize against DDL on an unrelated internal one. Nothing it would
+            // protect is FE-owned state anyway: an external table's schema comes from the connector cache, which
+            // is replaced wholesale and never takes the Locker.
+            // Judged through Table#isMetaLockTarget rather than the catalog name, because unlike SHOW TABLES the
+            // id at stake here is a table's: a resource-mapping ENGINE=HIVE table lives in an internal database
+            // and is rewritten in place by HiveTable.modifyTableSchema under this very lock, so it must keep it.
+            // The predicate is fail-closed -- an unclassified table kind stays locked.
+            boolean needLock = table.isMetaLockTarget();
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            if (needLock) {
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            }
             try {
                 PatternMatcher matcher = null;
                 if (statement.getPattern() != null) {
@@ -1470,7 +1483,10 @@ public class ShowExecutor {
                     }
                 }
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                if (needLock) {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                            LockType.READ);
+                }
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
@@ -2788,8 +2804,21 @@ public class ShowExecutor {
                         db.getOriginName() + "." + tableName.toString());
             }
 
+            // Both halves of this lock -- the IS on the database and the READ on the table -- are taken on ids
+            // that MetadataMgr just resolved through the catalog, so for an external catalog both are minted by
+            // the connector. Such a lock either never contends or, on a collision with the internal id space,
+            // makes SHOW on a Hive table serialize against DDL on an unrelated internal one. Nothing it would
+            // protect is FE-owned state anyway: an external table's schema comes from the connector cache, which
+            // is replaced wholesale and never takes the Locker.
+            // Judged through Table#isMetaLockTarget rather than the catalog name, because unlike SHOW TABLES the
+            // id at stake here is a table's: a resource-mapping ENGINE=HIVE table lives in an internal database
+            // and is rewritten in place by HiveTable.modifyTableSchema under this very lock, so it must keep it.
+            // The predicate is fail-closed -- an unclassified table kind stays locked.
+            boolean needLock = table.isMetaLockTarget();
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            if (needLock) {
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+            }
             try {
                 if (table instanceof OlapTable) {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
@@ -2805,7 +2834,10 @@ public class ShowExecutor {
                     // do nothing
                 }
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                if (needLock) {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                            LockType.READ);
+                }
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }

@@ -253,9 +253,9 @@ TEST(BailianDecisionProviderTest, KeepsPerRequestSchemasIsolatedWithoutStateOrCr
 }
 
 TEST(BailianDecisionProviderTest, FactoryRestrictsProtocolCapabilityAndRejectsInvalidCredentials) {
-    EXPECT_TRUE(create_ai_provider("bailian_decision", AICapability::DECISION).ok());
-    EXPECT_FALSE(create_ai_provider("bailian_decision", AICapability::CHAT).ok());
-    EXPECT_FALSE(create_ai_provider("openai_compatible", AICapability::DECISION).ok());
+    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::BAILIAN_DECISION, AICapability::DECISION).ok());
+    EXPECT_FALSE(create_ai_provider(AIProviderProtocol::BAILIAN_DECISION, AICapability::CHAT).ok());
+    EXPECT_FALSE(create_ai_provider(AIProviderProtocol::OPENAI, AICapability::DECISION).ok());
     OpenAICompatibleProvider chat;
     DashScopeMultimodalProvider embedding;
     EXPECT_FALSE(chat.build_request({.model = "model", .capability = AICapability::DECISION}).ok());

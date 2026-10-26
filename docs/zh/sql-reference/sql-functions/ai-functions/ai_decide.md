@@ -11,17 +11,16 @@ sidebar_position: 70
 ## 语法
 
 ```sql
-ai_decide(state VARCHAR, questions JSON) -> JSON
-ai_decide(state JSON, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state VARCHAR, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state JSON, questions JSON) -> JSON
+ai_decide(state, questions[, provider[, model]]) -> JSON
 ```
 
 - `state`：VARCHAR/CHAR 或 JSON 表达式。文本必须是合法 UTF-8，即使内容类似 JSON 或 URL，也按文本发送。JSON 状态只接受字符串、对象或数组。其他类型需要显式转换或使用 `parse_json`。
 - `questions`：定义 1–16 个问题的常量 JSON 对象。不支持 JSON 列或 `parse_json(column)`，也不会将字符串隐式视为 JSON。
-- `provider_name`：可选的常量 VARCHAR 表达式，必须非 NULL、非空白，按名称选择已注册的 Provider。省略时使用默认 `decision` Provider。远端模型始终来自 Provider 元数据，该参数不是远端模型名。
+- `provider` 和 `model`：可选常量 VARCHAR 表达式。省略、空字符串或 SQL NULL 的 `provider` 使用默认 `decision` Provider；`model` 的相同取值使用 Provider 默认模型，显式模型则覆盖默认值。纯空白字符串无效。显式指定 Provider 时不要求配置集群默认项。
 
-本函数不提供 options MAP。两种形式都要求 Provider 类型为 `decision`、协议为 `bailian_decision`，沿用已有的 [AI 函数权限](ai_functions.mdx#ai-function-privileges)、SQL 使用位置限制、异步 AIProject 和请求生命周期。创建或使用 decision Provider 前，请升级所有 FE 和 BE。
+位置参数和命名参数遵循[通用调用规则](ai_text_functions.md#公共调用规则)。
+
+本函数不提供 `options` 参数。两种 state 重载都要求 Provider 类型为 `decision`、协议为 `bailian_decision`，沿用已有的 [AI 函数权限](ai_functions.mdx#ai-function-privileges)、SQL 使用位置限制、异步 AIProject 和请求生命周期。创建或使用 decision Provider 前，请升级所有 FE 和 BE。
 
 ## 配置
 
@@ -41,9 +40,9 @@ GRANT USAGE ON AI FUNCTION ai_decide TO ROLE decision_reader;
 GRANT USAGE ON AI PROVIDER support_decision TO ROLE decision_reader;
 ```
 
-端点、模型、凭证及可选的 `timeout_ms` 来自 Provider 元数据，不需要 decision FE 配置或 BE 本地决策凭证，也不回退到 SYSTEM chat/embedding 设置。携带凭证的请求必须使用 HTTPS。Provider 密钥持久化到 FE 元数据，并通过现有内部 RPC 下发到执行 BE；SHOW/DESC 和诊断输出会脱敏。参见 [Provider 设置与快照](ai_custom_functions.md#query-snapshots-and-system-compatibility)。
+端点、默认模型、凭证及可选的 `timeout_ms` 来自 Provider 元数据。`model` 参数可选择该服务支持的其他决策模型。HTTP 和 HTTPS 端点遵循通用 Provider 校验规则。Provider 密钥持久化到 FE 元数据，并通过现有内部 RPC 下发到执行 BE；SHOW/DESC 和诊断输出会脱敏。参见 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)。
 
-一个计划固定首次选中的默认 Provider 或每个显式名称，并按 Provider UUID 保存不可变快照。默认与显式选择指向同一 UUID 时复用该快照。后续 ALTER、DROP 或默认项切换不会重定向已有计划；新计划重新解析当前元数据并检查权限。Provider 缺失、类型/协议不符或缺少函数/Provider USAGE 权限时直接失败，不回退 SYSTEM。读取业务表仍需相应表权限。业务状态和问题会发送到配置的服务；模型权限及地域可用性取决于服务账号，参见[模型文档](https://help.aliyun.com/zh/model-studio/decision-model-preview)。
+执行计划保存所选 Provider 的配置快照，元数据或默认项变更影响重新规划的查询。Provider 缺失、类型/协议不符或缺少函数/Provider USAGE 权限时在规划阶段报错，空输入查询也不例外。读取业务表仍需相应权限。业务状态和问题会发送到配置的服务；模型权限及地域可用性取决于服务账号，参见[模型文档](https://help.aliyun.com/zh/model-studio/decision-model-preview)。
 
 ## 问题与返回值
 
@@ -70,9 +69,21 @@ SELECT ai_decide(
 
 可使用普通 JSON 表达式提取字段，例如 `result -> '$.answers.refund.noul'`。每个参与计算的非 NULL 行提交一个包含全部问题的逻辑请求，重试可能增加 HTTP 次数。函数具有非确定性。
 
+
+使用命名参数指定 Provider 和模型：
+
+```sql
+SELECT ai_decide(
+    state => 'A customer asks for a refund.',
+    questions => parse_json('{"refund":{"type":"noul"}}'),
+    provider => 'support_decision',
+    model => 'decision-model-preview'
+);
+```
+
 ## NULL、错误与用量
 
-state 或 questions 为 SQL NULL 时，返回 SQL NULL 且不发送请求。显式 Provider 名称为 NULL 或空白会在分析阶段失败，不会选择默认项。对于实际初始化的 AIProject，非法常量问题定义在 fragment 初始化阶段报错，即使后续没有输入行或 state 为 SQL NULL。被优化器移除的调用（例如 `WHERE 1=0` 或 `LIMIT 0`）不会初始化并校验问题定义；函数及 Provider 授权仍遵循既有的优化前检查。原生 JSON null 与 SQL NULL 不同，不能用作状态或问题定义。
+state 或 questions 为 SQL NULL 时，返回 SQL NULL 且不发送请求。对于实际初始化的 AIProject，非法常量问题定义在 fragment 初始化阶段报错，即使后续没有输入行或 state 为 SQL NULL。被优化器移除的调用（例如 `WHERE 1=0` 或 `LIMIT 0`）不会初始化并校验问题定义；函数及 Provider 授权仍遵循既有的优化前检查。原生 JSON null 与 SQL NULL 不同，不能用作状态或问题定义。
 
 行输入错误、HTTP 失败和非法响应遵循 [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error)：`ignore` 对失败行返回 SQL NULL，`fail` 中止查询。非法配置和查询生命周期失败保留已有 AI 执行错误。错误不会转成否定答案或零分。
 

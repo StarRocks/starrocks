@@ -11,17 +11,16 @@ Calls an administrator-configured Alibaba Cloud Model Studio decision model and 
 ## Syntax
 
 ```sql
-ai_decide(state VARCHAR, questions JSON) -> JSON
-ai_decide(state JSON, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state VARCHAR, questions JSON) -> JSON
-ai_decide(provider_name VARCHAR, state JSON, questions JSON) -> JSON
+ai_decide(state, questions[, provider[, model]]) -> JSON
 ```
 
 - `state`: A VARCHAR/CHAR or JSON expression. Text must be valid UTF-8 and is sent as text, even if it resembles JSON or a URL. JSON state must be a string, object, or array. Use an explicit cast or `parse_json` to convert other types.
 - `questions`: A constant JSON object defining 1–16 questions. A JSON column or `parse_json(column)` is rejected. A string is not implicitly accepted as JSON.
-- `provider_name`: An optional constant, non-NULL, nonblank VARCHAR expression naming a registered Provider. Omit it to select the default `decision` Provider. The remote model always comes from that Provider; this argument is not a remote model name.
+- `provider` and `model`: Optional constant VARCHAR expressions. An omitted, empty, or SQL NULL `provider` selects the default `decision` Provider. The same values for `model` select the Provider's default model; an explicit model overrides it. Whitespace-only selectors are invalid. An explicit Provider does not require a cluster default.
 
-There is no options MAP. Both forms require a Provider of type `decision` and protocol `bailian_decision`. They use the existing [AI function privileges](ai_functions.mdx#ai-function-privileges), SQL placement restrictions, asynchronous AIProject execution, and request lifecycle. Upgrade all FE and BE nodes before creating or using a decision Provider.
+Positional and named arguments follow the [common calling rules](ai_text_functions.md#common-calling-rules).
+
+There is no `options` argument. Both state overloads require a Provider of type `decision` and protocol `bailian_decision`. They use the existing [AI function privileges](ai_functions.mdx#ai-function-privileges), SQL placement restrictions, asynchronous AIProject execution, and request lifecycle. Upgrade all FE and BE nodes before creating or using a decision Provider.
 
 ## Configuration
 
@@ -41,9 +40,9 @@ GRANT USAGE ON AI FUNCTION ai_decide TO ROLE decision_reader;
 GRANT USAGE ON AI PROVIDER support_decision TO ROLE decision_reader;
 ```
 
-Endpoint, model, credential, and optional `timeout_ms` come from Provider metadata. No decision FE configuration or BE-local decision credential is required, and calls never fall back to SYSTEM chat or embedding settings. Requests carrying a credential require HTTPS. Provider keys are persisted in FE metadata and sent to executing BEs through the existing internal RPC path; SHOW/DESC and diagnostic rendering mask them. See [Provider settings and snapshots](ai_custom_functions.md#query-snapshots-and-system-compatibility).
+Endpoint, default model, credential, and optional `timeout_ms` come from Provider metadata. The `model` argument can select another decision model supported by the service. HTTP and HTTPS endpoints follow the shared Provider validation rules. Provider keys are persisted in FE metadata and sent to executing BEs through the existing internal RPC path; SHOW/DESC and diagnostic rendering mask them. See [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md).
 
-A plan fixes its first selection for the default Provider or each explicit name and captures an immutable snapshot by Provider UUID. Default and explicit selections of the same UUID share that snapshot. Later ALTER, DROP, or default changes do not redirect the plan; newly built plans resolve current metadata and permissions. Missing Providers, wrong types/protocols, or missing function/Provider USAGE privileges fail without SYSTEM fallback. Table privileges still apply. State and questions are sent to the configured service. Model access and regional availability depend on the provider account; see the [model documentation](https://help.aliyun.com/zh/model-studio/decision-model-preview).
+The execution plan captures the selected Provider configuration. Metadata or default changes affect newly planned queries. Missing Providers, wrong types/protocols, or missing function/Provider USAGE privileges fail during planning, including empty-input queries. Table privileges still apply. State and questions are sent to the configured service. Model access and regional availability depend on the provider account; see the [model documentation](https://help.aliyun.com/zh/model-studio/decision-model-preview).
 
 ## Questions and results
 
@@ -70,9 +69,21 @@ SELECT ai_decide(
 
 Use ordinary JSON expressions to extract fields such as `result -> '$.answers.refund.noul'`. Each evaluated non-NULL row submits one logical request containing all questions; retries can add HTTP attempts. The function is nondeterministic.
 
+
+Specify a Provider and model with named arguments:
+
+```sql
+SELECT ai_decide(
+    state => 'A customer asks for a refund.',
+    questions => parse_json('{"refund":{"type":"noul"}}'),
+    provider => 'support_decision',
+    model => 'decision-model-preview'
+);
+```
+
 ## NULL, errors, and usage
 
-SQL NULL in state or questions returns SQL NULL without a request. A NULL or blank explicit Provider name is an analysis error, and never selects the default. When an AIProject is actually initialized, invalid constant question definitions fail during fragment initialization, even if it subsequently receives no rows or its state is SQL NULL. Calls removed by the optimizer, for example by `WHERE 1=0` or `LIMIT 0`, are not initialized for question validation. Function and Provider authorization still follow the existing pre-optimization checks. Native JSON null is distinct from SQL NULL and is not a valid state or question definition.
+SQL NULL in state or questions returns SQL NULL without a request. When an AIProject is actually initialized, invalid constant question definitions fail during fragment initialization, even if it subsequently receives no rows or its state is SQL NULL. Calls removed by the optimizer, for example by `WHERE 1=0` or `LIMIT 0`, are not initialized for question validation. Function and Provider authorization still follow the existing pre-optimization checks. Native JSON null is distinct from SQL NULL and is not a valid state or question definition.
 
 Row input errors, HTTP failures, and invalid responses follow [ai_function_on_error](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_on_error): `ignore` returns SQL NULL for the failed row, while `fail` aborts the query. Invalid configuration and query lifecycle failures retain the existing AI execution errors. An error is never interpreted as a negative decision or a zero score.
 

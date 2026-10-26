@@ -112,7 +112,7 @@ public class ExpressionPrinter<C> extends ScalarOperatorVisitor<String, C> {
         }
 
         int argumentCount = call.getChildren().size();
-        if (call.getFunction() != null && call.getFunction().isAi()) {
+        if (call.getFunction() != null && call.getFunction().isAI()) {
             argumentCount = call.getFunction().getNumArgs();
         }
         return fnName + "(" + call.getChildren().subList(0, argumentCount).stream()
