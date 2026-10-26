@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
+#include "exec/partition/partition_hash_map.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
@@ -321,6 +322,34 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullOneString
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWithSerializedKey) {
     using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
     TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
+}
+
+// get_max_serialize_size() sizes the staging buffer for serialize_batch(), which writes the
+// compact key encoding: a one-byte length prefix for a string that fits in one, not the four-byte
+// prefix of the persisted encoding. So the bound comes from max_one_element_serialize_size_compact(),
+// and -- the part that actually matters -- it has to cover what serialize_batch() lays down.
+TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
+    PartitionHashMapWithSerializedKey<SlicePartitionHashMap<PhmapSeed1>> partition_map(4);
+
+    auto string_column = BinaryColumn::create();
+    string_column->append("abc");
+    auto int_column = Int32Column::create();
+    int_column->append(7);
+    Columns key_columns{string_column, int_column};
+
+    const uint32_t max_one_row_size = partition_map.get_max_serialize_size(key_columns);
+    EXPECT_EQ(string_column->max_one_element_serialize_size_compact() +
+                      int_column->max_one_element_serialize_size_compact(),
+              max_one_row_size);
+    // Spelled out: one length byte plus "abc", then a bare int32.
+    EXPECT_EQ(static_cast<uint32_t>(1 + 3 + sizeof(int32_t)), max_one_row_size);
+
+    Buffer<uint32_t> slice_sizes(1, 0);
+    std::vector<uint8_t> buffer(max_one_row_size + 32, 0);
+    for (const auto& key_column : key_columns) {
+        key_column->serialize_batch(buffer.data(), slice_sizes, 1, max_one_row_size);
+    }
+    EXPECT_LE(slice_sizes[0], max_one_row_size) << "serialize_batch() overran the bound it was given";
 }
 
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {
