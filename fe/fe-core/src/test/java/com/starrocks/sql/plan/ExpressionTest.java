@@ -285,6 +285,11 @@ public class ExpressionTest extends PlanTestBase {
                         "seconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 1)"},
                 {"id_datetime + interval 1.5 second + interval 250 millisecond",
                         "milliseconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 250)"},
+                // a constant expression is folded first
+                {"timestampadd(second, 0.25 + 0.25, id_datetime)", "microseconds_add(8: id_datetime, 500000)"},
+                {"id_datetime + interval cast('1.5' as decimal(10, 1)) second",
+                        "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"date_sub(id_datetime, interval cast(3 as double) / 4 second)", "microseconds_sub(8: id_datetime, 750000)"},
         };
         for (String[] c : cases) {
             String plan = getFragmentPlan("select " + c[0] + " from test_all_type");
@@ -300,6 +305,21 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(e.getMessage(), "0.1234567");
         assertThrows(SemanticException.class,
                 () -> getFragmentPlan("select id_datetime + interval '1.0000001' second from test_all_type"));
+        // also when the amount is a constant expression
+        assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select timestampadd(second, 0.0000001 + 0, id_datetime) from test_all_type"));
+    }
+
+    // An exponent describes a huge number in a few characters. Such amounts are refused or left to the INT cast,
+    // without spelling the number out.
+    @Test
+    public void testIntervalWithHugeExponentInSeconds() throws Exception {
+        SemanticException e = assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval '1e-100000000' second from test_all_type"));
+        assertContains(e.getMessage(), "1E-100000000");
+
+        String plan = getFragmentPlan("select id_datetime + interval '1e100000000' second from test_all_type");
+        assertNotContains(plan, "microseconds_add");
     }
 
     @Test
