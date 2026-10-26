@@ -122,8 +122,8 @@ public class AIPrivilegeSchemaTest {
             Assertions.assertTrue(json.contains("\"name\":\"" + family + "\""));
             Assertions.assertEquals(object, GsonUtils.GSON.fromJson(json, PEntryObject.class));
         }
-        for (List<String> tokens : List.of(List.of("lower"), List.of("ai_query"), List.of("AI_QUERY"),
-                List.of("missing_ai_function"), List.of("db", "ai_complete"))) {
+        for (List<String> tokens : List.of(List.of("lower"), List.of("missing_ai_function"), List.of("MISSING_AI_FUNCTION"),
+                List.of("db", "ai_complete"))) {
             Assertions.assertThrows(PrivilegeException.class, () -> authorizationProvider.generateObject(type, tokens));
         }
     }
@@ -181,7 +181,7 @@ public class AIPrivilegeSchemaTest {
     public void testFunctionExecutionRejectsWildcardAndUnregisteredFamiliesEvenForRoot() {
         NativeAccessController controller = new NativeAccessController();
         Assertions.assertDoesNotThrow(() -> controller.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE));
-        for (String name : List.of("*", "lower", "ai_query", "missing_ai_function")) {
+        for (String name : List.of("*", "lower", "missing_ai_function")) {
             Assertions.assertThrows(AccessDeniedException.class,
                     () -> controller.checkAIFunctionAction(context, name, PrivilegeType.USAGE));
         }

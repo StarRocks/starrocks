@@ -2654,13 +2654,6 @@ CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
 
-// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
-CONF_Int32(llm_max_queue_size, "4096");
-
-CONF_Int32(llm_max_concurrent_queries, "8");
-
-CONF_Int32(llm_cache_size, "131072");
-
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 // When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.
 CONF_mBool(enable_lock_free_scan_task_queue, "true");

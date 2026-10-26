@@ -426,14 +426,9 @@ public class FunctionSetTest {
     }
 
     @Test
-    public void testLegacyAIQueryRemainsOrdinaryBuiltin() {
-        Function aiQuery = functionSet.getBuiltinFunctions().stream()
-                .filter(fn -> fn.getFunctionId() == 200000L)
-                .findFirst()
-                .orElseThrow();
-        Assertions.assertEquals("ai_query", aiQuery.functionName());
-        Assertions.assertFalse(aiQuery.isAI());
-        Assertions.assertEquals(TFunctionBinaryType.BUILTIN, aiQuery.getBinaryType());
+    public void testAIQueryIsRemoved() {
+        Assertions.assertTrue(functionSet.getBuiltinFunctions().stream()
+                .noneMatch(fn -> fn.getFunctionId() == 200000L || "ai_query".equals(fn.functionName())));
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
     }
@@ -441,7 +436,7 @@ public class FunctionSetTest {
     @Test
     public void testGrantableAIFunctionFamiliesRejectMalformedMetadata() {
         Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("AI_COMPLETE"));
-        for (String name : List.of("lower", "missing_ai", "db.ai_complete", "db.ai_query", "*", " ai_complete")) {
+        for (String name : List.of("lower", "missing_ai", "db.ai_complete", "db.lower", "*", " ai_complete")) {
             Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(name));
         }
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(null));

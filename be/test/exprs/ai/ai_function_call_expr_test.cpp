@@ -42,6 +42,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/object_pool.h"
+#include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -54,6 +55,13 @@
 
 namespace starrocks {
 namespace {
+
+TEST(AIFunctionRegistrationTest, ExcludesAIProjectAndRemovedFunctionsFromScalarBuiltins) {
+    EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(200000));
+    for (int64_t function_id = 200001; function_id <= 200013; ++function_id) {
+        EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(function_id));
+    }
+}
 
 constexpr int64_t kPromptFid = 200001;
 constexpr std::string_view kDefaultConfigId = "provider:default_chat";
@@ -1190,7 +1198,7 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
             EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         }
     }
-    // ai_query, the first unassigned ID, and retired AI overload IDs are not AIProject functions.
+    // Removed and unassigned function IDs are not AIProject functions.
     for (int64_t fid : {200000, 200014, 200100, 200101, 200102, 200103, 200104, 200108, 200109, 200110, 200111, 200112,
                         200113, 200114, 200115, 200116, 200118, 200120, 200122, 200124, 200126, 200128, 200129, 200130,
                         200134, 200138, 200139, 200140, 200141, 200142, 200143, 200144, 200150, 200164}) {

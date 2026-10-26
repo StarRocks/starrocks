@@ -619,7 +619,7 @@ public class AIProjectPlanTest extends PlanTestBase {
             Assertions.assertFalse(getExecPlan(
                     "select ai_complete(v3) from tprimary1 where pk1 = 20").isShortCircuit());
             Assertions.assertTrue(getExecPlan(
-                    "select ai_query(v3, parse_json('{}')) from tprimary1 where pk1 = 20").isShortCircuit());
+                    "select lower(v3) from tprimary1 where pk1 = 20").isShortCircuit());
         } finally {
             connectContext.getSessionVariable().setEnableShortCircuit(shortCircuitEnabled);
         }
