@@ -13,7 +13,7 @@ name: PR RECORD
 
 on:
   pull_request_target:
-    types: [opened, reopened, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft, assigned, unassigned]
+    types: [opened, reopened, synchronize, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft, assigned, unassigned]
   issue_comment:
     types: [created, edited, deleted]
   # CD SYNC CI PIPELINE: sets/clears ERROR with GITHUB_TOKEN, which emits no labeled event.
